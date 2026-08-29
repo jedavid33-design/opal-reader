@@ -1,4 +1,4 @@
-OPALREADER v1.1 - CHROMEBOOK / GITHUB FLAT UPDATE
+OPALREADER v1.1.1 - CHROMEBOOK / GITHUB FLAT UPDATE
 
 This package contains no folders.
 
@@ -6,17 +6,18 @@ GITHUB
 1. Extract this ZIP.
 2. In the existing opal-reader GitHub repository, choose Add file > Upload files.
 3. Select every loose file except cloudflare-worker.js and UPLOAD-INSTRUCTIONS.txt.
-4. Allow matching website files to replace the v1.0 copies and commit the upload.
+4. Allow matching website files to replace the old copies and commit the upload.
 5. Keep GitHub Pages configured as branch main and folder /(root).
 
 CLOUDFLARE WORKER
 1. Open the existing opalreader-api Worker and edit its code.
 2. Replace all old Worker code with cloudflare-worker.js and deploy.
-3. Keep the existing ALLOWED_ORIGIN value exactly as it is.
-4. Add OPALREADER_ACCESS_TOKEN as an encrypted secret if it is not already present.
-5. Add GOOGLE_CLOUD_TTS_API_KEY as an encrypted secret.
-6. Add ELEVENLABS_API_KEY only if you want the optional ElevenLabs catalog.
+3. Keep ALLOWED_ORIGIN, ELEVENLABS_API_KEY, and OPALREADER_ACCESS_TOKEN.
+4. GOOGLE_CLOUD_TTS_API_KEY is optional. ElevenLabs works without it.
 
-Never upload provider API keys to GitHub or enter them in the OpalReader web app.
+CROSS-DEVICE BINDINGS
+Create a KV namespace (suggested name: opalreader-sync) and bind it to the Worker with the exact variable name OPALREADER_KV.
 
-The app's Setup screen receives only the existing Worker URL and the same private OPALREADER_ACCESS_TOKEN you saved in Cloudflare.
+Create a private R2 bucket (suggested name: opalreader-storage) and bind it to the Worker with the exact variable name OPALREADER_STORAGE.
+
+Never upload provider API keys to GitHub or enter them in the OpalReader app. The app receives only the Worker URL and your private OPALREADER_ACCESS_TOKEN.
