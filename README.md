@@ -1,38 +1,53 @@
-# OpalReader V1
+# OpalReader v1.1.1
 
-A personal, installable EPUB audiobook reader with per-POV ElevenLabs casting.
+A personal, installable EPUB audiobook reader with provider-neutral, per-POV casting and optional cross-device storage.
 
-## What V1 includes
+## What this release includes
 
-- Local EPUB import and parsing (metadata, cover, spine chapters, headings and text)
-- Conservative all-caps POV detection suitable for `CHAPTER 18 / TUCKER`
-- Manual POV creation, renaming and chapter reassignment
-- Default narrator plus per-POV casting
-- Search of account voices and the broader shared Voice Library
-- Book-excerpt voice previews
-- Chapter-at-a-time narration and IndexedDB audio caching
-- Cached-audio stale markers after casting changes
-- Persistent library, casting, chapter progress and playback position
-- Mobile PWA shell and touch-friendly player
-- A separate Cloudflare Worker so the ElevenLabs key never reaches browser code
+- Existing EPUB parsing, chapter and mid-chapter POV review, manual corrections, cast management, budgeting, generation, playback, and mobile PWA behavior
+- ElevenLabs voice browsing and generation without requiring Google Cloud TTS
+- Google Cloud TTS remains optional
+- Google Cloud TTS voice listing, book-text auditions, and pricing for Standard, WaveNet, Neural2/Polyglot, Studio, and Chirp 3 HD
+- Bare Gemini-TTS catalog entries are excluded until a separate model-aware synthesis path is implemented
+- Provider errors are normalized into readable messages instead of object placeholders
+- Cloudflare KV sync for library data, parsed chapters, cast, voice assignments, playback position, progress, and shared settings
+- Private Cloudflare R2 storage for imported EPUBs and generated audio
+- R2-backed audio reuse across devices before any provider generation call
+- Separate free provider samples and book-text auditions; book auditions are generated once and cached in R2
+- Structured ElevenLabs gender, age, locale/accent, and use-case casting filters with paginated results
+- Browser IndexedDB remains the fast offline/local cache
 
-## Deploy the Worker
+## Update the existing Worker
 
-1. In `worker`, run `npm install`.
-2. Run `npx wrangler login` once if needed.
-3. Store the key securely: `npx wrangler secret put ELEVENLABS_API_KEY`.
-4. Create a long private token of your choice and store it with `npx wrangler secret put OPALREADER_ACCESS_TOKEN`. This prevents strangers who discover the Worker URL from consuming your credits.
-5. Set `ALLOWED_ORIGIN` in `wrangler.toml` to the exact GitHub Pages origin (for example `https://jedavid33.github.io`). During local development it is already `http://localhost:5173`.
-6. Run `npm run deploy` and copy the resulting Worker URL. Enter that URL and your private OpalReader token—not the ElevenLabs key—on the app's Setup screen.
+Replace the Worker editor contents with `worker/src/index.js` (or the flat package's `cloudflare-worker.js`) and deploy it. Keep the existing secrets and `ALLOWED_ORIGIN`.
 
-## Run and publish the app
+Add these Worker bindings:
 
-1. In the project root, run `npm install` then `npm run dev`.
-2. Open **Setup** in OpalReader and save the deployed Worker URL.
-3. For GitHub Pages, set the repository's Pages workflow to run `npm ci && npm run build` and publish `dist`. Vite uses relative PWA assets; set the repository path as `base` in `vite.config.js` if the site is not hosted at the domain root.
+| Binding variable     | Cloudflare resource                                    |
+| -------------------- | ------------------------------------------------------ |
+| `OPALREADER_KV`      | KV namespace, suggested name `opalreader-sync`         |
+| `OPALREADER_STORAGE` | Private R2 bucket, suggested name `opalreader-storage` |
 
-Never add the ElevenLabs API key to this repository, `.env` files committed to Git, or the browser setup screen.
+Provider keys stay exclusively in Worker secrets:
 
-## Storage note
+- `ELEVENLABS_API_KEY` — optional provider secret; sufficient by itself for ElevenLabs
+- `GOOGLE_CLOUD_TTS_API_KEY` — optional provider secret
+- `OPALREADER_ACCESS_TOKEN` — required private access secret
 
-V1 keeps books and generated MP3 data in browser IndexedDB. It survives ordinary closing and reopening on the same browser/device, but it is not cross-device sync and mobile browsers may reclaim site data under storage pressure. R2/D1-backed durable storage is intentionally deferred.
+Never commit provider keys to GitHub or enter them into the browser app.
+
+## Update GitHub Pages
+
+The Chromebook-friendly flat ZIP contains loose files. Upload all files to the existing repository and replace matching files. GitHub Pages remains configured as `main` and `/(root)`.
+
+The PWA cache changes to `opalreader-shell-v13`, forcing browsers to fetch the latest v1.1.1 client fixes.
+
+## Cross-device behavior
+
+Enter the same Worker URL and OpalReader access token once on each device. The app syncs on startup, when **Sync now** is pressed, and periodically after book/progress changes. EPUB bytes are uploaded to R2 at import. Parsed book state lives in KV, so another device restores the library and can play cached R2 audio without re-importing the EPUB.
+
+Audio cache keys include narration text, provider, voice, model, and generation settings. The Worker checks R2 immediately before provider generation, preventing duplicate provider charges even when the browser cache is empty.
+
+## Cost note
+
+Displayed estimates are planning estimates before allowances, taxes, and pricing changes. OpalReader does not add locally tracked spend when audio was found in the shared R2 cache.
