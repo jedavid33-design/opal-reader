@@ -7,6 +7,7 @@ A personal, installable EPUB audiobook reader with provider-neutral, per-POV cas
 - Existing EPUB parsing, chapter and mid-chapter POV review, manual corrections, cast management, budgeting, generation, playback, and mobile PWA behavior
 - ElevenLabs voice browsing and generation without requiring Google Cloud TTS
 - Google Cloud TTS remains optional
+- Azure Speech neural voice listing, book-text auditions, cast assignment, chapter generation, and R2 audio reuse
 - Google Cloud TTS voice listing, book-text auditions, and pricing for Standard, WaveNet, Neural2/Polyglot, Studio, and Chirp 3 HD
 - Bare Gemini-TTS catalog entries are excluded until a separate model-aware synthesis path is implemented
 - Provider errors are normalized into readable messages instead of object placeholders
@@ -32,6 +33,8 @@ Provider keys stay exclusively in Worker secrets:
 
 - `ELEVENLABS_API_KEY` — optional provider secret; sufficient by itself for ElevenLabs
 - `GOOGLE_CLOUD_TTS_API_KEY` — optional provider secret
+- `AZURE_SPEECH_KEY` — optional Azure Speech resource key
+- `AZURE_SPEECH_REGION` — required with the Azure key, such as `eastus`
 - `OPALREADER_ACCESS_TOKEN` — required private access secret
 
 Never commit provider keys to GitHub or enter them into the browser app.
@@ -40,7 +43,7 @@ Never commit provider keys to GitHub or enter them into the browser app.
 
 The Chromebook-friendly flat ZIP contains loose files. Upload all files to the existing repository and replace matching files. GitHub Pages remains configured as `main` and `/(root)`.
 
-The PWA cache changes to `opalreader-shell-v13`, forcing browsers to fetch the latest v1.1.1 client fixes.
+The PWA cache changes to `opalreader-shell-v14`, forcing browsers to fetch the Azure-enabled client.
 
 ## Cross-device behavior
 
@@ -51,3 +54,5 @@ Audio cache keys include narration text, provider, voice, model, and generation 
 ## Cost note
 
 Displayed estimates are planning estimates before allowances, taxes, and pricing changes. OpalReader does not add locally tracked spend when audio was found in the shared R2 cache.
+
+Azure standard, multilingual, and Neural HD Flash voices use a $15/M planning rate. Neural HD voices use a conservative $30/M planning rate and remain visually distinct. Confirm the applicable Azure regional price before generating a full book.
