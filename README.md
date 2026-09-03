@@ -22,6 +22,8 @@ A personal, installable EPUB audiobook reader with provider-neutral, per-POV cas
 - R2-backed audio reuse across devices before any provider generation call
 - Separate free provider samples and book-text auditions; book auditions are generated once and cached in R2
 - Structured ElevenLabs gender, age, locale/accent, and use-case casting filters with paginated results
+- ElevenLabs Free sample plays the provider-supplied preview URL without synthesis or credit use
+- Paid-only ElevenLabs voices remain assignable, while Book audition and chapter generation are blocked before TTS with a clear eligibility message
 - Browser IndexedDB remains the fast offline/local cache
 
 ## Update the existing Worker
@@ -56,7 +58,7 @@ Never commit provider keys to GitHub or enter them into the browser app.
 
 The Chromebook-friendly flat ZIP contains loose files. Upload all files to the existing repository and replace matching files. GitHub Pages remains configured as `main` and `/(root)`.
 
-The PWA cache changes to `opalreader-shell-v16`, forcing browsers to fetch the progress and playback-readiness update.
+The PWA cache changes to `opalreader-shell-v17`, forcing browsers to fetch the ElevenLabs preview and audition-gating update.
 
 ## Cross-device behavior
 
