@@ -8,6 +8,10 @@ A personal, installable EPUB audiobook reader with provider-neutral, per-POV cas
 - ElevenLabs voice browsing and generation without requiring Google Cloud TTS
 - Google Cloud TTS remains optional
 - Azure Speech neural voice listing, book-text auditions, cast assignment, chapter generation, and R2 audio reuse
+- Compact chapter cards with separate Generate and Play controls
+- Per-chapter segment/time resume positions and a persistent global listening speed
+- Top-of-screen Resume control and scroll-stable Voice Lab auditions
+- Cloudflare Queue-backed chapter generation that continues after the PWA is backgrounded
 - Google Cloud TTS voice listing, book-text auditions, and pricing for Standard, WaveNet, Neural2/Polyglot, Studio, and Chirp 3 HD
 - Bare Gemini-TTS catalog entries are excluded until a separate model-aware synthesis path is implemented
 - Provider errors are normalized into readable messages instead of object placeholders
@@ -28,6 +32,13 @@ Add these Worker bindings:
 | -------------------- | ------------------------------------------------------ |
 | `OPALREADER_KV`      | KV namespace, suggested name `opalreader-sync`         |
 | `OPALREADER_STORAGE` | Private R2 bucket, suggested name `opalreader-storage` |
+| `OPALREADER_GENERATION` | Queue producer binding for `opalreader-generation` |
+
+Create one Cloudflare Queue named `opalreader-generation`. Connect the existing
+`opalreader-api` Worker to it twice: as producer binding
+`OPALREADER_GENERATION`, and as the queue's consumer. Set the consumer maximum
+batch size to 1, maximum retries to 3, and maximum concurrency to 1. The same
+Worker handles both roles; no second Worker is required.
 
 Provider keys stay exclusively in Worker secrets:
 
@@ -43,13 +54,20 @@ Never commit provider keys to GitHub or enter them into the browser app.
 
 The Chromebook-friendly flat ZIP contains loose files. Upload all files to the existing repository and replace matching files. GitHub Pages remains configured as `main` and `/(root)`.
 
-The PWA cache changes to `opalreader-shell-v14`, forcing browsers to fetch the Azure-enabled client.
+The PWA cache changes to `opalreader-shell-v15`, forcing browsers to fetch the playback and background-generation update.
 
 ## Cross-device behavior
 
 Enter the same Worker URL and OpalReader access token once on each device. The app syncs on startup, when **Sync now** is pressed, and periodically after book/progress changes. EPUB bytes are uploaded to R2 at import. Parsed book state lives in KV, so another device restores the library and can play cached R2 audio without re-importing the EPUB.
 
 Audio cache keys include narration text, provider, voice, model, and generation settings. The Worker checks R2 immediately before provider generation, preventing duplicate provider charges even when the browser cache is empty.
+
+Chapter generation requests now return immediately after a durable job is stored
+in R2 and queued. Each queue invocation generates one narration segment, stores
+it in R2, updates durable job status, and queues the next segment. The Chapters
+screen polls while visible and reconciles status again when the PWA returns to
+the foreground. States are `not_generated`, `queued`, `generating`, `ready`, and
+`failed`; failed chapters expose a Retry action.
 
 ## Cost note
 
