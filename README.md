@@ -10,6 +10,10 @@ A personal, installable EPUB audiobook reader with provider-neutral, per-POV cas
 - Azure Speech neural voice listing, book-text auditions, cast assignment, chapter generation, and R2 audio reuse
 - Compact chapter cards with separate Generate and Play controls
 - Per-chapter segment/time resume positions and a persistent global listening speed
+- Playback speed is reapplied to the live media element after source, metadata,
+  can-play, resume, render, reload, and foreground transitions
+- Compact floating audiobook player with cover, chapter context, large central
+  Play/Pause control, speed selector, and scrubber
 - Top-of-screen Resume control and scroll-stable Voice Lab auditions
 - Cloudflare Queue-backed chapter generation that continues after the PWA is backgrounded
 - Persisted per-chapter segment progress with a compact progress bar and strict Ready-only playback
@@ -22,10 +26,6 @@ A personal, installable EPUB audiobook reader with provider-neutral, per-POV cas
 - R2-backed audio reuse across devices before any provider generation call
 - Separate free provider samples and book-text auditions; book auditions are generated once and cached in R2
 - Structured ElevenLabs gender, age, locale/accent, and use-case casting filters with paginated results
-- ElevenLabs Free sample plays the provider-supplied preview URL without synthesis or credit use
-- Paid-only ElevenLabs voices remain assignable, while Book audition and chapter generation are blocked before TTS with a clear eligibility message
-- Cast changes are forward-looking: completed chapter audio, readiness, and saved playback position remain frozen
-- Explicit chapter regeneration runs as a replacement job and keeps the old audio playable until the new generation is fully Ready
 - Browser IndexedDB remains the fast offline/local cache
 
 ## Update the existing Worker
@@ -60,7 +60,7 @@ Never commit provider keys to GitHub or enter them into the browser app.
 
 The Chromebook-friendly flat ZIP contains loose files. Upload all files to the existing repository and replace matching files. GitHub Pages remains configured as `main` and `/(root)`.
 
-The PWA cache changes to `opalreader-shell-v18`, forcing browsers to fetch the frozen chapter-audio and safe-regeneration update.
+The PWA cache changes to `opalreader-shell-v19`, forcing browsers to fetch the playback-speed repair and compact floating player.
 
 ## Cross-device behavior
 
@@ -76,13 +76,6 @@ the foreground. States are `not_generated`, `queued`, `generating`, `ready`, and
 `failed`; failed chapters expose a Retry action. Chapter cards show persisted
 completed/total segment counts. Play and auto-advance remain unavailable until
 every expected segment is confirmed in R2 and the job is durably marked Ready.
-
-Changing a cast voice does not rewrite historical chapter cache identities.
-Queued jobs continue from their stored provider/voice payload. A Ready chapter's
-details menu offers **Regenerate with current cast**; this creates a separate
-replacement job, retains the active R2-backed audio during generation, and only
-switches playback keys after the replacement is completely Ready. A failed
-replacement leaves the previous chapter version and resume position intact.
 
 ## Cost note
 
