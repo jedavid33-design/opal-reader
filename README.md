@@ -14,7 +14,9 @@ A personal, installable EPUB audiobook reader with provider-neutral, per-POV cas
   can-play, resume, render, reload, and foreground transitions
 - Compact floating audiobook player with cover, chapter context, large central
   Play/Pause control, speed selector, and scrubber
-- Top-of-screen Resume control and scroll-stable Voice Lab auditions
+- Current and upcoming cached narration segments are warmed from R2 into the
+  device cache to reduce replay delays without triggering synthesis
+- Sticky player resume control and scroll-stable Voice Lab auditions
 - Cloudflare Queue-backed chapter generation that continues after the PWA is backgrounded
 - Persisted per-chapter segment progress with a compact progress bar and strict Ready-only playback
 - Failed generation preserves completed R2 segments and Retry resumes at the first missing segment
@@ -60,7 +62,7 @@ Never commit provider keys to GitHub or enter them into the browser app.
 
 The Chromebook-friendly flat ZIP contains loose files. Upload all files to the existing repository and replace matching files. GitHub Pages remains configured as `main` and `/(root)`.
 
-The PWA cache changes to `opalreader-shell-v19`, forcing browsers to fetch the playback-speed repair and compact floating player.
+The PWA cache changes to `opalreader-shell-v21`, forcing browsers to fetch the numeric speed-selector fix, redundant top Resume removal, and playback cache warming.
 
 ## Cross-device behavior
 
