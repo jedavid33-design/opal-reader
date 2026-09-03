@@ -24,6 +24,8 @@ A personal, installable EPUB audiobook reader with provider-neutral, per-POV cas
 - Structured ElevenLabs gender, age, locale/accent, and use-case casting filters with paginated results
 - ElevenLabs Free sample plays the provider-supplied preview URL without synthesis or credit use
 - Paid-only ElevenLabs voices remain assignable, while Book audition and chapter generation are blocked before TTS with a clear eligibility message
+- Cast changes are forward-looking: completed chapter audio, readiness, and saved playback position remain frozen
+- Explicit chapter regeneration runs as a replacement job and keeps the old audio playable until the new generation is fully Ready
 - Browser IndexedDB remains the fast offline/local cache
 
 ## Update the existing Worker
@@ -58,7 +60,7 @@ Never commit provider keys to GitHub or enter them into the browser app.
 
 The Chromebook-friendly flat ZIP contains loose files. Upload all files to the existing repository and replace matching files. GitHub Pages remains configured as `main` and `/(root)`.
 
-The PWA cache changes to `opalreader-shell-v17`, forcing browsers to fetch the ElevenLabs preview and audition-gating update.
+The PWA cache changes to `opalreader-shell-v18`, forcing browsers to fetch the frozen chapter-audio and safe-regeneration update.
 
 ## Cross-device behavior
 
@@ -74,6 +76,13 @@ the foreground. States are `not_generated`, `queued`, `generating`, `ready`, and
 `failed`; failed chapters expose a Retry action. Chapter cards show persisted
 completed/total segment counts. Play and auto-advance remain unavailable until
 every expected segment is confirmed in R2 and the job is durably marked Ready.
+
+Changing a cast voice does not rewrite historical chapter cache identities.
+Queued jobs continue from their stored provider/voice payload. A Ready chapter's
+details menu offers **Regenerate with current cast**; this creates a separate
+replacement job, retains the active R2-backed audio during generation, and only
+switches playback keys after the replacement is completely Ready. A failed
+replacement leaves the previous chapter version and resume position intact.
 
 ## Cost note
 
