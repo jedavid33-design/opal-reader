@@ -12,6 +12,8 @@ A personal, installable EPUB audiobook reader with provider-neutral, per-POV cas
 - Per-chapter segment/time resume positions and a persistent global listening speed
 - Top-of-screen Resume control and scroll-stable Voice Lab auditions
 - Cloudflare Queue-backed chapter generation that continues after the PWA is backgrounded
+- Persisted per-chapter segment progress with a compact progress bar and strict Ready-only playback
+- Failed generation preserves completed R2 segments and Retry resumes at the first missing segment
 - Google Cloud TTS voice listing, book-text auditions, and pricing for Standard, WaveNet, Neural2/Polyglot, Studio, and Chirp 3 HD
 - Bare Gemini-TTS catalog entries are excluded until a separate model-aware synthesis path is implemented
 - Provider errors are normalized into readable messages instead of object placeholders
@@ -54,7 +56,7 @@ Never commit provider keys to GitHub or enter them into the browser app.
 
 The Chromebook-friendly flat ZIP contains loose files. Upload all files to the existing repository and replace matching files. GitHub Pages remains configured as `main` and `/(root)`.
 
-The PWA cache changes to `opalreader-shell-v15`, forcing browsers to fetch the playback and background-generation update.
+The PWA cache changes to `opalreader-shell-v16`, forcing browsers to fetch the progress and playback-readiness update.
 
 ## Cross-device behavior
 
@@ -67,7 +69,9 @@ in R2 and queued. Each queue invocation generates one narration segment, stores
 it in R2, updates durable job status, and queues the next segment. The Chapters
 screen polls while visible and reconciles status again when the PWA returns to
 the foreground. States are `not_generated`, `queued`, `generating`, `ready`, and
-`failed`; failed chapters expose a Retry action.
+`failed`; failed chapters expose a Retry action. Chapter cards show persisted
+completed/total segment counts. Play and auto-advance remain unavailable until
+every expected segment is confirmed in R2 and the job is durably marked Ready.
 
 ## Cost note
 
