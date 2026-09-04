@@ -1,4 +1,4 @@
-# OpalReader v1.1.1
+# OpalReader v1.1.2
 
 A personal, installable EPUB audiobook reader with provider-neutral, per-POV casting and optional cross-device storage.
 
