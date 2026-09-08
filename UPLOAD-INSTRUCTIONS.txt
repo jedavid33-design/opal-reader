@@ -1,23 +1,37 @@
-OPALREADER v1.1.1 - CHROMEBOOK / GITHUB FLAT UPDATE
+OPALREADER v1.2.0 - GITHUB / CLOUDFLARE FLAT UPDATE
 
-This package contains no folders.
+This package is intentionally flat: all files are at the ZIP root.
 
 GITHUB
 1. Extract this ZIP.
 2. In the existing opal-reader GitHub repository, choose Add file > Upload files.
-3. Select every loose file except cloudflare-worker.js and UPLOAD-INSTRUCTIONS.txt.
-4. Allow matching website files to replace the old copies and commit the upload.
-5. Keep GitHub Pages configured as branch main and folder /(root).
+3. Upload all loose files, including cloudflare-worker.js and this instruction file, so GitHub remains the complete source of truth.
+4. Replace matching files and commit.
+5. Keep GitHub Pages on branch main and /(root).
 
 CLOUDFLARE WORKER
-1. Open the existing opalreader-api Worker and edit its code.
-2. Replace all old Worker code with cloudflare-worker.js and deploy.
-3. Keep ALLOWED_ORIGIN, ELEVENLABS_API_KEY, and OPALREADER_ACCESS_TOKEN.
-4. GOOGLE_CLOUD_TTS_API_KEY is optional. ElevenLabs works without it.
+1. Open the existing opalreader-api Worker.
+2. Replace its code with cloudflare-worker.js from this package and deploy.
+3. KEEP all existing secrets/bindings:
+   - ALLOWED_ORIGIN
+   - OPALREADER_ACCESS_TOKEN
+   - ELEVENLABS_API_KEY
+   - GOOGLE_CLOUD_TTS_API_KEY
+   - AZURE_SPEECH_KEY
+   - AZURE_SPEECH_REGION
+   - OPALREADER_KV
+   - OPALREADER_STORAGE
+   - OPALREADER_GENERATION
+4. To enable Speechify, add a Worker secret named SPEECHIFY_API_KEY.
+   OpalReader never stores the Speechify key in the browser.
 
-CROSS-DEVICE BINDINGS
-Create a KV namespace (suggested name: opalreader-sync) and bind it to the Worker with the exact variable name OPALREADER_KV.
+SPEECHIFY
+- Model: Simba 3.2
+- OpalReader budget estimate: $10 per 1M billed characters.
+- Voice Lab will show Speechify only after SPEECHIFY_API_KEY is present.
+- Book auditions and generated narration use the same R2 cache and usage ledger as the other providers.
 
-Create a private R2 bucket (suggested name: opalreader-storage) and bind it to the Worker with the exact variable name OPALREADER_STORAGE.
-
-Never upload provider API keys to GitHub or enter them in the OpalReader app. The app receives only the Worker URL and your private OPALREADER_ACCESS_TOKEN.
+NOTES
+- /health is public and reports Worker/app version only.
+- The TTS call report remains protected by OPALREADER_ACCESS_TOKEN.
+- Generated audio stays in R2 and is reused without another provider synthesis call when the cache key matches.
