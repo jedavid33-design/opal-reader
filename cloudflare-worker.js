@@ -115,7 +115,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -636,6 +636,27 @@ export default {
         if (book.id !== id)
           return json({ error: "Book identifier mismatch." }, 400, origin, env);
         return json(await saveBook(env, book), 200, origin, env);
+      }
+      if (url.pathname.startsWith("/api/sync/book/") && request.method === "DELETE") {
+        if (!syncReady(env))
+          return json({ error: "Cross-device storage bindings have not been configured yet." }, 503, origin, env);
+        const id = decodeURIComponent(url.pathname.slice("/api/sync/book/".length));
+        if (!validId(id)) return json({ error: "Invalid book identifier." }, 400, origin, env);
+        const book = await env.OPALREADER_KV.get(`book:${id}`, "json");
+        const index = await libraryIndex(env);
+        const otherBooks = (await Promise.all(index.filter((item) => item.id !== id).map((item) => env.OPALREADER_KV.get(`book:${item.id}`, "json")))).filter(Boolean);
+        const inUse = new Set(otherBooks.flatMap((b) => (b.chapters || []).flatMap((ch) => (ch.segments || []).map((seg) => seg.audioKey).filter(Boolean))));
+        const audioKeys = new Set((book?.chapters || []).flatMap((ch) => (ch.segments || []).map((seg) => seg.audioKey).filter(Boolean)));
+        const jobIds = new Set((book?.chapters || []).flatMap((ch) => [ch.generation?.jobId || ch.generation?.job_id, ch.replacementGeneration?.jobId || ch.replacementGeneration?.job_id]).filter(Boolean));
+        await env.OPALREADER_KV.delete(`book:${id}`);
+        await env.OPALREADER_KV.put("library:index", JSON.stringify(index.filter((item) => item.id !== id)));
+        if (env.OPALREADER_STORAGE) {
+          await env.OPALREADER_STORAGE.delete(`epubs/${id}.epub`);
+          for (const key of audioKeys) if (!inUse.has(key)) await env.OPALREADER_STORAGE.delete(`audio/${key}.mp3`);
+          for (const jobId of jobIds) await env.OPALREADER_STORAGE.delete(generationPayloadKey(jobId));
+        }
+        for (const jobId of jobIds) await env.OPALREADER_KV.delete(generationStatusKey(jobId));
+        return json({ deleted: true, id, audio_deleted: [...audioKeys].filter((key) => !inUse.has(key)).length, jobs_deleted: jobIds.size }, 200, origin, env);
       }
       if (url.pathname === "/api/sync/settings" && request.method === "GET") {
         if (!env.OPALREADER_KV)
