@@ -1,0 +1,3 @@
+OpalReader v1.2.8
+
+Adds a ~1,000-character Prosody Lab context test around the matched paragraph. Production TTS segmentation remains unchanged.
