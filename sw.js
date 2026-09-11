@@ -1,4 +1,4 @@
-const CACHE = "opalreader-shell-v25";
+const CACHE = "opalreader-shell-v26";
 self.addEventListener("install", (e) =>
   e.waitUntil(
     caches

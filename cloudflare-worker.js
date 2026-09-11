@@ -115,7 +115,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.2.2";
+const APP_VERSION = "1.2.3";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
