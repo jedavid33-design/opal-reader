@@ -1,0 +1,7 @@
+OpalReader v1.2.6a — Prosody Lab iOS playback fix
+
+- Prosody Lab no longer autoplays after asynchronous synthesis.
+- Each test now generates first, then shows an explicit Play sample button.
+- This keeps playback inside a fresh user gesture, which iOS/Safari requires.
+- Generated samples do not replace chapter audio.
+- Full/context/paragraph tests remain fresh synthesis requests for prosody comparison.
