@@ -1,4 +1,4 @@
-OPALREADER v1.2.1 - GITHUB / CLOUDFLARE FLAT UPDATE
+OPALREADER v1.2.0 - GITHUB / CLOUDFLARE FLAT UPDATE
 
 This package is intentionally flat: all files are at the ZIP root.
 

@@ -1,12 +1,3 @@
-# OpalReader v1.2.1
-
-## Thursday playback + cleanup pass
-- Playback handoff refreshes generation state before deciding the next segment is unavailable.
-- Next-segment and next-chapter transitions use the same playback path.
-- Progressive playback remains available as soon as a segment is ready.
-- Added permanent Delete Book with local + cloud EPUB/audio/generation cleanup. Shared cached audio is preserved if another synced book still references it.
-- Historical TTS usage ledger is intentionally preserved.
-
 # OpalReader v1.2.0
 
 Personal EPUB audiobook reader with per-POV casting, Cloudflare Queue generation, KV sync, and private R2 audio caching.
