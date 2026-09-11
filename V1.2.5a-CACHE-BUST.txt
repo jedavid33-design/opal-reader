@@ -1,0 +1,10 @@
+OpalReader v1.2.5a — PWA cache bust + version info
+
+Changes:
+- Forces the installed PWA to fetch fresh app.js/styles.css using versioned asset URLs.
+- Service worker cache bumped to v28.
+- Navigation and JS/CSS use a network-first strategy with cache fallback.
+- Adds a small, unobtrusive information 'i' beside OpalReader. Tap it to see the installed app version.
+- Worker /health reports 1.2.5a for parity.
+
+No TTS, generation, playback, or prosody-diagnostic behavior changed.
