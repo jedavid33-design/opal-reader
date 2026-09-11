@@ -115,7 +115,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.2.3";
+const APP_VERSION = "1.2.4";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -265,6 +265,43 @@ async function hasCachedAudio(env, key) {
   if (env.OPALREADER_STORAGE.head)
     return Boolean(await env.OPALREADER_STORAGE.head(`audio/${key}.mp3`));
   return Boolean(await env.OPALREADER_STORAGE.get(`audio/${key}.mp3`));
+}
+
+
+async function chapterCompositeAudio(env, audioKeys, cacheKey) {
+  if (!env.OPALREADER_STORAGE) throw new Error("R2 storage has not been configured yet.");
+  const compositeObjectKey = `chapter-audio/${cacheKey}.mp3`;
+  const cached = await env.OPALREADER_STORAGE.get(compositeObjectKey);
+  if (cached) return { body: cached.body, cache: "HIT" };
+  const chunks = [];
+  let total = 0;
+  for (const key of audioKeys) {
+    const object = await cachedAudio(env, key);
+    if (!object) {
+      const error = new Error("One or more chapter audio segments are missing from R2.");
+      error.status = 404;
+      throw error;
+    }
+    const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
+    chunks.push(bytes);
+    total += bytes.byteLength;
+  }
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  await env.OPALREADER_STORAGE.put(compositeObjectKey, combined, {
+    httpMetadata: { contentType: "audio/mpeg" },
+  });
+  return { body: combined, cache: "MISS" };
+}
+
+async function compositeCacheKey(bookId, chapterIndex, audioKeys) {
+  const value = `${bookId}|${chapterIndex}|${audioKeys.join("|")}`;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function throwProviderError(response, provider) {
@@ -731,6 +768,20 @@ export default {
           "X-OpalReader-Cache": "HIT",
         });
       }
+
+      if (url.pathname === "/api/playback/chapter" && request.method === "POST") {
+        const body = await request.json();
+        const audioKeys = Array.isArray(body.audio_keys) ? body.audio_keys : [];
+        if (!validId(body.book_id) || !Number.isInteger(body.chapter_index) || !audioKeys.length || audioKeys.length > 100 || audioKeys.some((key) => !validCacheKey(key)))
+          return json({ error: "Invalid chapter playback request." }, 400, origin, env);
+        const key = await compositeCacheKey(body.book_id, body.chapter_index, audioKeys);
+        const result = await chapterCompositeAudio(env, audioKeys, key);
+        return relay(result.body, 200, "audio/mpeg", origin, env, {
+          "X-OpalReader-Cache": result.cache,
+          "X-OpalReader-Playback": "chapter-composite",
+        });
+      }
+
       if (url.pathname === "/api/generation/jobs" && request.method === "POST") {
         if (!env.OPALREADER_GENERATION || !syncReady(env))
           return json(

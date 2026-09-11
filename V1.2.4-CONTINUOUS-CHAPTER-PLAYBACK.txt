@@ -1,0 +1,19 @@
+OpalReader v1.2.4 — Continuous chapter playback
+
+Purpose
+- Work around iOS/WebKit background playback failures when JavaScript swaps audio.src after every narration segment.
+
+Change
+- Fully generated chapters are fetched from the Worker as one concatenated MP3 composite.
+- The player uses one audio source for the whole chapter, so segment boundaries no longer require JavaScript source changes while the phone is locked or Reader is backgrounded.
+- Composite chapter audio is cached in R2 using a hash of the chapter's current audio keys.
+- Partially generated chapters still use progressive segment playback.
+
+Known limitation
+- iOS can still block an automatic source change at the END OF A CHAPTER. This build is intended to eliminate the much more frequent segment-to-segment background failure first.
+- If chapter-to-chapter background continuation remains blocked, the next architecture step is an HLS/VOD playlist or longer continuous playback stream.
+
+Prosody investigation
+- Chapter 12 of In Her Own League remains the regression specimen.
+- Compare the deep-register shift around “…eventually. Minutes pass…” with the original segment boundaries.
+- If the shift aligns exactly with a synthesis request boundary, test: combined chunk, paragraph-aligned split, and provider-supported context/prompting.
