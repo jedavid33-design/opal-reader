@@ -1,5 +1,5 @@
-const CACHE = "opalreader-shell-v28";
-const SHELL = ["./", "./manifest.webmanifest?v=125a", "./icon.svg"];
+const CACHE = "opalreader-shell-v29";
+const SHELL = ["./", "./manifest.webmanifest?v=126", "./icon.svg"];
 self.addEventListener("install", (e) =>
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())),
 );

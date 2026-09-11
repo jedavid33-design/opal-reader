@@ -42,3 +42,11 @@ html,body,#app{max-width:100%;overflow-x:hidden}
 .usage-row span{text-align:right;color:#766b7b}
 @media(max-width:600px){.usage-row{flex-direction:column;gap:2px}.usage-row span{text-align:left}}
 .segment-tools{margin:0 0 14px;gap:10px;flex-wrap:wrap}.segment-boundary{display:grid;gap:10px;margin:10px 0}.segment-boundary>div{padding:10px 12px;border-radius:14px;background:rgba(79,45,94,.06)}.segment-boundary p{margin:4px 0 0;white-space:pre-wrap}.tts-boundary-marker{text-align:center;font-size:.82rem;font-weight:700;letter-spacing:.02em;color:#765782;padding:6px 0 10px}
+
+/* v1.2.6 Prosody Lab */
+.prosody-lab{margin:14px 0 18px;padding:14px;border:1px solid rgba(76,45,94,.18);border-radius:18px;background:rgba(244,237,248,.72)}
+.prosody-lab .row{align-items:flex-start;justify-content:space-between;gap:10px}
+.prosody-lab p{margin:10px 0 12px}
+.prosody-actions{display:flex;flex-wrap:wrap;gap:8px}
+.prosody-actions button{flex:1 1 180px}
+.prosody-status{margin-top:10px;padding:9px 11px;border-radius:12px;background:rgba(255,255,255,.7);font-size:.9rem}
