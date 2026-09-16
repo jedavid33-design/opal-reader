@@ -1,0 +1,7 @@
+OpalReader v1.3.0 — POV edit / regeneration repair
+
+- Existing generated audio remains playable after a POV/narrator edit.
+- Regenerate with current cast remains visible whenever prior chapter audio exists, including when that audio is marked stale by a POV edit.
+- Stale audio is treated as the safe fallback until replacement generation succeeds.
+- Successful replacement generation continues to swap in the newly generated audio only when ready.
+- Repairs chapters already left in the stale-audio state by earlier POV edits without requiring deletion or re-import.
