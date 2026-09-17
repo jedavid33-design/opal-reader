@@ -1,9 +1,0 @@
-OpalReader v1.2.7 — Prosody length test
-
-Adds two Prosody Lab auditions around the located passage:
-- ~2,000-character context
-- ~1,500-character context
-
-Both preserve whole paragraphs and work backward from the matched paragraph, so the problem passage remains in the sample while preceding context is progressively shortened. Production TTS chunking remains unchanged.
-
-Uses physical frontend filenames app-127.js, styles-127.css, and sw-127.js to avoid installed-PWA stale caching.
