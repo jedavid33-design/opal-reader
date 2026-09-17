@@ -1,8 +1,0 @@
-OpalReader v1.2.6b — hard PWA cache bust
-
-This build uses physically new frontend filenames:
-- app-126b.js
-- styles-126b.css
-- sw-126b.js
-
-Tap the small i beside OpalReader. It should report 1.2.6b.
