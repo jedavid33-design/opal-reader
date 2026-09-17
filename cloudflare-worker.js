@@ -115,7 +115,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.2.6";
+const APP_VERSION = "1.3.2";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -600,6 +600,24 @@ export default {
     const url = new URL(request.url);
     if ((url.pathname === "/health" || url.pathname === "/health/") && request.method === "GET")
       return json({ ok: true, app: "OpalReader API", version: APP_VERSION }, 200, origin, env);
+    if (url.pathname.startsWith("/api/export/audio/") && request.method === "GET") {
+      if (!env.OPALREADER_KV || !env.OPALREADER_STORAGE)
+        return json({ error: "Export storage is not configured." }, 503, origin, env);
+      const token = decodeURIComponent(url.pathname.slice("/api/export/audio/".length));
+      if (!/^[a-f0-9]{32}$/i.test(token))
+        return json({ error: "Invalid or expired export link." }, 400, origin, env);
+      const record = await env.OPALREADER_KV.get(`audio-export:${token}`, "json");
+      if (!record?.key || !validCacheKey(record.key))
+        return json({ error: "This export link has expired." }, 410, origin, env);
+      await env.OPALREADER_KV.delete(`audio-export:${token}`);
+      const object = await cachedAudio(env, record.key);
+      if (!object) return json({ error: "Audio not found." }, 404, origin, env);
+      const filename = String(record.filename || "opalreader-segment.mp3").replace(/[\r\n\"]/g, "_");
+      return relay(object.body, 200, "audio/mpeg", origin, env, {
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "private, no-store",
+      });
+    }
     if (
       env.OPALREADER_ACCESS_TOKEN &&
       request.headers.get("X-OpalReader-Token") !== env.OPALREADER_ACCESS_TOKEN
@@ -745,6 +763,20 @@ export default {
           return relay(object.body, 200, "application/epub+zip", origin, env);
         }
       }
+      if (url.pathname === "/api/export/audio-url" && request.method === "POST") {
+        if (!env.OPALREADER_KV || !env.OPALREADER_STORAGE)
+          return json({ error: "Export storage is not configured." }, 503, origin, env);
+        const body = await request.json();
+        if (!validCacheKey(body?.cache_key))
+          return json({ error: "Invalid audio cache key." }, 400, origin, env);
+        if (!(await hasCachedAudio(env, body.cache_key)))
+          return json({ error: "Audio not found." }, 404, origin, env);
+        const token = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, "0")).join("");
+        const filename = String(body?.filename || "opalreader-segment.mp3").replace(/[^a-z0-9._-]+/gi, "-").slice(0, 120);
+        await env.OPALREADER_KV.put(`audio-export:${token}`, JSON.stringify({ key: body.cache_key, filename }), { expirationTtl: 300 });
+        return json({ url: `${url.origin}/api/export/audio/${token}`, expires_in: 300 }, 200, origin, env);
+      }
+
       if (
         url.pathname.startsWith("/api/sync/audio/") &&
         request.method === "GET"
