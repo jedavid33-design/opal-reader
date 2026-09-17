@@ -115,7 +115,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.3.2";
+const APP_VERSION = "1.3.3";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -144,7 +144,8 @@ async function recordTtsUsage(env, body, details = {}) {
       queue_job_id: body?.queue_job_id || body?.job_id || null,
       voice_id: body?.voice_id || null,
       voice_name: body?.voice_name || null,
-      model: body?.model_id || null,
+      model: details.model || body?.model_id || null,
+      provider_request_id: details.provider_request_id || null,
       character_count_sent: details.provider_call ? String(body?.text || "").length : 0,
       provider_call_duration_ms: Number(details.duration_ms) || 0,
       audio_bytes_returned: Number(details.audio_bytes) || 0,
@@ -358,7 +359,7 @@ async function synthesizeAudio(env, provider, body) {
     return { body: hit.body, cache: "HIT" };
   }
   const started = Date.now();
-  let response, bytes, r2WriteSuccess = null;
+  let response, bytes, r2WriteSuccess = null, providerRequestId = null, actualModel = body?.model_id || null;
   try {
     if (provider === "azure") {
       if (!azureReady(env)) {
@@ -438,6 +439,8 @@ async function synthesizeAudio(env, provider, body) {
           language: body.language_code || "en-US",
         }),
       });
+      providerRequestId = response.headers.get("Speechify-Request-Id") || response.headers.get("X-Request-ID") || null;
+      actualModel = body.model_id || "simba-3.2";
       if (!response.ok) await throwProviderError(response, provider);
       bytes = await response.arrayBuffer();
     } else {
@@ -480,8 +483,10 @@ async function synthesizeAudio(env, provider, body) {
       duration_ms: Date.now() - started,
       audio_bytes: bytes?.byteLength || bytes?.length || 0,
       r2_write_success: r2WriteSuccess,
+      provider_request_id: providerRequestId,
+      model: actualModel,
     });
-    return { body: bytes, cache: "MISS" };
+    return { body: bytes, cache: "MISS", provider_request_id: providerRequestId, model: actualModel };
   } catch (error) {
     await recordTtsUsage(env, body, {
       provider,
@@ -491,6 +496,8 @@ async function synthesizeAudio(env, provider, body) {
       duration_ms: Date.now() - started,
       error: error.message || "Provider request failed.",
       r2_write_success: r2WriteSuccess,
+      provider_request_id: providerRequestId,
+      model: actualModel,
     });
     throw error;
   }
@@ -554,8 +561,9 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     if (!segment) throw new Error("Generation segment was not found.");
     segment.queue_job_id = jobId;
     segment.retry_attempt = attempts;
+    let result = null;
     if (!(await hasCachedAudio(env, segment.cache_key))) {
-      const result = await synthesizeAudio(env, segment.provider, segment);
+      result = await synthesizeAudio(env, segment.provider, segment);
       if (result.cache === "MISS")
         status.generated_cost =
           (status.generated_cost || 0) + (Number(segment.estimated_cost) || 0);
@@ -570,6 +578,8 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     status.segments[index] = {
       cache_key: segment.cache_key,
       state: "ready",
+      provider_request_id: result?.provider_request_id || null,
+      model: result?.model || segment.model_id || null,
     };
     status.completed = status.segments.filter(
       (item) => item.state === "ready",
@@ -972,6 +982,8 @@ export default {
         const result = await synthesizeAudio(env, "azure", body);
         return relay(result.body, 200, "audio/mpeg", origin, env, {
           "X-OpalReader-Cache": result.cache,
+          ...(result.provider_request_id ? { "X-Speechify-Request-Id": result.provider_request_id } : {}),
+          ...(result.model ? { "X-Speechify-Model": result.model } : {}),
         });
       }
       if (
