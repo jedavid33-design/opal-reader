@@ -46,3 +46,7 @@ The pass removes the app-side stale-state bugs we reproduced around completed ch
 ## Deployment
 
 See `UPLOAD-INSTRUCTIONS.txt`.
+
+
+## Opal POV metadata
+Opal Reader v136 recognizes Book OCR Studio chapter metadata exported as `data-opal-pov="Character"` on EPUB chapter sections. When present, that POV is authoritative for the chapter and uppercase text inside the chapter is not interpreted as a narrator switch. EPUBs without the tag continue to use the existing POV heuristic.
