@@ -72,3 +72,13 @@ When missing/repeated/bad audio is found:
 ## Recent commits
 - 6196bb3: Add single-segment audio preview for TTS diagnostics.
 - 4973368: Shorten voice audition samples to about 20 seconds.
+
+## Book backup / restore
+- Added 2026-09-23 in commit e1bca42.
+- A book can be exported from its book header with **Back up book**.
+- Backup is a portable `.opalreader.zip` containing `book.json`, the original EPUB when locally available, and every generated segment MP3 that can be recovered from local storage or R2.
+- Library has **Import backup** to restore the book state, EPUB, and backed-up audio.
+- Restored MP3s are written to local IndexedDB and playback now checks local restored audio before R2, so a restored full backup remains playable even if the R2 object is later unavailable.
+- Backup preserves OpalReader metadata including POV/cast, chapter/segment state, playback progress, audio keys, request/model metadata already stored on the book, etc.
+- Current backup format identifier: `opalreader-book-backup`, version 1.
+- This is intended to make deleting/archive-and-restore workflows reversible. A dedicated delete-with-backup confirmation flow can be added separately if desired.
