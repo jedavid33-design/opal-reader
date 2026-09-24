@@ -5,9 +5,17 @@ Last updated: 2026-09-23
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-135.js / styles-135.css / sw-135.js.
+- Current frontend generation: app-137.js / styles-137.css / sw-137.js.
 - cloudflare-worker.js is the Worker source of truth.
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## v137 unified frontend
+- Unified the previously split v135/v136 frontend on 2026-09-23.
+- v137 uses the latest v135 backup/restore, audition, and TTS diagnostic work as its base while preserving v136 Book OCR Studio `data-opal-pov` support.
+- The mobile chapter-card overflow fix is included in `styles-137.css`.
+- Added touch pull-to-refresh for iPhone/PWA use. Pulling down from the top shows a small status pill; releasing after the threshold saves the current playback position and reloads the app.
+- `index.html` now loads `app-137.js` and `styles-137.css`.
+- Do not resume feature work from app-135.js or app-136.js; v137 is the new frontend source of truth.
 
 ## Product
 OpalReader is Julie's EPUB-to-audiobook reader/generator. It imports EPUBs, identifies POV/narrator roles, casts voices, generates chapter audio through configured TTS providers, caches audio, and provides playback/progress controls.
