@@ -49,4 +49,11 @@ See `UPLOAD-INSTRUCTIONS.txt`.
 
 
 ## Opal POV metadata
-Opal Reader v136 recognizes Book OCR Studio chapter metadata exported as `data-opal-pov="Character"` on EPUB chapter sections. When present, that POV is authoritative for the chapter and uppercase text inside the chapter is not interpreted as a narrator switch. EPUBs without the tag continue to use the existing POV heuristic.
+Opal Reader v137 recognizes Book OCR Studio chapter metadata exported as `data-opal-pov="Character"` on EPUB chapter sections. When present, that POV is authoritative for the chapter and uppercase text inside the chapter is not interpreted as a narrator switch. EPUBs without the tag continue to use the existing POV heuristic.
+
+
+## v1.3.7 — unified mobile reader
+
+- Unified the v135 backup/restore and diagnostic work with v136 authoritative Book OCR Studio POV metadata.
+- Added pull-to-refresh on touch devices when the reader is already at the top of the page.
+- Preserved the mobile chapter-card overflow fix so long chapter titles wrap without pushing controls offscreen.
