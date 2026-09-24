@@ -61,7 +61,7 @@ When missing/repeated/bad audio is found:
 
 ## Voice audition
 - Voice audition uses book text appropriate to the selected POV/role.
-- As of 2026-09-23, audition text was shortened from the previous ~240-character sample to roughly 110 characters, targeting about 20 seconds of speech.
+- As of 2026-09-24, audition text is roughly 190 characters, targeting about 35 seconds of speech.
 - This change affects voice audition only. Production TTS segmentation is unchanged.
 
 ## Audio / generation principles
