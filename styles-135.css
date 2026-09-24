@@ -64,3 +64,49 @@ html,body,#app{max-width:100%;overflow-x:hidden}
   .book-head .muted{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .book-backup{font-size:11px;margin-top:5px}
 }
+
+
+/* Mobile chapter-card overflow fix: keep titles, info, and actions inside the viewport. */
+@media(max-width:600px){
+  .chapter-list{min-width:0;width:100%;max-width:100%}
+  .chapter{
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:8px 10px;
+  }
+  .chapter-main{
+    grid-column:1;
+    min-width:0;
+    width:auto;
+    flex:none;
+  }
+  .chapter-title{
+    min-width:0;
+    width:100%;
+  }
+  .chapter-title h3{
+    min-width:0;
+    white-space:normal;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    display:-webkit-box;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:2;
+    line-clamp:2;
+    line-height:1.22;
+  }
+  .chapter-details{flex:0 0 auto}
+  .chapter-actions{
+    grid-column:2;
+    grid-row:1;
+    min-width:0;
+    max-width:145px;
+    margin-left:0;
+    justify-content:flex-end;
+  }
+  .chapter-error{grid-column:1 / -1}
+}
