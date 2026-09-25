@@ -1,6 +1,6 @@
 # OpalReader Project Context
 
-Last updated: 2026-09-23
+Last updated: 2026-09-24
 
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
@@ -80,6 +80,8 @@ When missing/repeated/bad audio is found:
 ## Recent commits
 - 6196bb3: Add single-segment audio preview for TTS diagnostics.
 - 4973368: Shorten voice audition samples to about 20 seconds.
+- 2026-09-24: Shorten voice audition samples to ~35 seconds of speech (~190 chars).
+- 2026-09-24: Add delete-with-backup flow (book header Delete button, backup-first confirmation, IndexedDB cleanup).
 
 ## Book backup / restore
 - Added 2026-09-23 in commit e1bca42.
@@ -89,4 +91,12 @@ When missing/repeated/bad audio is found:
 - Restored MP3s are written to local IndexedDB and playback now checks local restored audio before R2, so a restored full backup remains playable even if the R2 object is later unavailable.
 - Backup preserves OpalReader metadata including POV/cast, chapter/segment state, playback progress, audio keys, request/model metadata already stored on the book, etc.
 - Current backup format identifier: `opalreader-book-backup`, version 1.
-- This is intended to make deleting/archive-and-restore workflows reversible. A dedicated delete-with-backup confirmation flow can be added separately if desired.
+- This is intended to make deleting/archive-and-restore workflows reversible.
+
+## Delete with backup (added 2026-09-24)
+- The book header now has a **Delete book** button next to Back up book.
+- Tapping it asks: back up first, then delete (OK), or choose the next step (Cancel).
+- Back-up-first path downloads the standard `.opalreader.zip` backup; if the backup fails, nothing is deleted.
+- Skipping the backup asks for explicit confirmation that deletion is without a backup and cannot be undone.
+- Deletion removes the book record, its local EPUB, and its cached segment audio from IndexedDB, then returns to the Library view.
+- Remote R2 audio objects are intentionally left in place for now; a restored backup plays from local audio first, so orphans are harmless but may accumulate. A worker-side R2 cleanup pass can be added later if storage becomes a concern.
