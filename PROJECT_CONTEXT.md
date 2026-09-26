@@ -5,9 +5,15 @@ Last updated: 2026-09-26
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-147.js / styles-138.css / sw-147.js.
+- Current frontend generation: app-148.js / styles-138.css / sw-148.js.
 - cloudflare-worker.js is the Worker source of truth (v1.4.5).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Audition progress + modal scroll preservation (v1.4.12, 2026-09-26)
+- Julie asked for (a) an in-progress indicator on the auditioned voice in Voice Lab (generation can take a while), and (b) a fix for the list jumping to the top when she taps audition.
+- (a) New `a.auditioningVoice` state: set + `se()` when an audition starts in `et()`, cleared in a `finally` (only if it still matches, guarding overlapping auditions; re-render scoped to the voices modal). The voice row (`Dr`) swaps the "Book audition" button for a disabled "Auditioning…" button while that voice generates.
+- (b) `se()` now saves/restores `.modal-back .modal` scrollTop across the full re-render, so progress updates, regen countdowns, and any other modal-time re-renders no longer reset the list position. Note: no `se()` call exists in the pre-1.4.12 audition path, so Julie's original jump was likely iOS Safari behavior (keyboard dismissal/focus) rather than a re-render; if it persists, get the exact timing from her.
+- Frontend-only: app-147.js → app-148.js, sw-147.js → sw-148.js (cache opalreader-shell-v148). Worker stays v1.4.5.
 
 ## Retry-loop const reassignment TypeError (v1.4.11, 2026-09-26)
 - Julie hit "Attempted to assign to readonly property." (Safari/JSC wording for assignment-to-const) on Regenerate right AFTER fixing her billing. Root cause: the v1.4.8 retry patch replaced `h=await gt(...)` with `h=null;...while(!h){h=await gt(...)}` without noticing `h` was declared `const` in the comma chain (`const S={...},h=...`). The bug only fires when the request SUCCEEDS: on rejection the assignment is skipped, so all the 429 countdowns worked fine and hid it. `node --check` does not catch const reassignment; the author's simulation used `let h` so it passed.
