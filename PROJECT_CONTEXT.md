@@ -14,6 +14,7 @@ Last updated: 2026-09-26
 - Non-429 errors fail fast with the existing explicit error alert. After 3 failed retries, the last 429 error is shown explicitly.
 - `be()` now attaches the HTTP status to thrown errors (`err.status`) — additive, no behavior change elsewhere.
 - Cost: 429 rejections process zero characters so retries are free; only a successful attempt costs (~$0.004/segment on paid Tier 1).
+- Review POV modal: segments with no audioKey now show a "Not generated" badge (reuses .badge.stale) next to the segment header, so ungenerated segments are visible at a glance.
 - Frontend-only: app-143.js → app-144.js, sw-143.js → sw-144.js (cache opalreader-shell-v144). Worker stays v1.4.5.
 
 ## Worker: background segment retries back to 3 (v1.4.5, 2026-09-26)
