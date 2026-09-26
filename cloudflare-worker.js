@@ -533,8 +533,11 @@ async function throwProviderError(response, provider) {
     raw = await response.text();
     detail = raw ? JSON.parse(raw) : null;
   } catch {}
+  const providerSaid = errorMessage(detail, raw.trim());
   const error = new Error(
-    errorMessage(detail, raw.trim() || `${label} request failed (${response.status}).`),
+    providerSaid
+      ? `${label} error (${response.status}): ${providerSaid}`
+      : `${label} request failed with status ${response.status}.`,
   );
   error.status = response.status;
   error.provider = provider;
@@ -930,7 +933,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       });
     return status;
   } catch (error) {
-    status.state = attempts <= 3 ? "queued" : "failed";
+    status.state = attempts < 2 ? "queued" : "failed";
     status.error = error.message || "Chapter generation failed.";
     status.updated_at = Date.now();
     await saveGenerationStatus(env, status);
@@ -1661,7 +1664,7 @@ export default {
         );
         message.ack();
       } catch (error) {
-        if ((message.attempts || 1) <= 3)
+        if ((message.attempts || 1) < 2)
           message.retry({
             delaySeconds: Math.min(60, 2 ** (message.attempts || 1)),
           });
