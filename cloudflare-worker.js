@@ -334,6 +334,32 @@ async function hasCachedAudio(env, key) {
 }
 
 
+async function purgeBookAudio(env, bookId, chapters, jobIds) {
+  let deleted = 0;
+  const erase = async (key) => {
+    try {
+      await env.OPALREADER_STORAGE.delete(key);
+      deleted += 1;
+    } catch {}
+  };
+  for (const chapter of chapters || []) {
+    const keys = (chapter.audio_keys || []).filter(validCacheKey);
+    for (const key of keys)
+      for (const ext of AUDIO_EXTENSIONS) await erase(`audio/${key}.${ext}`);
+    if (keys.length) {
+      const composite = await compositeCacheKey(bookId, chapter.chapter_index, keys);
+      for (const ext of AUDIO_EXTENSIONS) await erase(`chapter-audio/${composite}.${ext}`);
+    }
+  }
+  for (const jobId of jobIds || []) {
+    if (!validJobId(jobId)) continue;
+    await erase(generationPayloadKey(jobId));
+    try {
+      if (env.OPALREADER_KV) await env.OPALREADER_KV.delete(generationStatusKey(jobId));
+    } catch {}
+  }
+  return deleted;
+}
 async function chapterCompositeAudio(env, audioKeys, cacheKey) {
   if (!env.OPALREADER_STORAGE) throw new Error("R2 storage has not been configured yet.");
   const parts = [];
@@ -1129,6 +1155,36 @@ export default {
         const filename = String(body?.filename || "opalreader-segment.mp3").replace(/[^a-z0-9._-]+/gi, "-").slice(0, 120);
         await env.OPALREADER_KV.put(`audio-export:${token}`, JSON.stringify({ key: body.cache_key, filename }), { expirationTtl: 300 });
         return json({ url: `${url.origin}/api/export/audio/${token}`, expires_in: 300 }, 200, origin, env);
+      }
+
+      if (url.pathname === "/api/audio/purge" && request.method === "DELETE") {
+        if (!env.OPALREADER_STORAGE)
+          return json(
+            { error: "R2 storage has not been configured yet." },
+            503,
+            origin,
+            env,
+          );
+        const body = await request.json();
+        const bookId = String(body?.book_id || "");
+        const chapters = Array.isArray(body?.chapters) ? body.chapters : [];
+        const jobIds = Array.isArray(body?.job_ids) ? body.job_ids : [];
+        if (
+          !validId(bookId) ||
+          chapters.length > 500 ||
+          jobIds.length > 500 ||
+          chapters.some(
+            (chapter) =>
+              !Number.isInteger(chapter?.chapter_index) ||
+              !Array.isArray(chapter?.audio_keys) ||
+              chapter.audio_keys.length > 200 ||
+              chapter.audio_keys.some((key) => !validCacheKey(key)),
+          ) ||
+          jobIds.some((jobId) => !validJobId(jobId))
+        )
+          return json({ error: "Invalid audio purge request." }, 400, origin, env);
+        const deleted = await purgeBookAudio(env, bookId, chapters, jobIds);
+        return json({ deleted }, 200, origin, env);
       }
 
       if (
