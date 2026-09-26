@@ -5,16 +5,16 @@ Last updated: 2026-09-26
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-141.js / styles-138.css / sw-141.js.
+- Current frontend generation: app-142.js / styles-138.css / sw-142.js.
 - cloudflare-worker.js is the Worker source of truth (v1.4.4).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
 
-## Review POV cleanup (v1.4.5, 2026-09-26)
-- Review POV modal (segment review) decluttered at Julie's request.
-- Removed diagnostics: "Copy boundary report" button + handler, per-segment END text preview (START kept), "Listen to segment" button + previewOneSegment, "Prepare MP3" button + export handler + MP3-ready block + share handler.
-- Model / Request ID / Audio key moved behind a discreet ⓘ details popover per segment (new .segment-details styles).
-- Regenerating a segment now shows an indeterminate status bar in the modal (new .regen-bar / .regen-indeterminate styles) and disables that segment's Regenerate button while the request is in flight (prevents accidental double-taps / double quota spend).
-- Frontend app-140.js → app-141.js, styles-137.css → styles-138.css, sw-140.js → sw-141.js (cache opalreader-shell-v141). APP_UI_VERSION 1.4.5. Worker unchanged (v1.4.4).
+## Fix: single-segment Regenerate was broken by undefined `it(s)` (v1.4.6, 2026-09-26)
+- `regenerateOneSegment()` called `it(s)` — a function that was never defined anywhere in the bundle (latent bug in the original ChatGPT-built code, present since before v1.4.4). Every "Regenerate segment" tap threw `Can't find variable: it` before any request went out.
+- Replaced with a real guard using the app's own provider map: `if(!a.providers[s.provider]) throw new Error("The "+s.provider+" provider is not configured. Add its key in Voice Lab first.")`.
+- Frontend-only: app-141.js → app-142.js, sw-141.js → sw-142.js (cache opalreader-shell-v142). Worker stays v1.4.4.
+
+## Review POV modal cleanup (v1.4.5, 2026-09-26)
 
 ## Speechify removed; provider order Gemini > Fish > Azure > OpenAI (v1.4.4, 2026-09-26)
 - Speechify provider fully removed (frontend + worker) at Julie's request after she cancelled her subscription (generation issues + cost). Voice Lab tabs, settings model picker, provider status note, per-char pricing, voice mapping, worker synth branch, /api/providers/speechify/* endpoints all gone.
