@@ -6,8 +6,14 @@ Last updated: 2026-09-26
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
 - Current frontend generation: app-143.js / styles-138.css / sw-143.js.
-- cloudflare-worker.js is the Worker source of truth (v1.4.4).
+- cloudflare-worker.js is the Worker source of truth (v1.4.5).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Worker: background segment retries back to 3 (v1.4.5, 2026-09-26)
+- Julie asked to restore the retry count that was cut from 3 to 1 earlier today. Queue consumer now retries a failed segment up to 3 times (4 attempts total) with 2s/4s/8s backoff before marking it failed.
+- Explicit provider errors unchanged: failures still surface as "<Provider> error (<status>): <message>" in the chapter error line.
+- Worker-only: v1.4.4 → v1.4.5. Frontend stays v1.4.7 (app-143.js). compatibility_date 2026-08-29 and all 12 bindings preserved; secrets inherited.
+- Note: this covers background chapter generation via the queue. Single-segment Regenerate taps call /api/providers/<provider>/speech directly (no queue), so they still fail fast with the explicit error on the first attempt.
 
 ## Version label fix (v1.4.7, 2026-09-26)
 - v1.4.6 shipped the Regenerate fix but `APP_UI_VERSION` was still `"1.4.5"`, so the ⓘ dialog kept reporting 1.4.5 even with the fixed code. Bumped the label to 1.4.7 so the dialog reports correctly.
