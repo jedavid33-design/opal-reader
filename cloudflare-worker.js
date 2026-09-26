@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.4";
+const APP_VERSION = "1.4.5";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -762,7 +762,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       });
     return status;
   } catch (error) {
-    status.state = attempts < 2 ? "queued" : "failed";
+    status.state = attempts < 4 ? "queued" : "failed";
     status.error = error.message || "Chapter generation failed.";
     status.updated_at = Date.now();
     await saveGenerationStatus(env, status);
@@ -1313,7 +1313,7 @@ export default {
         );
         message.ack();
       } catch (error) {
-        if ((message.attempts || 1) < 2)
+        if ((message.attempts || 1) < 4)
           message.retry({
             delaySeconds: Math.min(60, 2 ** (message.attempts || 1)),
           });
