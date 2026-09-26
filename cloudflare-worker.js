@@ -1,5 +1,3 @@
-const EL = "https://api.elevenlabs.io";
-const GOOGLE = "https://texttospeech.googleapis.com/v1";
 const SPEECHIFY = "https://api.speechify.ai";
 const azureReady = (env) =>
   Boolean(env.AZURE_SPEECH_KEY && /^[a-z0-9-]+$/i.test(env.AZURE_SPEECH_REGION || ""));
@@ -46,26 +44,6 @@ const errorMessage = (value, fallback) => {
   }
   return extract(value) || fallback;
 };
-async function googleError(response, origin, env) {
-  const fallback = `Google Cloud TTS request failed (${response.status}).`;
-  let detail,
-    raw = "";
-  try {
-    raw = await response.text();
-    detail = raw ? JSON.parse(raw) : null;
-  } catch {}
-  return json(
-    {
-      error: errorMessage(detail, raw.trim() || fallback),
-      provider: "google",
-      status: response.status,
-      details: detail || raw || undefined,
-    },
-    response.status,
-    origin,
-    env,
-  );
-}
 async function azureError(response, origin, env) {
   const fallback = `Azure Speech request failed (${response.status}).`;
   let detail,
@@ -115,7 +93,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -255,8 +233,6 @@ const audioContentType = (format) =>
 function providerLabel(provider) {
   return provider === "azure"
     ? "Azure Speech"
-    : provider === "google"
-      ? "Google Cloud TTS"
       : provider === "speechify"
         ? "Speechify"
         : provider === "fish"
@@ -265,11 +241,7 @@ function providerLabel(provider) {
             ? "OpenAI"
             : provider === "gemini"
               ? "Gemini"
-              : provider === "kokoro"
-                ? "Kokoro"
-                : provider === "chatterbox"
-                  ? "Chatterbox"
-                  : "ElevenLabs";
+              : "TTS provider";
 }
 function sniffAudioFormat(bytes) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -486,71 +458,6 @@ const GEMINI_VOICE_LIST = normalizeStaticVoices("gemini", [
   ["Achernar", "Achernar", "female"],
   ["Orus", "Orus", "male"],
 ], "Gemini prebuilt");
-const KOKORO_VOICE_LIST = normalizeStaticVoices("kokoro", [
-  ["af_heart", "Heart", "female"],
-  ["af_alloy", "Alloy", "female"],
-  ["af_aoede", "Aoede", "female"],
-  ["af_bella", "Bella", "female"],
-  ["af_jessica", "Jessica", "female"],
-  ["af_kore", "Kore", "female"],
-  ["af_nicole", "Nicole", "female"],
-  ["af_nova", "Nova", "female"],
-  ["af_river", "River", "female"],
-  ["af_sarah", "Sarah", "female"],
-  ["af_sky", "Sky", "female"],
-  ["am_adam", "Adam", "male"],
-  ["am_echo", "Echo", "male"],
-  ["am_eric", "Eric", "male"],
-  ["am_fenrir", "Fenrir", "male"],
-  ["am_liam", "Liam", "male"],
-  ["am_michael", "Michael", "male"],
-  ["am_onyx", "Onyx", "male"],
-  ["am_puck", "Puck", "male"],
-  ["am_santa", "Santa", "male"],
-  ["bf_alice", "Alice", "female"],
-  ["bf_emma", "Emma", "female"],
-  ["bf_isabella", "Isabella", "female"],
-  ["bf_lily", "Lily", "female"],
-  ["bm_daniel", "Daniel", "male"],
-  ["bm_fable", "Fable", "male"],
-  ["bm_george", "George", "male"],
-  ["bm_lewis", "Lewis", "male"],
-], "Kokoro");
-async function selfHostedVoices(env, provider) {
-  const baseUrl = provider === "kokoro" ? env.KOKORO_TTS_URL : env.CHATTERBOX_TTS_URL;
-  const apiKey = provider === "kokoro" ? env.KOKORO_API_KEY : env.CHATTERBOX_API_KEY;
-  const label = providerLabel(provider);
-  const fallback = provider === "kokoro"
-    ? KOKORO_VOICE_LIST
-    : normalizeStaticVoices(provider, [["default", "Default voice", ""]], `${label} server`);
-  if (!baseUrl) return fallback;
-  try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/audio/voices`, {
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-    });
-    if (response.ok) {
-      const data = await response.json();
-      const items = Array.isArray(data) ? data : data.data || data.voices || [];
-      const voices = items
-        .map((item) => {
-          const id = typeof item === "string" ? item : item.id || item.voice_id || item.name;
-          if (!id) return null;
-          const name = typeof item === "object" && (item.name || item.title) ? item.name || item.title : String(id);
-          return {
-            provider,
-            voice_id: String(id),
-            name: String(name),
-            locale: "en",
-            gender: (typeof item === "object" && item.gender) || "",
-            traits: [`${label} server`],
-          };
-        })
-        .filter(Boolean);
-      if (voices.length) return voices;
-    }
-  } catch {}
-  return fallback;
-}
 async function throwProviderError(response, provider) {
   const label = providerLabel(provider);
   let detail,
@@ -577,7 +484,7 @@ async function synthesizeAudio(env, provider, body) {
     error.status = 400;
     throw error;
   }
-  const limits = { azure: 8000, google: 4500, elevenlabs: 40000, speechify: 20000, fish: 8000, openai: 4000, gemini: 8000, kokoro: 8000, chatterbox: 8000 };
+  const limits = { azure: 8000, speechify: 20000, fish: 8000, openai: 4000, gemini: 8000 };
   if (!limits[provider]) {
     const error = new Error("Unknown voice provider.");
     error.status = 400;
@@ -626,37 +533,6 @@ async function synthesizeAudio(env, provider, body) {
       });
       if (!response.ok) await throwProviderError(response, provider);
       bytes = await response.arrayBuffer();
-    } else if (provider === "google") {
-      if (!env.GOOGLE_CLOUD_TTS_API_KEY) {
-        const error = new Error("Google Cloud TTS has not been connected yet.");
-        error.status = 503;
-        throw error;
-      }
-      const chirp = /Chirp(?:[\s-]*3)?[\s-]*HD/i.test(body.voice_id),
-        audioConfig = { audioEncoding: "MP3" };
-      if (!chirp) {
-        audioConfig.speakingRate = body.speaking_rate || 1;
-        audioConfig.pitch = body.pitch || 0;
-      }
-      response = await fetch(`${GOOGLE}/text:synthesize`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": env.GOOGLE_CLOUD_TTS_API_KEY,
-        },
-        body: JSON.stringify({
-          input: { text: plainSpeechText(body.text) },
-          voice: {
-            name: body.voice_id,
-            languageCode:
-              body.language_code || body.voice_id.split("-").slice(0, 2).join("-"),
-          },
-          audioConfig,
-        }),
-      });
-      if (!response.ok) await throwProviderError(response, provider);
-      const data = await response.json();
-      bytes = decodeBase64(data.audioContent);
     } else if (provider === "speechify") {
       if (!env.SPEECHIFY_API_KEY) {
         const error = new Error("Speechify has not been connected yet.");
@@ -779,56 +655,10 @@ async function synthesizeAudio(env, provider, body) {
       const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
       bytes = pcmToWav(decodeBase64(audioPart.inlineData.data).buffer, { sampleRate });
       audioFormat = "wav";
-    } else if (provider === "kokoro" || provider === "chatterbox") {
-      const baseUrl = provider === "kokoro" ? env.KOKORO_TTS_URL : env.CHATTERBOX_TTS_URL;
-      const apiKey = provider === "kokoro" ? env.KOKORO_API_KEY : env.CHATTERBOX_API_KEY;
-      if (!baseUrl) {
-        const error = new Error(
-          `${providerLabel(provider)} has not been connected. Set ${provider === "kokoro" ? "KOKORO_TTS_URL" : "CHATTERBOX_TTS_URL"} on the Worker to point at your self-hosted server.`,
-        );
-        error.status = 503;
-        throw error;
-      }
-      const selfHostedModel = body.model_id || provider;
-      response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/audio/speech`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        body: JSON.stringify({
-          model: selfHostedModel,
-          input: plainSpeechText(body.text),
-          voice: body.voice_id,
-          response_format: "mp3",
-        }),
-      });
-      actualModel = selfHostedModel;
-      if (!response.ok) await throwProviderError(response, provider);
-      bytes = await response.arrayBuffer();
-      audioFormat = sniffAudioFormat(bytes);
     } else {
-      if (!env.ELEVENLABS_API_KEY) {
-        const error = new Error("ElevenLabs has not been connected yet.");
-        error.status = 503;
-        throw error;
-      }
-      response = await fetch(
-        `${EL}/v1/text-to-speech/${encodeURIComponent(body.voice_id)}/stream?output_format=mp3_44100_128`,
-        {
-          method: "POST",
-          headers: {
-            "xi-api-key": env.ELEVENLABS_API_KEY,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            text: plainSpeechText(body.text),
-            model_id: body.model_id || "eleven_flash_v2_5",
-          }),
-        },
-      );
-      if (!response.ok) await throwProviderError(response, provider);
-      bytes = await response.arrayBuffer();
+      const error = new Error(`Unknown TTS provider: ${provider}.`);
+      error.status = 400;
+      throw error;
     }
     if (body.cache_key) {
       try {
@@ -1010,14 +840,10 @@ export default {
         return json(
           {
             azure: azureReady(env),
-            google: Boolean(env.GOOGLE_CLOUD_TTS_API_KEY),
-            elevenlabs: Boolean(env.ELEVENLABS_API_KEY),
             speechify: Boolean(env.SPEECHIFY_API_KEY),
             fish: Boolean(env.FISH_AUDIO_API_KEY),
             openai: Boolean(env.OPENAI_API_KEY),
             gemini: Boolean(env.GEMINI_API_KEY),
-            kokoro: Boolean(env.KOKORO_TTS_URL),
-            chatterbox: Boolean(env.CHATTERBOX_TTS_URL),
             sync: Boolean(syncReady(env)),
             generation: Boolean(
               env.OPALREADER_GENERATION && syncReady(env),
@@ -1248,7 +1074,7 @@ export default {
               !validCacheKey(segment.cache_key) ||
               !segment.text ||
               !segment.voice_id ||
-              !["azure", "google", "elevenlabs", "speechify", "fish", "openai", "gemini", "kokoro", "chatterbox"].includes(segment.provider),
+              !["azure", "speechify", "fish", "openai", "gemini"].includes(segment.provider),
           )
         )
           return json(
@@ -1387,45 +1213,6 @@ export default {
         });
       }
       if (
-        url.pathname === "/api/providers/google/voices" &&
-        request.method === "GET"
-      ) {
-        if (!env.GOOGLE_CLOUD_TTS_API_KEY)
-          return json(
-            { error: "Google Cloud TTS has not been connected yet." },
-            503,
-            origin,
-            env,
-          );
-        const upstream = new URL(`${GOOGLE}/voices`);
-        if (url.searchParams.get("languageCode"))
-          upstream.searchParams.set(
-            "languageCode",
-            url.searchParams.get("languageCode"),
-          );
-        const response = await fetch(upstream, {
-          headers: { "x-goog-api-key": env.GOOGLE_CLOUD_TTS_API_KEY },
-        });
-        if (!response.ok) return googleError(response, origin, env);
-        return new Response(response.body, {
-          status: response.status,
-          headers: {
-            "Content-Type": "application/json",
-            ...cors(origin, env),
-          },
-        });
-      }
-      if (
-        url.pathname === "/api/providers/google/speech" &&
-        request.method === "POST"
-      ) {
-        const body = await request.json();
-        const result = await synthesizeAudio(env, "google", body);
-        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
-          "X-OpalReader-Cache": result.cache,
-        });
-      }
-      if (
         url.pathname === "/api/providers/speechify/voices" &&
         request.method === "GET"
       ) {
@@ -1465,80 +1252,6 @@ export default {
       ) {
         const body = await request.json();
         const result = await synthesizeAudio(env, "speechify", body);
-        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
-          "X-OpalReader-Cache": result.cache,
-        });
-      }
-      if (
-        url.pathname === "/api/providers/elevenlabs/voices" &&
-        request.method === "GET"
-      ) {
-        if (!env.ELEVENLABS_API_KEY)
-          return json(
-            { error: "ElevenLabs has not been connected yet." },
-            503,
-            origin,
-            env,
-          );
-        const shared = url.searchParams.get("library") === "true",
-          target = shared
-            ? new URL(`${EL}/v1/shared-voices`)
-            : new URL(`${EL}/v2/voices`);
-        for (const [key, value] of url.searchParams)
-          if (key !== "library") target.searchParams.set(key, value);
-        if (!shared) target.searchParams.set("include_total_count", "true");
-        const response = await fetch(target, {
-          headers: { "xi-api-key": env.ELEVENLABS_API_KEY },
-        });
-        return new Response(response.body, {
-          status: response.status,
-          headers: { "Content-Type": "application/json", ...cors(origin, env) },
-        });
-      }
-      if (
-        url.pathname === "/api/providers/elevenlabs/shared/add" &&
-        request.method === "POST"
-      ) {
-        if (!env.ELEVENLABS_API_KEY)
-          return json(
-            { error: "ElevenLabs has not been connected yet." },
-            503,
-            origin,
-            env,
-          );
-        const body = await request.json();
-        if (!body.public_user_id || !body.voice_id)
-          return json(
-            { error: "Shared voice owner and ID are required." },
-            400,
-            origin,
-            env,
-          );
-        const response = await fetch(
-          `${EL}/v1/voices/add/${encodeURIComponent(body.public_user_id)}/${encodeURIComponent(body.voice_id)}`,
-          {
-            method: "POST",
-            headers: {
-              "xi-api-key": env.ELEVENLABS_API_KEY,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              new_name: body.new_name || "OpalReader voice",
-              bookmarked: true,
-            }),
-          },
-        );
-        return new Response(response.body, {
-          status: response.status,
-          headers: { "Content-Type": "application/json", ...cors(origin, env) },
-        });
-      }
-      if (
-        url.pathname === "/api/providers/elevenlabs/speech" &&
-        request.method === "POST"
-      ) {
-        const body = await request.json();
-        const result = await synthesizeAudio(env, "elevenlabs", body);
         return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
         });
@@ -1646,53 +1359,7 @@ export default {
           "X-OpalReader-Cache": result.cache,
         });
       }
-      if (
-        url.pathname === "/api/providers/kokoro/voices" &&
-        request.method === "GET"
-      ) {
-        if (!env.KOKORO_TTS_URL)
-          return json(
-            { error: "Kokoro has not been connected. Set KOKORO_TTS_URL on the Worker." },
-            503,
-            origin,
-            env,
-          );
-        return json({ voices: await selfHostedVoices(env, "kokoro") }, 200, origin, env);
-      }
-      if (
-        url.pathname === "/api/providers/kokoro/speech" &&
-        request.method === "POST"
-      ) {
-        const body = await request.json();
-        const result = await synthesizeAudio(env, "kokoro", body);
-        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
-          "X-OpalReader-Cache": result.cache,
-        });
-      }
-      if (
-        url.pathname === "/api/providers/chatterbox/voices" &&
-        request.method === "GET"
-      ) {
-        if (!env.CHATTERBOX_TTS_URL)
-          return json(
-            { error: "Chatterbox has not been connected. Set CHATTERBOX_TTS_URL on the Worker." },
-            503,
-            origin,
-            env,
-          );
-        return json({ voices: await selfHostedVoices(env, "chatterbox") }, 200, origin, env);
-      }
-      if (
-        url.pathname === "/api/providers/chatterbox/speech" &&
-        request.method === "POST"
-      ) {
-        const body = await request.json();
-        const result = await synthesizeAudio(env, "chatterbox", body);
-        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
-          "X-OpalReader-Cache": result.cache,
-        });
-      }
-      return json({ error: "Not found" }, 404, origin, env);
+            return json({ error: "Not found" }, 404, origin, env);
     } catch (error) {
       return json(
         {

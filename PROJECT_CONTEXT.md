@@ -116,3 +116,12 @@ When missing/repeated/bad audio is found:
 - Required Worker secrets (Julie adds these herself): FISH_AUDIO_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY (Google AI Studio key, not the Cloud TTS key), KOKORO_TTS_URL (+ optional KOKORO_API_KEY), CHATTERBOX_TTS_URL (+ optional CHATTERBOX_API_KEY).
 - Gemini pricing is promotional through 2026 and may change in 2027; revisit before year-end.
 - No automatic cross-provider fallback was added (failed segments still retry the same provider 3x). That remains a separate decision.
+
+## v1.4.1: removed Kokoro, Chatterbox, ElevenLabs, Google Cloud TTS (2026-09-26)
+- Removed four providers, leaving Azure Speech, Speechify, Fish Audio, OpenAI TTS, and Gemini TTS. Worker APP_VERSION and frontend APP_UI_VERSION bumped to 1.4.1.
+- Kokoro/Chatterbox removed because self-hosting wasn't worth maintaining without an always-on machine.
+- ElevenLabs removed because its free tier (~10 min/month) was too limited to be useful for audiobook generation; Julie also struggled to find a voice she liked that was actually usable on a free account.
+- Google Cloud TTS removed in the same pass (Julie's call); Gemini (the separate AI Studio TTS provider) stays.
+- Worker: removed the kokoro/chatterbox self-hosted voice lists and endpoints, elevenlabs/voices + /speech + /shared/add endpoints, google/voices + /speech endpoints, all four synthesis branches, provider-label branches, char-limit entries, status fields, and generation-job validation entries. Unknown providers now get a 400 "Unknown TTS provider" error instead of falling through to ElevenLabs.
+- Frontend: removed the four Voice Lab tab buttons, display-name/pricing branches, elevenModel state/settings/cloud-sync/picker UI (Google had no model picker), the ElevenLabs shared-library tabs + shared-voice add flow (Rt/kt), the ElevenLabs free-preview path (wt/it/lr), age/use-case filters, and the google provider default (now "speechify", matching the fallback chain). Fallback chain is now speechify > fish > openai > gemini > azure.
+- ELEVENLABS_API_KEY and GOOGLE_CLOUD_TTS_API_KEY Worker secrets left in place (harmless, unused); Julie can delete them herself later.
