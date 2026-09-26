@@ -5,9 +5,14 @@ Last updated: 2026-09-26
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-146.js / styles-138.css / sw-146.js.
+- Current frontend generation: app-147.js / styles-138.css / sw-147.js.
 - cloudflare-worker.js is the Worker source of truth (v1.4.5).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Retry-loop const reassignment TypeError (v1.4.11, 2026-09-26)
+- Julie hit "Attempted to assign to readonly property." (Safari/JSC wording for assignment-to-const) on Regenerate right AFTER fixing her billing. Root cause: the v1.4.8 retry patch replaced `h=await gt(...)` with `h=null;...while(!h){h=await gt(...)}` without noticing `h` was declared `const` in the comma chain (`const S={...},h=...`). The bug only fires when the request SUCCEEDS: on rejection the assignment is skipped, so all the 429 countdowns worked fine and hid it. `node --check` does not catch const reassignment; the author's simulation used `let h` so it passed.
+- Fix: `const S={...};let h=null,nA=0;` — h moved to a `let` declaration. Verified with the exact declaration pattern in Node.
+- Frontend-only: app-146.js → app-147.js, sw-146.js → sw-147.js (cache opalreader-shell-v147). Worker stays v1.4.5.
 
 ## Voice Lab locale filter hid Gemini/OpenAI voices (v1.4.10, 2026-09-26)
 - Julie saw "No voices match these filters" on the Gemini tab with en-US selected. Root cause: the client-side filter `Ur()` requires the voice's accent string to contain the locale keyword ("en-US" → "american"), but the worker's static Gemini/OpenAI voice lists only carry `locale: "en"` with no accent metadata — so EVERY voice was filtered out. The locale dropdown also persists across provider tabs (used Azure with en-US, switched to Gemini → 0 voices).
