@@ -5,9 +5,13 @@ Last updated: 2026-09-26
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-144.js / styles-138.css / sw-144.js.
+- Current frontend generation: app-145.js / styles-138.css / sw-145.js.
 - cloudflare-worker.js is the Worker source of truth (v1.4.5).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Free-tier 429 fail-fast hint (v1.4.9, 2026-09-26)
+- Julie's screenshots showed Regenerate retries correctly running (attempt 4 of 4) but every attempt failing: the error names `generate_content_free_tier_requests, limit: 10` — her API key's project is NOT on her $10 paid billing, it's still drawing from the free tier. Retrying a daily free-tier quota is futile, so `regenerateOneSegment()` now detects `free_tier` in a 429 message and fails immediately (no 3-minute countdown), appending a plain-English note: the key is on the free tier (10/day), check which project owns the key in AI Studio and link the billing account to that exact project in Cloud Console → Billing.
+- Frontend-only: app-144.js → app-145.js, sw-144.js → sw-145.js (cache opalreader-shell-v145). Worker stays v1.4.5 (its background retries still apply, but the explicit free-tier error surfaces the same way).
 
 ## Regenerate taps auto-retry on 429 (v1.4.8, 2026-09-26)
 - Julie asked for auto-retry on single-segment Regenerate taps (she was manually retrying 429s). `regenerateOneSegment()` now retries the direct /api/providers/<provider>/speech call on HTTP 429: up to 3 retries (4 attempts total), waiting the server-suggested delay parsed from the error message ("Please retry in Ns"), clamped to 5-90s, with a per-second countdown in the modal status ("Rate limited — retrying Segment N in Ns… (attempt k of 4)"). Button stays disabled during waits.
