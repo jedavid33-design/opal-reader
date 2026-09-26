@@ -5,9 +5,13 @@ Last updated: 2026-09-26
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-142.js / styles-138.css / sw-142.js.
+- Current frontend generation: app-143.js / styles-138.css / sw-143.js.
 - cloudflare-worker.js is the Worker source of truth (v1.4.4).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Version label fix (v1.4.7, 2026-09-26)
+- v1.4.6 shipped the Regenerate fix but `APP_UI_VERSION` was still `"1.4.5"`, so the ⓘ dialog kept reporting 1.4.5 even with the fixed code. Bumped the label to 1.4.7 so the dialog reports correctly.
+- Frontend-only: app-142.js → app-143.js, sw-142.js → sw-143.js (cache opalreader-shell-v143). Worker stays v1.4.4. No functional changes.
 
 ## Fix: single-segment Regenerate was broken by undefined `it(s)` (v1.4.6, 2026-09-26)
 - `regenerateOneSegment()` called `it(s)` — a function that was never defined anywhere in the bundle (latent bug in the original ChatGPT-built code, present since before v1.4.4). Every "Regenerate segment" tap threw `Can't find variable: it` before any request went out.
