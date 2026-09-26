@@ -93,6 +93,10 @@ When missing/repeated/bad audio is found:
 - Current backup format identifier: `opalreader-book-backup`, version 1.
 - This is intended to make deleting/archive-and-restore workflows reversible.
 
+## R2 purge on delete (added 2026-09-26)
+- New worker endpoint `DELETE /api/audio/purge` removes a book's R2 objects: segment audio (`audio/<key>.mp3/.wav`), chapter composites (`chapter-audio/<key>.mp3/.wav`, key recomputed server-side), and generation job payloads (`generation/jobs/<jobId>.json`) plus KV statuses.
+- `deleteBookFlow` calls it best-effort after clearing local IndexedDB; local deletion never blocks on it. Keeps free-tier R2 storage from growing unboundedly.
+
 ## Delete with backup (added 2026-09-24)
 - The book header now has a **Delete book** button next to Back up book.
 - Tapping it asks: back up first, then delete (OK), or choose the next step (Cancel).
