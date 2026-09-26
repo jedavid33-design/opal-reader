@@ -5,9 +5,16 @@ Last updated: 2026-09-26
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-143.js / styles-138.css / sw-143.js.
+- Current frontend generation: app-144.js / styles-138.css / sw-144.js.
 - cloudflare-worker.js is the Worker source of truth (v1.4.5).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Regenerate taps auto-retry on 429 (v1.4.8, 2026-09-26)
+- Julie asked for auto-retry on single-segment Regenerate taps (she was manually retrying 429s). `regenerateOneSegment()` now retries the direct /api/providers/<provider>/speech call on HTTP 429: up to 3 retries (4 attempts total), waiting the server-suggested delay parsed from the error message ("Please retry in Ns"), clamped to 5-90s, with a per-second countdown in the modal status ("Rate limited — retrying Segment N in Ns… (attempt k of 4)"). Button stays disabled during waits.
+- Non-429 errors fail fast with the existing explicit error alert. After 3 failed retries, the last 429 error is shown explicitly.
+- `be()` now attaches the HTTP status to thrown errors (`err.status`) — additive, no behavior change elsewhere.
+- Cost: 429 rejections process zero characters so retries are free; only a successful attempt costs (~$0.004/segment on paid Tier 1).
+- Frontend-only: app-143.js → app-144.js, sw-143.js → sw-144.js (cache opalreader-shell-v144). Worker stays v1.4.5.
 
 ## Worker: background segment retries back to 3 (v1.4.5, 2026-09-26)
 - Julie asked to restore the retry count that was cut from 3 to 1 earlier today. Queue consumer now retries a failed segment up to 3 times (4 attempts total) with 2s/4s/8s backoff before marking it failed.
