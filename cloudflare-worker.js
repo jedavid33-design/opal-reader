@@ -115,7 +115,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.3.3";
+const APP_VERSION = "1.4.0";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -249,54 +249,156 @@ async function saveBook(env, book) {
   await env.OPALREADER_KV.put("library:index", JSON.stringify(index));
   return { book, accepted: true };
 }
+const AUDIO_EXTENSIONS = ["mp3", "wav"];
+const audioContentType = (format) =>
+  format === "wav" ? "audio/wav" : "audio/mpeg";
+function providerLabel(provider) {
+  return provider === "azure"
+    ? "Azure Speech"
+    : provider === "google"
+      ? "Google Cloud TTS"
+      : provider === "speechify"
+        ? "Speechify"
+        : provider === "fish"
+          ? "Fish Audio"
+          : provider === "openai"
+            ? "OpenAI"
+            : provider === "gemini"
+              ? "Gemini"
+              : provider === "kokoro"
+                ? "Kokoro"
+                : provider === "chatterbox"
+                  ? "Chatterbox"
+                  : "ElevenLabs";
+}
+function sniffAudioFormat(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (
+    b.length > 12 &&
+    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+  )
+    return "wav";
+  return "mp3";
+}
+function pcmToWav(pcmBytes, { sampleRate = 24000, channels = 1, bitsPerSample = 16 } = {}) {
+  const pcm = pcmBytes instanceof Uint8Array ? pcmBytes : new Uint8Array(pcmBytes);
+  const dataLen = pcm.byteLength;
+  const header = new DataView(new ArrayBuffer(44));
+  const writeStr = (offset, str) => {
+    for (let i = 0; i < str.length; i++) header.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeStr(0, "RIFF");
+  header.setUint32(4, 36 + dataLen, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  header.setUint32(16, 16, true);
+  header.setUint16(20, 1, true);
+  header.setUint16(22, channels, true);
+  header.setUint32(24, sampleRate, true);
+  header.setUint32(28, (sampleRate * channels * bitsPerSample) / 8, true);
+  header.setUint16(32, (channels * bitsPerSample) / 8, true);
+  header.setUint16(34, bitsPerSample, true);
+  writeStr(36, "data");
+  header.setUint32(40, dataLen, true);
+  const out = new Uint8Array(44 + dataLen);
+  out.set(new Uint8Array(header.buffer), 0);
+  out.set(pcm, 44);
+  return out;
+}
 async function cachedAudio(env, key) {
   if (!env.OPALREADER_STORAGE || !validCacheKey(key)) return null;
-  return env.OPALREADER_STORAGE.get(`audio/${key}.mp3`);
+  for (const ext of AUDIO_EXTENSIONS) {
+    const object = await env.OPALREADER_STORAGE.get(`audio/${key}.${ext}`);
+    if (object) return { object, format: ext };
+  }
+  return null;
 }
 async function storeAudio(env, key, bytes, metadata = {}) {
-  if (env.OPALREADER_STORAGE && validCacheKey(key))
-    await env.OPALREADER_STORAGE.put(`audio/${key}.mp3`, bytes, {
-      httpMetadata: { contentType: "audio/mpeg" },
+  if (env.OPALREADER_STORAGE && validCacheKey(key)) {
+    const format = metadata.format === "wav" ? "wav" : "mp3";
+    await env.OPALREADER_STORAGE.put(`audio/${key}.${format}`, bytes, {
+      httpMetadata: { contentType: audioContentType(format) },
       customMetadata: metadata,
     });
+  }
 }
 
 async function hasCachedAudio(env, key) {
   if (!env.OPALREADER_STORAGE || !validCacheKey(key)) return false;
-  if (env.OPALREADER_STORAGE.head)
-    return Boolean(await env.OPALREADER_STORAGE.head(`audio/${key}.mp3`));
-  return Boolean(await env.OPALREADER_STORAGE.get(`audio/${key}.mp3`));
+  if (env.OPALREADER_STORAGE.head) {
+    for (const ext of AUDIO_EXTENSIONS)
+      if (await env.OPALREADER_STORAGE.head(`audio/${key}.${ext}`)) return true;
+    return false;
+  }
+  return Boolean(await cachedAudio(env, key));
 }
 
 
 async function chapterCompositeAudio(env, audioKeys, cacheKey) {
   if (!env.OPALREADER_STORAGE) throw new Error("R2 storage has not been configured yet.");
-  const compositeObjectKey = `chapter-audio/${cacheKey}.mp3`;
-  const cached = await env.OPALREADER_STORAGE.get(compositeObjectKey);
-  if (cached) return { body: cached.body, cache: "HIT" };
-  const chunks = [];
-  let total = 0;
+  const parts = [];
   for (const key of audioKeys) {
-    const object = await cachedAudio(env, key);
-    if (!object) {
+    const found = await cachedAudio(env, key);
+    if (!found) {
       const error = new Error("One or more chapter audio segments are missing from R2.");
       error.status = 404;
       throw error;
     }
-    const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
-    chunks.push(bytes);
-    total += bytes.byteLength;
+    parts.push(found);
   }
-  const combined = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    combined.set(chunk, offset);
-    offset += chunk.byteLength;
+  const formats = new Set(parts.map((part) => part.format));
+  if (formats.size > 1) {
+    const error = new Error(
+      "This chapter mixes MP3 and WAV segments (Gemini returns WAV audio). Play the segments individually, or regenerate the chapter with voices from a single provider family.",
+    );
+    error.status = 422;
+    throw error;
+  }
+  const format = parts[0].format;
+  const compositeObjectKey = `chapter-audio/${cacheKey}.${format}`;
+  const cached = await env.OPALREADER_STORAGE.get(compositeObjectKey);
+  if (cached) return { body: cached.body, cache: "HIT", audioFormat: format };
+  let combined;
+  if (format === "wav") {
+    const pcmChunks = [];
+    let total = 0;
+    for (const { object } of parts) {
+      const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
+      if (bytes.byteLength < 44) {
+        const error = new Error("A chapter audio segment is not valid WAV audio.");
+        error.status = 422;
+        throw error;
+      }
+      const pcm = bytes.slice(44);
+      pcmChunks.push(pcm);
+      total += pcm.byteLength;
+    }
+    const pcmAll = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of pcmChunks) {
+      pcmAll.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    combined = pcmToWav(pcmAll.buffer);
+  } else {
+    const chunks = [];
+    let total = 0;
+    for (const { object } of parts) {
+      const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
+      chunks.push(bytes);
+      total += bytes.byteLength;
+    }
+    combined = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
   }
   await env.OPALREADER_STORAGE.put(compositeObjectKey, combined, {
-    httpMetadata: { contentType: "audio/mpeg" },
+    httpMetadata: { contentType: audioContentType(format) },
   });
-  return { body: combined, cache: "MISS" };
+  return { body: combined, cache: "MISS", audioFormat: format };
 }
 
 async function compositeCacheKey(bookId, chapterIndex, audioKeys) {
@@ -305,15 +407,126 @@ async function compositeCacheKey(bookId, chapterIndex, audioKeys) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const normalizeStaticVoices = (provider, tuples, trait) =>
+  tuples.map(([voice_id, name, gender]) => ({
+    provider,
+    voice_id,
+    name,
+    locale: "en",
+    gender: gender || "",
+    traits: [trait],
+  }));
+const OPENAI_VOICE_LIST = normalizeStaticVoices("openai", [
+  ["alloy", "Alloy", ""],
+  ["ash", "Ash", "male"],
+  ["ballad", "Ballad", "male"],
+  ["coral", "Coral", "female"],
+  ["echo", "Echo", "male"],
+  ["fable", "Fable", "male"],
+  ["nova", "Nova", "female"],
+  ["onyx", "Onyx", "male"],
+  ["sage", "Sage", "female"],
+  ["shimmer", "Shimmer", "female"],
+], "OpenAI");
+const GEMINI_VOICE_LIST = normalizeStaticVoices("gemini", [
+  ["Zephyr", "Zephyr", "female"],
+  ["Puck", "Puck", "male"],
+  ["Charon", "Charon", "male"],
+  ["Kore", "Kore", "female"],
+  ["Fenrir", "Fenrir", "male"],
+  ["Aoede", "Aoede", "female"],
+  ["Leda", "Leda", "female"],
+  ["Callirrhoe", "Callirrhoe", "female"],
+  ["Autonoe", "Autonoe", "female"],
+  ["Enceladus", "Enceladus", "male"],
+  ["Iapetus", "Iapetus", "male"],
+  ["Umbriel", "Umbriel", "male"],
+  ["Algieba", "Algieba", "male"],
+  ["Despina", "Despina", "female"],
+  ["Erinome", "Erinome", "female"],
+  ["Algenib", "Algenib", "male"],
+  ["Rasalgethi", "Rasalgethi", "male"],
+  ["Laomedeia", "Laomedeia", "female"],
+  ["Alnilam", "Alnilam", "male"],
+  ["Schedar", "Schedar", "male"],
+  ["Gacrux", "Gacrux", "female"],
+  ["Pulcherrima", "Pulcherrima", "female"],
+  ["Achird", "Achird", "male"],
+  ["Zubenelgenubi", "Zubenelgenubi", "male"],
+  ["Vindemiatrix", "Vindemiatrix", "female"],
+  ["Sadachbia", "Sadachbia", "male"],
+  ["Sadaltager", "Sadaltager", "male"],
+  ["Sulafat", "Sulafat", "female"],
+  ["Achernar", "Achernar", "female"],
+  ["Orus", "Orus", "male"],
+], "Gemini prebuilt");
+const KOKORO_VOICE_LIST = normalizeStaticVoices("kokoro", [
+  ["af_heart", "Heart", "female"],
+  ["af_alloy", "Alloy", "female"],
+  ["af_aoede", "Aoede", "female"],
+  ["af_bella", "Bella", "female"],
+  ["af_jessica", "Jessica", "female"],
+  ["af_kore", "Kore", "female"],
+  ["af_nicole", "Nicole", "female"],
+  ["af_nova", "Nova", "female"],
+  ["af_river", "River", "female"],
+  ["af_sarah", "Sarah", "female"],
+  ["af_sky", "Sky", "female"],
+  ["am_adam", "Adam", "male"],
+  ["am_echo", "Echo", "male"],
+  ["am_eric", "Eric", "male"],
+  ["am_fenrir", "Fenrir", "male"],
+  ["am_liam", "Liam", "male"],
+  ["am_michael", "Michael", "male"],
+  ["am_onyx", "Onyx", "male"],
+  ["am_puck", "Puck", "male"],
+  ["am_santa", "Santa", "male"],
+  ["bf_alice", "Alice", "female"],
+  ["bf_emma", "Emma", "female"],
+  ["bf_isabella", "Isabella", "female"],
+  ["bf_lily", "Lily", "female"],
+  ["bm_daniel", "Daniel", "male"],
+  ["bm_fable", "Fable", "male"],
+  ["bm_george", "George", "male"],
+  ["bm_lewis", "Lewis", "male"],
+], "Kokoro");
+async function selfHostedVoices(env, provider) {
+  const baseUrl = provider === "kokoro" ? env.KOKORO_TTS_URL : env.CHATTERBOX_TTS_URL;
+  const apiKey = provider === "kokoro" ? env.KOKORO_API_KEY : env.CHATTERBOX_API_KEY;
+  const label = providerLabel(provider);
+  const fallback = provider === "kokoro"
+    ? KOKORO_VOICE_LIST
+    : normalizeStaticVoices(provider, [["default", "Default voice", ""]], `${label} server`);
+  if (!baseUrl) return fallback;
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/audio/voices`, {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    });
+    if (response.ok) {
+      const data = await response.json();
+      const items = Array.isArray(data) ? data : data.data || data.voices || [];
+      const voices = items
+        .map((item) => {
+          const id = typeof item === "string" ? item : item.id || item.voice_id || item.name;
+          if (!id) return null;
+          const name = typeof item === "object" && (item.name || item.title) ? item.name || item.title : String(id);
+          return {
+            provider,
+            voice_id: String(id),
+            name: String(name),
+            locale: "en",
+            gender: (typeof item === "object" && item.gender) || "",
+            traits: [`${label} server`],
+          };
+        })
+        .filter(Boolean);
+      if (voices.length) return voices;
+    }
+  } catch {}
+  return fallback;
+}
 async function throwProviderError(response, provider) {
-  const label =
-    provider === "azure"
-      ? "Azure Speech"
-      : provider === "google"
-        ? "Google Cloud TTS"
-        : provider === "speechify"
-          ? "Speechify"
-          : "ElevenLabs";
+  const label = providerLabel(provider);
   let detail,
     raw = "";
   try {
@@ -335,7 +548,7 @@ async function synthesizeAudio(env, provider, body) {
     error.status = 400;
     throw error;
   }
-  const limits = { azure: 8000, google: 4500, elevenlabs: 40000, speechify: 20000 };
+  const limits = { azure: 8000, google: 4500, elevenlabs: 40000, speechify: 20000, fish: 8000, openai: 4000, gemini: 8000, kokoro: 8000, chatterbox: 8000 };
   if (!limits[provider]) {
     const error = new Error("Unknown voice provider.");
     error.status = 400;
@@ -343,7 +556,7 @@ async function synthesizeAudio(env, provider, body) {
   }
   if (body.text.length > limits[provider]) {
     const error = new Error(
-      `This narration segment is too long for one ${provider === "azure" ? "Azure" : provider === "google" ? "Google" : "ElevenLabs"} request. Split the segment first.`,
+      `This narration segment is too long for one ${providerLabel(provider)} request. Split the segment first.`,
     );
     error.status = 413;
     throw error;
@@ -356,10 +569,10 @@ async function synthesizeAudio(env, provider, body) {
       request_status: "succeeded",
       cache_status: "cache_hit",
     });
-    return { body: hit.body, cache: "HIT" };
+    return { body: hit.object.body, cache: "HIT", audioFormat: hit.format };
   }
   const started = Date.now();
-  let response, bytes, r2WriteSuccess = null, providerRequestId = null, actualModel = body?.model_id || null;
+  let response, bytes, r2WriteSuccess = null, providerRequestId = null, actualModel = body?.model_id || null, audioFormat = "mp3";
   try {
     if (provider === "azure") {
       if (!azureReady(env)) {
@@ -443,6 +656,128 @@ async function synthesizeAudio(env, provider, body) {
       actualModel = body.model_id || "simba-3.2";
       if (!response.ok) await throwProviderError(response, provider);
       bytes = await response.arrayBuffer();
+    } else if (provider === "fish") {
+      if (!env.FISH_AUDIO_API_KEY) {
+        const error = new Error(
+          "Fish Audio has not been connected. Add FISH_AUDIO_API_KEY to the Worker.",
+        );
+        error.status = 503;
+        throw error;
+      }
+      const fishModel = body.model_id || "s2.1-pro";
+      response = await fetch("https://api.fish.audio/v1/tts", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.FISH_AUDIO_API_KEY}`,
+          "Content-Type": "application/json",
+          model: fishModel,
+        },
+        body: JSON.stringify({
+          text: plainSpeechText(body.text),
+          reference_id: body.voice_id,
+          format: "mp3",
+          mp3_bitrate: 128,
+          latency: "normal",
+        }),
+      });
+      actualModel = fishModel;
+      if (!response.ok) await throwProviderError(response, provider);
+      bytes = await response.arrayBuffer();
+    } else if (provider === "openai") {
+      if (!env.OPENAI_API_KEY) {
+        const error = new Error(
+          "OpenAI has not been connected. Add OPENAI_API_KEY to the Worker.",
+        );
+        error.status = 503;
+        throw error;
+      }
+      const openaiModel = body.model_id || "gpt-4o-mini-tts";
+      response = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: openaiModel,
+          input: plainSpeechText(body.text),
+          voice: body.voice_id,
+          response_format: "mp3",
+        }),
+      });
+      actualModel = openaiModel;
+      if (!response.ok) await throwProviderError(response, provider);
+      bytes = await response.arrayBuffer();
+    } else if (provider === "gemini") {
+      if (!env.GEMINI_API_KEY) {
+        const error = new Error(
+          "Gemini has not been connected. Add GEMINI_API_KEY (from Google AI Studio) to the Worker.",
+        );
+        error.status = 503;
+        throw error;
+      }
+      const geminiModel = body.model_id || "gemini-2.5-flash-preview-tts";
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: plainSpeechText(body.text) }] }],
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: body.voice_id },
+                },
+              },
+            },
+          }),
+        },
+      );
+      actualModel = geminiModel;
+      if (!response.ok) await throwProviderError(response, provider);
+      const data = await response.json();
+      const parts = data?.candidates?.[0]?.content?.parts || [];
+      const audioPart = parts.find((part) => part?.inlineData?.data);
+      if (!audioPart) {
+        const error = new Error("Gemini did not return audio for that text.");
+        error.status = 502;
+        throw error;
+      }
+      const mimeType = audioPart.inlineData.mimeType || "";
+      const rateMatch = /rate=(\d+)/.exec(mimeType);
+      const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
+      bytes = pcmToWav(decodeBase64(audioPart.inlineData.data).buffer, { sampleRate });
+      audioFormat = "wav";
+    } else if (provider === "kokoro" || provider === "chatterbox") {
+      const baseUrl = provider === "kokoro" ? env.KOKORO_TTS_URL : env.CHATTERBOX_TTS_URL;
+      const apiKey = provider === "kokoro" ? env.KOKORO_API_KEY : env.CHATTERBOX_API_KEY;
+      if (!baseUrl) {
+        const error = new Error(
+          `${providerLabel(provider)} has not been connected. Set ${provider === "kokoro" ? "KOKORO_TTS_URL" : "CHATTERBOX_TTS_URL"} on the Worker to point at your self-hosted server.`,
+        );
+        error.status = 503;
+        throw error;
+      }
+      const selfHostedModel = body.model_id || provider;
+      response = await fetch(`${baseUrl.replace(/\/+$/, "")}/v1/audio/speech`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          model: selfHostedModel,
+          input: plainSpeechText(body.text),
+          voice: body.voice_id,
+          response_format: "mp3",
+        }),
+      });
+      actualModel = selfHostedModel;
+      if (!response.ok) await throwProviderError(response, provider);
+      bytes = await response.arrayBuffer();
+      audioFormat = sniffAudioFormat(bytes);
     } else {
       if (!env.ELEVENLABS_API_KEY) {
         const error = new Error("ElevenLabs has not been connected yet.");
@@ -468,7 +803,7 @@ async function synthesizeAudio(env, provider, body) {
     }
     if (body.cache_key) {
       try {
-        await storeAudio(env, body.cache_key, bytes, { provider, voiceId: body.voice_id });
+        await storeAudio(env, body.cache_key, bytes, { provider, voiceId: body.voice_id, format: audioFormat });
         r2WriteSuccess = true;
       } catch (error) {
         r2WriteSuccess = false;
@@ -486,7 +821,7 @@ async function synthesizeAudio(env, provider, body) {
       provider_request_id: providerRequestId,
       model: actualModel,
     });
-    return { body: bytes, cache: "MISS", provider_request_id: providerRequestId, model: actualModel };
+    return { body: bytes, cache: "MISS", provider_request_id: providerRequestId, model: actualModel, audioFormat };
   } catch (error) {
     await recordTtsUsage(env, body, {
       provider,
@@ -620,10 +955,11 @@ export default {
       if (!record?.key || !validCacheKey(record.key))
         return json({ error: "This export link has expired." }, 410, origin, env);
       await env.OPALREADER_KV.delete(`audio-export:${token}`);
-      const object = await cachedAudio(env, record.key);
-      if (!object) return json({ error: "Audio not found." }, 404, origin, env);
-      const filename = String(record.filename || "opalreader-segment.mp3").replace(/[\r\n\"]/g, "_");
-      return relay(object.body, 200, "audio/mpeg", origin, env, {
+      const found = await cachedAudio(env, record.key);
+      if (!found) return json({ error: "Audio not found." }, 404, origin, env);
+      const ext = found.format === "wav" ? "wav" : "mp3";
+      const filename = String(record.filename || `opalreader-segment.${ext}`).replace(/[\r\n\"]/g, "_");
+      return relay(found.object.body, 200, audioContentType(found.format), origin, env, {
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       });
@@ -648,6 +984,11 @@ export default {
             google: Boolean(env.GOOGLE_CLOUD_TTS_API_KEY),
             elevenlabs: Boolean(env.ELEVENLABS_API_KEY),
             speechify: Boolean(env.SPEECHIFY_API_KEY),
+            fish: Boolean(env.FISH_AUDIO_API_KEY),
+            openai: Boolean(env.OPENAI_API_KEY),
+            gemini: Boolean(env.GEMINI_API_KEY),
+            kokoro: Boolean(env.KOKORO_TTS_URL),
+            chatterbox: Boolean(env.CHATTERBOX_TTS_URL),
             sync: Boolean(syncReady(env)),
             generation: Boolean(
               env.OPALREADER_GENERATION && syncReady(env),
@@ -803,10 +1144,10 @@ export default {
         );
         if (!validCacheKey(key))
           return json({ error: "Invalid audio cache key." }, 400, origin, env);
-        const object = await cachedAudio(env, key);
-        if (!object)
+        const found = await cachedAudio(env, key);
+        if (!found)
           return json({ error: "Audio not found." }, 404, origin, env);
-        return relay(object.body, 200, "audio/mpeg", origin, env, {
+        return relay(found.object.body, 200, audioContentType(found.format), origin, env, {
           "X-OpalReader-Cache": "HIT",
         });
       }
@@ -818,7 +1159,7 @@ export default {
           return json({ error: "Invalid chapter playback request." }, 400, origin, env);
         const key = await compositeCacheKey(body.book_id, body.chapter_index, audioKeys);
         const result = await chapterCompositeAudio(env, audioKeys, key);
-        return relay(result.body, 200, "audio/mpeg", origin, env, {
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
           "X-OpalReader-Playback": "chapter-composite",
         });
@@ -848,7 +1189,7 @@ export default {
               !validCacheKey(segment.cache_key) ||
               !segment.text ||
               !segment.voice_id ||
-              !["azure", "google", "elevenlabs", "speechify"].includes(segment.provider),
+              !["azure", "google", "elevenlabs", "speechify", "fish", "openai", "gemini", "kokoro", "chatterbox"].includes(segment.provider),
           )
         )
           return json(
@@ -980,7 +1321,7 @@ export default {
       ) {
         const body = await request.json();
         const result = await synthesizeAudio(env, "azure", body);
-        return relay(result.body, 200, "audio/mpeg", origin, env, {
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
           ...(result.provider_request_id ? { "X-Speechify-Request-Id": result.provider_request_id } : {}),
           ...(result.model ? { "X-Speechify-Model": result.model } : {}),
@@ -1021,7 +1362,7 @@ export default {
       ) {
         const body = await request.json();
         const result = await synthesizeAudio(env, "google", body);
-        return relay(result.body, 200, "audio/mpeg", origin, env, {
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
         });
       }
@@ -1065,7 +1406,7 @@ export default {
       ) {
         const body = await request.json();
         const result = await synthesizeAudio(env, "speechify", body);
-        return relay(result.body, 200, "audio/mpeg", origin, env, {
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
         });
       }
@@ -1139,7 +1480,156 @@ export default {
       ) {
         const body = await request.json();
         const result = await synthesizeAudio(env, "elevenlabs", body);
-        return relay(result.body, 200, "audio/mpeg", origin, env, {
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
+          "X-OpalReader-Cache": result.cache,
+        });
+      }
+      if (
+        url.pathname === "/api/providers/fish/voices" &&
+        request.method === "GET"
+      ) {
+        if (!env.FISH_AUDIO_API_KEY)
+          return json(
+            { error: "Fish Audio has not been connected yet." },
+            503,
+            origin,
+            env,
+          );
+        const upstream = new URL("https://api.fish.audio/model");
+        const pageSize = Math.min(
+          100,
+          Math.max(1, parseInt(url.searchParams.get("page_size") || "50", 10) || 50),
+        );
+        upstream.searchParams.set("page_size", String(pageSize));
+        upstream.searchParams.set("page_number", url.searchParams.get("page") || "1");
+        const search = url.searchParams.get("search");
+        if (search) upstream.searchParams.set("title", search);
+        upstream.searchParams.set("language", "en");
+        upstream.searchParams.set("sort_by", "score");
+        const response = await fetch(upstream, {
+          headers: { Authorization: `Bearer ${env.FISH_AUDIO_API_KEY}` },
+        });
+        if (!response.ok) {
+          let detail = "";
+          try { detail = await response.text(); } catch {}
+          return json(
+            { error: detail || `Fish Audio voice request failed (${response.status}).`, provider: "fish" },
+            response.status,
+            origin,
+            env,
+          );
+        }
+        const data = await response.json();
+        const voices = (data.items || []).map((m) => ({
+          provider: "fish",
+          voice_id: m._id,
+          name: m.title || m._id,
+          locale: "en",
+          gender: "",
+          traits: Array.isArray(m.tags) ? m.tags.slice(0, 4) : [],
+          description: m.description || "",
+        }));
+        return json({ voices, total: data.total || voices.length }, 200, origin, env);
+      }
+      if (
+        url.pathname === "/api/providers/fish/speech" &&
+        request.method === "POST"
+      ) {
+        const body = await request.json();
+        const result = await synthesizeAudio(env, "fish", body);
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
+          "X-OpalReader-Cache": result.cache,
+        });
+      }
+      if (
+        url.pathname === "/api/providers/openai/voices" &&
+        request.method === "GET"
+      ) {
+        if (!env.OPENAI_API_KEY)
+          return json(
+            { error: "OpenAI has not been connected yet." },
+            503,
+            origin,
+            env,
+          );
+        return json({ voices: OPENAI_VOICE_LIST }, 200, origin, env);
+      }
+      if (
+        url.pathname === "/api/providers/openai/speech" &&
+        request.method === "POST"
+      ) {
+        const body = await request.json();
+        const result = await synthesizeAudio(env, "openai", body);
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
+          "X-OpalReader-Cache": result.cache,
+        });
+      }
+      if (
+        url.pathname === "/api/providers/gemini/voices" &&
+        request.method === "GET"
+      ) {
+        if (!env.GEMINI_API_KEY)
+          return json(
+            { error: "Gemini has not been connected yet." },
+            503,
+            origin,
+            env,
+          );
+        return json({ voices: GEMINI_VOICE_LIST }, 200, origin, env);
+      }
+      if (
+        url.pathname === "/api/providers/gemini/speech" &&
+        request.method === "POST"
+      ) {
+        const body = await request.json();
+        const result = await synthesizeAudio(env, "gemini", body);
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
+          "X-OpalReader-Cache": result.cache,
+        });
+      }
+      if (
+        url.pathname === "/api/providers/kokoro/voices" &&
+        request.method === "GET"
+      ) {
+        if (!env.KOKORO_TTS_URL)
+          return json(
+            { error: "Kokoro has not been connected. Set KOKORO_TTS_URL on the Worker." },
+            503,
+            origin,
+            env,
+          );
+        return json({ voices: await selfHostedVoices(env, "kokoro") }, 200, origin, env);
+      }
+      if (
+        url.pathname === "/api/providers/kokoro/speech" &&
+        request.method === "POST"
+      ) {
+        const body = await request.json();
+        const result = await synthesizeAudio(env, "kokoro", body);
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
+          "X-OpalReader-Cache": result.cache,
+        });
+      }
+      if (
+        url.pathname === "/api/providers/chatterbox/voices" &&
+        request.method === "GET"
+      ) {
+        if (!env.CHATTERBOX_TTS_URL)
+          return json(
+            { error: "Chatterbox has not been connected. Set CHATTERBOX_TTS_URL on the Worker." },
+            503,
+            origin,
+            env,
+          );
+        return json({ voices: await selfHostedVoices(env, "chatterbox") }, 200, origin, env);
+      }
+      if (
+        url.pathname === "/api/providers/chatterbox/speech" &&
+        request.method === "POST"
+      ) {
+        const body = await request.json();
+        const result = await synthesizeAudio(env, "chatterbox", body);
+        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
         });
       }
