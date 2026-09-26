@@ -5,9 +5,13 @@ Last updated: 2026-09-24
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-138.js / styles-137.css / sw-138.js.
+- Current frontend generation: app-139.js / styles-137.css / sw-139.js.
 - cloudflare-worker.js is the Worker source of truth (v1.4.2).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Default provider: Gemini first (v1.4.3, 2026-09-26)
+- Voice Lab provider-tab fallback chain now prefers Gemini: gemini → speechify → fish → openai → azure (was speechify first). Cast voice picker opens on the Gemini tab when Gemini is configured.
+- Frontend-only change: app-139.js / sw-139.js (cache opalreader-shell-v139). Worker stays v1.4.2.
 
 ## Gemini style direction (v1.4.2, 2026-09-26)
 - Cast view shows a "Style direction" text input under any POV (or Default Narrator) using a Gemini voice, e.g. "warm Southern drawl".
