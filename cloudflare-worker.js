@@ -93,7 +93,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.4.2";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -622,13 +622,17 @@ async function synthesizeAudio(env, provider, body) {
         throw error;
       }
       const geminiModel = body.model_id || "gemini-2.5-flash-preview-tts";
+      const geminiStyle = (body.style_direction || "").toString().trim().slice(0, 300);
+      const geminiPrompt = geminiStyle
+        ? `Voice direction: ${geminiStyle}\n\n${plainSpeechText(body.text)}`
+        : plainSpeechText(body.text);
       response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: plainSpeechText(body.text) }] }],
+            contents: [{ parts: [{ text: geminiPrompt }] }],
             generationConfig: {
               responseModalities: ["AUDIO"],
               speechConfig: {

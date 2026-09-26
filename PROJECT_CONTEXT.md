@@ -5,9 +5,16 @@ Last updated: 2026-09-24
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-137.js / styles-137.css / sw-137.js.
-- cloudflare-worker.js is the Worker source of truth.
+- Current frontend generation: app-138.js / styles-137.css / sw-138.js.
+- cloudflare-worker.js is the Worker source of truth (v1.4.2).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Gemini style direction (v1.4.2, 2026-09-26)
+- Cast view shows a "Style direction" text input under any POV (or Default Narrator) using a Gemini voice, e.g. "warm Southern drawl".
+- Stored as `voice.style_direction` on the cast voice; persisted with the book.
+- Threaded into every Gemini request: chapter generation, single-segment regen, book auditions, prosody auditions.
+- Included in cache-key hashes, so changing the direction invalidates old audio and the "already uses the current cast" guard detects it.
+- Worker prepends `Voice direction: <text>` to the Gemini prompt (300-char cap).
 
 ## v137 unified frontend
 - Unified the previously split v135/v136 frontend on 2026-09-23.
