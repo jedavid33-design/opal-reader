@@ -5,9 +5,15 @@ Last updated: 2026-09-24
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-139.js / styles-137.css / sw-139.js.
-- cloudflare-worker.js is the Worker source of truth (v1.4.2).
+- Current frontend generation: app-140.js / styles-137.css / sw-140.js.
+- cloudflare-worker.js is the Worker source of truth (v1.4.4).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Speechify removed; provider order Gemini > Fish > Azure > OpenAI (v1.4.4, 2026-09-26)
+- Speechify provider fully removed (frontend + worker) at Julie's request after she cancelled her subscription (generation issues + cost). Voice Lab tabs, settings model picker, provider status note, per-char pricing, voice mapping, worker synth branch, /api/providers/speechify/* endpoints all gone.
+- Provider fallback/tab order is now Gemini → Fish Audio → Azure → OpenAI (Julie: azure ahead of openai).
+- Frontend app-139.js → app-140.js, sw-139.js → sw-140.js (cache opalreader-shell-v140). Worker v1.4.2 → v1.4.4.
+- SPEECHIFY_API_KEY secret left in place unused (same precedent as ELEVENLABS/GOOGLE_CLOUD_TTS keys); Julie can ask to delete it.
 
 ## Default provider: Gemini first (v1.4.3, 2026-09-26)
 - Voice Lab provider-tab fallback chain now prefers Gemini: gemini → speechify → fish → openai → azure (was speechify first). Cast voice picker opens on the Gemini tab when Gemini is configured.

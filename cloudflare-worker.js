@@ -1,4 +1,3 @@
-const SPEECHIFY = "https://api.speechify.ai";
 const azureReady = (env) =>
   Boolean(env.AZURE_SPEECH_KEY && /^[a-z0-9-]+$/i.test(env.AZURE_SPEECH_REGION || ""));
 const azureBase = (env) =>
@@ -93,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.2";
+const APP_VERSION = "1.4.4";
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -233,8 +232,6 @@ const audioContentType = (format) =>
 function providerLabel(provider) {
   return provider === "azure"
     ? "Azure Speech"
-      : provider === "speechify"
-        ? "Speechify"
         : provider === "fish"
           ? "Fish Audio"
           : provider === "openai"
@@ -484,7 +481,7 @@ async function synthesizeAudio(env, provider, body) {
     error.status = 400;
     throw error;
   }
-  const limits = { azure: 8000, speechify: 20000, fish: 8000, openai: 4000, gemini: 8000 };
+  const limits = { azure: 8000, fish: 8000, openai: 4000, gemini: 8000 };
   if (!limits[provider]) {
     const error = new Error("Unknown voice provider.");
     error.status = 400;
@@ -531,34 +528,6 @@ async function synthesizeAudio(env, provider, body) {
         },
         body: ssml,
       });
-      if (!response.ok) await throwProviderError(response, provider);
-      bytes = await response.arrayBuffer();
-    } else if (provider === "speechify") {
-      if (!env.SPEECHIFY_API_KEY) {
-        const error = new Error("Speechify has not been connected yet.");
-        error.status = 503;
-        throw error;
-      }
-      const hasMarkup = /<\/?emphasis>/i.test(body.text);
-      const speechInput = hasMarkup
-        ? `<speak>${speechMarkup(body.text)}</speak>`
-        : plainSpeechText(body.text);
-      response = await fetch(`${SPEECHIFY}/v1/audio/stream`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.SPEECHIFY_API_KEY}`,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg",
-        },
-        body: JSON.stringify({
-          input: speechInput,
-          voice_id: body.voice_id,
-          model: body.model_id || "simba-3.2",
-          language: body.language_code || "en-US",
-        }),
-      });
-      providerRequestId = response.headers.get("Speechify-Request-Id") || response.headers.get("X-Request-ID") || null;
-      actualModel = body.model_id || "simba-3.2";
       if (!response.ok) await throwProviderError(response, provider);
       bytes = await response.arrayBuffer();
     } else if (provider === "fish") {
@@ -844,7 +813,6 @@ export default {
         return json(
           {
             azure: azureReady(env),
-            speechify: Boolean(env.SPEECHIFY_API_KEY),
             fish: Boolean(env.FISH_AUDIO_API_KEY),
             openai: Boolean(env.OPENAI_API_KEY),
             gemini: Boolean(env.GEMINI_API_KEY),
@@ -1078,7 +1046,7 @@ export default {
               !validCacheKey(segment.cache_key) ||
               !segment.text ||
               !segment.voice_id ||
-              !["azure", "speechify", "fish", "openai", "gemini"].includes(segment.provider),
+              !["azure", "fish", "openai", "gemini"].includes(segment.provider),
           )
         )
           return json(
@@ -1210,52 +1178,6 @@ export default {
       ) {
         const body = await request.json();
         const result = await synthesizeAudio(env, "azure", body);
-        return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
-          "X-OpalReader-Cache": result.cache,
-          ...(result.provider_request_id ? { "X-Speechify-Request-Id": result.provider_request_id } : {}),
-          ...(result.model ? { "X-Speechify-Model": result.model } : {}),
-        });
-      }
-      if (
-        url.pathname === "/api/providers/speechify/voices" &&
-        request.method === "GET"
-      ) {
-        if (!env.SPEECHIFY_API_KEY)
-          return json(
-            { error: "Speechify has not been connected yet." },
-            503,
-            origin,
-            env,
-          );
-        const upstream = new URL(`${SPEECHIFY}/v1/voices`);
-        for (const key of ["locale", "gender", "model", "limit", "cursor"]) {
-          const value = url.searchParams.get(key);
-          if (value) upstream.searchParams.set(key, value);
-        }
-        const response = await fetch(upstream, {
-          headers: { Authorization: `Bearer ${env.SPEECHIFY_API_KEY}` },
-        });
-        if (!response.ok) {
-          let detail = "";
-          try { detail = await response.text(); } catch {}
-          return json(
-            { error: detail || `Speechify voice request failed (${response.status}).`, provider: "speechify" },
-            response.status,
-            origin,
-            env,
-          );
-        }
-        return new Response(response.body, {
-          status: response.status,
-          headers: { "Content-Type": "application/json", ...cors(origin, env) },
-        });
-      }
-      if (
-        url.pathname === "/api/providers/speechify/speech" &&
-        request.method === "POST"
-      ) {
-        const body = await request.json();
-        const result = await synthesizeAudio(env, "speechify", body);
         return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
         });
