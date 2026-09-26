@@ -5,9 +5,14 @@ Last updated: 2026-09-26
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-145.js / styles-138.css / sw-145.js.
+- Current frontend generation: app-146.js / styles-138.css / sw-146.js.
 - cloudflare-worker.js is the Worker source of truth (v1.4.5).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+
+## Voice Lab locale filter hid Gemini/OpenAI voices (v1.4.10, 2026-09-26)
+- Julie saw "No voices match these filters" on the Gemini tab with en-US selected. Root cause: the client-side filter `Ur()` requires the voice's accent string to contain the locale keyword ("en-US" → "american"), but the worker's static Gemini/OpenAI voice lists only carry `locale: "en"` with no accent metadata — so EVERY voice was filtered out. The locale dropdown also persists across provider tabs (used Azure with en-US, switched to Gemini → 0 voices).
+- Fix: `Ur()` now skips the accent check for the static providers (`e.provider==="gemini"||e.provider==="openai"`). Fish/Azure behavior unchanged (their voices carry real locale/accent data; Azure is additionally pre-filtered server-side).
+- Frontend-only: app-145.js → app-146.js, sw-145.js → sw-146.js (cache opalreader-shell-v146). Worker stays v1.4.5.
 
 ## Free-tier 429 fail-fast hint (v1.4.9, 2026-09-26)
 - Julie's screenshots showed Regenerate retries correctly running (attempt 4 of 4) but every attempt failing: the error names `generate_content_free_tier_requests, limit: 10` — her API key's project is NOT on her $10 paid billing, it's still drawing from the free tier. Retrying a daily free-tier quota is futile, so `regenerateOneSegment()` now detects `free_tier` in a 429 message and fails immediately (no 3-minute countdown), appending a plain-English note: the key is on the free tier (10/day), check which project owns the key in AI Studio and link the billing account to that exact project in Cloud Console → Billing.
