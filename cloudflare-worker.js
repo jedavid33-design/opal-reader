@@ -870,6 +870,44 @@ export default {
           return json({ error: "Book identifier mismatch." }, 400, origin, env);
         return json(await saveBook(env, book), 200, origin, env);
       }
+      if (
+        url.pathname.startsWith("/api/sync/book/") &&
+        request.method === "DELETE"
+      ) {
+        if (!syncReady(env))
+          return json(
+            {
+              error:
+                "Cross-device storage bindings have not been configured yet.",
+            },
+            503,
+            origin,
+            env,
+          );
+        const id = decodeURIComponent(
+          url.pathname.slice("/api/sync/book/".length),
+        );
+        if (!validId(id))
+          return json({ error: "Invalid book identifier." }, 400, origin, env);
+        // Delete book from KV
+        await env.OPALREADER_KV.delete(`book:${id}`);
+        // Remove from library index
+        const index = await libraryIndex(env),
+          filtered = index.filter((item) => item.id !== id);
+        if (filtered.length !== index.length) {
+          await env.OPALREADER_KV.put(
+            "library:index",
+            JSON.stringify(filtered),
+          );
+        }
+        // Delete synced EPUB from R2 (best-effort)
+        try {
+          if (env.OPALREADER_STORAGE) {
+            await env.OPALREADER_STORAGE.delete(`epubs/${id}.epub`);
+          }
+        } catch (_) {}
+        return json({ deleted: true }, 200, origin, env);
+      }
       if (url.pathname === "/api/sync/settings" && request.method === "GET") {
         if (!env.OPALREADER_KV)
           return json(
