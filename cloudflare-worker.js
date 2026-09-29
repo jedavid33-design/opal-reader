@@ -592,9 +592,11 @@ async function synthesizeAudio(env, provider, body) {
       }
       const geminiModel = body.model_id || "gemini-2.5-flash-preview-tts";
       const geminiStyle = (body.style_direction || "").toString().trim().slice(0, 300);
+      // TTS instructions: prevent whispering and skipped words
+      const ttsInstructions = "Read aloud exactly, word for word. Do not skip any words. Do not whisper unless explicitly asked.";
       const geminiPrompt = geminiStyle
-        ? `Voice direction: ${geminiStyle}\n\n${plainSpeechText(body.text)}`
-        : plainSpeechText(body.text);
+        ? `${ttsInstructions}\n\nVoice direction: ${geminiStyle}\n\n${plainSpeechText(body.text)}`
+        : `${ttsInstructions}\n\n${plainSpeechText(body.text)}`;
       response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
         {
