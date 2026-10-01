@@ -157,7 +157,7 @@ async function usageReport(env, url) {
     cursor = listed.truncated ? listed.cursor : undefined;
     for (const object of listed.objects) {
       try {
-        const item = await env.OPALREADER_STORAGE.get(object.key);
+        const item = await r2Get(env, object.key);
         if (!item) continue;
         const event = item.json ? await item.json() : JSON.parse(await new Response(item.body).text());
         if ((event.timestamp || 0) < from || (event.timestamp || 0) > to) continue;
@@ -324,10 +324,34 @@ function pcmToWav(pcmBytes, { sampleRate = 24000, channels = 1, bitsPerSample = 
   out.set(pcm, 44);
   return out;
 }
+// Cloudflare's R2/KV bindings occasionally throw transient internal errors
+// ("We encountered an internal error. Please try again. (10001)"). Those are
+// explicitly retryable: the request is well-formed and succeeds a moment later.
+// Retry idempotent READS only — a failed-looking write may still have applied.
+function isTransientStorageError(error) {
+  const msg = String((error && error.message) || error || "");
+  return /10001|internal error|please try again|connection (lost|reset|refused)|timed?\s*out|econnreset|etimedout|socket hang up|fetch failed/i.test(msg);
+}
+async function retryStorageRead(fn, attempts = 3) {
+  let last;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      last = error;
+      if (i >= attempts - 1 || !isTransientStorageError(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 60 * 2 ** i));
+    }
+  }
+  throw last;
+}
+const r2Head = (env, key) => retryStorageRead(() => env.OPALREADER_STORAGE.head(key));
+const r2Get = (env, key) => retryStorageRead(() => env.OPALREADER_STORAGE.get(key));
+
 async function cachedAudio(env, key) {
   if (!env.OPALREADER_STORAGE || !validCacheKey(key)) return null;
   for (const ext of AUDIO_EXTENSIONS) {
-    const object = await env.OPALREADER_STORAGE.get(`audio/${key}.${ext}`);
+    const object = await r2Get(env, `audio/${key}.${ext}`);
     if (object) return { object, format: ext };
   }
   return null;
@@ -346,7 +370,7 @@ async function hasCachedAudio(env, key) {
   if (!env.OPALREADER_STORAGE || !validCacheKey(key)) return false;
   if (env.OPALREADER_STORAGE.head) {
     for (const ext of AUDIO_EXTENSIONS)
-      if (await env.OPALREADER_STORAGE.head(`audio/${key}.${ext}`)) return true;
+      if (await r2Head(env, `audio/${key}.${ext}`)) return true;
     return false;
   }
   return Boolean(await cachedAudio(env, key));
@@ -387,7 +411,7 @@ async function chapterCompositeAudio(env, audioKeys, cacheKey) {
     audioKeys.map(async (key) => {
       if (!validCacheKey(key)) return null;
       for (const ext of AUDIO_EXTENSIONS) {
-        const head = await env.OPALREADER_STORAGE.head(`audio/${key}.${ext}`);
+        const head = await r2Head(env, `audio/${key}.${ext}`);
         if (head) return { key, ext, size: head.size || 0 };
       }
       return null;
@@ -409,7 +433,7 @@ async function chapterCompositeAudio(env, audioKeys, cacheKey) {
   const format = heads[0].ext;
   // Check the composite cache BEFORE downloading any segment bytes.
   const compositeObjectKey = `chapter-audio/${cacheKey}.${format}`;
-  const cached = await env.OPALREADER_STORAGE.get(compositeObjectKey);
+  const cached = await r2Get(env, compositeObjectKey);
   if (cached) return { body: cached.body, cache: "HIT", audioFormat: format };
   // Bound the composition so a long chapter can't OOM the worker (128 MB
   // free-plan limit). Over the cap: client falls back to segment playback.
@@ -423,7 +447,7 @@ async function chapterCompositeAudio(env, audioKeys, cacheKey) {
   }
   const parts = [];
   const objects = await Promise.all(
-    heads.map((h) => env.OPALREADER_STORAGE.get(`audio/${h.key}.${h.ext}`)),
+    heads.map((h) => r2Get(env, `audio/${h.key}.${h.ext}`)),
   );
   for (const object of objects) {
     if (!object) {
