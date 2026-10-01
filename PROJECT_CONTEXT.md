@@ -257,3 +257,9 @@ When missing/repeated/bad audio is found:
 - Deployed: app-181.js (5797d2366d52), index.html repointed. Bundle verified live before index repoint. APP_UI_VERSION 1.4.43.
 - Old fragmented Shelf rows still untouched (awaiting Julie's OK to merge).
 
+## v1.4.44 (frontend) + v1.4.13 (worker) — audit fixes (2026-10-01)
+- Julie asked for a fine-tooth-comb audit of why chapters end up in broken/half-built states. Report: AUDIT-2026-10-01.md. 5 majors found; production data healthy (ch20 verified 28/28, ch6 scare resolved — old failed job was a phantom book import superseded same-day by 8/8, 0 stuck jobs, R2 1.55GB/10GB).
+- Worker v1.4.13: A2 duplicate-delivery KV lease (`processing:<job_id>:<index>`, ~90s TTL) — a redelivered message skips synthesis instead of double-spending Gemini quota. Queue visibility timeout is NOT raisable for worker-type consumers (Cloudflare fixes it at 30s; the field only exists on HTTP pull consumers) — the lease is the real guard. A1 stale-heartbeat resume: POST re-sends the queue message when existing status is queued/generating but updated_at is >5min old. A3: R2 write failures retry the write (backoff) instead of re-synthesizing paid audio. A11: repo cloudflare-worker.js synced to deployed source (was stale at v1.4.8).
+- Frontend v1.4.44 (app-182.js): A1/A5 — poll failures counted per chapter; 404 or ~5 consecutive failures set local generation to failed with "tap Generate to restart" instead of an eternal spinner. A4 — or() matches segments by cache_key identity, not array index (split-mid-generation can no longer misalign audio). A6 — network throw during playback alerts "Couldn't reach the audio" without nulling the audioKey.
+- New: per-chapter provider override picker in generation options (default = POV voice's provider) — Chapter 21 can go to OpenAI without touching voice casting.
+- Deployed: worker v1.4.13 (health endpoint confirms), app-182.js live on Pages with index.html repointed, APP_UI_VERSION 1.4.44.
