@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.5";
+const APP_VERSION = "1.4.8"; // + deletion tombstones: deleted books stay deleted
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -204,9 +204,59 @@ async function usageReport(env, url) {
 async function libraryIndex(env) {
   return (await env.OPALREADER_KV.get("library:index", "json")) || [];
 }
+// Deletion tombstones: deleting a book records `deleted:<id>` so that a
+// stale device (or a failed-then-retried sync) can never resurrect it with a
+// PUT, and so other devices learn to drop their local copy on next sync.
+const tombstoneKey = (id) => `deleted:${id}`;
+async function getTombstone(env, id) {
+  try {
+    return await env.OPALREADER_KV.get(tombstoneKey(id), "json");
+  } catch (_) {
+    return null;
+  }
+}
+async function listTombstones(env) {
+  const out = [];
+  let cursor;
+  for (;;) {
+    let page;
+    try {
+      page = await env.OPALREADER_KV.list({ prefix: "deleted:", cursor });
+    } catch (_) {
+      break;
+    }
+    for (const k of page.keys || []) {
+      try {
+        const t = await env.OPALREADER_KV.get(k.name, "json");
+        if (t && t.id)
+          out.push({
+            id: t.id,
+            title: t.title || "",
+            deletedAt: t.deletedAt || 0,
+          });
+      } catch (_) {}
+    }
+    if (page.list_complete) break;
+    cursor = page.cursor;
+  }
+  return out;
+}
 async function saveBook(env, book) {
   if (!book?.id || !validId(book.id))
     throw new Error("Invalid book identifier.");
+  // A tombstoned book stays deleted: refuse resurrection by PUT. The client
+  // must clear the tombstone first (explicit restore), which proves a human
+  // asked for the book back rather than a stale device re-uploading it.
+  const tomb = await getTombstone(env, book.id);
+  if (tomb) {
+    const err = new Error(
+      "This book was deleted on another device and cannot be re-uploaded. Restore it from a backup to bring it back.",
+    );
+    err.code = "BOOK_DELETED";
+    err.status = 409;
+    err.deletedAt = tomb.deletedAt || 0;
+    throw err;
+  }
   const key = `book:${book.id}`,
     existing = await env.OPALREADER_KV.get(key, "json");
   if (existing && (existing.updatedAt || 0) > (book.updatedAt || 0))
@@ -331,17 +381,24 @@ async function purgeBookAudio(env, bookId, chapters, jobIds) {
 }
 async function chapterCompositeAudio(env, audioKeys, cacheKey) {
   if (!env.OPALREADER_STORAGE) throw new Error("R2 storage has not been configured yet.");
-  const parts = [];
-  for (const key of audioKeys) {
-    const found = await cachedAudio(env, key);
-    if (!found) {
-      const error = new Error("One or more chapter audio segments are missing from R2.");
-      error.status = 404;
-      throw error;
-    }
-    parts.push(found);
+  // Cheap parallel HEADs: verify every segment exists and learn sizes/formats
+  // without downloading 10s of MB first.
+  const heads = await Promise.all(
+    audioKeys.map(async (key) => {
+      if (!validCacheKey(key)) return null;
+      for (const ext of AUDIO_EXTENSIONS) {
+        const head = await env.OPALREADER_STORAGE.head(`audio/${key}.${ext}`);
+        if (head) return { key, ext, size: head.size || 0 };
+      }
+      return null;
+    }),
+  );
+  if (heads.some((h) => !h)) {
+    const error = new Error("One or more chapter audio segments are missing from R2.");
+    error.status = 404;
+    throw error;
   }
-  const formats = new Set(parts.map((part) => part.format));
+  const formats = new Set(heads.map((h) => h.ext));
   if (formats.size > 1) {
     const error = new Error(
       "This chapter mixes MP3 and WAV segments (Gemini returns WAV audio). Play the segments individually, or regenerate the chapter with voices from a single provider family.",
@@ -349,10 +406,33 @@ async function chapterCompositeAudio(env, audioKeys, cacheKey) {
     error.status = 422;
     throw error;
   }
-  const format = parts[0].format;
+  const format = heads[0].ext;
+  // Check the composite cache BEFORE downloading any segment bytes.
   const compositeObjectKey = `chapter-audio/${cacheKey}.${format}`;
   const cached = await env.OPALREADER_STORAGE.get(compositeObjectKey);
   if (cached) return { body: cached.body, cache: "HIT", audioFormat: format };
+  // Bound the composition so a long chapter can't OOM the worker (128 MB
+  // free-plan limit). Over the cap: client falls back to segment playback.
+  const totalSize = heads.reduce((n, h) => n + h.size, 0);
+  if (totalSize > 64 * 1024 * 1024) {
+    const error = new Error(
+      "This chapter is too large to play as one file. Playing the segments individually instead.",
+    );
+    error.status = 413;
+    throw error;
+  }
+  const parts = [];
+  const objects = await Promise.all(
+    heads.map((h) => env.OPALREADER_STORAGE.get(`audio/${h.key}.${h.ext}`)),
+  );
+  for (const object of objects) {
+    if (!object) {
+      const error = new Error("One or more chapter audio segments are missing from R2.");
+      error.status = 404;
+      throw error;
+    }
+    parts.push({ object, format });
+  }
   let combined;
   if (format === "wav") {
     const pcmChunks = [];
@@ -593,7 +673,7 @@ async function synthesizeAudio(env, provider, body) {
       const geminiModel = body.model_id || "gemini-2.5-flash-preview-tts";
       const geminiStyle = (body.style_direction || "").toString().trim().slice(0, 300);
       // TTS instructions: prevent whispering and skipped words
-      const ttsInstructions = "Read aloud exactly, word for word. Do not skip any words. Do not whisper unless explicitly asked.";
+      const ttsInstructions = "Read aloud exactly, word for word, in a clear normal speaking voice. Do not skip any words. NEVER whisper, murmur, or speak softly.";
       const geminiPrompt = geminiStyle
         ? `${ttsInstructions}\n\nVoice direction: ${geminiStyle}\n\n${plainSpeechText(body.text)}`
         : `${ttsInstructions}\n\n${plainSpeechText(body.text)}`;
@@ -618,11 +698,19 @@ async function synthesizeAudio(env, provider, body) {
       actualModel = geminiModel;
       if (!response.ok) await throwProviderError(response, provider);
       const data = await response.json();
-      const parts = data?.candidates?.[0]?.content?.parts || [];
+      const candidate = data?.candidates?.[0] || {};
+      const parts = candidate?.content?.parts || [];
       const audioPart = parts.find((part) => part?.inlineData?.data);
       if (!audioPart) {
-        const error = new Error("Gemini did not return audio for that text.");
+        const finishReason = candidate.finishReason || "UNKNOWN";
+        const blockReason = data?.promptFeedback?.blockReason || "";
+        const detail = [finishReason, blockReason].filter(Boolean).join("/");
+        const error = new Error(
+          `Gemini did not return audio for that text (Gemini said: ${detail}).`
+        );
         error.status = 502;
+        // Content-filter refusals are deterministic for the same text: retrying burns quota.
+        error.noRetry = /SAFETY|RECITATION|BLOCK/i.test(detail);
         throw error;
       }
       const mimeType = audioPart.inlineData.mimeType || "";
@@ -764,7 +852,8 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       });
     return status;
   } catch (error) {
-    status.state = attempts < 4 ? "queued" : "failed";
+    const retryable = attempts < 4 && !error?.noRetry;
+    status.state = retryable ? "queued" : "failed";
     status.error = error.message || "Chapter generation failed.";
     status.updated_at = Date.now();
     await saveGenerationStatus(env, status);
@@ -845,8 +934,9 @@ export default {
                 env.OPALREADER_KV.get(`book:${item.id}`, "json"),
               ),
             )
-          ).filter(Boolean);
-        return json({ books }, 200, origin, env);
+          ).filter(Boolean),
+          deleted = await listTombstones(env);
+        return json({ books, deleted }, 200, origin, env);
       }
       if (
         url.pathname.startsWith("/api/sync/book/") &&
@@ -870,7 +960,22 @@ export default {
         const book = await request.json();
         if (book.id !== id)
           return json({ error: "Book identifier mismatch." }, 400, origin, env);
-        return json(await saveBook(env, book), 200, origin, env);
+        try {
+          return json(await saveBook(env, book), 200, origin, env);
+        } catch (err) {
+          if (err && err.code === "BOOK_DELETED")
+            return json(
+              {
+                error: err.message,
+                deleted: true,
+                deletedAt: err.deletedAt || 0,
+              },
+              409,
+              origin,
+              env,
+            );
+          throw err;
+        }
       }
       if (
         url.pathname.startsWith("/api/sync/book/") &&
@@ -891,6 +996,12 @@ export default {
         );
         if (!validId(id))
           return json({ error: "Invalid book identifier." }, 400, origin, env);
+        // Remember the title for the tombstone before removing the book.
+        let doomedTitle = "";
+        try {
+          const doomed = await env.OPALREADER_KV.get(`book:${id}`, "json");
+          if (doomed && doomed.title) doomedTitle = String(doomed.title);
+        } catch (_) {}
         // Delete book from KV
         await env.OPALREADER_KV.delete(`book:${id}`);
         // Remove from library index
@@ -902,6 +1013,18 @@ export default {
             JSON.stringify(filtered),
           );
         }
+        // Record a deletion tombstone so a stale device can never resurrect
+        // this book via PUT, and other devices drop their local copy on sync.
+        try {
+          await env.OPALREADER_KV.put(
+            tombstoneKey(id),
+            JSON.stringify({
+              id,
+              title: doomedTitle,
+              deletedAt: Date.now(),
+            }),
+          );
+        } catch (_) {}
         // Delete synced EPUB from R2 (best-effort)
         try {
           if (env.OPALREADER_STORAGE) {
@@ -909,6 +1032,33 @@ export default {
           }
         } catch (_) {}
         return json({ deleted: true }, 200, origin, env);
+      }
+      if (
+        url.pathname.startsWith("/api/sync/deleted/") &&
+        request.method === "DELETE"
+      ) {
+        // Clear a deletion tombstone: the explicit "restore" path. Called by
+        // the client when the user deliberately restores a book from a backup.
+        // Never called by background sync, so stale devices can't use it.
+        if (!syncReady(env))
+          return json(
+            {
+              error:
+                "Cross-device storage bindings have not been configured yet.",
+            },
+            503,
+            origin,
+            env,
+          );
+        const id = decodeURIComponent(
+          url.pathname.slice("/api/sync/deleted/".length),
+        );
+        if (!validId(id))
+          return json({ error: "Invalid book identifier." }, 400, origin, env);
+        try {
+          await env.OPALREADER_KV.delete(tombstoneKey(id));
+        } catch (_) {}
+        return json({ cleared: true }, 200, origin, env);
       }
       if (url.pathname === "/api/sync/settings" && request.method === "GET") {
         if (!env.OPALREADER_KV)
@@ -1353,11 +1503,13 @@ export default {
         );
         message.ack();
       } catch (error) {
-        if ((message.attempts || 1) < 4)
+        // Deterministic refusals (e.g. Gemini content-filter blocks) never
+        // succeed on retry: drop the message instead of burning quota.
+        if (error?.noRetry || (message.attempts || 1) >= 4) message.ack();
+        else
           message.retry({
             delaySeconds: Math.min(60, 2 ** (message.attempts || 1)),
           });
-        else message.ack();
       }
     }
   },
