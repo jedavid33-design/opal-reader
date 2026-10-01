@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.8"; // + deletion tombstones: deleted books stay deleted
+const APP_VERSION = "1.4.12"; // synced from deployed 2026-10-01: v1.4.10 finishReason reporting + noRetry, v1.4.11 R2 read retries, v1.4.12 PROHIBITED/BLOCKLIST noRetry (label was stale at 1.4.8)
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
