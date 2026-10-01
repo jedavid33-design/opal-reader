@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.12"; // synced from deployed 2026-10-01: v1.4.10 finishReason reporting + noRetry, v1.4.11 R2 read retries, v1.4.12 PROHIBITED/BLOCKLIST noRetry (label was stale at 1.4.8)
+const APP_VERSION = "1.4.13"; // v1.4.13: A2 duplicate-delivery lease + visibility-timeout guidance, A1 stale-heartbeat resume, A3 R2 write retries
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -374,6 +374,51 @@ async function hasCachedAudio(env, key) {
     return false;
   }
   return Boolean(await cachedAudio(env, key));
+}
+
+// A2: duplicate-delivery guard. Two queue deliveries of the same segment can
+// overlap (redelivery after the visibility timeout, or a crash mid-synthesis).
+// A short KV lease ensures only one of them calls the provider. The TTL (90s)
+// is the backstop: if a worker dies mid-synthesis without releasing, the
+// lease expires and a later redelivery may proceed.
+const processingLeaseKey = (jobId, index) => `processing:${jobId}:${index}`;
+async function acquireProcessingLease(env, jobId, index) {
+  const key = processingLeaseKey(jobId, index);
+  try {
+    if (await env.OPALREADER_KV.get(key)) return false;
+    await env.OPALREADER_KV.put(key, String(Date.now()), { expirationTtl: 90 });
+    return true;
+  } catch (_) {
+    return true; // KV hiccup: never block generation on the guard itself.
+  }
+}
+async function releaseProcessingLease(env, jobId, index) {
+  try {
+    await env.OPALREADER_KV.delete(processingLeaseKey(jobId, index));
+  } catch (_) {}
+}
+
+// A3: retry the R2 *write* (with backoff) before giving up on audio the
+// provider already returned. Re-synthesizing would bill a second request for
+// audio already paid for. Puts are idempotent for identical bytes, and a HEAD
+// between attempts catches the case where the failed-looking write actually
+// landed, so we never rewrite needlessly.
+async function storeAudioWithRetry(env, cacheKey, bytes, metadata, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await storeAudio(env, cacheKey, bytes, metadata);
+      return;
+    } catch (error) {
+      lastError = error;
+      try {
+        if (await hasCachedAudio(env, cacheKey)) return;
+      } catch (_) {}
+      if (attempt < attempts)
+        await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+    }
+  }
+  throw lastError;
 }
 
 
@@ -749,7 +794,8 @@ async function synthesizeAudio(env, provider, body) {
     }
     if (body.cache_key) {
       try {
-        await storeAudio(env, body.cache_key, bytes, { provider, voiceId: body.voice_id, format: audioFormat });
+        // A3: retry the write, never re-synthesize audio already paid for.
+        await storeAudioWithRetry(env, body.cache_key, bytes, { provider, voiceId: body.voice_id, format: audioFormat });
         r2WriteSuccess = true;
       } catch (error) {
         r2WriteSuccess = false;
@@ -804,8 +850,10 @@ async function saveGenerationStatus(env, status) {
 }
 
 async function readGenerationStatus(env, jobId) {
-  const object = await env.OPALREADER_STORAGE.get(
-    generationStatusObjectKey(jobId),
+  // A3: transient R2/KV blips must not fail status reads — retry like the
+  // other storage read paths (v1.4.11 established the pattern).
+  const object = await retryStorageRead(() =>
+    env.OPALREADER_STORAGE.get(generationStatusObjectKey(jobId)),
   );
   if (object) {
     if (object.json) return object.json();
@@ -815,7 +863,11 @@ async function readGenerationStatus(env, jobId) {
 }
 
 async function readGenerationPayload(env, jobId) {
-  const object = await env.OPALREADER_STORAGE.get(generationPayloadKey(jobId));
+  // A3: the job payload read is on the critical path — a transient R2 blip
+  // here used to fail the whole job. Reuse the transient-error retry helper.
+  const object = await retryStorageRead(() =>
+    env.OPALREADER_STORAGE.get(generationPayloadKey(jobId)),
+  );
   if (!object) return null;
   if (object.json) return object.json();
   return JSON.parse(await new Response(object.body).text());
@@ -842,19 +894,41 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     if (!segment) throw new Error("Generation segment was not found.");
     segment.queue_job_id = jobId;
     segment.retry_attempt = attempts;
-    let result = null;
-    if (!(await hasCachedAudio(env, segment.cache_key))) {
-      result = await synthesizeAudio(env, segment.provider, segment);
-      if (result.cache === "MISS")
-        status.generated_cost =
-          (status.generated_cost || 0) + (Number(segment.estimated_cost) || 0);
-    } else {
+    // A2: if a duplicate queue delivery already holds this segment, bail out
+    // instead of synthesizing (and billing) it a second time. The primary
+    // delivery owns progress; this duplicate just acks and exits.
+    if (!(await acquireProcessingLease(env, jobId, index))) {
       await recordTtsUsage(env, segment, {
         provider: segment.provider,
         provider_call: false,
         request_status: "succeeded",
-        cache_status: "skipped_existing_audio",
+        cache_status: "skipped_duplicate_delivery",
       });
+      return status;
+    }
+    let result = null;
+    try {
+      let cached = await hasCachedAudio(env, segment.cache_key);
+      if (!cached) {
+        // A2: re-check immediately before the provider call — a duplicate
+        // delivery may have finished synthesizing between the checks.
+        cached = await hasCachedAudio(env, segment.cache_key);
+      }
+      if (!cached) {
+        result = await synthesizeAudio(env, segment.provider, segment);
+        if (result.cache === "MISS")
+          status.generated_cost =
+            (status.generated_cost || 0) + (Number(segment.estimated_cost) || 0);
+      } else {
+        await recordTtsUsage(env, segment, {
+          provider: segment.provider,
+          provider_call: false,
+          request_status: "succeeded",
+          cache_status: "skipped_existing_audio",
+        });
+      }
+    } finally {
+      await releaseProcessingLease(env, jobId, index);
     }
     status.segments[index] = {
       cache_key: segment.cache_key,
@@ -1270,8 +1344,34 @@ export default {
             env,
           );
         const existing = await readGenerationStatus(env, payload.job_id);
-        if (existing && ["queued", "generating", "ready"].includes(existing.state))
+        if (
+          existing &&
+          ["queued", "generating", "ready"].includes(existing.state)
+        ) {
+          // A1: stale-heartbeat resume. If the job claims to be in flight but
+          // has not been touched for ~5 minutes, its queue message was lost —
+          // re-enqueue the next pending segment instead of returning the stuck
+          // status forever. Tapping Generate is the recovery path.
+          const stale =
+            existing.state !== "ready" &&
+            Number(existing.updated_at) > 0 &&
+            Date.now() - Number(existing.updated_at) > 5 * 60 * 1000;
+          if (stale && (await readGenerationPayload(env, payload.job_id))) {
+            const nextIndex = (existing.segments || []).findIndex(
+              (item) => item.state !== "ready",
+            );
+            const resumed = { ...existing, updated_at: Date.now() };
+            if (nextIndex < 0) resumed.state = "ready";
+            await saveGenerationStatus(env, resumed);
+            if (nextIndex >= 0)
+              await env.OPALREADER_GENERATION.send({
+                job_id: payload.job_id,
+                segment_index: nextIndex,
+              });
+            return json(resumed, 200, origin, env);
+          }
           return json(existing, 200, origin, env);
+        }
         const ready = await Promise.all(
             payload.segments.map((segment) =>
               hasCachedAudio(env, segment.cache_key),
