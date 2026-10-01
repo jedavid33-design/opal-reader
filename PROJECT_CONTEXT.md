@@ -208,3 +208,48 @@ When missing/repeated/bad audio is found:
 - Worker: removed the kokoro/chatterbox self-hosted voice lists and endpoints, elevenlabs/voices + /speech + /shared/add endpoints, google/voices + /speech endpoints, all four synthesis branches, provider-label branches, char-limit entries, status fields, and generation-job validation entries. Unknown providers now get a 400 "Unknown TTS provider" error instead of falling through to ElevenLabs.
 - Frontend: removed the four Voice Lab tab buttons, display-name/pricing branches, elevenModel state/settings/cloud-sync/picker UI (Google had no model picker), the ElevenLabs shared-library tabs + shared-voice add flow (Rt/kt), the ElevenLabs free-preview path (wt/it/lr), age/use-case filters, and the google provider default (now "speechify", matching the fallback chain). Fallback chain is now speechify > fish > openai > gemini > azure.
 - ELEVENLABS_API_KEY and GOOGLE_CLOUD_TTS_API_KEY Worker secrets left in place (harmless, unused); Julie can delete them herself later.
+
+## Shelf link fix (v1.4.37, 2026-10-01)
+- Root cause of Julie's "Could not start a Shelf read-through (400)": the link flow searched `/api/books/search`, which returns Open Library/Google Books catalog results with NO Shelf book id. `POST /api/reads` then got `book_id: undefined` -> worker 400 "Book is required".
+- Fix: search now matches against `/api/bootstrap`'s local `books` (normalized title/author scoring, exact title first, 2-min cache). `shelfLinkPick` reuses the cached bootstrap; cache is invalidated on 409 before re-reading active read-throughs.
+- Verified: `shelfFindBooks` ranks "Pucked" first for "Pucked"/"pucked"/"Forever Pucked" queries against live bootstrap data; Pucked (book_b56d84d8) has an active ebook read-through (read_148f9c75) so linking resolves without creation.
+- Deployed: app-174.js (84f7abb), index.html repointed (9296895). Bundle verified 200 on Pages with new code BEFORE index.html was repointed.
+
+## Active-read filter (v1.4.38, 2026-10-01)
+- Julie: link search should only pull up actively-reading books. Candidates now filtered to books with an active read-through before title/author matching. Intro + empty-state copy updated. (2 active reads on her Shelf; "Pucked" now returns just Pucked.)
+- Deployed: app-175.js (4d4cd50), index.html repointed (9713a52). Bundle verified live before index.html repoint.
+
+## No-search active list (v1.4.39, 2026-10-01)
+- Julie: skip search entirely. Link modal now lists actively-reading books (alphabetical) with Link buttons directly; no search field. Pages took ~3 min to serve the new bundle this time (6x20s polls) — bundle verified live before index.html repoint as usual.
+- Deployed: app-176.js (5c7898b). index.html repoint pushed; verifying live.
+
+## Version display fix (v1.4.39, 2026-10-01)
+- Julie asked what the version should say; found APP_UI_VERSION was stale at "1.4.36" (the header ⓘ button shows `OpalReader ${APP_UI_VERSION}`). Bumped to "1.4.39" in app-177.js. Lesson: keep APP_UI_VERSION in step on every version bump.
+- Deployed: app-177.js (0dd1a07), index.html repointed. Bundle verified live before index repoint.
+
+## Listening-time not logging (v1.4.40, 2026-10-01)
+- Julie: linked Pucked but no time appeared in Shelf. Found TWO bugs:
+  1. Boot called `shelfListenFlush()` but the function is named `shelfFlush()` — ReferenceError at boot since v1.4.36 (app-173). This killed the boot-time offline-queue flush AND the boot `rt()` sync (everything after the throw never ran).
+  2. `shelfLinkPick` never started the wall-clock timer if audio was already playing when linking — the timer only starts on `ee.onplay`, so a mid-listen link silently logged nothing until the next pause+play.
+- Fixes: boot calls `shelfFlush()`; after a successful link, `if(!ee.paused)shelfListenStart()`. Guarded on `!ee.paused` because shelfActive() doesn't check playback state — calling it while paused would log paused time as listening.
+- Shelf worker confirmed healthy: sessions WERE landing on the Pucked read this morning (09:17/09:46 EDT), so the POST path was fine; the gap was device-side timer start.
+- Deployed: app-178.js (233dd80), index.html repointed. Bundle verified live before index repoint. APP_UI_VERSION bumped to 1.4.40 (keep in step!).
+
+## v1.4.41 (2026-10-01)
+- Julie confirmed Shelf sessions working. Screenshot showed 30s checkpoint chunks fragmenting the Shelf session list (each checkpoint queued a separate outbox item).
+- Fix: `shelfQueue` now merges a chunk into the previous outbox item when same readId and gap <90s (checkpoint drift tolerance). Contiguous listening = one session per stretch; separate stretches and different reads stay separate. Harness: 137s contiguous -> 1 item; 10-min gap -> separate; different read -> separate.
+- Old fragmented sessions in Shelf left untouched (no destructive cleanup).
+- Deployed: app-179.js (10f5b1f), index.html repointed. Bundle verified live before index repoint. APP_UI_VERSION 1.4.41.
+
+## v1.4.42 (2026-10-01)
+- Julie (on 1.4.41, confirmed via screenshot): sessions still split. Shelf data proved it: 18:47:31+22s, 18:47:53+40s, 18:48:33+16s — perfectly back-to-back, zero gap = section auto-advance, not user pauses. onended called shelfListenStop() unconditionally, so every TTS section boundary (and chapter boundary) posted its own session.
+- Fix: onended no longer stops the wall clock on auto-advance (Ot section advance, Me chapter advance, playChapterComposite). shelfListenStop() now only on terminal paths: voice-preview end, no-book, waiting-for-generation (3x), book completed (2x). Verified: 7 stops, all on terminal paths; 0 before the 3 advance returns. Ot/Me/playChapterComposite/retryPlay never fire pause, so the clock survives boundaries; checkpoints keep merging via the v1.4.41 shelfQueue coalescing.
+- Deployed: app-180.js (7303a22), index.html repointed. Bundle verified live before index repoint. APP_UI_VERSION 1.4.42.
+
+## v1.4.43 (2026-10-01)
+- Julie (on 1.4.42, confirmed): sessions STILL split — 16:47:09+26s, 16:47:35+36s, 16:48:11+35s, chained with 167-310ms stop->restart gaps. Root cause: Ot() calls ee.load() at every section boundary, and Safari fires a pause event on load() — so onpause -> shelfListenStop() -> flush split every section even though onended no longer stops. The v1.4.42 "never fire pause" check only looked for explicit ee.pause() calls and missed the implicit load() pause.
+- Fix: debounced pause. onpause now calls shelfListenPaused(): a 4s timer; a pause->play blip (section/chapter/composite transition, ~200ms) cancels it and the wall clock runs straight through — no stop, no flush, checkpoints keep merging. A sustained pause confirms at +4s with a backdated stop (paused seconds never counted), and the closed session posts ~95s later; resuming within 90s cancels the post and merges (v1.4.41 coalescing preserved), resuming later splits truthfully. Checkpoints suppressed while a pause is pending; pagehide/visibility-hidden during a pending pause finalizes the backdated stop immediately so no time is lost. Hard stops (preview end, generation stall, book done, unlink, errors) still post immediately.
+- Harness: 16 checks on a virtual clock — blip keeps one 60s item with zero flushes; real pause backdates and posts at +95s; resume<90s merges; resume>90s splits; pagehide during pending pause backdates cleanly.
+- Deployed: app-181.js (5797d2366d52), index.html repointed. Bundle verified live before index repoint. APP_UI_VERSION 1.4.43.
+- Old fragmented Shelf rows still untouched (awaiting Julie's OK to merge).
+
