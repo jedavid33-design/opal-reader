@@ -1,51 +1,70 @@
 # OpalReader Project Context
 
-Last updated: 2026-09-26
+Last updated: 2026-09-30
 
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-148.js / styles-138.css / sw-148.js.
-- cloudflare-worker.js is the Worker source of truth (v1.4.5).
+- Current frontend generation: app-171.js (v1.4.34) / styles-139.css / sw-142.js.
+- v1.4.34: per-section navigation for un-composited chapters (>10 segments). Player context row now has ‹ › prev/next-section buttons; the "segment N/M" label is tappable and opens a Sections jump list (all sections, current highlighted, ungenerated rows disabled). prevSection scans backward for the last generated section, crossing chapter boundaries (restarts section 1 at the very start); nextSection advances or moves to the next playable chapter via Me(). Section jumps go through Ot() so composite mode yields to per-segment play. Media-session prev/next stay chapter-level. Tested: 14 node harness checks on extracted jr/prevSection/nextSection/renderSectionList. Live 2026-09-30 ~9:50pm EDT.
+- Current worker: v1.4.9.
+- v1.4.33: `onended` segment-boundary handler also skips the composite for chapters with >10 segments (was only skipped at chapter start in v1.4.32) + added "onended next seg=" breadcrumb. Live 2026-09-30 ~1:52pm EDT.
+- Julie 2026-09-30 ~1:51pm: ch18 plays on 1.4.32 but segment advance seemed stalled; when she switched away and back, section two started correctly (not a restart of section 1). Likely the boundary composite attempt (removed in 1.4.33) plus iOS background suspension delaying the async handoff. Awaiting retest on 1.4.33 for prompt handoffs.
+- cloudflare-worker.js is the Worker source of truth (v1.4.8).
 - Keep deliverables flat when making ZIPs: all files at ZIP root, no enclosing folder.
+- Deploy helper (recreated 2026-09-30 after /tmp cleanup): `~/workspace/opal-reader-deploy/gh-push.py` — pushes via contents API with the body over HTTP (argv can't carry large files). Same verify-before-switch rule: confirm the versioned JS is live on Pages before repointing index.html.
 
-## Audition progress + modal scroll preservation (v1.4.12, 2026-09-26)
-- Julie asked for (a) an in-progress indicator on the auditioned voice in Voice Lab (generation can take a while), and (b) a fix for the list jumping to the top when she taps audition.
-- (a) New `a.auditioningVoice` state: set + `se()` when an audition starts in `et()`, cleared in a `finally` (only if it still matches, guarding overlapping auditions; re-render scoped to the voices modal). The voice row (`Dr`) swaps the "Book audition" button for a disabled "Auditioning…" button while that voice generates.
-- (b) `se()` now saves/restores `.modal-back .modal` scrollTop across the full re-render, so progress updates, regen countdowns, and any other modal-time re-renders no longer reset the list position. Note: no `se()` call exists in the pre-1.4.12 audition path, so Julie's original jump was likely iOS Safari behavior (keyboard dismissal/focus) rather than a re-render; if it persists, get the exact timing from her.
-- Frontend-only: app-147.js → app-148.js, sw-147.js → sw-148.js (cache opalreader-shell-v148). Worker stays v1.4.5.
+## Per-paragraph pause fix (v1.4.23, 2026-09-30)
+- Julie: most recent generated chapter paused after each paragraph; voice also changed drastically segment-to-segment.
+- Root cause: `ee.onended` retried `playChapterComposite()` (a full worker round-trip to re-stitch all remaining segments) on EVERY segment boundary, with no try/catch. For a chapter whose composite fails (mixed MP3/WAV, missing R2 object, invalid WAV), each boundary sat through a failed stitch attempt = the pause, and the uncaught throw could kill playback instead of advancing (same bug family as the 9/28 `Me()` fix; the onended path was missed then).
+- Fix: `ee._compositeFailed` session flag — `Me()` resets it at chapter start and sets it when the initial composite fails; `onended` skips the composite retry once it has failed and catches the throw, falling straight through to per-segment `Ot()`. One stitch attempt per chapter, then clean paragraph-to-paragraph play.
+- Open: whether the drastic voice changes are the POV cast voices swapping per section (by design) or one voice varying between syntheses (Gemini variance). Asked Julie.
 
-## Retry-loop const reassignment TypeError (v1.4.11, 2026-09-26)
-- Julie hit "Attempted to assign to readonly property." (Safari/JSC wording for assignment-to-const) on Regenerate right AFTER fixing her billing. Root cause: the v1.4.8 retry patch replaced `h=await gt(...)` with `h=null;...while(!h){h=await gt(...)}` without noticing `h` was declared `const` in the comma chain (`const S={...},h=...`). The bug only fires when the request SUCCEEDS: on rejection the assignment is skipped, so all the 429 countdowns worked fine and hid it. `node --check` does not catch const reassignment; the author's simulation used `let h` so it passed.
-- Fix: `const S={...};let h=null,nA=0;` — h moved to a `let` declaration. Verified with the exact declaration pattern in Node.
-- Frontend-only: app-146.js → app-147.js, sw-146.js → sw-147.js (cache opalreader-shell-v147). Worker stays v1.4.5.
+## Shorter segments (v1.4.24, 2026-09-30)
+- Julie reported the voice drifts within a segment — turns breathier with more breath/mic noises as the segment plays, then resets clean at the next segment. Classic long-synthesis degradation.
+- Her call, and she's right: segment target cut 4000 -> 1000 chars (`qt` default `4e3` -> `1e3`). Same total characters = same TTS cost; more segments per chapter (worker cap is 100 segments/chapter; provider per-request limits are 4000-8000 chars, so 1000 is safe everywhere). Splits still land on paragraph/sentence boundaries.
+- Applies to newly imported books only — existing books keep the segments they were imported with. Told Julie she'd need to re-import a book to get the shorter segments.
 
-## Voice Lab locale filter hid Gemini/OpenAI voices (v1.4.10, 2026-09-26)
-- Julie saw "No voices match these filters" on the Gemini tab with en-US selected. Root cause: the client-side filter `Ur()` requires the voice's accent string to contain the locale keyword ("en-US" → "american"), but the worker's static Gemini/OpenAI voice lists only carry `locale: "en"` with no accent metadata — so EVERY voice was filtered out. The locale dropdown also persists across provider tabs (used Azure with en-US, switched to Gemini → 0 voices).
-- Fix: `Ur()` now skips the accent check for the static providers (`e.provider==="gemini"||e.provider==="openai"`). Fish/Azure behavior unchanged (their voices carry real locale/accent data; Azure is additionally pre-filtered server-side).
-- Frontend-only: app-145.js → app-146.js, sw-145.js → sw-146.js (cache opalreader-shell-v146). Worker stays v1.4.5.
+## Silent disabled Generate button (v1.4.25, 2026-09-30)
+- After re-importing for the shorter segments, Julie's Generate button did nothing with no error.
+- Root cause: fresh imports build the cast with `voice:null` for every POV and `defaultVoice:null`, so `m=e.segments.some(S=>!st(S.pov))` is true and the button rendered `disabled` while still labeled "Generate" — a dead button with zero feedback. (My miss: I told her to re-import without warning her the cast resets.)
+- Fix: the button is now only disabled while generation is actually working (`_`). With voices unassigned, tapping it surfaces the existing `qe()` alert ("Choose a voice for X first."), which names exactly what's missing.
+- Julie's unblock: open the book → Cast tab → assign voices (Violet=Zephyr, Alex=Charon, etc.) → Generate lights up.
 
-## Free-tier 429 fail-fast hint (v1.4.9, 2026-09-26)
-- Julie's screenshots showed Regenerate retries correctly running (attempt 4 of 4) but every attempt failing: the error names `generate_content_free_tier_requests, limit: 10` — her API key's project is NOT on her $10 paid billing, it's still drawing from the free tier. Retrying a daily free-tier quota is futile, so `regenerateOneSegment()` now detects `free_tier` in a 429 message and fails immediately (no 3-minute countdown), appending a plain-English note: the key is on the free tier (10/day), check which project owns the key in AI Studio and link the billing account to that exact project in Cloud Console → Billing.
-- Frontend-only: app-144.js → app-145.js, sw-144.js → sw-145.js (cache opalreader-shell-v145). Worker stays v1.4.5 (its background retries still apply, but the explicit free-tier error surfaces the same way).
+## Playback stall at segment boundaries (v1.4.26, 2026-09-30)
+- Julie reported chapter 18 (re-imported, 27× 1000-char segments) stuck paused at 0:00 of segment 2 — "regressed to not playing the next chapter that's generated."
+- Diagnosis: at every segment/chapter boundary the app calls `ee.play()` programmatically. iOS sometimes rejects that call; the old code set `_pendingPlay` and gave up with no retry — and that flag was write-only (never read). With 4–5× more boundaries per chapter after the 1000-char change, a previously rare stall became frequent, which is why it felt like a regression.
+- Fix: new `retryPlay()` helper retries `play()` up to 4 more times (~0.9s apart) when rejected, used at both boundary play sites (segment `Ot` and chapter composite). A user-initiated pause (`ee._userPaused`, tracked in the #play handler) cancels retries so the app never restarts audio against her will.
+- v1.4.26 did NOT fix Julie's chapter 18 stall (still stuck paused at 0:00, no alert) → not a transient rejection.
 
-## Regenerate taps auto-retry on 429 (v1.4.8, 2026-09-26)
-- Julie asked for auto-retry on single-segment Regenerate taps (she was manually retrying 429s). `regenerateOneSegment()` now retries the direct /api/providers/<provider>/speech call on HTTP 429: up to 3 retries (4 attempts total), waiting the server-suggested delay parsed from the error message ("Please retry in Ns"), clamped to 5-90s, with a per-second countdown in the modal status ("Rate limited — retrying Segment N in Ns… (attempt k of 4)"). Button stays disabled during waits.
-- Non-429 errors fail fast with the existing explicit error alert. After 3 failed retries, the last 429 error is shown explicitly.
-- `be()` now attaches the HTTP status to thrown errors (`err.status`) — additive, no behavior change elsewhere.
-- Cost: 429 rejections process zero characters so retries are free; only a successful attempt costs (~$0.004/segment on paid Tier 1).
-- Review POV modal: segments with no audioKey now show a "Not generated" badge (reuses .badge.stale) next to the segment header, so ungenerated segments are visible at a glance.
-- Frontend-only: app-143.js → app-144.js, sw-143.js → sw-144.js (cache opalreader-shell-v144). Worker stays v1.4.5.
+## Silent playback stall — damaged cached audio (v1.4.27, 2026-09-30)
+- Revised diagnosis: the stall is deterministic. Tapping play produced no alert, meaning `ee.play()` never rejected — it never settled, which happens when the audio element is waiting on data that never arrives (damaged/empty cached blob). The app had NO `ee.onerror` handling and no blob validation, so any corrupt cache entry = permanent silent death at 0:00.
+- Fix: `Bt()` now validates cached blobs (>1024 bytes); damaged entries are evicted from IDB and refetched from the network (fresh copy persisted). If the network copy is also bad → null → existing "missing or damaged" alert names the remedy. Added `ee.onerror` logging. The #play handler now races `ee.play()` against a 15s timeout so a stuck start surfaces an error message instead of sitting silently.
+- v1.4.27 did NOT fix Julie's chapter 18 stall (still stuck paused at 0:00, no alert) → the stall is not in the direct-play path (fresh load goes through resumeCurrent, which the timeout doesn't wrap) and not a damaged segment blob.
 
-## Worker: background segment retries back to 3 (v1.4.5, 2026-09-26)
-- Julie asked to restore the retry count that was cut from 3 to 1 earlier today. Queue consumer now retries a failed segment up to 3 times (4 attempts total) with 2s/4s/8s backoff before marking it failed.
-- Explicit provider errors unchanged: failures still surface as "<Provider> error (<status>): <message>" in the chapter error line.
-- Worker-only: v1.4.4 → v1.4.5. Frontend stays v1.4.7 (app-143.js). compatibility_date 2026-08-29 and all 12 bindings preserved; secrets inherited.
-- Note: this covers background chapter generation via the queue. Single-segment Regenerate taps call /api/providers/<provider>/speech directly (no queue), so they still fail fast with the explicit error on the first attempt.
+## Playback diagnostic build (v1.4.28, 2026-09-30)
+- After two theory-driven fixes failed, stopped guessing: v1.4.28 records a timestamped breadcrumb trail (`dl()`) of the tap→play chain (play handler, resumeCurrent, Me, composite fetch/load, Ot/Bt, retryPlay attempts, onloadedmetadata/onended/onerror, unhandled rejections) persisted to localStorage.
+- Tapping the version number 5x within 2.5s shows the log in an alert (otherwise shows version as before).
+- Also added real hang protection on the composite path: 45s fetch timeout → segment fallback; 15s loadedmetadata timeout / element error → `_compositeFailed`, revoke blob URL, fall back to `Ot` segments.
+- Worker side verified clean: `pcmToWav` writes valid headers, `relay()` sets correct Content-Length, no mismatched-length hang source.
+- `ee` is a detached `new Audio()` — app re-renders cannot disturb it. `#play` binding verified intact (Zr re-binds after every se() render).
+- Earlier `ot(a.book...)` no-op suspicion was a misread of a stale grep — current onended handles segment boundaries correctly.
+- v1.4.30: fixed a TDZ bug in the v1.4.28 diagnostic itself — `dl("Me("+e+") ir="+ir(ch))` referenced `ch` before its `const` declaration, throwing "Cannot access 'ch' before initialization" on every `Me()` call (this is the alert Julie screenshotted 2026-09-30). This means 1.4.28/1.4.29 never actually exercised the playback path — every tap died in `Me` before reaching the composite/fetch logic. After this fix the hang-protection + diagnostics run for real.
+- **Chapter 18 root cause found + fixed 2026-09-30 (v1.4.32 + worker v1.4.9).** Julie's 1:38pm log screenshot showed the composite fetch starting at 17:37:27 and then 50s of silence — no success, no failure, timeout never fired (iOS suspends JS timers when the phone auto-locks, which is why even the 45s safety net never ran). Server-side: ch18 = 27 Gemini WAV segments ≈ 73MB total; the worker downloaded all 27 sequentially and materialized ~150-220MB in memory, over the 128MB free-plan limit — it hung and never responded. R2 `chapter-audio/` cache was completely empty: no composite had EVER succeeded. Fixes: (a) client skips the composite for chapters with >10 segments and plays segments directly (her normal listening mode all along); (b) worker now checks the composite cache FIRST, uses parallel HEADs, refuses cleanly with 413 over 64MB total (client falls back to segments), and parallelizes segment GETs. Awaiting Julie's retest on 1.4.32.
+- Worker v1.4.9 deployed 2026-09-30 via deploy-worker.py (settings verified: compat 2026-08-29, bindings match).
 
-## Version label fix (v1.4.7, 2026-09-26)
-- v1.4.6 shipped the Regenerate fix but `APP_UI_VERSION` was still `"1.4.5"`, so the ⓘ dialog kept reporting 1.4.5 even with the fixed code. Bumped the label to 1.4.7 so the dialog reports correctly.
-- Frontend-only: app-142.js → app-143.js, sw-142.js → sw-143.js (cache opalreader-shell-v143). Worker stays v1.4.4. No functional changes.
+## Library sorted by most recent (v1.4.22, 2026-09-30)
+- Julie asked for the library grid sorted with the latest listened-to/imported book on top.
+- `Rr()` now renders `[...a.books]` sorted desc by `lastPlayedAt || updatedAt || importedAt` (same precedence the existing Resume strip uses, plus `importedAt` so fresh imports rank). Sort is render-only; `a.books` order untouched.
+- Frontend-only: app-158.js → app-159.js, index.html repointed (verified live before the switch, per the standing rule).
+
+## Fix: deleted books resurrecting via sync (v1.4.20/v1.4.21, 2026-09-30)
+- Root causes found: (1) `deleteBookFlow` fired the server DELETE inside `try{...}catch(_){}` — any network/worker failure was silent, so the server kept the book and the next sync re-downloaded it; (2) the sync push loop re-uploaded every local-only book with no notion of deletion, so a second device (iPad) resurrected books deleted on the first (iPhone).
+- Worker v1.4.8: DELETE `/api/sync/book/:id` now writes a `deleted:<id>` tombstone `{id,title,deletedAt}`; PUT on a tombstoned id returns **409** `{deleted:true}`; GET `/api/sync/library` includes `deleted[]`; new `DELETE /api/sync/deleted/:id` clears a tombstone (explicit restore path only, never called by background sync). Verified 8/8 against the real worker module with a mock KV (PUT→DELETE→tombstone listed→stale PUT 409→clear→PUT accepted).
+- Frontend v1.4.20 (app-157.js): delete verifies the server DELETE response; sync `rt()` drops local copies listed in `deleted[]` and never re-pushes tombstoned ids; `Ee()` treats 409 as "server says deleted" and purges the stale local copy; localStorage tombstone registry `opalreader.deletedBooks.v1` (pruned >180d at boot); restore-from-backup clears the tombstone first and marks `restoredAt` so the 409 path re-clears + re-pushes instead of deleting.
+- Frontend v1.4.21 (app-158.js): offline deletes are no longer blocked — the book deletes locally, a tombstone is recorded, and the next sync propagates the DELETE to the server (merge loop issues server DELETE for any locally-tombstoned id found server-side instead of re-downloading it).
+- Deploy notes: worker via `~/workspace/opal-reader-deploy/deploy-worker.py` (secret inherit). Frontend pushed via GitHub Data API (`/tmp/gh_push_file.py`); **verify the new app-NNN.js returns 200 with expected content on Pages BEFORE pointing index.html at it** (the app-156 404 lesson). sw-142.js unchanged — JS/navigations are network-first so the new bundle is picked up on reopen.
+- Test UUIDs used in the mock-KV harness only; no production KV keys were touched.
 
 ## Fix: single-segment Regenerate was broken by undefined `it(s)` (v1.4.6, 2026-09-26)
 - `regenerateOneSegment()` called `it(s)` — a function that was never defined anywhere in the bundle (latent bug in the original ChatGPT-built code, present since before v1.4.4). Every "Regenerate segment" tap threw `Can't find variable: it` before any request went out.
