@@ -5,7 +5,8 @@ Last updated: 2026-09-30
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-171.js (v1.4.34) / styles-139.css / sw-142.js.
+- Current frontend generation: app-172.js (v1.4.35) / styles-139.css / sw-142.js.
+- v1.4.35: -15s/+30s now span section and chapter boundaries via seekBy(). Backward: while t<0, stepSection(-1) to the previous generated section (crossing chapters), probe its duration with a temp Audio element, t+=dur. Forward: while t>dur, stepSection(+1), t-=dur. Then Ot() to the target and apply the final time once metadata is ready. Section-row CSS fixed for the light modal theme (was unreadable white-on-white). Composite chapters keep the old clamp. Lock-screen seekbackward/seekforward route through seekBy too. Tested: 18 node harness checks. Live 2026-09-30 ~10:45pm EDT.
 - v1.4.34: per-section navigation for un-composited chapters (>10 segments). Player context row now has ‹ › prev/next-section buttons; the "segment N/M" label is tappable and opens a Sections jump list (all sections, current highlighted, ungenerated rows disabled). prevSection scans backward for the last generated section, crossing chapter boundaries (restarts section 1 at the very start); nextSection advances or moves to the next playable chapter via Me(). Section jumps go through Ot() so composite mode yields to per-segment play. Media-session prev/next stay chapter-level. Tested: 14 node harness checks on extracted jr/prevSection/nextSection/renderSectionList. Live 2026-09-30 ~9:50pm EDT.
 - Current worker: v1.4.9.
 - v1.4.33: `onended` segment-boundary handler also skips the composite for chapters with >10 segments (was only skipped at chapter start in v1.4.32) + added "onended next seg=" breadcrumb. Live 2026-09-30 ~1:52pm EDT.
