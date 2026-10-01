@@ -734,7 +734,7 @@ async function synthesizeAudio(env, provider, body) {
         );
         error.status = 502;
         // Content-filter refusals are deterministic for the same text: retrying burns quota.
-        error.noRetry = /SAFETY|RECITATION|BLOCK/i.test(detail);
+        error.noRetry = /SAFETY|RECITATION|PROHIBITED|BLOCKLIST|BLOCKED/i.test(detail);
         throw error;
       }
       const mimeType = audioPart.inlineData.mimeType || "";
