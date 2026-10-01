@@ -166,9 +166,9 @@ html,body{overscroll-behavior-y:none}
 .player-segment-btn{background:none;border:0;padding:0;color:#ded2e4;font-size:11px;font-family:inherit;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;max-width:100%}
 /* Section jump list (v1.4.34) */
 .section-list{display:grid;gap:6px;margin-top:10px;max-height:62vh;overflow:auto}
-.section-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#ffffff10;border:1px solid #ffffff22;color:#fff;border-radius:12px;padding:10px 12px;font-size:14px}
-.section-row.current{border-color:#9fd5d0;background:#9fd5d022}
+.section-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:rgba(79,45,94,.06);border:1px solid #ece5ef;color:#3d2a47;border-radius:12px;padding:12px;font-size:15px}
+.section-row.current{border-color:#4fa8a0;background:#9fd5d033}
 .section-row:disabled{opacity:.45}
 .section-num{font-weight:800;min-width:2ch}
 .section-pov{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.section-row .st{margin-left:auto;font-size:12px;color:#ded2e4;flex:0 0 auto}
+.section-row .st{margin-left:auto;font-size:12px;color:#8a7a94;flex:0 0 auto}
