@@ -263,3 +263,11 @@ When missing/repeated/bad audio is found:
 - Frontend v1.4.44 (app-182.js): A1/A5 — poll failures counted per chapter; 404 or ~5 consecutive failures set local generation to failed with "tap Generate to restart" instead of an eternal spinner. A4 — or() matches segments by cache_key identity, not array index (split-mid-generation can no longer misalign audio). A6 — network throw during playback alerts "Couldn't reach the audio" without nulling the audioKey.
 - New: per-chapter provider override picker in generation options (default = POV voice's provider) — Chapter 21 can go to OpenAI without touching voice casting.
 - Deployed: worker v1.4.13 (health endpoint confirms), app-182.js live on Pages with index.html repointed, APP_UI_VERSION 1.4.44.
+
+## Shipped 2026-10-02 — v1.4.46 (both items below, was "next release")
+- Per-segment Generate button even before audio exists: segment modal now always renders the button ("Generate segment" vs "Regenerate segment"), reusing `regenerateOneSegment` (POV voice, cost confirm, quota-safe).
+- Generation progress below the segment list in the chapter ⓘ modal via new `_p()` helper (same chapter-progress component as the chapter card; live-updates with poller re-renders).
+
+## Next release — Julie's feature requests (2026-10-02, noted not built — both shipped in v1.4.46, see above)
+1. Per-segment Generate button even when the segment has no audio yet (currently "Regenerate segment" only renders when `audioKey` exists). Use case: auditioning voices on real chapter text without generating the whole chapter. The foreground single-segment path (`regenerateOneSegment`) already exists — it just needs a "Generate segment" affordance for the not-generated state, with the same confirm + cost estimate.
+2. Generation progress duplicated below the segment list in the chapter ⓘ modal (currently only at the top of the chapter card) so she doesn't have to scroll up to see it. Note: the modal is per-chapter; progress state comes from `generation`/`replacementGeneration` — render the same progress block after the segment list.
