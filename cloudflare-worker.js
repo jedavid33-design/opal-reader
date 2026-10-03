@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.13"; // v1.4.13: A2 duplicate-delivery lease + visibility-timeout guidance, A1 stale-heartbeat resume, A3 R2 write retries
+const APP_VERSION = "1.4.14"; // v1.4.14: atomic R2 generation leases + Gemini Pacific-day request counter
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -142,6 +142,93 @@ async function recordTtsUsage(env, body, details = {}) {
   } catch (error) {
     console.warn("TTS usage ledger write failed", error);
   }
+}
+const geminiQuotaPrefix = "quota:gemini:";
+async function recordGeminiQuotaAttempt(env, model) {
+  if (!env.OPALREADER_KV) return;
+  try {
+    const now = Date.now();
+    const key = `${geminiQuotaPrefix}${String(now).padStart(13, "0")}:${crypto.randomUUID()}`;
+    await env.OPALREADER_KV.put(
+      key,
+      JSON.stringify({ timestamp: now, model: model || null }),
+      { expirationTtl: 60 * 60 * 48 },
+    );
+  } catch (error) {
+    console.warn("Gemini quota counter write failed", error);
+  }
+}
+function zoneOffsetMs(ts, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(ts));
+  const v = Object.fromEntries(
+    parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]),
+  );
+  return Date.UTC(
+    +v.year, +v.month - 1, +v.day, +v.hour, +v.minute, +v.second,
+  ) - Math.floor(ts / 1000) * 1000;
+}
+function pacificMidnightUtc(year, month, day) {
+  const guess = Date.UTC(year, month - 1, day, 0, 0, 0);
+  let offset = zoneOffsetMs(guess, "America/Los_Angeles");
+  let ts = guess - offset;
+  offset = zoneOffsetMs(ts, "America/Los_Angeles");
+  return guess - offset;
+}
+function geminiPacificDayBounds(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(now));
+  const v = Object.fromEntries(
+    parts.filter((p) => p.type !== "literal").map((p) => [p.type, p.value]),
+  );
+  const y = +v.year, m = +v.month, d = +v.day;
+  const start = pacificMidnightUtc(y, m, d);
+  const nextDate = new Date(Date.UTC(y, m - 1, d + 1));
+  const end = pacificMidnightUtc(
+    nextDate.getUTCFullYear(),
+    nextDate.getUTCMonth() + 1,
+    nextDate.getUTCDate(),
+  );
+  return { start, end };
+}
+async function geminiQuotaReport(env) {
+  if (!env.OPALREADER_KV)
+    return {
+      used_today: 0,
+      limit: null,
+      resets_at_ms: null,
+      reset_timezone: "America/Los_Angeles",
+      approximate: true,
+    };
+  const { start, end } = geminiPacificDayBounds();
+  let cursor, used = 0;
+  do {
+    const page = await env.OPALREADER_KV.list({
+      prefix: geminiQuotaPrefix,
+      cursor,
+      limit: 1000,
+    });
+    for (const item of page.keys || []) {
+      const m = /^quota:gemini:(\d{13}):/.exec(item.name || "");
+      const ts = m ? Number(m[1]) : 0;
+      if (ts >= start && ts < end) used += 1;
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  const configured = Number(env.GEMINI_DAILY_REQUEST_LIMIT);
+  return {
+    used_today: used,
+    limit: Number.isFinite(configured) && configured > 0 ? configured : null,
+    resets_at_ms: end,
+    reset_timezone: "America/Los_Angeles",
+    approximate: true,
+  };
 }
 async function usageReport(env, url) {
   if (!env.OPALREADER_STORAGE) return { events: 0, summary: [] };
@@ -376,25 +463,36 @@ async function hasCachedAudio(env, key) {
   return Boolean(await cachedAudio(env, key));
 }
 
-// A2: duplicate-delivery guard. Two queue deliveries of the same segment can
-// overlap (redelivery after the visibility timeout, or a crash mid-synthesis).
-// A short KV lease ensures only one of them calls the provider. The TTL (90s)
-// is the backstop: if a worker dies mid-synthesis without releasing, the
-// lease expires and a later redelivery may proceed.
-const processingLeaseKey = (jobId, index) => `processing:${jobId}:${index}`;
+// A2: duplicate-delivery guard. Queue delivery is at-least-once, so a segment
+// may be delivered twice. Use an atomic R2 conditional PUT as a create-if-absent
+// lease; unlike the old KV get-then-put guard, two workers cannot both acquire
+// the same fresh lock. A stale lock can be reclaimed after five minutes.
+const processingLeaseKey = (jobId, index) =>
+  `generation/locks/${jobId}/${index}.lock`;
 async function acquireProcessingLease(env, jobId, index) {
+  if (!env.OPALREADER_STORAGE)
+    throw new Error("R2 storage is required for generation locking.");
   const key = processingLeaseKey(jobId, index);
-  try {
-    if (await env.OPALREADER_KV.get(key)) return false;
-    await env.OPALREADER_KV.put(key, String(Date.now()), { expirationTtl: 90 });
-    return true;
-  } catch (_) {
-    return true; // KV hiccup: never block generation on the guard itself.
+  const tryCreate = () =>
+    env.OPALREADER_STORAGE.put(key, String(Date.now()), {
+      onlyIf: new Headers({ "If-None-Match": "*" }),
+      httpMetadata: { contentType: "text/plain" },
+    });
+  let created = await tryCreate();
+  if (created) return true;
+  const existing = await r2Head(env, key);
+  const uploaded = existing?.uploaded ? new Date(existing.uploaded).getTime() : 0;
+  if (uploaded && Date.now() - uploaded > 5 * 60 * 1000) {
+    await env.OPALREADER_STORAGE.delete(key);
+    created = await tryCreate();
+    return Boolean(created);
   }
+  return false;
 }
 async function releaseProcessingLease(env, jobId, index) {
   try {
-    await env.OPALREADER_KV.delete(processingLeaseKey(jobId, index));
+    if (env.OPALREADER_STORAGE)
+      await env.OPALREADER_STORAGE.delete(processingLeaseKey(jobId, index));
   } catch (_) {}
 }
 
@@ -746,6 +844,8 @@ async function synthesizeAudio(env, provider, body) {
       const geminiPrompt = geminiStyle
         ? `${ttsInstructions}\n\nVoice direction: ${geminiStyle}\n\n${plainSpeechText(body.text)}`
         : `${ttsInstructions}\n\n${plainSpeechText(body.text)}`;
+      actualModel = geminiModel;
+      await recordGeminiQuotaAttempt(env, geminiModel);
       response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
         {
@@ -764,7 +864,6 @@ async function synthesizeAudio(env, provider, body) {
           }),
         },
       );
-      actualModel = geminiModel;
       if (!response.ok) await throwProviderError(response, provider);
       const data = await response.json();
       const candidate = data?.candidates?.[0] || {};
@@ -998,6 +1097,8 @@ export default {
     try {
       if (url.pathname === "/api/usage/report" && request.method === "GET")
         return json(await usageReport(env, url), 200, origin, env);
+      if (url.pathname === "/api/quota/gemini" && request.method === "GET")
+        return json(await geminiQuotaReport(env), 200, origin, env);
       if (url.pathname === "/api/providers/status" && request.method === "GET")
         return json(
           {
