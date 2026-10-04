@@ -220,7 +220,10 @@ function bookCostBanner(){
   const e=bookCostEstimate(),missing=[...e.missing];
   if(missing.length)return`<div class="estimate-banner"><strong>Book cost estimate waiting on cast</strong><span>Assign a voice for ${ie(missing.join(", "))} to price the whole book.</span></div>`;
   return`<div class="estimate-banner"><strong>Estimated full-book generation · ${Pe(e.total)}</strong><span>${e.chars.toLocaleString()} spoken chars · about ${Pe(e.remaining)} still ungenerated</span></div><div class="muted tiny" style="margin:-6px 0 14px">Forecast from the current cast and provider/model rates. Gemini is estimated before generation because its final bill depends on actual audio-token duration.</div>`;
-}function ot(){return a.voiceTarget==="default"?null:a.book?.povs.find(e=>e.id===a.voiceTarget)?.name}function Cr(){const e=ot();return a.book?.chapters.flatMap(c=>c.segments).filter(c=>e?c.pov===e:!c.pov).reduce((c,r)=>c+r.text.length,0)||0}function Ar(){const e=ot(),c=a.book?.chapters.flatMap(r=>r.segments).find(r=>e?r.pov===e:!r.pov)?.text||a.book?.chapters[0]?.segments[0]?.text||"Welcome to OpalReader.",m=c.slice(0,190),s=Math.max(m.lastIndexOf(". "),m.lastIndexOf("! "),m.lastIndexOf("? "));return(s>=110?m.slice(0,s+1):m).trim()}function Ze(e){return a.voiceProfiles[`${e.provider}:${e.voice_id}`]||{favorite:!1,tags:[],notes:""}}function Ve(){const e=new Date().toISOString().slice(0,7);return a.usage.month!==e&&(a.usage={month:e,spent:0}),a.usage}async function Ae(){const e={id:"main",apiBase:a.apiBase,accessToken:a.accessToken,voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:Date.now()};if(await ke("settings",e),a.providers.sync){const c={voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,playbackRate:a.playbackRate,updatedAt:e.sharedUpdatedAt};St(a.apiBase,a.accessToken,c).catch(()=>{})}}function xr(e){return{...e,epub:e.epub?{name:e.epub.name}:null}}async function Ee(e){if(!(!a.providers.sync||!e))try{const c=await _r(a.apiBase,a.accessToken,xr(e));if(!c.accepted&&c.book){const m=xe({...c.book});await ke("books",m),a.book?.id===m.id&&(a.book=m)}a.syncStatus="Synced"}catch(err){if(err&&err.status===409){const lid=e.id;let local=null;try{local=await Oe("books",lid)}catch(_){}if(local&&local.restoredAt){await dtClearServer(lid);dtRemove(lid);try{await _r(a.apiBase,a.accessToken,xr(local));a.syncStatus="Synced"}catch(_){a.syncStatus="Sync pending"}}else{dtAdd(lid);await dtPurgeLocal(lid);a.syncStatus="Synced"}}else a.syncStatus="Sync pending"}}function Er(e){!a.providers.sync||e._syncTimer||Object.defineProperty(e,"_syncTimer",{value:setTimeout(()=>{delete e._syncTimer,Ee(e)},8e3),configurable:!0,writable:!0,enumerable:!1})}async function pe(){a.book&&(a.book.updatedAt=Date.now(),await ke("books",a.book),a.books=await Be("books"),Er(a.book))}async function delIDB(e,t){const n=await nt();return new Promise((o,r)=>{const d=n.transaction(e,"readwrite").objectStore(e).delete(t);d.onsuccess=()=>o(!0),d.onerror=()=>r(d.error)})}async function deleteBookFlow(e){try{if(!e)return;const b=xe(await Oe("books",e));if(!b){alert("Book not found.");return}const t=b.title||"this book";if(confirm(`Back up "${t}" before deleting?\n\nOK = download a backup, then delete\nCancel = choose what to do next`)){if(!await backupBook(e))return}else if(!confirm(`Delete "${t}" WITHOUT a backup?\n\nThis removes the book, its EPUB, and cached audio from this device. This cannot be undone.`))return;const k=[...new Set((b.chapters||[]).flatMap(c=>(c.segments||[]).map(s=>s.audioKey).filter(Boolean)))];for(const key of k){try{await delIDB("audio",key)}catch(_){}}
+}function segmentFallbackTarget(){const m=/^segfb:(\d+):(\d+)$/.exec(a.voiceTarget||"");return m?{chapter:+m[1],segment:+m[2]}:null}
+function ot(){const t=segmentFallbackTarget();if(t)return`Segment ${t.segment+1} fallback`;return a.voiceTarget==="default"?null:a.book?.povs.find(e=>e.id===a.voiceTarget)?.name}
+function Cr(){const t=segmentFallbackTarget();if(t)return a.book?.chapters?.[t.chapter]?.segments?.[t.segment]?.text?.length||0;const e=ot();return a.book?.chapters.flatMap(c=>c.segments).filter(c=>e?c.pov===e:!c.pov).reduce((c,r)=>c+r.text.length,0)||0}
+function Ar(){const t=segmentFallbackTarget(),target=t?a.book?.chapters?.[t.chapter]?.segments?.[t.segment]?.text:null,e=t?null:ot(),c=target||a.book?.chapters.flatMap(r=>r.segments).find(r=>e?r.pov===e:!r.pov)?.text||a.book?.chapters[0]?.segments[0]?.text||"Welcome to OpalReader.",m=c.slice(0,190),s=Math.max(m.lastIndexOf(". "),m.lastIndexOf("! "),m.lastIndexOf("? "));return(s>=110?m.slice(0,s+1):m).trim()}function Ze(e){return a.voiceProfiles[`${e.provider}:${e.voice_id}`]||{favorite:!1,tags:[],notes:""}}function Ve(){const e=new Date().toISOString().slice(0,7);return a.usage.month!==e&&(a.usage={month:e,spent:0}),a.usage}async function Ae(){const e={id:"main",apiBase:a.apiBase,accessToken:a.accessToken,voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:Date.now()};if(await ke("settings",e),a.providers.sync){const c={voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,playbackRate:a.playbackRate,updatedAt:e.sharedUpdatedAt};St(a.apiBase,a.accessToken,c).catch(()=>{})}}function xr(e){return{...e,epub:e.epub?{name:e.epub.name}:null}}async function Ee(e){if(!(!a.providers.sync||!e))try{const c=await _r(a.apiBase,a.accessToken,xr(e));if(!c.accepted&&c.book){const m=xe({...c.book});await ke("books",m),a.book?.id===m.id&&(a.book=m)}a.syncStatus="Synced"}catch(err){if(err&&err.status===409){const lid=e.id;let local=null;try{local=await Oe("books",lid)}catch(_){}if(local&&local.restoredAt){await dtClearServer(lid);dtRemove(lid);try{await _r(a.apiBase,a.accessToken,xr(local));a.syncStatus="Synced"}catch(_){a.syncStatus="Sync pending"}}else{dtAdd(lid);await dtPurgeLocal(lid);a.syncStatus="Synced"}}else a.syncStatus="Sync pending"}}function Er(e){!a.providers.sync||e._syncTimer||Object.defineProperty(e,"_syncTimer",{value:setTimeout(()=>{delete e._syncTimer,Ee(e)},8e3),configurable:!0,writable:!0,enumerable:!1})}async function pe(){a.book&&(a.book.updatedAt=Date.now(),await ke("books",a.book),a.books=await Be("books"),Er(a.book))}async function delIDB(e,t){const n=await nt();return new Promise((o,r)=>{const d=n.transaction(e,"readwrite").objectStore(e).delete(t);d.onsuccess=()=>o(!0),d.onerror=()=>r(d.error)})}async function deleteBookFlow(e){try{if(!e)return;const b=xe(await Oe("books",e));if(!b){alert("Book not found.");return}const t=b.title||"this book";if(confirm(`Back up "${t}" before deleting?\n\nOK = download a backup, then delete\nCancel = choose what to do next`)){if(!await backupBook(e))return}else if(!confirm(`Delete "${t}" WITHOUT a backup?\n\nThis removes the book, its EPUB, and cached audio from this device. This cannot be undone.`))return;const k=[...new Set((b.chapters||[]).flatMap(c=>(c.segments||[]).map(s=>s.audioKey).filter(Boolean)))];for(const key of k){try{await delIDB("audio",key)}catch(_){}}
 // Purge the book's audio from the worker's R2 cache too (best-effort: local delete always proceeds).
 try{
 if(a.apiBase&&k.length){
@@ -276,7 +279,7 @@ async function finishQueuedSegment(e,c,j,status){
   if(actual>0){Ve().spent+=actual;await Ae()}
   seg.audioKey=j.cacheKey;seg.generationFingerprint=j.fingerprint;seg.audioStale=!1;
   seg.generatedModel=item.model||j.model||null;seg.providerRequestId=item.provider_request_id||null;
-  delete seg.segmentGeneration;
+  delete seg.segmentGeneration;delete seg.generationBlocked;delete seg.splitExhausted;delete seg.systemVoiceFallback;
   delete seg.pendingAudioKey;delete seg.pendingGenerationFingerprint;delete seg.pendingGeneratedModel;delete seg.pendingGenerationAt;delete seg.pendingEstimatedCost;delete seg.pendingOldAudioKey;
   Fe.clear();oldKey&&oldKey!==j.cacheKey&&delIDB("audio",oldKey).catch(()=>{});
   ch.generation={...ch.generation||{},state:ch.segments.every(y=>y.audioKey&&!y.audioStale)?"ready":ch.generation?.state||"not_generated"};
@@ -340,7 +343,7 @@ async function splitBlockedSegment(e,c){
   if(!seg?.generationBlocked)return alert("That segment is not marked as blocked.");
   if(["queued","generating"].includes(ch.generation?.state))return alert("Reader is still generating the rest of this chapter. Let that finish first so no later segment can be synthesized twice.");
   const plain=String(seg.text||plainSpeech(seg.speechText)||""),cut=naturalBlockedSplitPoint(plain);
-  if(cut<0)return alert("This blocked piece is already too short to split safely. Use a different provider for this segment instead.");
+  if(cut<0){seg.splitExhausted=!0;await pe();se();alert("Reader has exhausted the safe split points for this blocked text. You can now use a free device voice for just this piece, or choose another cloud voice.");return}
   const raw=seg.speechText||seg.text||"",parts=splitSpeechMarkup(raw,cut),leftSpeech=parts[0],rightSpeech=parts[1],leftText=plainSpeech(leftSpeech).trim(),rightText=plainSpeech(rightSpeech).trim();
   if(!leftText||!rightText)return alert("Reader could not find a safe split point for this segment.");
   let voice;try{voice=chVoice(ch,seg.pov)}catch(err){return alert(err.message)}
@@ -352,6 +355,51 @@ async function splitBlockedSegment(e,c){
   delete left.segmentGeneration;delete left.generationBlocked;delete right.segmentGeneration;delete right.generationBlocked;
   ch.segments.splice(c,1,left,right);ch.text=ch.segments.map(x=>x.text).join(`\n\n`);
   ch.generation={state:"not_generated"};await pe();se();await Mr(e);
+}
+async function systemVoiceList(){
+  if(!("speechSynthesis"in window))return[];
+  let v=window.speechSynthesis.getVoices();
+  if(v.length)return v;
+  await new Promise(resolve=>{let done=!1;const finish=()=>{if(done)return;done=!0;window.speechSynthesis.removeEventListener?.("voiceschanged",finish);resolve()};window.speechSynthesis.addEventListener?.("voiceschanged",finish,{once:!0});setTimeout(finish,900)});
+  return window.speechSynthesis.getVoices();
+}
+async function useSystemVoiceFallback(e,c){
+  const ch=a.book.chapters[e],seg=ch?.segments?.[c];if(!seg)return;
+  if(!("speechSynthesis"in window)||!("SpeechSynthesisUtterance"in window))return alert("This browser does not expose a device TTS voice.");
+  const voices=await systemVoiceList(),voice=voices.find(v=>v.default&&/^en\b/i.test(v.lang||""))||voices.find(v=>/^en-US\b/i.test(v.lang||""))||voices.find(v=>/^en\b/i.test(v.lang||""))||voices[0]||null;
+  seg.systemVoiceFallback={voiceURI:voice?.voiceURI||"",name:voice?.name||"Device voice",lang:voice?.lang||"en-US"};
+  delete seg.generationBlocked;delete seg.splitExhausted;delete seg.fallbackVoice;delete seg.segmentGeneration;
+  await pe();se();alert(`Segment ${c+1} will use ${seg.systemVoiceFallback.name} on this device. This fallback is free and does not call a cloud TTS provider.`);
+}
+function chooseCloudFallbackVoice(e,c){
+  const seg=a.book?.chapters?.[e]?.segments?.[c];if(!seg)return;
+  a.voiceTarget=`segfb:${e}:${c}`;
+  a.provider=a.providers.azure?"azure":a.providers.fish?"fish":a.providers.openai?"openai":a.providers.gemini?"gemini":"azure";
+  a.voiceList=[];a.voicePage=0;a.voiceHasMore=!1;a.modal={type:"voices",fallbackReturn:{chapter:e,segment:c}};Ce();
+}
+let systemSpeechUtterance=null;
+async function afterSystemSegment(chapterIndex,segmentIndex){
+  if(!a.book)return;
+  const ch=a.book.chapters[chapterIndex],next=segmentIndex+1;
+  if(next<ch.segments.length){
+    at(a.book,chapterIndex,next,0);
+    if(segmentPlayable(ch.segments[next])&&!ch.segments[next]?.audioStale){await pe();return Ot(chapterIndex,next,0)}
+    shelfListenStop();ee._chapterPlayback=!1;ee._waitingForGeneration=!0;await pe();se();updateMediaSession();return;
+  }
+  ar(a.book,chapterIndex);const nc=chapterIndex+1;
+  if(nc<a.book.chapters.length){at(a.book,nc,0,0);if(playable(a.book.chapters[nc])){await pe();return Me(nc)}shelfListenStop();ee._chapterPlayback=!1;ee._waitingForGeneration=!0;await pe();se();updateMediaSession();return}
+  shelfListenStop();ee._chapterPlayback=!1;a.book.completed=!0;await pe();se();updateMediaSession();
+}
+async function playSystemSegment(e,c){
+  const ch=a.book.chapters[e],seg=ch?.segments?.[c],cfg=seg?.systemVoiceFallback;if(!seg||!cfg)return;
+  if(!("speechSynthesis"in window)||!("SpeechSynthesisUtterance"in window))throw new Error("Device TTS is not available in this browser.");
+  try{ee.pause()}catch(_){}
+  window.speechSynthesis.cancel();const voices=await systemVoiceList(),u=new SpeechSynthesisUtterance(plainSpeech(seg.speechText||seg.text||""));
+  u.voice=voices.find(v=>v.voiceURI===cfg.voiceURI)||voices.find(v=>v.name===cfg.name)||null;u.lang=cfg.lang||u.voice?.lang||"en-US";u.rate=Math.min(2,Math.max(.75,Number(a.playbackRate)||1));
+  systemSpeechUtterance=u;ee._systemSpeechActive=!0;ee._chapterPlayback=!0;ee._compositePlayback=!1;ee._waitingForGeneration=!1;at(a.book,e,c,0);await pe();se();updateMediaSession();shelfListenStart();It();
+  u.onend=async()=>{if(systemSpeechUtterance!==u)return;systemSpeechUtterance=null;ee._systemSpeechActive=!1;shelfListenPaused();It();await afterSystemSegment(e,c)};
+  u.onerror=()=>{if(systemSpeechUtterance!==u)return;systemSpeechUtterance=null;ee._systemSpeechActive=!1;shelfListenStop();It();alert("The device voice could not read this segment.")};
+  window.speechSynthesis.speak(u);
 }
 async function regenerateOneSegment(e,c){
   const ch=a.book.chapters[e],seg=ch?.segments?.[c];
