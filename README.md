@@ -1,10 +1,10 @@
-# OpalReader v1.4.51
+# OpalReader v1.4.52
 
-Current source of truth: `app-189.js` + `styles-139.css` + `sw-151.js`; Worker source `cloudflare-worker.js` v1.4.15.
+Current source of truth: `app-190.js` + `styles-139.css` + `sw-152.js`; Worker source `cloudflare-worker.js` v1.4.15.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
 
-Gemini TTS billing is token-based, not character-based. Worker v1.4.15 records Gemini `usageMetadata` input/output tokens and calculated provider cost for new calls. The Setup TTS report separates token-metered cost from legacy character estimates; the local soft-cap number is explicitly only a forecast. Frontend v1.4.51 routes individual segment generation through the existing Cloudflare Queue, using a durable one-segment job so iOS/Safari no longer has to hold the provider request open. The same job ID is resumed after a lost acknowledgement, and the Worker's duplicate-delivery lease prevents duplicate provider synthesis. Cast and Chapters now also show a full-book/current-cast cost forecast plus the still-ungenerated forecast. Legacy v1.4.50 pending direct requests are still recoverable.
+Gemini TTS billing is token-based, not character-based. Worker v1.4.15 records Gemini `usageMetadata` input/output tokens and calculated provider cost for new calls. The Setup TTS report separates token-metered cost from legacy character estimates; the local soft-cap number is explicitly only a forecast. Frontend v1.4.51 routes individual segment generation through the existing Cloudflare Queue, using a durable one-segment job so iOS/Safari no longer has to hold the provider request open. The same job ID is resumed after a lost acknowledgement, and the Worker's duplicate-delivery lease prevents duplicate provider synthesis. Cast and Chapters now also show a full-book/current-cast cost forecast plus the still-ungenerated forecast. Legacy v1.4.50 pending direct requests are still recoverable. v1.4.52 also ignores explicit `data-opal-narration="skip"` regions and EPUB-native `titlepage` regions while importing, so OCR Studio's visible title/author page no longer becomes a TTS chapter.
 
 > The versioned notes below are historical and may mention providers or implementation details that are no longer active.
 
