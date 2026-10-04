@@ -1,8 +1,10 @@
-# OpalReader v1.4.52
+# OpalReader v1.4.53
 
-Current source of truth: `app-190.js` + `styles-139.css` + `sw-152.js`; Worker source `cloudflare-worker.js` v1.4.15.
+Current source of truth: `app-191.js` + `styles-139.css` + `sw-153.js`; Worker source `cloudflare-worker.js` v1.4.16.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+v1.4.53 / Worker v1.4.16 changes Gemini `PROHIBITED_CONTENT` handling: during whole-chapter Queue generation, only the refused segment is marked blocked and the Worker continues generating the remaining segments. A deliberate one-segment job still stops on that segment. Reader surfaces the blocked segment, never auto-retries it, and offers **Split blocked segment & continue** after the rest of the chapter finishes; the split uses a natural paragraph/sentence boundary, preserves the exact wording, and reuses already-cached chapter audio so only the smaller replacement pieces need synthesis.
 
 Gemini TTS billing is token-based, not character-based. Worker v1.4.15 records Gemini `usageMetadata` input/output tokens and calculated provider cost for new calls. The Setup TTS report separates token-metered cost from legacy character estimates; the local soft-cap number is explicitly only a forecast. Frontend v1.4.51 routes individual segment generation through the existing Cloudflare Queue, using a durable one-segment job so iOS/Safari no longer has to hold the provider request open. The same job ID is resumed after a lost acknowledgement, and the Worker's duplicate-delivery lease prevents duplicate provider synthesis. Cast and Chapters now also show a full-book/current-cast cost forecast plus the still-ungenerated forecast. Legacy v1.4.50 pending direct requests are still recoverable. v1.4.52 also ignores explicit `data-opal-narration="skip"` regions and EPUB-native `titlepage` regions while importing, so OCR Studio's visible title/author page no longer becomes a TTS chapter.
 
