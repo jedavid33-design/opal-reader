@@ -443,7 +443,7 @@ async function playSystemSegment(e,c,{userGesture=!1}={}){
   const voices=window.speechSynthesis.getVoices(),u=new SpeechSynthesisUtterance(plainSpeech(seg.speechText||seg.text||""));
   u.voice=voices.find(v=>v.voiceURI===cfg.voiceURI)||voices.find(v=>v.name===cfg.name)||null;u.lang=cfg.lang||u.voice?.lang||"en-US";u.rate=1;
   let started=!1,finished=!1;
-  systemSpeechUtterance=u;ee._systemSpeechActive=!0;ee._systemSpeechPending=!1;ee._chapterPlayback=!0;ee._compositePlayback=!1;ee._waitingForGeneration=!1;at(a.book,e,c,0);se();updateMediaSession();It();
+  systemSpeechUtterance=u;ee._systemSpeechActive=!0;ee._systemSpeechPending=!1;ee._chapterPlayback=!0;ee._waitingForGeneration=!1;at(a.book,e,c,0);se();updateMediaSession();It();
   u.onstart=()=>{if(systemSpeechUtterance!==u)return;started=!0;ee._systemSpeechPending=!1;shelfListenStart();It();updateMediaSession()};
   u.onend=async()=>{if(systemSpeechUtterance!==u||finished)return;finished=!0;
     if(!started){
