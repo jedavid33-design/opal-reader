@@ -1,8 +1,10 @@
-# OpalReader v1.4.56
+# OpalReader v1.4.57
 
-Current source of truth: `app-194.js` + `styles-139.css` + `sw-156.js`; Worker source `cloudflare-worker.js` v1.4.16.
+Current source of truth: `app-195.js` + `styles-139.css` + `sw-157.js`; Worker source `cloudflare-worker.js` v1.4.16.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+v1.4.57 fixes the iOS device-voice handoff used by blocked-segment fallback. Reader now keeps a fallback segment selected if system speech fails to auto-start, never treats an `onend` that occurred before `onstart` as a completed segment, labels the player `device voice · tap Play` when manual intervention is needed, and gives an explicit Play/section tap a synchronous `speechSynthesis.speak()` path before IndexedDB or voice-loading awaits can consume iOS user activation. This prevents the fallback segment from being silently skipped to the next Gemini segment.
 
 v1.4.56 removes the now-redundant chapter-level **Generation provider** override from chapter details. Chapter generation always follows the assigned cast, while blocked-text recovery can still use a one-segment fallback voice without changing the cast. Existing saved chapter-provider overrides are ignored/cleared when a book is hydrated. Failed generation cards now also show **Clear error**, which dismisses the stale failure state without deleting audio or the section.
 
