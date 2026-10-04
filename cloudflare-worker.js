@@ -7,7 +7,7 @@ const cors = (origin, env) => ({
     env.ALLOWED_ORIGIN === "*" ? "*" : env.ALLOWED_ORIGIN || origin,
   "Access-Control-Allow-Headers": "Content-Type, X-OpalReader-Token",
   "Access-Control-Allow-Methods": "GET,PUT,POST,DELETE,OPTIONS",
-  "Access-Control-Expose-Headers": "X-OpalReader-Cache",
+  "Access-Control-Expose-Headers": "X-OpalReader-Cache, X-OpalReader-Cost, X-OpalReader-Input-Tokens, X-OpalReader-Output-Tokens",
   Vary: "Origin",
 });
 const json = (body, status, origin, env) =>
@@ -92,12 +92,36 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.14"; // v1.4.14: atomic R2 generation leases + Gemini Pacific-day request counter
+const APP_VERSION = "1.4.15"; // v1.4.15: meter Gemini TTS from provider token usage instead of character estimates
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
     ? value
     : "other";
+const geminiTtsPricing = (model) =>
+  /pro-preview-tts/i.test(model || "")
+    ? { input_per_million: 1, output_per_million: 20 }
+    : { input_per_million: 0.5, output_per_million: 10 };
+function geminiUsageAccounting(model, usage) {
+  if (!usage || typeof usage !== "object") return null;
+  const hasCounts =
+    usage.promptTokenCount != null || usage.candidatesTokenCount != null;
+  if (!hasCounts) return null;
+  const inputTokens = Math.max(0, Number(usage.promptTokenCount) || 0);
+  const outputTokens = Math.max(0, Number(usage.candidatesTokenCount) || 0);
+  const pricing = geminiTtsPricing(model);
+  const calculatedCost =
+    (inputTokens / 1e6) * pricing.input_per_million +
+    (outputTokens / 1e6) * pricing.output_per_million;
+  return {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    calculated_cost: calculatedCost,
+    cost_source: "gemini_usage_metadata",
+    input_price_per_million: pricing.input_per_million,
+    output_price_per_million: pricing.output_per_million,
+  };
+}
 async function recordTtsUsage(env, body, details = {}) {
   if (!env.OPALREADER_STORAGE) return;
   try {
@@ -129,9 +153,18 @@ async function recordTtsUsage(env, body, details = {}) {
       retry_attempt: Number(body?.retry_attempt) || 1,
       error: details.error || null,
       r2_write_success: details.r2_write_success ?? null,
+      input_tokens: Number(details.input_tokens) || 0,
+      output_tokens: Number(details.output_tokens) || 0,
+      calculated_cost:
+        details.calculated_cost == null ? null : Math.max(0, Number(details.calculated_cost) || 0),
+      cost_source: details.cost_source || null,
+      input_price_per_million:
+        details.input_price_per_million == null ? null : Number(details.input_price_per_million),
+      output_price_per_million:
+        details.output_price_per_million == null ? null : Number(details.output_price_per_million),
       estimated_cost: Number(body?.estimated_cost) || 0,
       pricing_rate: Number(body?.pricing_rate) || null,
-      pricing_unit: body?.pricing_rate ? "USD per 1M characters" : null,
+      pricing_unit: body?.pricing_rate ? "forecast USD per 1M characters" : null,
       cache_key: body?.cache_key || null,
     };
     await env.OPALREADER_STORAGE.put(
@@ -265,20 +298,30 @@ async function usageReport(env, url) {
       successful_calls: 0,
       failed_calls: 0,
       characters_sent: 0,
+      input_tokens: 0,
+      output_tokens: 0,
       audio_bytes_returned: 0,
       retries: 0,
       cache_hits: 0,
       skipped_existing_audio: 0,
-      estimated_cost: 0,
+      metered_cost: 0,
+      legacy_estimated_cost: 0,
+      unmetered_calls: 0,
     };
     if (event.provider_call) {
       row.provider_synthesis_calls += 1;
       row.characters_sent += Number(event.character_count_sent) || 0;
+      row.input_tokens += Number(event.input_tokens) || 0;
+      row.output_tokens += Number(event.output_tokens) || 0;
       row.audio_bytes_returned += Number(event.audio_bytes_returned) || 0;
       if (event.request_status === "failed") row.failed_calls += 1;
-      else {
-        row.successful_calls += 1;
-        row.estimated_cost += Number(event.estimated_cost) || 0;
+      else row.successful_calls += 1;
+      if (event.calculated_cost != null && Number.isFinite(Number(event.calculated_cost))) {
+        row.metered_cost += Math.max(0, Number(event.calculated_cost) || 0);
+      } else {
+        row.unmetered_calls += 1;
+        if (event.request_status !== "failed")
+          row.legacy_estimated_cost += Number(event.estimated_cost) || 0;
       }
       if ((Number(event.retry_attempt) || 1) > 1) row.retries += 1;
     }
@@ -286,7 +329,19 @@ async function usageReport(env, url) {
     if (event.cache_status === "skipped_existing_audio") row.skipped_existing_audio += 1;
     map.set(key, row);
   }
-  return { events: events.length, summary: [...map.values()] };
+  const summary = [...map.values()];
+  const cost_summary = summary.reduce(
+    (total, row) => {
+      total.metered_cost += Number(row.metered_cost) || 0;
+      total.legacy_estimated_cost += Number(row.legacy_estimated_cost) || 0;
+      total.unmetered_calls += Number(row.unmetered_calls) || 0;
+      total.input_tokens += Number(row.input_tokens) || 0;
+      total.output_tokens += Number(row.output_tokens) || 0;
+      return total;
+    },
+    { metered_cost: 0, legacy_estimated_cost: 0, unmetered_calls: 0, input_tokens: 0, output_tokens: 0 },
+  );
+  return { events: events.length, summary, cost_summary };
 }
 async function libraryIndex(env) {
   return (await env.OPALREADER_KV.get("library:index", "json")) || [];
@@ -752,7 +807,7 @@ async function synthesizeAudio(env, provider, body) {
     return { body: hit.object.body, cache: "HIT", audioFormat: hit.format };
   }
   const started = Date.now();
-  let response, bytes, r2WriteSuccess = null, providerRequestId = null, actualModel = body?.model_id || null, audioFormat = "mp3";
+  let response, bytes, r2WriteSuccess = null, providerRequestId = null, actualModel = body?.model_id || null, audioFormat = "mp3", usageAccounting = null;
   try {
     if (provider === "azure") {
       if (!azureReady(env)) {
@@ -866,6 +921,8 @@ async function synthesizeAudio(env, provider, body) {
       );
       if (!response.ok) await throwProviderError(response, provider);
       const data = await response.json();
+      providerRequestId = data?.responseId || providerRequestId;
+      usageAccounting = geminiUsageAccounting(geminiModel, data?.usageMetadata);
       const candidate = data?.candidates?.[0] || {};
       const parts = candidate?.content?.parts || [];
       const audioPart = parts.find((part) => part?.inlineData?.data);
@@ -911,8 +968,18 @@ async function synthesizeAudio(env, provider, body) {
       r2_write_success: r2WriteSuccess,
       provider_request_id: providerRequestId,
       model: actualModel,
+      ...(usageAccounting || {}),
     });
-    return { body: bytes, cache: "MISS", provider_request_id: providerRequestId, model: actualModel, audioFormat };
+    return {
+      body: bytes,
+      cache: "MISS",
+      provider_request_id: providerRequestId,
+      model: actualModel,
+      audioFormat,
+      calculated_cost: usageAccounting?.calculated_cost ?? null,
+      input_tokens: usageAccounting?.input_tokens ?? null,
+      output_tokens: usageAccounting?.output_tokens ?? null,
+    };
   } catch (error) {
     await recordTtsUsage(env, body, {
       provider,
@@ -924,6 +991,7 @@ async function synthesizeAudio(env, provider, body) {
       r2_write_success: r2WriteSuccess,
       provider_request_id: providerRequestId,
       model: actualModel,
+      ...(usageAccounting || {}),
     });
     throw error;
   }
@@ -1017,7 +1085,10 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
         result = await synthesizeAudio(env, segment.provider, segment);
         if (result.cache === "MISS")
           status.generated_cost =
-            (status.generated_cost || 0) + (Number(segment.estimated_cost) || 0);
+            (status.generated_cost || 0) +
+            (result.calculated_cost == null
+              ? Number(segment.estimated_cost) || 0
+              : Number(result.calculated_cost) || 0);
       } else {
         await recordTtsUsage(env, segment, {
           provider: segment.provider,
@@ -1698,6 +1769,9 @@ export default {
         const result = await synthesizeAudio(env, "gemini", body);
         return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
+          ...(result.calculated_cost == null ? {} : { "X-OpalReader-Cost": String(result.calculated_cost) }),
+          ...(result.input_tokens == null ? {} : { "X-OpalReader-Input-Tokens": String(result.input_tokens) }),
+          ...(result.output_tokens == null ? {} : { "X-OpalReader-Output-Tokens": String(result.output_tokens) }),
         });
       }
             return json({ error: "Not found" }, 404, origin, env);
