@@ -294,8 +294,18 @@ async function rt(){if(await $e(),!a.providers.sync)return se();a.syncStatus="Sy
     const payload={...full,job_id:jobId,segments:selected};
     ch.generation={jobId,state:"queued",completed:0,total:selected.length,segmentKeys,segmentFingerprints,recordedCost:0,error:null,rangeStart:Math.max(0,Number(startIndex)||0)};
     await pe();se();
-    const status=await xt(a.apiBase,a.accessToken,payload);
-    await lt(e,status);se();ct();
+    try{
+      const status=await xt(a.apiBase,a.accessToken,payload);
+      await lt(e,status);se();ct();
+    }catch(submitErr){
+      if(submitErr?.status)throw submitErr;
+      // If Safari loses only the acknowledgement, keep the exact stable job
+      // instead of making a second paid request. The normal poller will find
+      // the accepted job, if it reached the Worker.
+      ch.generation={...ch.generation,state:"queued",error:null};
+      await pe();se();ct();
+      alert("Reader lost the queue acknowledgement, but the same chapter job is preserved. It will check that job instead of sending a duplicate request.");
+    }
   }catch(err){
     ch.generation={...ch.generation||{},state:"failed",error:err.message};
     await pe();se();alert(err.message||"The rest of the chapter could not be queued.");
