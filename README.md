@@ -1,8 +1,10 @@
-# OpalReader v1.4.48
+# OpalReader v1.4.49
 
-Current source of truth: `app-186.js` + `styles-139.css` + `sw-148.js`; Worker source `cloudflare-worker.js` v1.4.14.
+Current source of truth: `app-187.js` + `styles-139.css` + `sw-149.js`; Worker source `cloudflare-worker.js` v1.4.15.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+Gemini TTS billing is token-based, not character-based. Worker v1.4.15 records Gemini `usageMetadata` input/output tokens and calculated provider cost for new calls. The Setup TTS report separates token-metered cost from legacy character estimates; the local soft-cap number is explicitly only a forecast. Deploy the Worker after updating the repo for token metering to become live.
 
 > The versioned notes below are historical and may mention providers or implementation details that are no longer active.
 
