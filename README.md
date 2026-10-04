@@ -1,4 +1,14 @@
-# OpalReader v1.2.0
+# OpalReader v1.4.48
+
+Current source of truth: `app-186.js` + `styles-139.css` + `sw-148.js`; Worker source `cloudflare-worker.js` v1.4.14.
+
+Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+> The versioned notes below are historical and may mention providers or implementation details that are no longer active.
+
+## Historical notes
+
+## OpalReader v1.2.0
 
 Personal EPUB audiobook reader with per-POV casting, Cloudflare Queue generation, KV sync, and private R2 audio caching.
 
