@@ -1128,8 +1128,6 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     return status;
   } catch (error) {
     if (error?.contentBlocked) {
-      // A PROHIBITED_CONTENT false-positive should strand only the refused
-      // segment, not everything after it in a whole-chapter generation.
       const index = Number.isInteger(segmentIndex)
         ? segmentIndex
         : status.segments.findIndex((item) => !["ready", "blocked"].includes(item.state));
@@ -1146,21 +1144,33 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       }
       status.completed = status.segments.filter((item) => item.state === "ready").length;
       status.blocked = status.segments.filter((item) => item.state === "blocked").length;
-      const next = status.segments.findIndex(
-        (item) => !["ready", "blocked"].includes(item.state),
-      );
-      status.state = next < 0 ? "partial" : "queued";
-      status.error = next < 0
-        ? `${status.blocked} segment${status.blocked === 1 ? "" : "s"} blocked by Gemini; all other segments finished.`
-        : null;
+
+      // Whole-chapter generation keeps going past a PROHIBITED_CONTENT refusal.
+      // A deliberate one-segment generation still stops on that one segment:
+      // there is no "rest of chapter" in that job to continue.
+      if (payload.segments.length > 1) {
+        const next = status.segments.findIndex(
+          (item) => !["ready", "blocked"].includes(item.state),
+        );
+        status.state = next < 0 ? "partial" : "queued";
+        status.error = next < 0
+          ? `${status.blocked} segment${status.blocked === 1 ? "" : "s"} blocked by Gemini; all other segments finished.`
+          : null;
+        status.updated_at = Date.now();
+        await saveGenerationStatus(env, status);
+        if (next >= 0)
+          await env.OPALREADER_GENERATION.send({
+            job_id: jobId,
+            segment_index: next,
+          });
+        return status;
+      }
+
+      status.state = "failed";
+      status.error = error.message || "Gemini blocked this segment.";
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
-      if (next >= 0)
-        await env.OPALREADER_GENERATION.send({
-          job_id: jobId,
-          segment_index: next,
-        });
-      return status;
+      throw error;
     }
     const retryable = attempts < 4 && !error?.noRetry;
     status.state = retryable ? "queued" : "failed";
