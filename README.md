@@ -1,8 +1,10 @@
-# OpalReader v1.4.54
+# OpalReader v1.4.55
 
-Current source of truth: `app-192.js` + `styles-139.css` + `sw-154.js`; Worker source `cloudflare-worker.js` v1.4.16.
+Current source of truth: `app-193.js` + `styles-139.css` + `sw-155.js`; Worker source `cloudflare-worker.js` v1.4.16.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+v1.4.55 adds **Generate rest of chapter** beside normal per-segment generation in Segment Review. Starting at the selected segment, Reader queues only missing or stale cloud-generated segments through the end of the chapter, reuses current cached audio, skips already-resolved device-voice fallbacks and still-blocked segments, shows an estimated incremental cost before submission, and preserves a stable Queue job ID if Safari loses the acknowledgement.
 
 v1.4.54 adds a last-resort blocked-text fallback after safe splitting is exhausted. Reader can use a free browser/device speech voice for only that blocked piece, with no cloud TTS provider request or provider charge, and chapter playback can step into and out of that device-spoken segment. Alternatively, the user can choose a one-segment cloud fallback voice without changing the book cast; Reader prefers Azure when available, then Fish, OpenAI, and Gemini. The device fallback is not an R2 audio file, so export/composite audio and background/lock-screen behavior remain subject to browser/iOS speech-synthesis limits.
 
