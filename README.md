@@ -1,8 +1,10 @@
-# OpalReader v1.4.58
+# OpalReader v1.4.59
 
-Current source of truth: `app-196.js` + `styles-139.css` + `sw-158.js`; Worker source `cloudflare-worker.js` v1.4.16.
+Current source of truth: `app-197.js` + `styles-139.css` + `sw-159.js`; Worker source `cloudflare-worker.js` v1.4.16.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+v1.4.59 removes the old stitched/composite chapter playback path. Reader now always plays the actual narration segments one-by-one and auto-advances between them. The **−15s / +30s** transport remains cross-segment and cross-chapter: it measures neighboring cached audio durations and lands at the correct offset in the adjacent segment instead of being trapped by a segment boundary. Device/system fallback speech has no seekable timeline, so crossing into it lands at its start; while already in device speech, −15 moves into the previous audio segment and +30 moves to the next playable segment.
 
 v1.4.58 makes the free device/system fallback voice always speak at **1.0×**, regardless of the audiobook player's selected playback speed. Cloud-generated audio continues to use the normal player speed.
 
