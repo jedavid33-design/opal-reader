@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.15"; // v1.4.15: meter Gemini TTS from provider token usage instead of character estimates
+const APP_VERSION = "1.4.16"; // v1.4.16: PROHIBITED_CONTENT blocks one segment without aborting the rest of a chapter job
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -936,6 +936,13 @@ async function synthesizeAudio(env, provider, body) {
         error.status = 502;
         // Content-filter refusals are deterministic for the same text: retrying burns quota.
         error.noRetry = /SAFETY|RECITATION|PROHIBITED|BLOCKLIST|BLOCKED/i.test(detail);
+        // PROHIBITED_CONTENT gets one special recovery path: a whole-chapter
+        // Queue job records only this segment as blocked and continues with
+        // later segments. Other deterministic refusal classes keep the
+        // existing fail-fast behavior.
+        error.contentBlocked = /PROHIBITED_CONTENT/i.test(blockReason || detail);
+        error.blockReason = blockReason || null;
+        error.finishReason = finishReason || null;
         throw error;
       }
       const mimeType = audioPart.inlineData.mimeType || "";
@@ -1120,6 +1127,41 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       });
     return status;
   } catch (error) {
+    if (error?.contentBlocked) {
+      // A PROHIBITED_CONTENT false-positive should strand only the refused
+      // segment, not everything after it in a whole-chapter generation.
+      const index = Number.isInteger(segmentIndex)
+        ? segmentIndex
+        : status.segments.findIndex((item) => !["ready", "blocked"].includes(item.state));
+      const segment = payload.segments[index];
+      if (index >= 0 && segment) {
+        status.segments[index] = {
+          cache_key: segment.cache_key,
+          state: "blocked",
+          error: error.message || "Gemini blocked this segment.",
+          block_reason: error.blockReason || "PROHIBITED_CONTENT",
+          finish_reason: error.finishReason || "UNKNOWN",
+          model: segment.model_id || null,
+        };
+      }
+      status.completed = status.segments.filter((item) => item.state === "ready").length;
+      status.blocked = status.segments.filter((item) => item.state === "blocked").length;
+      const next = status.segments.findIndex(
+        (item) => !["ready", "blocked"].includes(item.state),
+      );
+      status.state = next < 0 ? "partial" : "queued";
+      status.error = next < 0
+        ? `${status.blocked} segment${status.blocked === 1 ? "" : "s"} blocked by Gemini; all other segments finished.`
+        : null;
+      status.updated_at = Date.now();
+      await saveGenerationStatus(env, status);
+      if (next >= 0)
+        await env.OPALREADER_GENERATION.send({
+          job_id: jobId,
+          segment_index: next,
+        });
+      return status;
+    }
     const retryable = attempts < 4 && !error?.noRetry;
     status.state = retryable ? "queued" : "failed";
     status.error = error.message || "Chapter generation failed.";
@@ -1518,7 +1560,7 @@ export default {
         const existing = await readGenerationStatus(env, payload.job_id);
         if (
           existing &&
-          ["queued", "generating", "ready"].includes(existing.state)
+          ["queued", "generating", "ready", "partial"].includes(existing.state)
         ) {
           // A1: stale-heartbeat resume. If the job claims to be in flight but
           // has not been touched for ~5 minutes, its queue message was lost —
@@ -1530,7 +1572,7 @@ export default {
             Date.now() - Number(existing.updated_at) > 5 * 60 * 1000;
           if (stale && (await readGenerationPayload(env, payload.job_id))) {
             const nextIndex = (existing.segments || []).findIndex(
-              (item) => item.state !== "ready",
+              (item) => !["ready", "blocked"].includes(item.state),
             );
             const resumed = { ...existing, updated_at: Date.now() };
             if (nextIndex < 0) resumed.state = "ready";
