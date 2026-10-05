@@ -1,8 +1,10 @@
 # OpalReader v1.4.61
 
-Current source of truth: `app-199.js` + `styles-140.css` + `sw-161.js`; Worker source `cloudflare-worker.js` v1.4.16.
+Current source of truth: `app-199.js` + `styles-140.css` + `sw-161.js`; Worker source `cloudflare-worker.js` v1.4.17.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+Worker v1.4.17 hardens Gemini TTS against missing narration at the start of a segment. Narration/style directions now travel in `systemInstruction`, while `contents[].parts[].text` contains only the verbatim book excerpt. The instruction explicitly requires the first through last words, narration before colons, speaker tags, and quoted dialogue to be spoken exactly once. Existing cached audio is not invalidated automatically.
 
 v1.4.61 compacts Segment Review generation controls on mobile. **Generate/Regenerate segment** and **Generate rest** now sit side-by-side instead of stacking into two oversized rows, while keeping the same queue behavior and cost safeguards.
 
