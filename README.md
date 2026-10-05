@@ -1,10 +1,12 @@
-# OpalReader v1.4.64
+# OpalReader v1.4.65
 
-Current source of truth: `app-202.js` + `styles-139.css` + `sw-164.js`; Worker source `cloudflare-worker.js` v1.4.20.
+Current source of truth: `app-203.js` + `styles-139.css` + `sw-165.js`; Worker source `cloudflare-worker.js` v1.4.21.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
 
 Worker v1.4.17 hardens Gemini TTS against missing narration at the start of a segment. Narration/style directions now travel in `systemInstruction`, while `contents[].parts[].text` contains only the verbatim book excerpt. The instruction explicitly requires the first through last words, narration before colons, speaker tags, and quoted dialogue to be spoken exactly once. Existing cached audio is not invalidated automatically.
+
+v1.4.65 + Worker v1.4.21 let Reader get past an isolated Gemini HTTP 500 instead of sacrificing the rest of a chapter. In a multi-segment job, the Worker marks only that piece `provider_failed`, does not auto-retry it, and continues later segments. Segment Review then offers **Retry Gemini**, **Use free device voice**, or **Choose another cloud voice** for the failed piece. Legacy 500 failures from older Worker versions are recovered into the same per-segment UI after reload. `Generate rest of chapter` skips an isolated failed piece so it cannot be re-requested accidentally.
 
 Worker v1.4.20 also makes Gemini HTTP 500 internal errors single-shot Queue failures. Because newly freed Gemini TTS request slots may be scarce under the apparent rolling 24-hour quota window, Reader no longer spends up to four automatic Queue attempts on the same provider-side 500; the user can explicitly retry later.
 
