@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.18"; // v1.4.18: Gemini 429 quota/rate-limit responses are terminal for Queue delivery and never auto-retried
+const APP_VERSION = "1.4.19"; // v1.4.19: Gemini 429 quota failures are terminal, structured, and never auto-retried
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1189,7 +1189,21 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       throw error;
     }
     if (error?.quotaExceeded) {
+      const index = Number.isInteger(segmentIndex)
+        ? segmentIndex
+        : status.segments.findIndex((item) => item.state !== "ready");
+      if (index >= 0 && status.segments[index]) {
+        status.segments[index] = {
+          ...status.segments[index],
+          state: "failed",
+          error: error.message || "Gemini quota reached.",
+          quota_exceeded: true,
+          model: payload.segments[index]?.model_id || null,
+        };
+      }
       status.state = "failed";
+      status.quota_exceeded = true;
+      status.provider = "gemini";
       status.error = `${error.message || "Gemini quota reached."} Reader stopped this Queue job without retrying it.`;
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
