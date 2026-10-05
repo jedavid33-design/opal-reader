@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.17"; // v1.4.17: Gemini TTS keeps narration instructions separate from the verbatim book transcript to protect segment openings
+const APP_VERSION = "1.4.18"; // v1.4.18: Gemini 429 quota/rate-limit responses are terminal for Queue delivery and never auto-retried
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -774,6 +774,14 @@ async function throwProviderError(response, provider) {
   error.status = response.status;
   error.provider = provider;
   error.details = detail || raw || undefined;
+  // Gemini quota/rate-limit 429s should never be retried automatically by the
+  // Queue. Retrying the same segment seconds later cannot clear a daily/model
+  // quota and only burns additional request attempts. A later explicit user
+  // retry creates/resumes the job after quota is available again.
+  if (provider === "gemini" && response.status === 429) {
+    error.noRetry = true;
+    error.quotaExceeded = true;
+  }
   throw error;
 }
 
@@ -1176,6 +1184,13 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
 
       status.state = "failed";
       status.error = error.message || "Gemini blocked this segment.";
+      status.updated_at = Date.now();
+      await saveGenerationStatus(env, status);
+      throw error;
+    }
+    if (error?.quotaExceeded) {
+      status.state = "failed";
+      status.error = `${error.message || "Gemini quota reached."} Reader stopped this Queue job without retrying it.`;
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
       throw error;
