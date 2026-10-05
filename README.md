@@ -1,10 +1,10 @@
 # OpalReader v1.4.66
 
-Current source of truth: `app-204.js` + `styles-139.css` + `sw-166.js`; Worker source `cloudflare-worker.js` v1.4.22.
+Current source of truth: `app-204.js` + `styles-139.css` + `sw-166.js`; Worker source `cloudflare-worker.js` v1.4.23.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
 
-Worker v1.4.17 hardens Gemini TTS against missing narration at the start of a segment. Narration/style directions now travel in `systemInstruction`, while `contents[].parts[].text` contains only the verbatim book excerpt. The instruction explicitly requires the first through last words, narration before colons, speaker tags, and quoted dialogue to be spoken exactly once. Existing cached audio is not invalidated automatically.
+Worker v1.4.23 recognizes Gemini 3.8 Interactions HTTP 400 policy refusals such as `Request blocked for an unspecified policy reason. Please modify your input and retry.` as blocked content. Those refusals are single-shot, do not consume automatic Queue retries, and reuse Reader's existing blocked-segment recovery flow: split the segment, use the free device voice, or choose another cloud voice. Other Gemini 400 errors still remain generic failures.\n\nWorker v1.4.17 hardens Gemini TTS against missing narration at the start of a segment. Narration/style directions now travel in `systemInstruction`, while `contents[].parts[].text` contains only the verbatim book excerpt. The instruction explicitly requires the first through last words, narration before colons, speaker tags, and quoted dialogue to be spoken exactly once. Existing cached audio is not invalidated automatically.
 
 v1.4.66 + Worker v1.4.22 migrate Gemini narration to **Gemini 3.8 Flash TTS** by default. Existing cast voice assignments and `style_direction` notes are preserved; only the Gemini model selection changes. Worker 1.4.22 uses the Gemini Interactions API, sends the book text as the strict verbatim `text` transcript, and sends sustained delivery notes through `speech_metadata.style`. Unary 3.8 output is stored directly as WAV. Usage accounting now understands Interactions API token fields and 3.8 pricing. Setup also offers 3.8 Flash-Lite as an optional lower-cost alternative.
 
