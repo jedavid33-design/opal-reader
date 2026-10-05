@@ -1,8 +1,10 @@
-# OpalReader v1.4.60
+# OpalReader v1.4.61
 
-Current source of truth: `app-198.js` + `styles-139.css` + `sw-160.js`; Worker source `cloudflare-worker.js` v1.4.16.
+Current source of truth: `app-199.js` + `styles-140.css` + `sw-161.js`; Worker source `cloudflare-worker.js` v1.4.16.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+v1.4.61 compacts Segment Review generation controls on mobile. **Generate/Regenerate segment** and **Generate rest** now sit side-by-side instead of stacking into two oversized rows, while keeping the same queue behavior and cost safeguards.
 
 v1.4.60 hardens whole-chapter Queue submission against Safari/network acknowledgement loss. If the POST returns a transport error such as `Load failed` without an HTTP status, Reader keeps the exact chapter/regeneration job in `queued` state and polls that same job instead of presenting it as failed or risking a duplicate paid request. **Clear error** now resumes a preserved failed job ID when one exists; if the Worker confirms the job is gone (404), Reader can then safely surface an expired-job failure for an explicit retry.
 
