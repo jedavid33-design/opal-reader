@@ -1877,6 +1877,28 @@ export default {
                 updated_at: Date.now(),
               };
               await saveGenerationStatus(env, status);
+            } else if (
+              ["queued", "generating"].includes(status.state) &&
+              Number(status.updated_at) > 0 &&
+              Date.now() - Number(status.updated_at) > 5 * 60 * 1000
+            ) {
+              // Poll-time watchdog: the UI may be unable to POST while a job
+              // still claims to be active. Wake a stale job from the normal
+              // status poll, skipping terminal blocked/provider-failed pieces.
+              const nextIndex = nextGenerationSegmentIndex(status.segments);
+              status = { ...status, updated_at: Date.now() };
+              if (nextIndex < 0) {
+                finishGenerationState(status);
+              } else {
+                status.state = "queued";
+                status.error = null;
+              }
+              await saveGenerationStatus(env, status);
+              if (nextIndex >= 0)
+                await env.OPALREADER_GENERATION.send({
+                  job_id: jobId,
+                  segment_index: nextIndex,
+                });
             }
           }
         }
