@@ -1,10 +1,12 @@
-# OpalReader v1.4.65
+# OpalReader v1.4.66
 
-Current source of truth: `app-203.js` + `styles-139.css` + `sw-165.js`; Worker source `cloudflare-worker.js` v1.4.21.
+Current source of truth: `app-204.js` + `styles-139.css` + `sw-166.js`; Worker source `cloudflare-worker.js` v1.4.22.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
 
 Worker v1.4.17 hardens Gemini TTS against missing narration at the start of a segment. Narration/style directions now travel in `systemInstruction`, while `contents[].parts[].text` contains only the verbatim book excerpt. The instruction explicitly requires the first through last words, narration before colons, speaker tags, and quoted dialogue to be spoken exactly once. Existing cached audio is not invalidated automatically.
+
+v1.4.66 + Worker v1.4.22 migrate Gemini narration to **Gemini 3.8 Flash TTS** by default. Existing cast voice assignments and `style_direction` notes are preserved; only the Gemini model selection changes. Worker 1.4.22 uses the Gemini Interactions API, sends the book text as the strict verbatim `text` transcript, and sends sustained delivery notes through `speech_metadata.style`. Unary 3.8 output is stored directly as WAV. Usage accounting now understands Interactions API token fields and 3.8 pricing. Setup also offers 3.8 Flash-Lite as an optional lower-cost alternative.
 
 v1.4.65 + Worker v1.4.21 let Reader get past an isolated Gemini HTTP 500 instead of sacrificing the rest of a chapter. In a multi-segment job, the Worker marks only that piece `provider_failed`, does not auto-retry it, and continues later segments. Segment Review then offers **Retry Gemini**, **Use free device voice**, or **Choose another cloud voice** for the failed piece. Legacy 500 failures from older Worker versions are recovered into the same per-segment UI after reload. `Generate rest of chapter` skips an isolated failed piece so it cannot be re-requested accidentally.
 
