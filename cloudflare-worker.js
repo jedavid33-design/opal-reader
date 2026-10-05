@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.22"; // v1.4.22: Gemini 3.8 Flash TTS via Interactions API with verbatim transcript + speech_metadata style
+const APP_VERSION = "1.4.23"; // v1.4.23: classify Gemini Interactions HTTP 400 policy refusals as blocked content
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -803,6 +803,23 @@ async function throwProviderError(response, provider) {
   if (provider === "gemini" && response.status === 500) {
     error.noRetry = true;
     error.providerInternal = true;
+  }
+  // Gemini 3.8 Interactions can reject narration text before synthesis with an
+  // HTTP 400 policy refusal instead of returning PROHIBITED_CONTENT in a model
+  // response. Treat only the explicit policy-block wording as blocked content
+  // so Reader uses the existing split/device/alternate-cloud recovery flow and
+  // never burns Queue retries on text Google has already refused.
+  if (
+    provider === "gemini" &&
+    response.status === 400 &&
+    /request\s+blocked|blocked.{0,40}policy|policy\s+reason|modify\s+your\s+input/i.test(
+      providerSaid,
+    )
+  ) {
+    error.noRetry = true;
+    error.contentBlocked = true;
+    error.blockReason = "POLICY_BLOCK";
+    error.finishReason = "HTTP_400";
   }
   throw error;
 }
