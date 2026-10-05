@@ -1,10 +1,12 @@
-# OpalReader v1.4.63
+# OpalReader v1.4.64
 
-Current source of truth: `app-201.js` + `styles-139.css` + `sw-163.js`; Worker source `cloudflare-worker.js` v1.4.18.
+Current source of truth: `app-202.js` + `styles-139.css` + `sw-164.js`; Worker source `cloudflare-worker.js` v1.4.19.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
 
 Worker v1.4.17 hardens Gemini TTS against missing narration at the start of a segment. Narration/style directions now travel in `systemInstruction`, while `contents[].parts[].text` contains only the verbatim book excerpt. The instruction explicitly requires the first through last words, narration before colons, speaker tags, and quoted dialogue to be spoken exactly once. Existing cached audio is not invalidated automatically.
+
+v1.4.64 + Worker v1.4.19 make Gemini quota exhaustion a first-class Queue failure. The Worker marks Gemini HTTP 429 responses with `quota_exceeded`, stops Queue retries immediately, and ACKs the delivery. Segment Review recognizes that state and does **not** offer an immediate new queued synthesis while quota is still exhausted; it clears the failed job reference so a later explicit tap can start a fresh job once quota returns.
 
 Worker v1.4.18 treats Gemini HTTP 429 quota/rate-limit responses as terminal for that Queue delivery. Reader records the failure once and the Queue consumer acknowledges it instead of auto-retrying the same segment up to four times. A later explicit user retry remains available after Gemini quota recovers.
 
