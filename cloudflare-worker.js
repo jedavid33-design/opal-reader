@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.26"; // v1.4.26: serialize each generation job so duplicate queue deliveries cannot race status forward/backward
+const APP_VERSION = "1.4.27"; // v1.4.27: track Gemini request usage in a rolling 24-hour window
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -246,16 +246,24 @@ function geminiPacificDayBounds(now = Date.now()) {
   return { start, end };
 }
 async function geminiQuotaReport(env) {
+  const now = Date.now();
+  const windowMs = 24 * 60 * 60 * 1000;
+  const start = now - windowMs;
   if (!env.OPALREADER_KV)
     return {
+      used_24h: 0,
       used_today: 0,
       limit: null,
+      window_ms: windowMs,
+      window_start_ms: start,
+      next_expiry_ms: null,
       resets_at_ms: null,
-      reset_timezone: "America/Los_Angeles",
+      reset_timezone: null,
+      tracking_mode: "rolling_24h",
       approximate: true,
     };
-  const { start, end } = geminiPacificDayBounds();
-  let cursor, used = 0;
+
+  let cursor, used = 0, oldest = null;
   do {
     const page = await env.OPALREADER_KV.list({
       prefix: geminiQuotaPrefix,
@@ -265,16 +273,26 @@ async function geminiQuotaReport(env) {
     for (const item of page.keys || []) {
       const m = /^quota:gemini:(\d{13}):/.exec(item.name || "");
       const ts = m ? Number(m[1]) : 0;
-      if (ts >= start && ts < end) used += 1;
+      if (ts >= start && ts <= now) {
+        used += 1;
+        if (oldest == null || ts < oldest) oldest = ts;
+      }
     }
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
+
   const configured = Number(env.GEMINI_DAILY_REQUEST_LIMIT);
   return {
+    used_24h: used,
+    // Backward-compatible alias for older Reader frontends.
     used_today: used,
     limit: Number.isFinite(configured) && configured > 0 ? configured : null,
-    resets_at_ms: end,
-    reset_timezone: "America/Los_Angeles",
+    window_ms: windowMs,
+    window_start_ms: start,
+    next_expiry_ms: oldest == null ? null : oldest + windowMs,
+    resets_at_ms: null,
+    reset_timezone: null,
+    tracking_mode: "rolling_24h",
     approximate: true,
   };
 }

@@ -1,6 +1,12 @@
-# OpalReader v1.4.67
+# OpalReader v1.4.68
 
-Current source of truth: `app-205.js` + `styles-139.css` + `sw-167.js`; Worker source `cloudflare-worker.js` v1.4.25.
+Current source of truth: `app-206.js` + `styles-139.css` + `sw-168.js`; Worker source `cloudflare-worker.js` v1.4.27.
+
+v1.4.68 changes the Gemini request meter from a Pacific-midnight day bucket to a rolling 24-hour Worker count. The panel now shows requests made in the previous 24 hours and, when available, the time the oldest counted request will drop out of the window. The Worker keeps `used_today` as a compatibility alias for older frontends.
+
+Worker v1.4.27 implements the rolling 24-hour quota tracker on top of the existing per-attempt KV ledger. It still counts only actual Gemini provider attempts, including failed or blocked attempts, while cache hits and duplicate Queue deliveries that never reach Gemini do not increment the counter.
+
+Worker v1.4.26 serializes generation at the whole-job level so duplicate/redelivered Queue messages cannot race chapter status updates, and records failures against the segment actually processed after any redirect.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
 
