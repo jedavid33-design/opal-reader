@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.25"; // v1.4.25: skip blocked/provider-failed segments when advancing split recovery jobs
+const APP_VERSION = "1.4.26"; // v1.4.26: serialize each generation job so duplicate queue deliveries cannot race status forward/backward
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1194,75 +1194,74 @@ function finishGenerationState(status) {
   return status;
 }
 
-async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
-  const payload = await readGenerationPayload(env, jobId);
-  if (!payload) throw new Error("Generation job payload was not found.");
+async function processGenerationJobLocked(
+  env,
+  jobId,
+  payload,
+  segmentIndex,
+  attempts = 1,
+) {
   let status = (await readGenerationStatus(env, jobId)) || payload.status;
-  if (status?.state === "ready") return status;
-  status = {
-    ...status,
-    state: "generating",
-    attempts,
-    error: null,
-    updated_at: Date.now(),
-  };
-  await saveGenerationStatus(env, status);
+  if (status?.state === "ready") return { status, next: -1 };
+
+  let activeIndex = -1;
   try {
     const requestedIndex = Number.isInteger(segmentIndex) ? segmentIndex : -1;
-    const index =
-      requestedIndex >= 0 && !generationSegmentTerminal(status.segments?.[requestedIndex])
+    activeIndex =
+      requestedIndex >= 0 &&
+      !generationSegmentTerminal(status.segments?.[requestedIndex])
         ? requestedIndex
         : nextGenerationSegmentIndex(status.segments);
-    if (index < 0) {
+
+    if (activeIndex < 0) {
       finishGenerationState(status);
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
-      return status;
+      return { status, next: -1 };
     }
-    const segment = payload.segments[index];
+
+    status = {
+      ...status,
+      state: "generating",
+      attempts,
+      error: null,
+      updated_at: Date.now(),
+      segments: (status.segments || []).map((item, index) =>
+        index === activeIndex ? { ...item, state: "generating" } : item,
+      ),
+    };
+    await saveGenerationStatus(env, status);
+
+    const segment = payload.segments[activeIndex];
     if (!segment) throw new Error("Generation segment was not found.");
     segment.queue_job_id = jobId;
     segment.retry_attempt = attempts;
-    // A2: if a duplicate queue delivery already holds this segment, bail out
-    // instead of synthesizing (and billing) it a second time. The primary
-    // delivery owns progress; this duplicate just acks and exits.
-    if (!(await acquireProcessingLease(env, jobId, index))) {
+
+    let result = null;
+    let cached = await hasCachedAudio(env, segment.cache_key);
+    if (!cached) {
+      // Re-check immediately before the provider call. A previous delivery may
+      // have finished the audio just before this job-level lease was acquired.
+      cached = await hasCachedAudio(env, segment.cache_key);
+    }
+    if (!cached) {
+      result = await synthesizeAudio(env, segment.provider, segment);
+      if (result.cache === "MISS")
+        status.generated_cost =
+          (status.generated_cost || 0) +
+          (result.calculated_cost == null
+            ? Number(segment.estimated_cost) || 0
+            : Number(result.calculated_cost) || 0);
+    } else {
       await recordTtsUsage(env, segment, {
         provider: segment.provider,
         provider_call: false,
         request_status: "succeeded",
-        cache_status: "skipped_duplicate_delivery",
+        cache_status: "skipped_existing_audio",
       });
-      return status;
     }
-    let result = null;
-    try {
-      let cached = await hasCachedAudio(env, segment.cache_key);
-      if (!cached) {
-        // A2: re-check immediately before the provider call — a duplicate
-        // delivery may have finished synthesizing between the checks.
-        cached = await hasCachedAudio(env, segment.cache_key);
-      }
-      if (!cached) {
-        result = await synthesizeAudio(env, segment.provider, segment);
-        if (result.cache === "MISS")
-          status.generated_cost =
-            (status.generated_cost || 0) +
-            (result.calculated_cost == null
-              ? Number(segment.estimated_cost) || 0
-              : Number(result.calculated_cost) || 0);
-      } else {
-        await recordTtsUsage(env, segment, {
-          provider: segment.provider,
-          provider_call: false,
-          request_status: "succeeded",
-          cache_status: "skipped_existing_audio",
-        });
-      }
-    } finally {
-      await releaseProcessingLease(env, jobId, index);
-    }
-    status.segments[index] = {
+
+    status.segments[activeIndex] = {
       cache_key: segment.cache_key,
       state: "ready",
       provider_request_id: result?.provider_request_id || null,
@@ -1271,6 +1270,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     status.completed = status.segments.filter(
       (item) => item.state === "ready",
     ).length;
+
     const next = nextGenerationSegmentIndex(status.segments);
     if (next < 0) finishGenerationState(status);
     else {
@@ -1279,18 +1279,18 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     }
     status.updated_at = Date.now();
     await saveGenerationStatus(env, status);
-    if (next >= 0)
-      await env.OPALREADER_GENERATION.send({
-        job_id: jobId,
-        segment_index: next,
-      });
-    return status;
+    return { status, next };
   } catch (error) {
-    if (error?.contentBlocked) {
-      const index = Number.isInteger(segmentIndex)
-        ? segmentIndex
+    // Always record an error against the segment this delivery actually
+    // processed. A stale/redelivered message may have been redirected away
+    // from its originally requested segment.
+    const index =
+      activeIndex >= 0
+        ? activeIndex
         : nextGenerationSegmentIndex(status.segments);
-      const segment = payload.segments[index];
+    const segment = index >= 0 ? payload.segments[index] : null;
+
+    if (error?.contentBlocked) {
       if (index >= 0 && segment) {
         status.segments[index] = {
           cache_key: segment.cache_key,
@@ -1301,26 +1301,23 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
           model: segment.model_id || null,
         };
       }
-      status.completed = status.segments.filter((item) => item.state === "ready").length;
-      status.blocked = status.segments.filter((item) => item.state === "blocked").length;
+      status.completed = status.segments.filter(
+        (item) => item.state === "ready",
+      ).length;
+      status.blocked = status.segments.filter(
+        (item) => item.state === "blocked",
+      ).length;
 
-      // Whole-chapter generation keeps going past a PROHIBITED_CONTENT refusal.
-      // A deliberate one-segment generation still stops on that one segment:
-      // there is no "rest of chapter" in that job to continue.
       if (payload.segments.length > 1) {
         const next = nextGenerationSegmentIndex(status.segments);
         status.state = next < 0 ? "partial" : "queued";
-        status.error = next < 0
-          ? `${status.blocked} segment${status.blocked === 1 ? "" : "s"} blocked by Gemini; all other segments finished.`
-          : null;
+        status.error =
+          next < 0
+            ? `${status.blocked} segment${status.blocked === 1 ? "" : "s"} blocked by Gemini; all other segments finished.`
+            : null;
         status.updated_at = Date.now();
         await saveGenerationStatus(env, status);
-        if (next >= 0)
-          await env.OPALREADER_GENERATION.send({
-            job_id: jobId,
-            segment_index: next,
-          });
-        return status;
+        return { status, next };
       }
 
       status.state = "failed";
@@ -1329,16 +1326,20 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       await saveGenerationStatus(env, status);
       throw error;
     }
+
     if (error?.quotaExceeded || error?.providerInternal) {
-      const index = Number.isInteger(segmentIndex)
-        ? segmentIndex
-        : nextGenerationSegmentIndex(status.segments);
       if (index >= 0 && status.segments[index]) {
         status.segments[index] = {
           ...status.segments[index],
           state: error?.providerInternal ? "provider_failed" : "failed",
-          error: error.message || (error?.quotaExceeded ? "Gemini quota reached." : "Gemini internal error."),
-          ...(error?.quotaExceeded ? { quota_exceeded: true } : { provider_internal: true }),
+          error:
+            error.message ||
+            (error?.quotaExceeded
+              ? "Gemini quota reached."
+              : "Gemini internal error."),
+          ...(error?.quotaExceeded
+            ? { quota_exceeded: true }
+            : { provider_internal: true }),
           model: payload.segments[index]?.model_id || null,
         };
       }
@@ -1353,27 +1354,23 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       }
 
       status.provider_internal = true;
-      status.provider_failed = status.segments.filter((item) => item.state === "provider_failed").length;
-      status.completed = status.segments.filter((item) => item.state === "ready").length;
+      status.provider_failed = status.segments.filter(
+        (item) => item.state === "provider_failed",
+      ).length;
+      status.completed = status.segments.filter(
+        (item) => item.state === "ready",
+      ).length;
 
-      // A Gemini 500 can be isolated to one request. For a multi-segment job,
-      // preserve that failed piece and keep generating later pieces instead of
-      // sacrificing the rest of the chapter. One-segment jobs still stop so
-      // the user can choose retry/device/alternate-cloud recovery explicitly.
       if (payload.segments.length > 1) {
         const next = nextGenerationSegmentIndex(status.segments);
         status.state = next < 0 ? "partial" : "queued";
-        status.error = next < 0
-          ? `${status.provider_failed} segment${status.provider_failed === 1 ? "" : "s"} hit a Gemini internal error; all other segments finished.`
-          : null;
+        status.error =
+          next < 0
+            ? `${status.provider_failed} segment${status.provider_failed === 1 ? "" : "s"} hit a Gemini provider error; all other segments finished.`
+            : null;
         status.updated_at = Date.now();
         await saveGenerationStatus(env, status);
-        if (next >= 0)
-          await env.OPALREADER_GENERATION.send({
-            job_id: jobId,
-            segment_index: next,
-          });
-        return status;
+        return { status, next };
       }
 
       status.state = "failed";
@@ -1382,6 +1379,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       await saveGenerationStatus(env, status);
       throw error;
     }
+
     const retryable = attempts < 4 && !error?.noRetry;
     status.state = retryable ? "queued" : "failed";
     status.error = error.message || "Chapter generation failed.";
@@ -1390,6 +1388,42 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     throw error;
   }
 }
+
+async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
+  const payload = await readGenerationPayload(env, jobId);
+  if (!payload) throw new Error("Generation job payload was not found.");
+
+  // v1.4.26: serialize the entire job, not just individual segments. Queue
+  // delivery is at-least-once, and two different segment deliveries can
+  // otherwise update the same status snapshot concurrently and regress a
+  // completed segment back to queued/generating.
+  if (!(await acquireProcessingLease(env, jobId, "job"))) {
+    return (await readGenerationStatus(env, jobId)) || payload.status;
+  }
+
+  let outcome;
+  try {
+    outcome = await processGenerationJobLocked(
+      env,
+      jobId,
+      payload,
+      segmentIndex,
+      attempts,
+    );
+  } finally {
+    // Release before enqueueing the next piece. If Queue delivers the next
+    // message immediately, it must be able to acquire the job lease.
+    await releaseProcessingLease(env, jobId, "job");
+  }
+
+  if (outcome?.next >= 0)
+    await env.OPALREADER_GENERATION.send({
+      job_id: jobId,
+      segment_index: outcome.next,
+    });
+  return outcome?.status || payload.status;
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
