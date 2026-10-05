@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.23"; // v1.4.23: classify Gemini Interactions HTTP 400 policy refusals as blocked content
+const APP_VERSION = "1.4.24"; // v1.4.24: timeout hung Gemini 3.8 Interactions requests and continue the chapter
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -953,31 +953,51 @@ async function synthesizeAudio(env, provider, body) {
           geminiStyle,
           "clear normal speaking voice; never whisper, murmur, or speak softly",
         ].filter(Boolean).join(". ");
-        response = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/interactions",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": env.GEMINI_API_KEY,
-            },
-            body: JSON.stringify({
-              model: geminiModel,
-              input: [{
-                type: "user_input",
-                content: [{
-                  type: "text",
-                  text: geminiTranscript,
-                  annotations: [{ type: "speech_metadata", style }],
-                }],
-              }],
-              response_format: { type: "audio" },
-              generation_config: {
-                speech_config: [{ voice: body.voice_id }],
+        const controller = new AbortController();
+        const timeoutMs = 120000;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          response = await fetch(
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": env.GEMINI_API_KEY,
               },
-            }),
-          },
-        );
+              signal: controller.signal,
+              body: JSON.stringify({
+                model: geminiModel,
+                input: [{
+                  type: "user_input",
+                  content: [{
+                    type: "text",
+                    text: geminiTranscript,
+                    annotations: [{ type: "speech_metadata", style }],
+                  }],
+                }],
+                response_format: { type: "audio" },
+                generation_config: {
+                  speech_config: [{ voice: body.voice_id }],
+                },
+              }),
+            },
+          );
+        } catch (error) {
+          if (error?.name === "AbortError" || controller.signal.aborted) {
+            const timeoutError = new Error(
+              "Gemini 3.8 TTS timed out after 120 seconds.",
+            );
+            timeoutError.status = 504;
+            timeoutError.provider = "gemini";
+            timeoutError.noRetry = true;
+            timeoutError.providerInternal = true;
+            throw timeoutError;
+          }
+          throw error;
+        } finally {
+          clearTimeout(timeoutId);
+        }
         if (!response.ok) await throwProviderError(response, provider);
         const data = await response.json();
         providerRequestId = data?.id || providerRequestId;
