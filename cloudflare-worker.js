@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.20"; // v1.4.20: Gemini 429 and 500 failures are single-shot Queue attempts; user decides when to retry
+const APP_VERSION = "1.4.21"; // v1.4.21: whole-chapter jobs skip one Gemini 500 segment, continue later segments, and expose the failed piece for fallback
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1198,21 +1198,54 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     if (error?.quotaExceeded || error?.providerInternal) {
       const index = Number.isInteger(segmentIndex)
         ? segmentIndex
-        : status.segments.findIndex((item) => item.state !== "ready");
+        : status.segments.findIndex((item) => !["ready", "blocked", "provider_failed"].includes(item.state));
       if (index >= 0 && status.segments[index]) {
         status.segments[index] = {
           ...status.segments[index],
-          state: "failed",
+          state: error?.providerInternal ? "provider_failed" : "failed",
           error: error.message || (error?.quotaExceeded ? "Gemini quota reached." : "Gemini internal error."),
           ...(error?.quotaExceeded ? { quota_exceeded: true } : { provider_internal: true }),
           model: payload.segments[index]?.model_id || null,
         };
       }
-      status.state = "failed";
       status.provider = "gemini";
-      if (error?.quotaExceeded) status.quota_exceeded = true;
-      if (error?.providerInternal) status.provider_internal = true;
-      status.error = `${error.message || (error?.quotaExceeded ? "Gemini quota reached." : "Gemini internal error.")} Reader stopped this Queue job without retrying it.`;
+      if (error?.quotaExceeded) {
+        status.state = "failed";
+        status.quota_exceeded = true;
+        status.error = `${error.message || "Gemini quota reached."} Reader stopped this Queue job without retrying it.`;
+        status.updated_at = Date.now();
+        await saveGenerationStatus(env, status);
+        throw error;
+      }
+
+      status.provider_internal = true;
+      status.provider_failed = status.segments.filter((item) => item.state === "provider_failed").length;
+      status.completed = status.segments.filter((item) => item.state === "ready").length;
+
+      // A Gemini 500 can be isolated to one request. For a multi-segment job,
+      // preserve that failed piece and keep generating later pieces instead of
+      // sacrificing the rest of the chapter. One-segment jobs still stop so
+      // the user can choose retry/device/alternate-cloud recovery explicitly.
+      if (payload.segments.length > 1) {
+        const next = status.segments.findIndex(
+          (item) => !["ready", "blocked", "provider_failed"].includes(item.state),
+        );
+        status.state = next < 0 ? "partial" : "queued";
+        status.error = next < 0
+          ? `${status.provider_failed} segment${status.provider_failed === 1 ? "" : "s"} hit a Gemini internal error; all other segments finished.`
+          : null;
+        status.updated_at = Date.now();
+        await saveGenerationStatus(env, status);
+        if (next >= 0)
+          await env.OPALREADER_GENERATION.send({
+            job_id: jobId,
+            segment_index: next,
+          });
+        return status;
+      }
+
+      status.state = "failed";
+      status.error = `${error.message || "Gemini internal error."} Reader stopped this one-segment job without retrying it.`;
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
       throw error;
