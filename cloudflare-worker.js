@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.24"; // v1.4.24: timeout hung Gemini 3.8 Interactions requests and continue the chapter
+const APP_VERSION = "1.4.25"; // v1.4.25: skip blocked/provider-failed segments when advancing split recovery jobs
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1167,6 +1167,33 @@ async function readGenerationPayload(env, jobId) {
   return JSON.parse(await new Response(object.body).text());
 }
 
+const generationSegmentTerminal = (item) =>
+  ["ready", "blocked", "provider_failed"].includes(item?.state) ||
+  Boolean(item?.provider_internal);
+const nextGenerationSegmentIndex = (segments) =>
+  (segments || []).findIndex((item) => !generationSegmentTerminal(item));
+function finishGenerationState(status) {
+  const blocked = (status.segments || []).filter((item) => item.state === "blocked").length;
+  const providerFailed = (status.segments || []).filter(
+    (item) => item.state === "provider_failed" || item.provider_internal,
+  ).length;
+  status.blocked = blocked;
+  status.provider_failed = providerFailed;
+  if (blocked || providerFailed) {
+    status.state = "partial";
+    const parts = [];
+    if (blocked)
+      parts.push(`${blocked} segment${blocked === 1 ? "" : "s"} blocked by Gemini`);
+    if (providerFailed)
+      parts.push(`${providerFailed} segment${providerFailed === 1 ? "" : "s"} hit a Gemini provider error`);
+    status.error = `${parts.join("; ")}; all other segments finished.`;
+  } else {
+    status.state = "ready";
+    status.error = null;
+  }
+  return status;
+}
+
 async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
   const payload = await readGenerationPayload(env, jobId);
   if (!payload) throw new Error("Generation job payload was not found.");
@@ -1183,7 +1210,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
   try {
     const index = Number.isInteger(segmentIndex)
         ? segmentIndex
-        : status.segments.findIndex((item) => item.state !== "ready"),
+        : nextGenerationSegmentIndex(status.segments),
       segment = payload.segments[index];
     if (!segment) throw new Error("Generation segment was not found.");
     segment.queue_job_id = jobId;
@@ -1236,8 +1263,12 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     status.completed = status.segments.filter(
       (item) => item.state === "ready",
     ).length;
-    const next = status.segments.findIndex((item) => item.state !== "ready");
-    status.state = next < 0 ? "ready" : "queued";
+    const next = nextGenerationSegmentIndex(status.segments);
+    if (next < 0) finishGenerationState(status);
+    else {
+      status.state = "queued";
+      status.error = null;
+    }
     status.updated_at = Date.now();
     await saveGenerationStatus(env, status);
     if (next >= 0)
@@ -1250,7 +1281,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     if (error?.contentBlocked) {
       const index = Number.isInteger(segmentIndex)
         ? segmentIndex
-        : status.segments.findIndex((item) => !["ready", "blocked"].includes(item.state));
+        : nextGenerationSegmentIndex(status.segments);
       const segment = payload.segments[index];
       if (index >= 0 && segment) {
         status.segments[index] = {
@@ -1269,9 +1300,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       // A deliberate one-segment generation still stops on that one segment:
       // there is no "rest of chapter" in that job to continue.
       if (payload.segments.length > 1) {
-        const next = status.segments.findIndex(
-          (item) => !["ready", "blocked"].includes(item.state),
-        );
+        const next = nextGenerationSegmentIndex(status.segments);
         status.state = next < 0 ? "partial" : "queued";
         status.error = next < 0
           ? `${status.blocked} segment${status.blocked === 1 ? "" : "s"} blocked by Gemini; all other segments finished.`
@@ -1295,7 +1324,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     if (error?.quotaExceeded || error?.providerInternal) {
       const index = Number.isInteger(segmentIndex)
         ? segmentIndex
-        : status.segments.findIndex((item) => !["ready", "blocked", "provider_failed"].includes(item.state));
+        : nextGenerationSegmentIndex(status.segments);
       if (index >= 0 && status.segments[index]) {
         status.segments[index] = {
           ...status.segments[index],
@@ -1324,9 +1353,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       // sacrificing the rest of the chapter. One-segment jobs still stop so
       // the user can choose retry/device/alternate-cloud recovery explicitly.
       if (payload.segments.length > 1) {
-        const next = status.segments.findIndex(
-          (item) => !["ready", "blocked", "provider_failed"].includes(item.state),
-        );
+        const next = nextGenerationSegmentIndex(status.segments);
         status.state = next < 0 ? "partial" : "queued";
         status.error = next < 0
           ? `${status.provider_failed} segment${status.provider_failed === 1 ? "" : "s"} hit a Gemini internal error; all other segments finished.`
@@ -1756,11 +1783,9 @@ export default {
             Number(existing.updated_at) > 0 &&
             Date.now() - Number(existing.updated_at) > 5 * 60 * 1000;
           if (stale && (await readGenerationPayload(env, payload.job_id))) {
-            const nextIndex = (existing.segments || []).findIndex(
-              (item) => !["ready", "blocked"].includes(item.state),
-            );
+            const nextIndex = nextGenerationSegmentIndex(existing.segments);
             const resumed = { ...existing, updated_at: Date.now() };
-            if (nextIndex < 0) resumed.state = "ready";
+            if (nextIndex < 0) finishGenerationState(resumed);
             await saveGenerationStatus(env, resumed);
             if (nextIndex >= 0)
               await env.OPALREADER_GENERATION.send({
