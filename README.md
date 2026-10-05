@@ -1,8 +1,10 @@
-# OpalReader v1.4.59
+# OpalReader v1.4.60
 
-Current source of truth: `app-197.js` + `styles-139.css` + `sw-159.js`; Worker source `cloudflare-worker.js` v1.4.16.
+Current source of truth: `app-198.js` + `styles-139.css` + `sw-160.js`; Worker source `cloudflare-worker.js` v1.4.16.
 
 Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue generation, KV sync, private R2 audio caching, Opal Shelf listening-time sync, per-section playback/navigation, and EPUB imports targeting ~1,500-character narration segments.
+
+v1.4.60 hardens whole-chapter Queue submission against Safari/network acknowledgement loss. If the POST returns a transport error such as `Load failed` without an HTTP status, Reader keeps the exact chapter/regeneration job in `queued` state and polls that same job instead of presenting it as failed or risking a duplicate paid request. **Clear error** now resumes a preserved failed job ID when one exists; if the Worker confirms the job is gone (404), Reader can then safely surface an expired-job failure for an explicit retry.
 
 v1.4.59 removes the old stitched/composite chapter playback path. Reader now always plays the actual narration segments one-by-one and auto-advances between them. The **−15s / +30s** transport remains cross-segment and cross-chapter: it measures neighboring cached audio durations and lands at the correct offset in the adjacent segment instead of being trapped by a segment boundary. Device/system fallback speech has no seekable timeline, so crossing into it lands at its start; while already in device speech, −15 moves into the previous audio segment and +30 moves to the next playable segment.
 
