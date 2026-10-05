@@ -6,7 +6,7 @@ Current stack: Gemini / Fish Audio / Azure / OpenAI TTS, Cloudflare Queue genera
 
 Worker v1.4.17 hardens Gemini TTS against missing narration at the start of a segment. Narration/style directions now travel in `systemInstruction`, while `contents[].parts[].text` contains only the verbatim book excerpt. The instruction explicitly requires the first through last words, narration before colons, speaker tags, and quoted dialogue to be spoken exactly once. Existing cached audio is not invalidated automatically.
 
-v1.4.61 compacts Segment Review generation controls on mobile. **Generate/Regenerate segment** and **Generate rest** now sit side-by-side instead of stacking into two oversized rows, while keeping the same queue behavior and cost safeguards.
+v1.4.61 compacts Segment Review generation controls on mobile. **Generate/Regenerate segment** and **Generate rest** now sit side-by-side instead of stacking into two oversized rows, while keeping the same queue behavior and cost safeguards. This frontend-only change does not require a Worker redeploy.
 
 v1.4.60 hardens whole-chapter Queue submission against Safari/network acknowledgement loss. If the POST returns a transport error such as `Load failed` without an HTTP status, Reader keeps the exact chapter/regeneration job in `queued` state and polls that same job instead of presenting it as failed or risking a duplicate paid request. **Clear error** now resumes a preserved failed job ID when one exists; if the Worker confirms the job is gone (404), Reader can then safely surface an expired-job failure for an explicit retry.
 
