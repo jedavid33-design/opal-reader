@@ -1,6 +1,8 @@
-# OpalReader v1.4.68
+# OpalReader v1.4.69
 
-Current source of truth: `app-206.js` + `styles-139.css` + `sw-168.js`; Worker source `cloudflare-worker.js` v1.4.27.
+Current source of truth: `app-207.js` + `styles-140.css` + `sw-169.js`; Worker source `cloudflare-worker.js` v1.4.27.
+
+v1.4.69 adds an always-visible Gemini request badge beside the Reader version control. It shows the rolling 24-hour request count and the next request drop-off time. The lightweight quota endpoint refreshes on app open, foreground return, generation status changes/completions, and every five minutes while Reader is visible.
 
 v1.4.68 changes the Gemini request meter from a Pacific-midnight day bucket to a rolling 24-hour Worker count. The panel now shows requests made in the previous 24 hours and, when available, the time the oldest counted request will drop out of the window. The Worker keeps `used_today` as a compatibility alias for older frontends.
 
