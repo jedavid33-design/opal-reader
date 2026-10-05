@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.19"; // v1.4.19: Gemini 429 quota failures are terminal, structured, and never auto-retried
+const APP_VERSION = "1.4.20"; // v1.4.20: Gemini 429 and 500 failures are single-shot Queue attempts; user decides when to retry
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -782,6 +782,13 @@ async function throwProviderError(response, provider) {
     error.noRetry = true;
     error.quotaExceeded = true;
   }
+  // Gemini 500 is a provider-side internal failure. Near the rolling daily
+  // request ceiling, automatic Queue retries can consume newly freed request
+  // slots without giving the user any control, so keep it single-shot.
+  if (provider === "gemini" && response.status === 500) {
+    error.noRetry = true;
+    error.providerInternal = true;
+  }
   throw error;
 }
 
@@ -1188,7 +1195,7 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       await saveGenerationStatus(env, status);
       throw error;
     }
-    if (error?.quotaExceeded) {
+    if (error?.quotaExceeded || error?.providerInternal) {
       const index = Number.isInteger(segmentIndex)
         ? segmentIndex
         : status.segments.findIndex((item) => item.state !== "ready");
@@ -1196,15 +1203,16 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
         status.segments[index] = {
           ...status.segments[index],
           state: "failed",
-          error: error.message || "Gemini quota reached.",
-          quota_exceeded: true,
+          error: error.message || (error?.quotaExceeded ? "Gemini quota reached." : "Gemini internal error."),
+          ...(error?.quotaExceeded ? { quota_exceeded: true } : { provider_internal: true }),
           model: payload.segments[index]?.model_id || null,
         };
       }
       status.state = "failed";
-      status.quota_exceeded = true;
       status.provider = "gemini";
-      status.error = `${error.message || "Gemini quota reached."} Reader stopped this Queue job without retrying it.`;
+      if (error?.quotaExceeded) status.quota_exceeded = true;
+      if (error?.providerInternal) status.provider_internal = true;
+      status.error = `${error.message || (error?.quotaExceeded ? "Gemini quota reached." : "Gemini internal error.")} Reader stopped this Queue job without retrying it.`;
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
       throw error;
