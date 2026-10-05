@@ -1208,10 +1208,18 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
   };
   await saveGenerationStatus(env, status);
   try {
-    const index = Number.isInteger(segmentIndex)
-        ? segmentIndex
-        : nextGenerationSegmentIndex(status.segments),
-      segment = payload.segments[index];
+    const requestedIndex = Number.isInteger(segmentIndex) ? segmentIndex : -1;
+    const index =
+      requestedIndex >= 0 && !generationSegmentTerminal(status.segments?.[requestedIndex])
+        ? requestedIndex
+        : nextGenerationSegmentIndex(status.segments);
+    if (index < 0) {
+      finishGenerationState(status);
+      status.updated_at = Date.now();
+      await saveGenerationStatus(env, status);
+      return status;
+    }
+    const segment = payload.segments[index];
     if (!segment) throw new Error("Generation segment was not found.");
     segment.queue_job_id = jobId;
     segment.retry_attempt = attempts;
