@@ -400,7 +400,33 @@ async function usageReport(env, url) {
     },
     { metered_cost: 0, legacy_estimated_cost: 0, unmetered_calls: 0, input_tokens: 0, output_tokens: 0 },
   );
-  return { events: events.length, summary, cost_summary };
+  const lastGeminiGenerationSuccess = events.reduce(
+    (latest, event) =>
+      event.provider === "gemini" &&
+      event.provider_call &&
+      event.request_status !== "failed" &&
+      event.usage_type === "book_generation"
+        ? Math.max(latest, Number(event.timestamp) || 0)
+        : latest,
+    0,
+  );
+  if (lastGeminiGenerationSuccess && env.OPALREADER_KV) {
+    try {
+      const saved = await env.OPALREADER_KV.get(geminiLastSuccessKey, "json");
+      if ((Number(saved?.timestamp) || 0) < lastGeminiGenerationSuccess) {
+        await env.OPALREADER_KV.put(
+          geminiLastSuccessKey,
+          JSON.stringify({ timestamp: lastGeminiGenerationSuccess, backfilled: true }),
+        );
+      }
+    } catch {}
+  }
+  return {
+    events: events.length,
+    summary,
+    cost_summary,
+    last_success_ms: lastGeminiGenerationSuccess || null,
+  };
 }
 async function libraryIndex(env) {
   return (await env.OPALREADER_KV.get("library:index", "json")) || [];
