@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.27"; // v1.4.27: track Gemini request usage in a rolling 24-hour window
+const APP_VERSION = "1.4.28"; // v1.4.28: persist the last successful Gemini book-generation timestamp
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -192,6 +192,26 @@ async function recordTtsUsage(env, body, details = {}) {
   }
 }
 const geminiQuotaPrefix = "quota:gemini:";
+const geminiLastSuccessKey = "quota:gemini:last-success";
+async function recordGeminiGenerationSuccess(env, body, model, providerRequestId) {
+  if (!env.OPALREADER_KV || body?.usage_type !== "book_generation") return;
+  try {
+    const timestamp = Date.now();
+    await env.OPALREADER_KV.put(
+      geminiLastSuccessKey,
+      JSON.stringify({
+        timestamp,
+        model: model || body?.model_id || null,
+        provider_request_id: providerRequestId || null,
+        book_id: body?.book_id || null,
+        chapter_index: Number.isInteger(body?.chapter_index) ? body.chapter_index : null,
+        segment_index: Number.isInteger(body?.segment_index) ? body.segment_index : null,
+      }),
+    );
+  } catch (error) {
+    console.warn("Gemini last-success write failed", error);
+  }
+}
 async function recordGeminiQuotaAttempt(env, model) {
   if (!env.OPALREADER_KV) return;
   try {
@@ -257,6 +277,7 @@ async function geminiQuotaReport(env) {
       window_ms: windowMs,
       window_start_ms: start,
       next_expiry_ms: null,
+      last_success_ms: null,
       resets_at_ms: null,
       reset_timezone: null,
       tracking_mode: "rolling_24h",
@@ -281,6 +302,10 @@ async function geminiQuotaReport(env) {
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
 
+  let lastSuccess = null;
+  try {
+    lastSuccess = await env.OPALREADER_KV.get(geminiLastSuccessKey, "json");
+  } catch {}
   const configured = Number(env.GEMINI_DAILY_REQUEST_LIMIT);
   return {
     used_24h: used,
@@ -290,6 +315,7 @@ async function geminiQuotaReport(env) {
     window_ms: windowMs,
     window_start_ms: start,
     next_expiry_ms: oldest == null ? null : oldest + windowMs,
+    last_success_ms: Number(lastSuccess?.timestamp) || null,
     resets_at_ms: null,
     reset_timezone: null,
     tracking_mode: "rolling_24h",
@@ -1103,6 +1129,8 @@ async function synthesizeAudio(env, provider, body) {
         throw error;
       }
     }
+    if (provider === "gemini")
+      await recordGeminiGenerationSuccess(env, body, actualModel, providerRequestId);
     await recordTtsUsage(env, body, {
       provider,
       provider_call: true,
