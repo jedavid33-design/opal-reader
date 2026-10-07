@@ -1,12 +1,13 @@
 # OpalReader Project Context
 
-Last updated: 2026-10-05
+Last updated: 2026-10-07
 
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-209.js (v1.4.71) / styles-140.css / sw-171.js.
+- Current frontend generation: app-210.js (v1.4.72) / styles-140.css / sw-172.js.
 - Current worker source: cloudflare-worker.js v1.4.27. Gemini token metering is live and was validated with a fresh call showing 424 input tokens + 1,916 output tokens, calculating to about $0.01937 and displaying as $0.02.
+- frontend v1.4.72 (2026-10-07): fixes Opal Shelf listening-session delivery to match Shelf’s idempotent session contract. New outbox items get a stable `client_session_id`; an item is no longer merge-extended after its first delivery attempt; flush removes only the item it actually sent so checkpoints queued during an in-flight request cannot be overwritten. Legacy keyless items that receive a 409 overlap are trimmed/split around the already-recorded interval when that can be determined safely, preserving unsent minutes. Manual **Send pending now** now reports the real Shelf error and gives re-link guidance on a deleted read-through instead of silently leaving the count unchanged. Frontend source is app-210.js / sw-172.js; no Reader Worker redeploy required.
 - frontend v1.4.71 (2026-10-07): restores continuous chapter playback for fully generated cloud-audio chapters so iOS can keep one media file active while the screen is locked instead of relying on suspended JavaScript to swap segment files. Partial chapters, stale audio, and device/system-voice fallback chapters remain on per-segment playback. The existing Worker chapter-composite endpoint is reused; if composition is unavailable or too large, Reader falls back to segmented playback. Frontend source is app-209.js / sw-171.js; no Worker redeploy required.
 - frontend v1.4.69 (2026-10-05): adds an always-visible compact Gemini rolling-request badge beside the version button. It shows count/limit plus the next request drop-off time, refreshes on app open and foreground return, after Queue generation state changes/completions, and every five minutes while visible. Detailed TTS report remains in Setup.
 - worker v1.4.27 (2026-10-05): changes the Gemini request tracker to a rolling 24-hour window. Each real Gemini provider attempt remains a counted event; cache hits and duplicate Queue deliveries that never call Gemini are excluded. The quota endpoint returns `used_24h`, a backward-compatible `used_today` alias, the rolling-window start, and the next request expiry time. Reader v1.4.68 labels this correctly as "last 24h" and shows when the oldest counted request will drop off.
