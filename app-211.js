@@ -364,12 +364,12 @@ function quotaMiniMarkup(){
   if(!a.apiBase)return"";
   const p=quotaMiniParts();
   const detail=`All Gemini API requests in the last 24 hours, including failed and blocked attempts: ${p.count}; next recorded request drops off ${p.nextText.replace(/^off /,"")}; most recent request ${p.lastText.replace(/^last /,"")}`;
-  return`<span id="quotaMini" class="quota-mini" role="status" aria-label="${detail}" title="All Gemini attempts, including errors · rolling 24h · Worker-tracked estimate">Gemini all ${p.count} · ${p.nextText} · ${p.lastText}</span>`;
+  return`<span id="quotaMini" class="quota-mini" role="status" aria-label="${detail}" title="All Gemini attempts, including errors · rolling 24h · Worker-tracked estimate">Gemini all/24h ${p.count} · ${p.nextText} · ${p.lastText}</span>`;
 }
 function updateQuotaMiniDom(){
   const el=document.querySelector("#quotaMini");if(!el)return;
   const p=quotaMiniParts();
-  el.textContent=`Gemini all ${p.count} · ${p.nextText} · ${p.lastText}`;
+  el.textContent=`Gemini all/24h ${p.count} · ${p.nextText} · ${p.lastText}`;
   el.setAttribute("aria-label",`All Gemini API requests in the last 24 hours, including failed and blocked attempts: ${p.count}; next recorded request drops off ${p.nextText.replace(/^off /,"")}; most recent request ${p.lastText.replace(/^last /,"")}`);
 }
 async function refreshQuotaBadge(){
