@@ -626,14 +626,14 @@ function quotaQueueFailure(status){
 function providerFailedQueueItem(status){return(status?.segments||[]).find(x=>x?.state==="provider_failed"||x?.provider_internal)||null}
 function rememberProviderFailure(seg,status,ch=null){
   const item=providerFailedQueueItem(status);if(!seg||!item)return!1;
-  seg.generationFailure={error:item.error||status?.error||"Gemini internal error.",kind:"provider_internal",jobId:status?.job_id||status?.jobId||null};
+  seg.generationFailure={error:item.error||status?.error||"Gemini internal error.",kind:"provider_internal",model:item.model||null,jobId:status?.job_id||status?.jobId||null};
   if(ch)recordGeminiFailure(ch,seg,{...seg.generationFailure},"provider_internal");
   delete seg.segmentGeneration;return!0;
 }
 function blockedQueueItem(status){return(status?.segments||[]).find(x=>x?.state==="blocked")||null}
 function rememberBlockedSegment(seg,status,ch=null){
   const item=blockedQueueItem(status);if(!seg||!item)return!1;
-  seg.generationBlocked={error:item.error||status?.error||"Gemini blocked this segment.",blockReason:item.block_reason||"PROHIBITED_CONTENT",finishReason:item.finish_reason||"UNKNOWN",jobId:status?.job_id||status?.jobId||null};
+  seg.generationBlocked={error:item.error||status?.error||"Gemini blocked this segment.",blockReason:item.block_reason||"PROHIBITED_CONTENT",finishReason:item.finish_reason||"UNKNOWN",model:item.model||null,jobId:status?.job_id||status?.jobId||null};
   if(ch)recordGeminiFailure(ch,seg,{...seg.generationBlocked},"policy_block");
   delete seg.segmentGeneration;return!0;
 }
