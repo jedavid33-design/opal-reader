@@ -5,7 +5,8 @@ Last updated: 2026-10-09
 ## Source of truth
 - Repository: jedavid33-design/opal-reader
 - Main branch is the source of truth.
-- Current frontend generation: app-220.js (v1.4.82) / styles-142.css / sw-182.js.
+- Current frontend generation: app-221.js (v1.4.83) / styles-143.css / sw-183.js.
+- Frontend v1.4.83 (2026-10-09): native system-voice picker for blocked passages or existing device-voice fallbacks in Review POV. Lists all voices actually exposed by current Safari Web Speech API, English-first, with neutral spoiler-free audition; remember male or female preset device-locally (localStorage), manually recall on future passages. Assigns only selected segment, preserves Gemini/other audio, skips unsupported voices, and adds Change system voice for assigned device-fallback segments. No Cloudflare Worker deployment required for this frontend change; pending Worker v1.4.32 deploy remains separate.
 - Worker source: cloudflare-worker.js v1.4.32, deployment REQUIRED to activate this fix.
 - v1.4.82 + Worker v1.4.32 (2026-10-09): Gemini 429 diagnosis now requires explicit per-day quota language/metric before scheduling midnight-Pacific reset +5 min; repeated generic 429s remain temporary (90 s, 4 min, 12 min, 30 min, then up to 60 min) instead of being mistaken for daily quota on the fourth try. Honors provider Retry-After and retains paced chapter requests and durable same-job retries. A status-poll migration reschedules old queued 'unknown_wait_until_reset' 429s to a 2-minute retry, with a persistent pending flag for safe recovery; confirmed daily-limit waits are not shortened. Poll watchdog now respects active cooldown, avoiding duplicate early queue sends. Chapters and Review POV show 'Paused for Gemini quota' plus retry time and temporary-vs-daily reason instead of the misleading 'Chapter working…'. Completed audio and existing 400 auto-splitting remain unchanged. Requires Cloudflare Worker v1.4.32 deploy + Reader refresh.
 
