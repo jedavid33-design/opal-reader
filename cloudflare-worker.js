@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.31"; // Gemini queue pacing and persisted adaptive HTTP 429 cooldowns
+const APP_VERSION = "1.4.32"; // separate confirmed daily vs transient Gemini 429; no false overnight wait
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1274,22 +1274,66 @@ function gemini429Cooldown(error, attempt, now = Date.now()) {
   const detail = typeof error?.details === "string" ? error.details :
     JSON.stringify(error?.details || {});
   const message = (String(error?.message || "") + " " + detail).slice(0,4000);
-  const daily = /per.?day|requests?.?per.?day|(?:\bRPD\b)|daily|generate_requests_per_day|GenerateRequestsPerDayPerProjectPerModel/i.test(message);
+  // The word "daily" by itself does not prove a Gemini RPD exhaustion.
+  // Require an explicit requests-per-day quota metric or clear daily quota text.
+  const confirmedDaily =
+    /GenerateRequestsPerDayPerProjectPerModel|generate_requests_per_day|\bRPD\b|requests?[\s_-]*(?:per|\/)[\s_-]*day|\bper[\s_-]*day\b|\bdaily\s+(?:request\s+)?(?:quota|limit)\b|\b(?:quota|limit)\s+(?:is\s+)?daily\b/i.test(message);
   const retrySeconds = Number(error?.retryAfterSeconds) || 0;
-  const fallback = [90, 240, 720][Math.min(Math.max(attempt - 1, 0), 2)];
+  // Generic 429s remain temporary even after repeated failures. Cap probes to
+  // once per hour rather than interpreting the fourth 429 as a daily limit.
+  const fallback = [90, 240, 720, 1800, 3600][Math.min(Math.max(attempt - 1, 0), 4)];
   let until = now + Math.max(fallback, retrySeconds) * 1000;
-  let scope = "temporary";
-  // Repeated generic 429s may actually indicate a daily quota; don't
-  // hammer the API every few minutes for the remainder of that quota day.
-  if (daily || attempt >= 4) {
+  if (confirmedDaily)
     until = Math.max(until, geminiPacificDayBounds(now).end + 5 * 60 * 1000);
-    scope = daily ? "daily" : "unknown_wait_until_reset";
-  }
-  return { retryAt: until, scope, delaySeconds: Math.max(1, Math.ceil((until-now)/1000)) };
+  return {
+    retryAt: until, scope: confirmedDaily ? "daily" : "temporary",
+    delaySeconds: Math.max(1, Math.ceil((until-now)/1000)),
+  };
 }
 function generationDelaySeconds(status, now = Date.now()) {
   return status?.next_retry_at > now ?
     Math.min(MAX_QUEUE_DELAY_SECONDS, Math.max(1, Math.ceil((status.next_retry_at-now)/1000))) : 0;
+}
+// v1.4.32: v1.4.31 mistook a fourth generic 429 for a daily reset.
+// Migrate only that specific legacy scope when an existing job is polled.
+// An explicitly detected daily quota retains its original Pacific reset.
+async function shortenLegacyGeneric429(env, jobId, original) {
+  const legacy = original?.state === "queued" &&
+    original?.cooldown_scope === "unknown_wait_until_reset";
+  if ((!legacy && !original?.cooldown_migration_pending) ||
+      !env.OPALREADER_GENERATION) return original;
+  if (!(await acquireProcessingLease(env, jobId, "quota-migrate")))
+    return original;
+  try {
+    let status = await readGenerationStatus(env, jobId) || original;
+    const isLegacy = status.state === "queued" &&
+      status.cooldown_scope === "unknown_wait_until_reset";
+    if (isLegacy) {
+      const soon = Date.now() + 120 * 1000;
+      status = {
+        ...status, cooldown_scope: "temporary",
+        next_retry_at: Math.min(Number(status.next_retry_at) || soon, soon),
+        cooldown_migration_pending: true,
+        error: "Gemini temporary 429: shorter retry scheduled. Completed audio is preserved.",
+        updated_at: Date.now(),
+      };
+      await saveGenerationStatus(env, status);
+    }
+    if (status.cooldown_migration_pending && status.state === "queued") {
+      const next = nextGenerationSegmentIndex(status.segments);
+      if (next >= 0) {
+        await env.OPALREADER_GENERATION.send(
+          {job_id: jobId, segment_index: next},
+          {delaySeconds: Math.max(1, generationDelaySeconds(status))},
+        );
+      }
+      status = {...status, cooldown_migration_pending: false, updated_at: Date.now()};
+      await saveGenerationStatus(env, status);
+    }
+    return status;
+  } finally {
+    await releaseProcessingLease(env, jobId, "quota-migrate");
+  }
 }
 async function processGenerationJobLocked(
   env,
@@ -2011,6 +2055,7 @@ export default {
         if (!status)
           return json({ error: "Generation job not found." }, 404, origin, env);
         if (status.state !== "ready") {
+          status = await shortenLegacyGeneric429(env, jobId, status);
           const payload = await readGenerationPayload(env, jobId);
           if (payload) {
             const ready = await Promise.all(
@@ -2033,6 +2078,7 @@ export default {
               await saveGenerationStatus(env, status);
             } else if (
               ["queued", "generating"].includes(status.state) &&
+              !generationDelaySeconds(status) &&
               Number(status.updated_at) > 0 &&
               Date.now() - Number(status.updated_at) > 5 * 60 * 1000
             ) {
