@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.32"; // separate confirmed daily vs transient Gemini 429; no false overnight wait
+const APP_VERSION = "1.4.33"; // strip WAV metadata from continuous chapter stitch points
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -539,6 +539,66 @@ function pcmToWav(pcmBytes, { sampleRate = 24000, channels = 1, bitsPerSample = 
   out.set(pcm, 44);
   return out;
 }
+
+/**
+ * Extract only the audio payload from a RIFF/WAVE file.
+ * Gemini WAV output can contain C2PA and other metadata chunks AFTER "data".
+ * Stripping 44 bytes and joining everything else accidentally plays that
+ * metadata as ~126 ms of harsh static at each chapter stitch point.
+ */
+function extractWavPcm(input) {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const invalid = (reason) => {
+    const error = new Error(`Cannot combine WAV segments: ${reason}. Playing individually instead.`);
+    error.status = 422;
+    throw error;
+  };
+  if (bytes.length < 44) invalid("incomplete WAV header");
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tag = (at) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  if (tag(0) !== "RIFF" || tag(8) !== "WAVE") invalid("not a RIFF/WAVE file");
+  const riffEnd = 8 + dv.getUint32(4, true);
+  if (riffEnd > bytes.length || riffEnd < 44) invalid("truncated RIFF data");
+  let format = null;
+  let pcm = null;
+  for (let at = 12; at + 8 <= riffEnd;) {
+    const type = tag(at);
+    const length = dv.getUint32(at + 4, true);
+    const start = at + 8;
+    const end = start + length;
+    if (end > riffEnd || end > bytes.length) invalid("invalid WAV chunk size");
+    if (type === "fmt ") {
+      if (length < 16) invalid("incomplete audio format");
+      format = {
+        encoding: dv.getUint16(start, true),
+        channels: dv.getUint16(start + 2, true),
+        sampleRate: dv.getUint32(start + 4, true),
+        byteRate: dv.getUint32(start + 8, true),
+        blockAlign: dv.getUint16(start + 12, true),
+        bitsPerSample: dv.getUint16(start + 14, true),
+      };
+    } else if (type === "data" && pcm === null) {
+      pcm = bytes.subarray(start, end);
+    }
+    at = end + (length & 1); // RIFF chunks are padded to an even byte boundary.
+  }
+  if (!format || !pcm || !pcm.length) invalid("missing audio data");
+  if (format.encoding !== 1 || format.bitsPerSample !== 16 ||
+      !format.channels || !format.sampleRate ||
+      format.blockAlign !== format.channels * 2 ||
+      format.byteRate !== format.sampleRate * format.blockAlign ||
+      pcm.byteLength % format.blockAlign !== 0)
+    invalid("unsupported or inconsistent PCM format");
+  return {
+    pcm,
+    format: {
+      sampleRate: format.sampleRate,
+      channels: format.channels,
+      bitsPerSample: format.bitsPerSample,
+    },
+  };
+}
+
 // Cloudflare's R2/KV bindings occasionally throw transient internal errors
 // ("We encountered an internal error. Please try again. (10001)"). Those are
 // explicitly retryable: the request is well-formed and succeeds a moment later.
@@ -732,16 +792,21 @@ async function chapterCompositeAudio(env, audioKeys, cacheKey) {
   if (format === "wav") {
     const pcmChunks = [];
     let total = 0;
+    let commonFormat = null;
     for (const { object } of parts) {
-      const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
-      if (bytes.byteLength < 44) {
-        const error = new Error("A chapter audio segment is not valid WAV audio.");
+      const wav = extractWavPcm(new Uint8Array(await new Response(object.body).arrayBuffer()));
+      if (commonFormat && (
+        wav.format.sampleRate !== commonFormat.sampleRate ||
+        wav.format.channels !== commonFormat.channels ||
+        wav.format.bitsPerSample !== commonFormat.bitsPerSample
+      )) {
+        const error = new Error("Chapter WAV segments have incompatible audio formats. Playing individually instead.");
         error.status = 422;
         throw error;
       }
-      const pcm = bytes.slice(44);
-      pcmChunks.push(pcm);
-      total += pcm.byteLength;
+      commonFormat ||= wav.format;
+      pcmChunks.push(wav.pcm);
+      total += wav.pcm.byteLength;
     }
     const pcmAll = new Uint8Array(total);
     let offset = 0;
@@ -749,7 +814,7 @@ async function chapterCompositeAudio(env, audioKeys, cacheKey) {
       pcmAll.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    combined = pcmToWav(pcmAll.buffer);
+    combined = pcmToWav(pcmAll, commonFormat);
   } else {
     const chunks = [];
     let total = 0;
@@ -772,7 +837,7 @@ async function chapterCompositeAudio(env, audioKeys, cacheKey) {
 }
 
 async function compositeCacheKey(bookId, chapterIndex, audioKeys) {
-  const value = `${bookId}|${chapterIndex}|${audioKeys.join("|")}`;
+  const value = `wav-data-chunks-v2|${bookId}|${chapterIndex}|${audioKeys.join("|")}`;
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
