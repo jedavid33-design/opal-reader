@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.30"; // Pacific-day and rolling 24-hour Gemini counters
+const APP_VERSION = "1.4.31"; // Gemini queue pacing and persisted adaptive HTTP 429 cooldowns
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -854,6 +854,14 @@ async function throwProviderError(response, provider) {
   if (provider === "gemini" && response.status === 429) {
     error.noRetry = true;
     error.quotaExceeded = true;
+    const retryAfter = response.headers.get("Retry-After");
+    if (retryAfter) {
+      const asSeconds = Number(retryAfter);
+      const parsed = Number.isFinite(asSeconds) ? asSeconds :
+        (Date.parse(retryAfter) - Date.now()) / 1000;
+      if (Number.isFinite(parsed) && parsed > 0)
+        error.retryAfterSeconds = Math.min(86400, Math.ceil(parsed));
+    }
   }
   // Gemini 500 is a provider-side internal failure. Near the rolling daily
   // request ceiling, automatic Queue retries can consume newly freed request
@@ -1254,6 +1262,35 @@ function finishGenerationState(status) {
   return status;
 }
 
+// Pace successful/blocked Gemini chapter segments without slowing other providers.
+// Delays are durable Cloudflare Queue delivery delays, not in-request sleeps.
+const GEMINI_SEGMENT_PACE_SECONDS = 12;
+const MAX_QUEUE_DELAY_SECONDS = 12 * 60 * 60;
+function chapterNextPace(payload, index) {
+  return index >= 0 && payload.segments?.[index]?.provider === "gemini"
+    ? GEMINI_SEGMENT_PACE_SECONDS : 0;
+}
+function gemini429Cooldown(error, attempt, now = Date.now()) {
+  const detail = typeof error?.details === "string" ? error.details :
+    JSON.stringify(error?.details || {});
+  const message = (String(error?.message || "") + " " + detail).slice(0,4000);
+  const daily = /per.?day|requests?.?per.?day|(?:\bRPD\b)|daily|generate_requests_per_day|GenerateRequestsPerDayPerProjectPerModel/i.test(message);
+  const retrySeconds = Number(error?.retryAfterSeconds) || 0;
+  const fallback = [90, 240, 720][Math.min(Math.max(attempt - 1, 0), 2)];
+  let until = now + Math.max(fallback, retrySeconds) * 1000;
+  let scope = "temporary";
+  // Repeated generic 429s may actually indicate a daily quota; don't
+  // hammer the API every few minutes for the remainder of that quota day.
+  if (daily || attempt >= 4) {
+    until = Math.max(until, geminiPacificDayBounds(now).end + 5 * 60 * 1000);
+    scope = daily ? "daily" : "unknown_wait_until_reset";
+  }
+  return { retryAt: until, scope, delaySeconds: Math.max(1, Math.ceil((until-now)/1000)) };
+}
+function generationDelaySeconds(status, now = Date.now()) {
+  return status?.next_retry_at > now ?
+    Math.min(MAX_QUEUE_DELAY_SECONDS, Math.max(1, Math.ceil((status.next_retry_at-now)/1000))) : 0;
+}
 async function processGenerationJobLocked(
   env,
   jobId,
@@ -1263,6 +1300,12 @@ async function processGenerationJobLocked(
 ) {
   let status = (await readGenerationStatus(env, jobId)) || payload.status;
   if (status?.state === "ready") return { status, next: -1 };
+  // A duplicate, early delivery must never bypass a saved cooldown or
+  // between-segment pace window. Long waits chain Queue delays up to 12h.
+  if (status?.state === "queued" && generationDelaySeconds(status)) {
+    return {status, next: nextGenerationSegmentIndex(status.segments),
+      delaySeconds: generationDelaySeconds(status)};
+  }
 
   let activeIndex = -1;
   try {
@@ -1285,6 +1328,7 @@ async function processGenerationJobLocked(
       state: "generating",
       attempts,
       error: null,
+      next_retry_at: null,
       updated_at: Date.now(),
       segments: (status.segments || []).map((item, index) =>
         index === activeIndex ? { ...item, state: "generating" } : item,
@@ -1337,6 +1381,11 @@ async function processGenerationJobLocked(
       status.state = "queued";
       status.error = null;
     }
+    status.next_retry_at = next >= 0 ? Date.now() + chapterNextPace(payload,next)*1000 : null;
+    status.cooldown_reason = null;
+    status.cooldown_scope = null;
+    status.quota_exceeded = false;
+    status.quota_cooldown_count = 0;
     status.updated_at = Date.now();
     await saveGenerationStatus(env, status);
     return { status, next };
@@ -1375,6 +1424,7 @@ async function processGenerationJobLocked(
           next < 0
             ? `${status.blocked} segment${status.blocked === 1 ? "" : "s"} blocked by Gemini; all other segments finished.`
             : null;
+        status.next_retry_at = next >= 0 ? Date.now() + chapterNextPace(payload,next)*1000 : null;
         status.updated_at = Date.now();
         await saveGenerationStatus(env, status);
         return { status, next };
@@ -1387,54 +1437,59 @@ async function processGenerationJobLocked(
       throw error;
     }
 
-    if (error?.quotaExceeded || error?.providerInternal) {
+    if (error?.quotaExceeded) {
+      const count = (Number(status.quota_cooldown_count) || 0) + 1;
+      const cooldown = gemini429Cooldown(error, count);
       if (index >= 0 && status.segments[index]) {
         status.segments[index] = {
-          ...status.segments[index],
-          state: error?.providerInternal ? "provider_failed" : "failed",
-          error:
-            error.message ||
-            (error?.quotaExceeded
-              ? "Gemini quota reached."
-              : "Gemini internal error."),
-          ...(error?.quotaExceeded
-            ? { quota_exceeded: true }
-            : { provider_internal: true }),
-          model: payload.segments[index]?.model_id || null,
+          ...status.segments[index], state: "queued", error: null,
+          quota_exceeded: false, model: segment?.model_id || null,
+        };
+      }
+      status.state = "queued";
+      status.quota_exceeded = true;
+      status.quota_cooldown_count = count;
+      status.cooldown_reason = "quota";
+      status.cooldown_scope = cooldown.scope;
+      status.next_retry_at = cooldown.retryAt;
+      status.error = "Gemini 429: chapter paused until " +
+        new Date(cooldown.retryAt).toISOString() +
+        ". Completed segments are saved; remaining work resumes automatically.";
+      status.updated_at = Date.now();
+      await saveGenerationStatus(env, status);
+      return {status, next: index, delaySeconds: cooldown.delaySeconds};
+    }
+
+    if (error?.providerInternal) {
+      if (index >= 0 && status.segments[index]) {
+        status.segments[index] = {
+          ...status.segments[index], state: "provider_failed",
+          error: error.message || "Gemini internal error.",
+          provider_internal: true, model: segment?.model_id || null,
         };
       }
       status.provider = "gemini";
-      if (error?.quotaExceeded) {
-        status.state = "failed";
-        status.quota_exceeded = true;
-        status.error = `${error.message || "Gemini quota reached."} Reader stopped this Queue job without retrying it.`;
-        status.updated_at = Date.now();
-        await saveGenerationStatus(env, status);
-        throw error;
-      }
-
       status.provider_internal = true;
       status.provider_failed = status.segments.filter(
-        (item) => item.state === "provider_failed",
+        item => item.state === "provider_failed",
       ).length;
       status.completed = status.segments.filter(
-        (item) => item.state === "ready",
+        item => item.state === "ready",
       ).length;
-
       if (payload.segments.length > 1) {
         const next = nextGenerationSegmentIndex(status.segments);
         status.state = next < 0 ? "partial" : "queued";
-        status.error =
-          next < 0
-            ? `${status.provider_failed} segment${status.provider_failed === 1 ? "" : "s"} hit a Gemini provider error; all other segments finished.`
-            : null;
+        status.error = next < 0
+          ? status.provider_failed + " segment(s) hit a Gemini provider error; all other segments finished."
+          : null;
+        status.next_retry_at = next >= 0 ? Date.now() + chapterNextPace(payload,next)*1000 : null;
         status.updated_at = Date.now();
         await saveGenerationStatus(env, status);
-        return { status, next };
+        return {status,next};
       }
-
       status.state = "failed";
-      status.error = `${error.message || "Gemini internal error."} Reader stopped this one-segment job without retrying it.`;
+      status.error = (error.message || "Gemini internal error.") +
+        " Reader stopped this one-segment job without retrying it.";
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
       throw error;
@@ -1476,11 +1531,15 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
     await releaseProcessingLease(env, jobId, "job");
   }
 
-  if (outcome?.next >= 0)
-    await env.OPALREADER_GENERATION.send({
-      job_id: jobId,
-      segment_index: outcome.next,
-    });
+  if (outcome?.next >= 0) {
+    const delay = Math.max(Number(outcome.delaySeconds)||0,
+      generationDelaySeconds(outcome.status));
+    const seconds = Math.min(MAX_QUEUE_DELAY_SECONDS, Math.max(0, Math.ceil(delay)));
+    await env.OPALREADER_GENERATION.send(
+      {job_id: jobId, segment_index: outcome.next},
+      seconds ? {delaySeconds: seconds} : undefined,
+    );
+  }
   return outcome?.status || payload.status;
 }
 
@@ -1882,6 +1941,7 @@ export default {
           // status forever. Tapping Generate is the recovery path.
           const stale =
             existing.state !== "ready" &&
+            !generationDelaySeconds(existing) &&
             Number(existing.updated_at) > 0 &&
             Date.now() - Number(existing.updated_at) > 5 * 60 * 1000;
           if (stale && (await readGenerationPayload(env, payload.job_id))) {
