@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.29"; // v1.4.29: show all recent Gemini attempts and the actual last attempt time
+const APP_VERSION = "1.4.30"; // Pacific-day and rolling 24-hour Gemini counters
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -266,65 +266,48 @@ function geminiPacificDayBounds(now = Date.now()) {
   return { start, end };
 }
 async function geminiQuotaReport(env) {
-  const now = Date.now();
-  const windowMs = 24 * 60 * 60 * 1000;
-  const start = now - windowMs;
-  if (!env.OPALREADER_KV)
-    return {
-      used_24h: null,
-      used_today: null,
-      tracking_available: false,
-      last_request_ms: null,
-      limit: null,
-      window_ms: windowMs,
-      window_start_ms: start,
-      next_expiry_ms: null,
-      last_success_ms: null,
-      resets_at_ms: null,
-      reset_timezone: null,
-      tracking_mode: "rolling_24h",
-      approximate: true,
-    };
-
-  let cursor, used = 0, oldest = null, newest = null;
+  const now = Date.now(), windowMs = 24 * 60 * 60 * 1000;
+  const rollingStart = now - windowMs, day = geminiPacificDayBounds(now);
+  if (!env.OPALREADER_KV) return {
+    used_24h:null, used_today:null, used_calendar_day:null, tracking_available:false,
+    last_request_ms:null, limit:null, window_ms:windowMs,
+    window_start_ms:rollingStart, day_start_ms:day.start,
+    next_expiry_ms:null, last_success_ms:null,
+    resets_at_ms:day.end, reset_timezone:"America/Los_Angeles",
+    tracking_mode:"pacific_day_and_rolling_24h", approximate:true,
+  };
+  // A DST fall-back Pacific day can span 25 hours.
+  const scanStart = Math.min(rollingStart, day.start);
+  let cursor, used24h=0, usedToday=0, oldest24h=null, newest=null;
   do {
     const page = await env.OPALREADER_KV.list({
-      prefix: geminiQuotaPrefix,
-      cursor,
-      limit: 1000,
+      prefix:geminiQuotaPrefix, cursor, limit:1000,
     });
     for (const item of page.keys || []) {
-      const m = /^quota:gemini:(\d{13}):/.exec(item.name || "");
-      const ts = m ? Number(m[1]) : 0;
-      if (ts >= start && ts <= now) {
-        used += 1;
-        if (oldest == null || ts < oldest) oldest = ts;
-        if (newest == null || ts > newest) newest = ts;
+      const match = /^quota:gemini:(\d{13}):/.exec(item.name||"");
+      const ts = match ? Number(match[1]) : 0;
+      if (ts < scanStart || ts > now) continue;
+      if (newest == null || ts > newest) newest=ts;
+      if (ts >= rollingStart) {
+        used24h++;
+        if(oldest24h == null || ts < oldest24h) oldest24h=ts;
       }
+      if(ts >= day.start && ts < day.end) usedToday++;
     }
     cursor = page.list_complete ? undefined : page.cursor;
-  } while (cursor);
-
+  } while(cursor);
   let lastSuccess = null;
-  try {
-    lastSuccess = await env.OPALREADER_KV.get(geminiLastSuccessKey, "json");
-  } catch {}
+  try {lastSuccess = await env.OPALREADER_KV.get(geminiLastSuccessKey, "json");} catch {}
   const configured = Number(env.GEMINI_DAILY_REQUEST_LIMIT);
   return {
-    used_24h: used,
-    // Backward-compatible alias for older Reader frontends.
-    used_today: used,
-    tracking_available: true,
-    last_request_ms: newest,
-    limit: Number.isFinite(configured) && configured > 0 ? configured : null,
-    window_ms: windowMs,
-    window_start_ms: start,
-    next_expiry_ms: oldest == null ? null : oldest + windowMs,
-    last_success_ms: Number(lastSuccess?.timestamp) || null,
-    resets_at_ms: null,
-    reset_timezone: null,
-    tracking_mode: "rolling_24h",
-    approximate: true,
+    used_24h:used24h, used_today:usedToday, used_calendar_day:usedToday,
+    tracking_available:true, last_request_ms:newest,
+    limit:Number.isFinite(configured)&&configured>0?configured:null,
+    window_ms:windowMs, window_start_ms:rollingStart, day_start_ms:day.start,
+    next_expiry_ms:oldest24h==null?null:oldest24h+windowMs,
+    last_success_ms:Number(lastSuccess?.timestamp)||null,
+    resets_at_ms:day.end, reset_timezone:"America/Los_Angeles",
+    tracking_mode:"pacific_day_and_rolling_24h", approximate:true,
   };
 }
 async function usageReport(env, url) {
