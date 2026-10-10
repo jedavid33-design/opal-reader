@@ -1187,6 +1187,22 @@ function continuousRunEnd(ch,start){
   }
   return end;
 }
+// If a saved composite has to fall back to individual audio, translate the
+// composite clock to an exact segment/position first. Never seek 3 minutes
+// into a 25-second audio segment.
+async function individualFromCompositeTime(chapterIndex,start,end,time){
+  const t=Math.max(0,Number(time)||0);
+  if(!(t>0)||end<=start+1)return {segment:start,position:t};
+  let remaining=t,last=start;
+  for(let i=start;i<end;i++){
+    const seconds=await sectionDuration(chapterIndex,i);
+    if(!(seconds>0)||!Number.isFinite(seconds))return {segment:start,position:0};
+    last=i;
+    if(remaining<seconds-.05)return {segment:i,position:remaining};
+    remaining-=seconds;
+  }
+  return {segment:last,position:Math.max(0,(await sectionDuration(chapterIndex,last))-.25)};
+}
 async function playContinuousFrom(chapterIndex,segmentIndex,position=0,{fastStart=false,preferredEnd=null}={}){
   const ch=a.book?.chapters?.[chapterIndex],seg=ch?.segments?.[segmentIndex];
   if(!seg)return;
@@ -1207,9 +1223,11 @@ async function playContinuousFrom(chapterIndex,segmentIndex,position=0,{fastStar
       const ok=await playChapterComposite(chapterIndex,segmentIndex,position,end,first.blob);
       if(ok)return ok;
     }
-    // Start speech from the already cached individual segment immediately.
-    await Ot(chapterIndex,segmentIndex,position);
-    if(first.slow){
+    // The saved position is relative to the whole group. Map it to its
+    // constituent segment before falling back or it may jump minutes ahead.
+    const fallback=await individualFromCompositeTime(chapterIndex,segmentIndex,end,position);
+    await Ot(chapterIndex,fallback.segment,fallback.position);
+    if(first.slow&&fallback.segment===segmentIndex){
       const playingSrc=ee.src,bookId=a.book?.id;
       const localCompositeSignatureForWarmup=localCompositeSignature(chapterIndex,segmentIndex,end);
       pending.then(blob=>{
@@ -1239,7 +1257,8 @@ async function playContinuousFrom(chapterIndex,segmentIndex,position=0,{fastStar
     // 413 (too large), mixed codec, transient failures: use a smaller group.
     end=segmentIndex+Math.floor((end-segmentIndex)/2);
   }
-  return Ot(chapterIndex,segmentIndex,position);
+  const fallback=await individualFromCompositeTime(chapterIndex,segmentIndex,continuousRunEnd(ch,segmentIndex),position);
+  return Ot(chapterIndex,fallback.segment,fallback.position);
 }
 async function Me(e){
   const ch=a.book.chapters[e],resume=nr(a.book,e);
