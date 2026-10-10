@@ -1053,10 +1053,16 @@ async function playChapterComposite(e,startSegment=0,r=0,endSegment=null){
   return!0
 }
 function continuousRunEnd(ch,start){
-  let end=Math.max(0,start);
+  let end=Math.max(0,start),chars=0;
+  // Bound requests proactively, not just after a Worker 413 response.
+  // ~14k narration characters generally stays comfortably below the 64 MB
+  // PCM composite cap; the Worker still enforces exact audio-byte limits.
   while(end<(ch?.segments?.length||0)){
     const seg=ch.segments[end];
     if(!seg?.audioKey||seg?.audioStale||seg?.systemVoiceFallback)break;
+    const next=String(seg.speechText||seg.text||"").length;
+    if(end>start&&(chars+next>14000||end-start>=16))break;
+    chars+=next;
     end++;
   }
   return end;
