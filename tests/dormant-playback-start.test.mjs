@@ -9,7 +9,7 @@ const between=(start,end)=>{
  assert.ok(a>=0&&b>a,"Missing Reader function: "+start);
  return source.slice(a,b);
 };
-const fastStartFn=between("async function playContinuousFrom(","async function Me(");
+const fastStartFn=between("async function individualFromCompositeTime(","async function Me(");
 const mockBook=()=>({id:"book1",currentChapter:0,currentSegment:2,chapters:[
  {id:"chapter1",segments:[{}, {},{audioKey:"a"},{audioKey:"b"},{audioKey:"c"}]}
 ]});
