@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-const js=readFileSync(new URL("../app-225.js",import.meta.url),"utf8");
+const js=readFileSync(new URL("../app-226.js",import.meta.url),"utf8");
 const range=(from,to)=>{
  const a=js.indexOf(from),b=js.indexOf(to,a);
  assert.ok(a>=0&&b>a,"Missing playback function: "+from);
