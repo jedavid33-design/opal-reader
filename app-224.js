@@ -1105,20 +1105,15 @@ async function playContinuousFrom(chapterIndex,segmentIndex,position=0,{fastStar
   if(seg.systemVoiceFallback&&!seg.audioKey)return Ot(chapterIndex,segmentIndex,position);
   let end=continuousRunEnd(ch,segmentIndex);
   if(fastStart&&end-segmentIndex>1){
-    // A previously assembled chapter chunk starts instantly from local storage.
-    const signature=localCompositeSignature(chapterIndex,segmentIndex,end);
-    const cached=await recentComposite(signature);
-    if(cached){
-      const ok=await playChapterComposite(chapterIndex,segmentIndex,position,end,cached);
-      if(ok)return ok;
-    }
-    // Cold start: give the Worker a short head start, but never make Play
-    // wait through a 20-second request and several halving retries.
+    // Read the local composite just once. If it's absent, give the Worker
+    // a short head start, but don't make Play wait through repeated retries.
     const pending=getCompositeBlob(chapterIndex,segmentIndex,end);
+    let wakeTimer=null;
     const first=await Promise.race([
       pending.then(blob=>({blob}),error=>({error})),
-      new Promise(resolve=>setTimeout(()=>resolve({slow:true}),1200))
+      new Promise(resolve=>{wakeTimer=setTimeout(()=>resolve({slow:true}),1200)})
     ]);
+    if(wakeTimer!==null)clearTimeout(wakeTimer);
     if(first.blob){
       const ok=await playChapterComposite(chapterIndex,segmentIndex,position,end,first.blob);
       if(ok)return ok;
