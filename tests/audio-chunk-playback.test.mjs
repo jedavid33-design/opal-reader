@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-const js=readFileSync(new URL("../app-224.js",import.meta.url),"utf8");
+const js=readFileSync(new URL("../app-225.js",import.meta.url),"utf8");
 const range=(from,to)=>{
  const a=js.indexOf(from),b=js.indexOf(to,a);
  assert.ok(a>=0&&b>a,"Missing playback function: "+from);
@@ -14,9 +14,9 @@ function player(book, combine){
  const calls=[];
  const a={book};
  const fn=new Function("context",
-   "const a=context.a, playChapterComposite=context.combine, Ot=context.single;\n"+
+   "const a=context.a, playChapterComposite=context.combine, Ot=context.single, sectionDuration=context.sectionDuration;\n"+
    chunkHelpers+"\nreturn {continuousRunEnd,playContinuousFrom};")({
-     a, combine:async(...args)=>{calls.push(["combine",args[1],args[3]]);return combine(...args)},
+     a,sectionDuration:async()=>25, combine:async(...args)=>{calls.push(["combine",args[1],args[3]]);return combine(...args)},
      single:async(...args)=>{calls.push(["single",args[1]]);return true},
    });
  return {...fn,calls};
