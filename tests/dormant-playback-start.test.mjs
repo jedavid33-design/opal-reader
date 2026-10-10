@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-const source=readFileSync(new URL("../app-225.js", import.meta.url),"utf8");
+const source=readFileSync(new URL("../app-226.js", import.meta.url),"utf8");
 const between=(start,end)=>{
  const a=source.indexOf(start),b=source.indexOf(end,a);
  assert.ok(a>=0&&b>a,"Missing Reader function: "+start);
@@ -15,8 +15,13 @@ const mockBook=()=>({id:"book1",currentChapter:0,currentSegment:2,chapters:[
 ]});
 function harness({cloud,visibility="visible"}={}){
  const calls=[],book=mockBook();
- const ee={src:"",paused:true,currentTime:3,duration:40,
-   _compositePlayback:false,_restoringPosition:false,_systemSpeechActive:false};
+ const mediaListeners=new Map();
+ const ee={src:"",paused:true,currentTime:3,duration:40,readyState:4,
+   _compositePlayback:false,_restoringPosition:false,_systemSpeechActive:false,
+   addEventListener:(event,handler)=>{if(!mediaListeners.has(event))mediaListeners.set(event,new Set());mediaListeners.get(event).add(handler);},
+   removeEventListener:(event,handler)=>mediaListeners.get(event)?.delete(handler),
+   emit:(event)=>{for(const handler of [...(mediaListeners.get(event)||[])])handler();}
+ };
  const ctx={
   a:{book},ee,document:{visibilityState:visibility},
   continuousRunEnd:()=>5,
@@ -34,7 +39,7 @@ function harness({cloud,visibility="visible"}={}){
  const start=new Function("ctx",
  "const {a,ee,document,continuousRunEnd,sectionDuration,localCompositeSignature,Ot,playChapterComposite,getCompositeBlob,dl,console}=ctx;\n"+
  fastStartFn+"\nreturn playContinuousFrom;")(ctx);
- return {start,calls,book,ee};
+ return {start,calls,book,ee,mediaListeners};
 }
 const delay=(ms)=>new Promise(resolve=>setTimeout(resolve,ms));
 
@@ -101,6 +106,37 @@ test("stale composite fallback resolves a saved group timestamp to the correct s
  const h=harness({cloud:async()=>{throw new Error("composite offline")}});
  await h.start(0,2,50,{fastStart:true});
  assert.deepEqual(h.calls,[["segment",0,4,0]]);
+});
+test("late composite response waits for iPhone metadata and actual playback before joining",async()=>{
+ let finish;const delayed=new Promise(resolve=>finish=resolve);
+ const h=harness({cloud:()=>delayed});
+ h.ee.readyState=0;
+ h.ee._restoringPosition=true;
+ await h.start(0,2,0,{fastStart:true});
+ h.ee.paused=true;
+ finish({size:4000});
+ await delay(12);
+ assert.equal(h.calls.length,1);
+ h.ee._restoringPosition=false;
+ h.ee.readyState=4;
+ h.ee.emit("loadedmetadata");
+ assert.equal(h.calls.length,1);
+ h.ee.paused=false;
+ h.ee.emit("playing");
+ await delay(2);
+ assert.equal(h.calls[1][0],"composite");
+ assert.equal(h.calls[1][2],2);
+ assert.equal(h.mediaListeners.get("playing").size,0);
+});
+test("warm composite response does not join after a genuine user pause",async()=>{
+ let finish;const delayed=new Promise(resolve=>finish=resolve);
+ const h=harness({cloud:()=>delayed});
+ await h.start(0,2,0,{fastStart:true});
+ h.ee.paused=true;h.ee.emit("pause");
+ finish({size:4000});
+ await delay(12);
+ h.ee.paused=false;h.ee.emit("playing");
+ assert.equal(h.calls.length,1);
 });
 test("failed composite download still starts locally",async()=>{
  const h=harness({cloud:async()=>{throw new Error("offline")}});
