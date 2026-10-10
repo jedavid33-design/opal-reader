@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-const source=readFileSync(new URL("../app-224.js", import.meta.url),"utf8");
+const source=readFileSync(new URL("../app-225.js", import.meta.url),"utf8");
 const between=(start,end)=>{
  const a=source.indexOf(start),b=source.indexOf(end,a);
  assert.ok(a>=0&&b>a,"Missing Reader function: "+start);
@@ -20,6 +20,7 @@ function harness({cloud,visibility="visible"}={}){
  const ctx={
   a:{book},ee,document:{visibilityState:visibility},
   continuousRunEnd:()=>5,
+  sectionDuration:async()=>25,
   localCompositeSignature:(chapter,start,end)=>[book.id,chapter,start,end,
    ...book.chapters[chapter].segments.slice(start,end).map(seg=>seg.audioKey||"")].join("|"),
   Ot:async(ch,seg,pos)=>{calls.push(["segment",ch,seg,pos]);ee.src="blob:segment";ee.paused=false;return true;},
@@ -31,7 +32,7 @@ function harness({cloud,visibility="visible"}={}){
   dl:()=>{},console:{warn:()=>{}}
  };
  const start=new Function("ctx",
- "const {a,ee,document,continuousRunEnd,localCompositeSignature,Ot,playChapterComposite,getCompositeBlob,dl,console}=ctx;\n"+
+ "const {a,ee,document,continuousRunEnd,sectionDuration,localCompositeSignature,Ot,playChapterComposite,getCompositeBlob,dl,console}=ctx;\n"+
  fastStartFn+"\nreturn playContinuousFrom;")(ctx);
  return {start,calls,book,ee};
 }
@@ -95,6 +96,11 @@ test("do not switch a paused or hidden app after remote completion",async()=>{
  finish({size:4000});
  await delay(10);
  assert.equal(h.calls.length,1);
+});
+test("stale composite fallback resolves a saved group timestamp to the correct segment",async()=>{
+ const h=harness({cloud:async()=>{throw new Error("composite offline")}});
+ await h.start(0,2,50,{fastStart:true});
+ assert.deepEqual(h.calls,[["segment",0,4,0]]);
 });
 test("failed composite download still starts locally",async()=>{
  const h=harness({cloud:async()=>{throw new Error("offline")}});
