@@ -20,6 +20,8 @@ function harness({cloud,visibility="visible"}={}){
  const ctx={
   a:{book},ee,document:{visibilityState:visibility},
   continuousRunEnd:()=>5,
+  localCompositeSignature:(chapter,start,end)=>[book.id,chapter,start,end,
+   ...book.chapters[chapter].segments.slice(start,end).map(seg=>seg.audioKey||"")].join("|"),
   Ot:async(ch,seg,pos)=>{calls.push(["segment",ch,seg,pos]);ee.src="blob:segment";ee.paused=false;return true;},
   playChapterComposite:async(ch,seg,pos,end,blob)=>{
     calls.push(["composite",ch,seg,pos,end,!!blob]);
@@ -29,7 +31,7 @@ function harness({cloud,visibility="visible"}={}){
   dl:()=>{},console:{warn:()=>{}}
  };
  const start=new Function("ctx",
- "const {a,ee,document,continuousRunEnd,Ot,playChapterComposite,getCompositeBlob,dl,console}=ctx;\n"+
+ "const {a,ee,document,continuousRunEnd,localCompositeSignature,Ot,playChapterComposite,getCompositeBlob,dl,console}=ctx;\n"+
  fastStartFn+"\nreturn playContinuousFrom;")(ctx);
  return {start,calls,book,ee};
 }
@@ -72,6 +74,24 @@ test("do not upgrade composite while app is backgrounded",async()=>{
  const h=harness({cloud:()=>delayed});
  await h.start(0,2,0,{fastStart:true});
  h.ee.src="blob:another-segment";
+ finish({size:4000});
+ await delay(10);
+ assert.equal(h.calls.length,1);
+});
+test("do not restart a changed narration segment after remote completion",async()=>{
+ let finish;const delayed=new Promise(resolve=>finish=resolve);
+ const h=harness({cloud:()=>delayed});
+ await h.start(0,2,0,{fastStart:true});
+ h.book.chapters[0].segments[2].audioKey="new-audio-key";
+ finish({size:4000});
+ await delay(10);
+ assert.equal(h.calls.length,1);
+});
+test("do not switch a paused or hidden app after remote completion",async()=>{
+ let finish;const delayed=new Promise(resolve=>finish=resolve);
+ const h=harness({cloud:()=>delayed});
+ await h.start(0,2,0,{fastStart:true});
+ h.ee.paused=true;
  finish({size:4000});
  await delay(10);
  assert.equal(h.calls.length,1);
