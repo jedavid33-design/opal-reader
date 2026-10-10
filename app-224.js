@@ -1026,9 +1026,13 @@ async function getCompositeBlob(chapterIndex,start,end){
   rememberComposite(signature,blob);
   return blob;
 }
-async function playChapterComposite(e,startSegment=0,r=0,endSegment=null,preloadedBlob=null){
+async function playChapterComposite(e,startSegment=0,r=0,endSegment=null,preloadedBlob=null,expectedSrc=null){
   dl("composite start ch="+e+" seg="+startSegment);
   await ut();
+  // The user may have paused or navigated while the fast-start upgrade
+  // awaited persistence. Do not replace a now-unrelated audio source.
+  if(expectedSrc&&(ee.src!==expectedSrc||ee.paused||
+    document.visibilityState!=="visible"))return null;
   const ch=a.book.chapters[e],start=Math.min(Math.max(0,Number(startSegment)||0),Math.max(0,ch.segments.length-1));
   const end=Math.min(ch.segments.length,endSegment==null?ch.segments.length:Math.max(start,Number(endSegment)||start));
   const ready=end-start>1&&ch.segments.slice(start,end).every(seg=>seg?.audioKey&&!seg?.audioStale&&!seg?.systemVoiceFallback);
@@ -1122,8 +1126,12 @@ async function playContinuousFrom(chapterIndex,segmentIndex,position=0,{fastStar
     await Ot(chapterIndex,segmentIndex,position);
     if(first.slow){
       const playingSrc=ee.src,bookId=a.book?.id;
+      const localCompositeSignatureForWarmup=localCompositeSignature(chapterIndex,segmentIndex,end);
       pending.then(blob=>{
-        if(!blob||!playingSrc||a.book?.id!==bookId||
+        if(!blob||!playingSrc||
+          localCompositeSignature(chapterIndex,segmentIndex,end)!==
+          localCompositeSignatureForWarmup||
+          a.book?.id!==bookId||
           a.book.currentChapter!==chapterIndex||
           a.book.currentSegment!==segmentIndex||
           ee.src!==playingSrc||ee._compositePlayback||
@@ -1131,7 +1139,7 @@ async function playContinuousFrom(chapterIndex,segmentIndex,position=0,{fastStar
           document.visibilityState!=="visible"||
           (Number.isFinite(ee.duration)&&ee.currentTime>=ee.duration-1))return;
         // Continue at the same elapsed time; never restart or overlay audio.
-        playChapterComposite(chapterIndex,segmentIndex,ee.currentTime,end,blob).catch(err=>
+        playChapterComposite(chapterIndex,segmentIndex,ee.currentTime,end,blob,playingSrc).catch(err=>
           console.warn("Continuous playback upgrade failed",err)
         );
       }).catch(err=>dl("Composite warm-up failed: "+(err?.message||err)));
