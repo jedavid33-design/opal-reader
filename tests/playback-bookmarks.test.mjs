@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const source=readFileSync(new URL("../app-225.js",import.meta.url),"utf8");
+const source=readFileSync(new URL("../app-226.js",import.meta.url),"utf8");
 const span=(a,b)=>{
   const start=source.indexOf(a),end=source.indexOf(b,start);
   assert.ok(start>=0&&end>start,"Missing Reader function: "+a);
