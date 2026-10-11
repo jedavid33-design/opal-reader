@@ -1,4 +1,7 @@
-# OpalReader v1.4.90
+# OpalReader v1.4.91
+
+**Accurate chapter labels:** Prologue and Epilogue now display by name and do not increment chapter numbering. The first regular chapter after a Prologue displays as Chapter 1; books without a Prologue still start at Chapter 1. Applies to Chapters, Library resume, playback/voice dialogs, regeneration confirmation, accessibility labels and Gemini failure diagnostics. This is a display-only frontend patch; existing imported EPUBs, indexed chapter positions, saved listening progress, and generated audio are not modified. Source `app-229.js` + `sw-191.js`; Worker deployment and book re-import are not required.
+
 
 **Scene-aware narration (frontend-only):** Newly imported EPUBs containing `data-opal-scene-break` illustrated dividers now preserve those breaks in the TTS segment timeline. Reader never narrates the artwork and inserts a 950 ms silent WAV between the two narrated scenes. Native HTMLAudio playback keeps the pause working under iOS screen lock; continuous R2 audio chunks stop at every scene boundary instead of stitching over it. The WAV clip is created locally, uses no cloud TTS requests, and plays at 1.0x regardless of audiobook playback speed. The chapter's POV voice is used for **all** messages, including text conversations; there is **no per-sender voice switching**. Existing imported books keep their original saved segments/audio; to gain scene markers, import the metadata-equipped EPUB as a new book. Worker v1.4.33 is unchanged and does not require redeployment.
 
