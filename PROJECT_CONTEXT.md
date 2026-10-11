@@ -1,4 +1,5 @@
 # OpalReader Project Context
+- **v1.4.90 (2026-10-11):** EPUB import identifies `[data-opal-scene-break]` elements as non-spoken scene boundaries, splits new narration segments there, and annotates the immediately following segment with `sceneBreakBefore`. The composite chunk builder never combines audio across the marker. Chapter playback inserts a local 950ms 16kHz mono PCM WAV silent clip, played at 1.0× through the existing HTMLAudioElement, before proceeding to the next generated narration segment; avoids background JavaScript timers when iOS locks. No Gemini credits or Worker redeployment. Source `app-228.js`, `sw-190.js`; update is new imports only. `data-opal-pov` remains the chapter narrator for every text bubble, with **no automatic text-message voice switching**. Existing generated audio remains untouched.
 
 Last updated: 2026-10-10
 
