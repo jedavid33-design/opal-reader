@@ -1,6 +1,8 @@
-# OpalReader v1.4.69
+# OpalReader v1.4.89
 
-Current source of truth: `app-207.js` + `styles-140.css` + `sw-169.js`; Worker source `cloudflare-worker.js` v1.4.27.
+Current source of truth: `app-227.js` + `styles-144.css` + `sw-189.js`; Worker source `cloudflare-worker.js` v1.4.33.
+
+v1.4.89 keeps playback responsive while another chapter generates. All playback transitions start audio promptly instead of waiting for an overloaded Worker to merge a full chapter chunk; an in-flight composite can upgrade the active segment when ready. Other-chapter generation caps continuous playback composites to four segments or approximately 5,000 narration characters to reduce R2 contention. The following composite chunk is prefetched as the current chunk or individual segment starts, overlapping duplicate composite requests are deduplicated, and the deferred upgrade window is 60 seconds. No TTS regeneration or Worker redeployment is required.
 
 v1.4.69 adds an always-visible Gemini request badge beside the Reader version control. It shows the rolling 24-hour request count and the next request drop-off time. The lightweight quota endpoint refreshes on app open, foreground return, generation status changes/completions, and every five minutes while Reader is visible.
 
