@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-const source=readFileSync(new URL("../app-226.js",import.meta.url),"utf8");
+const source=readFileSync(new URL("../app-227.js",import.meta.url),"utf8");
 const between=(start,end)=>{
   const from=source.indexOf(start),to=source.indexOf(end,from);
   assert.ok(from>=0&&to>from,"Missing joining function "+start);
