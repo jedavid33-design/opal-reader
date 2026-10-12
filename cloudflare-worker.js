@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.33"; // strip WAV metadata from continuous chapter stitch points
+const APP_VERSION = "1.4.34"; // recognize Gemini HTTP 400 sensitive-words policy blocks
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -943,7 +943,7 @@ async function throwProviderError(response, provider) {
   if (
     provider === "gemini" &&
     response.status === 400 &&
-    /request\s+blocked|blocked.{0,40}policy|policy\s+reason|modify\s+your\s+input/i.test(
+    /request\s+blocked|input\s+blocked|blocked.{0,40}policy|policy\s+reason|modify\s+your\s+input|prompt\s+contains\s+sensitive\s+words|generative\s+ai\s+prohibited\s+use\s+policy/i.test(
       providerSaid,
     )
   ) {
