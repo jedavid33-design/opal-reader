@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.34"; // recognize Gemini HTTP 400 sensitive-words policy blocks
+const APP_VERSION = "1.4.35"; // durable spoiler-free queue diagnostics
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1300,6 +1300,19 @@ async function readGenerationPayload(env, jobId) {
   return JSON.parse(await new Response(object.body).text());
 }
 
+// Bounded metadata-only queue trace; never store narration or request identifiers.
+function addGenerationTrace(status, event, segment, extra = {}) {
+  if (!status || typeof status !== "object") return;
+  const row = {at: Date.now(), event};
+  if (Number.isInteger(segment?.segment_index)) row.segment = segment.segment_index + 1;
+  if (extra.scope === "daily" || extra.scope === "temporary") row.scope = extra.scope;
+  if (Number.isFinite(extra.retry_at)) row.retry_at = extra.retry_at;
+  status.generation_trace = [
+    ...(Array.isArray(status.generation_trace) ? status.generation_trace : []).slice(-159),
+    row,
+  ];
+}
+
 const generationSegmentTerminal = (item) =>
   ["ready", "blocked", "provider_failed"].includes(item?.state) ||
   Boolean(item?.provider_internal);
@@ -1426,6 +1439,7 @@ async function processGenerationJobLocked(
         : nextGenerationSegmentIndex(status.segments);
 
     if (activeIndex < 0) {
+      addGenerationTrace(status, "queue_complete", null);
       finishGenerationState(status);
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
@@ -1443,12 +1457,13 @@ async function processGenerationJobLocked(
         index === activeIndex ? { ...item, state: "generating" } : item,
       ),
     };
-    await saveGenerationStatus(env, status);
 
     const segment = payload.segments[activeIndex];
     if (!segment) throw new Error("Generation segment was not found.");
     segment.queue_job_id = jobId;
     segment.retry_attempt = attempts;
+    addGenerationTrace(status, "selected", segment);
+    await saveGenerationStatus(env, status);
 
     let result = null;
     let cached = await hasCachedAudio(env, segment.cache_key);
@@ -1458,6 +1473,8 @@ async function processGenerationJobLocked(
       cached = await hasCachedAudio(env, segment.cache_key);
     }
     if (!cached) {
+      addGenerationTrace(status, "synthesis_started", segment);
+      await saveGenerationStatus(env, status);
       result = await synthesizeAudio(env, segment.provider, segment);
       if (result.cache === "MISS")
         status.generated_cost =
@@ -1474,6 +1491,8 @@ async function processGenerationJobLocked(
       });
     }
 
+    addGenerationTrace(status, cached || result?.cache === "HIT" ?
+      "reused_existing_audio" : "saved_new_audio", segment);
     status.segments[activeIndex] = {
       cache_key: segment.cache_key,
       state: "ready",
@@ -1509,6 +1528,7 @@ async function processGenerationJobLocked(
     const segment = index >= 0 ? payload.segments[index] : null;
 
     if (error?.contentBlocked) {
+      addGenerationTrace(status, "blocked_by_provider", segment);
       if (index >= 0 && segment) {
         status.segments[index] = {
           cache_key: segment.cache_key,
@@ -1561,6 +1581,8 @@ async function processGenerationJobLocked(
       status.cooldown_reason = "quota";
       status.cooldown_scope = cooldown.scope;
       status.next_retry_at = cooldown.retryAt;
+      addGenerationTrace(status, "quota_pause", segment,
+        {scope: cooldown.scope, retry_at: cooldown.retryAt});
       status.error = "Gemini 429: chapter paused until " +
         new Date(cooldown.retryAt).toISOString() +
         ". Completed segments are saved; remaining work resumes automatically.";
@@ -1570,6 +1592,7 @@ async function processGenerationJobLocked(
     }
 
     if (error?.providerInternal) {
+      addGenerationTrace(status, "provider_internal", segment);
       if (index >= 0 && status.segments[index]) {
         status.segments[index] = {
           ...status.segments[index], state: "provider_failed",
@@ -1605,6 +1628,7 @@ async function processGenerationJobLocked(
     }
 
     const retryable = attempts < 4 && !error?.noRetry;
+    addGenerationTrace(status, retryable ? "transient_error" : "terminal_error", segment);
     status.state = retryable ? "queued" : "failed";
     status.error = error.message || "Chapter generation failed.";
     status.updated_at = Date.now();
