@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.35"; // durable spoiler-free queue diagnostics
+const APP_VERSION = "1.4.36"; // reconcile queued generation with manually saved audio
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1313,6 +1313,27 @@ function addGenerationTrace(status, event, segment, extra = {}) {
   ];
 }
 
+// v1.4.36: A paused chapter job may hold the original deterministic
+// cache key while Review POV saved this same passage under a different key.
+// Only reuse an actual existing R2 audio object whose saved fingerprint
+// matches the queued passage. Never adopt a stale or different-voice take,
+// and never short-circuit an explicit force-fresh regeneration.
+async function previouslyGeneratedChapterAudio(env, payload, segment) {
+  if (!env.OPALREADER_KV ||
+      !validId(payload?.book_id) ||
+      !Number.isInteger(payload?.chapter_index) || payload.chapter_index < 0 ||
+      !Number.isInteger(segment?.segment_index) || segment.segment_index < 0 ||
+      !segment.fingerprint ||
+      segment.cache_key !== segment.fingerprint) return null;
+  const book = await env.OPALREADER_KV.get(`book:${payload.book_id}`, "json");
+  if (book?.id !== payload.book_id) return null;
+  const current = book?.chapters?.[payload.chapter_index]?.segments?.[segment.segment_index];
+  if (!current || current.audioStale || current.systemVoiceFallback ||
+      current.generationFingerprint !== segment.fingerprint ||
+      !validCacheKey(current.audioKey)) return null;
+  return (await hasCachedAudio(env, current.audioKey)) ? current.audioKey : null;
+}
+
 const generationSegmentTerminal = (item) =>
   ["ready", "blocked", "provider_failed"].includes(item?.state) ||
   Boolean(item?.provider_internal);
@@ -1472,6 +1493,17 @@ async function processGenerationJobLocked(
       // have finished the audio just before this job-level lease was acquired.
       cached = await hasCachedAudio(env, segment.cache_key);
     }
+    let reusedManual = false;
+    if (!cached) {
+      // Check the latest synced chapter only when this is a normal deterministic
+      // generation. A deliberate force-fresh key must always bypass this path.
+      const savedKey = await previouslyGeneratedChapterAudio(env, payload, segment);
+      if (savedKey) {
+        segment.cache_key = savedKey;
+        cached = true;
+        reusedManual = true;
+      }
+    }
     if (!cached) {
       addGenerationTrace(status, "synthesis_started", segment);
       await saveGenerationStatus(env, status);
@@ -1491,8 +1523,9 @@ async function processGenerationJobLocked(
       });
     }
 
-    addGenerationTrace(status, cached || result?.cache === "HIT" ?
-      "reused_existing_audio" : "saved_new_audio", segment);
+    addGenerationTrace(status, reusedManual ? "reused_manual_audio" :
+      cached || result?.cache === "HIT" ? "reused_existing_audio" :
+      "saved_new_audio", segment);
     status.segments[activeIndex] = {
       cache_key: segment.cache_key,
       state: "ready",
