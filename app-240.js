@@ -1140,7 +1140,7 @@ async function playSystemSegment(e,c,{userGesture=!1}={}){
   pe().catch(()=>{});
   setTimeout(()=>{if(systemSpeechUtterance!==u||finished||started)return;finished=!0;systemSpeechUtterance=null;ee._systemSpeechActive=!1;ee._systemSpeechPending=!0;try{window.speechSynthesis.cancel()}catch(_){};shelfListenStop();at(a.book,e,c,0);pe().catch(()=>{});se();It();updateMediaSession()},2500);
 }
-// v1.4.101: Missing segments share the chapter job's deterministic cache
+// v1.4.102: Missing segments share the chapter job's deterministic cache
 // key, so a paused Queue can reuse the audio without spending Gemini requests.
 // Explicit regenerations and stale audio still request a fresh take.
 function needsFreshManualTake(seg){return!!(seg?.audioKey||seg?.audioStale)}
