@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.36"; // reconcile queued generation with manually saved audio
+const APP_VERSION = "1.4.37"; // preserve sanitized Gemini 429 quota evidence
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1369,6 +1369,61 @@ function chapterNextPace(payload, index) {
   return index >= 0 && payload.segments?.[index]?.provider === "gemini"
     ? GEMINI_SEGMENT_PACE_SECONDS : 0;
 }
+function extractGeminiQuotaDiagnostics(error, segment, payload, cooldown) {
+  const raw = error?.details;
+  const root = raw && typeof raw === "object" ? (raw.error && typeof raw.error === "object" ? raw.error : raw) : {};
+  const detailRows = Array.isArray(root.details) ? root.details.slice(0, 20) : [];
+  const messages = [root.message, error?.message];
+  const metrics = new Set(), limits = new Set(), quotaIds = new Set();
+  const safeName = value => typeof value === "string" && /^[A-Za-z][A-Za-z0-9_.-]{2,100}$/.test(value) ? value : null;
+  const addMetric = value => {const safe=safeName(value);if(safe&&metrics.size<6)metrics.add(safe)};
+  const addQuotaId = value => {const safe=safeName(value);if(safe&&quotaIds.size<6)quotaIds.add(safe)};
+  const addLimit = value => {const n=Number(value);if(Number.isFinite(n)&&n>=0&&n<=1000000000&&limits.size<6)limits.add(n)};
+  let retryInfoSeconds = null;
+  for (const item of detailRows) {
+    if (!item || typeof item !== "object") continue;
+    addMetric(item.quota_metric || item.quotaMetric);
+    addQuotaId(item.quota_id || item.quotaId);
+    if (item.limit !== undefined) addLimit(item.limit);
+    if (item.metadata && typeof item.metadata === "object") {
+      addMetric(item.metadata.quota_metric || item.metadata.quotaMetric);
+      addQuotaId(item.metadata.quota_id || item.metadata.quotaId);
+      if (item.metadata.limit !== undefined) addLimit(item.metadata.limit);
+    }
+    if (Array.isArray(item.violations)) {
+      for (const violation of item.violations.slice(0, 10)) {
+        addMetric(violation?.quotaMetric || violation?.quota_metric);
+        addQuotaId(violation?.quotaId || violation?.quota_id);
+        messages.push(violation?.description);
+      }
+    }
+    if (retryInfoSeconds === null && typeof item.retryDelay === "string") {
+      const m = /^(\d+(?:\.\d+)?)(s|m|h)$/.exec(item.retryDelay.trim());
+      if (m) retryInfoSeconds = Math.min(86400, Math.ceil(Number(m[1]) * ({s:1,m:60,h:3600}[m[2]])));
+    }
+  }
+  for (const message of messages.filter(v=>typeof v==="string")) {
+    for (const match of message.matchAll(/\b(?:quota\s*metric|quota_metric)\s*['":= ]+\s*([A-Za-z][A-Za-z0-9_.-]{2,100})/gi)) addMetric(match[1]);
+    for (const match of message.matchAll(/\b(?:Generate|Interact|Create|Input|Output|generate_|interactions)[A-Za-z0-9_.-]*(?:PerDay|PerMinute|per_day|per_minute)[A-Za-z0-9_.-]*/g)) addMetric(match[0]);
+    for (const match of message.matchAll(/\b(?:quota\s+limit|limit)\s*(?:of|is|:|=)\s*(\d+(?:\.\d+)?)/gi)) addLimit(match[1]);
+    for (const match of message.matchAll(/\bquota[_\s-]*id\s*[:=]\s*['"]?([A-Za-z][A-Za-z0-9_.-]{2,100})/gi)) addQuotaId(match[1]);
+  }
+  const model=safeName(segment?.model_id);
+  const kind=["blocked_split","single_segment","chapter","replacement"].includes(payload?.diagnostic_job_kind)
+    ? payload.diagnostic_job_kind : payload?.segments?.length===1?"single_segment":"chapter_or_split";
+  return {
+    at:Date.now(), http_status:429,
+    google_status:typeof root.status==="string"&&/^[A-Z_]{3,48}$/.test(root.status)?root.status:null,
+    model, job_kind:kind,
+    attempted_segment:Number.isInteger(segment?.segment_index)?segment.segment_index+1:null,
+    job_segment_count:Array.isArray(payload?.segments)?payload.segments.length:null,
+    quota_metrics:[...metrics], quota_ids:[...quotaIds], stated_limits:[...limits],
+    retry_after_seconds:Number.isFinite(Number(error?.retryAfterSeconds))&&Number(error?.retryAfterSeconds)>0?Number(error.retryAfterSeconds):null,
+    retry_info_seconds:retryInfoSeconds,
+    scheduled_retry_at:Number.isFinite(cooldown?.retryAt)?cooldown.retryAt:null,
+    cooldown_scope:cooldown?.scope==="daily"?"daily":"temporary"
+  };
+}
 function gemini429Cooldown(error, attempt, now = Date.now()) {
   const detail = typeof error?.details === "string" ? error.details :
     JSON.stringify(error?.details || {});
@@ -1602,6 +1657,13 @@ async function processGenerationJobLocked(
     if (error?.quotaExceeded) {
       const count = (Number(status.quota_cooldown_count) || 0) + 1;
       const cooldown = gemini429Cooldown(error, count);
+      // Keep only structured quota evidence; never persist the provider's raw
+      // response, transcript, API credentials or project identifiers.
+      const evidence = extractGeminiQuotaDiagnostics(error, segment, payload, cooldown);
+      status.quota_diagnostics = [
+        ...(Array.isArray(status.quota_diagnostics) ? status.quota_diagnostics : []).slice(-7),
+        evidence,
+      ];
       if (index >= 0 && status.segments[index]) {
         status.segments[index] = {
           ...status.segments[index], state: "queued", error: null,
