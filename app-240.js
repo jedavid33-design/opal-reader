@@ -525,7 +525,8 @@ async function copyGeminiDiagnostics(ch,index){
   const job=ch?.generation||{};
   parts.push("Chapter queue state: "+(job.state||"unknown"));
   parts.push("Chapter queue progress: "+(Number(job.completed)||0)+"/"+(Number(job.total)||0));
-  if(job.cooldown_reason)parts.push("Cooldown: "+job.cooldown_reason+" / "+(job.cooldown_scope||"unspecified"));
+  if(job.scope)parts.push("Reader queue scope: "+String(job.scope).slice(0,50));
+   if(job.cooldown_reason)parts.push("Cooldown: "+job.cooldown_reason+" / "+(job.cooldown_scope||"unspecified"));
   if(Number(job.next_retry_at)>0)parts.push("Scheduled retry (UTC): "+new Date(Number(job.next_retry_at)).toISOString());
   if(job.jobId&&a.apiBase&&a.accessToken){
     try{
@@ -539,7 +540,7 @@ async function copyGeminiDiagnostics(ch,index){
         const date=Number(record?.at)>0?new Date(Number(record.at)).toISOString():"unknown";
         const vals=xs=>Array.isArray(xs)&&xs.length?xs.map(x=>String(x).slice(0,110)).join(", "):"not supplied";
         parts.push("  "+date+" HTTP "+(Number(record?.http_status)||429)+" / "+String(record?.google_status||"status unavailable").slice(0,50));
-        parts.push("    Job: "+String(record?.job_kind||"unknown")+"; model: "+String(record?.model||"unknown").slice(0,100)+"; segment: "+(record?.attempted_segment??"unknown")+"; queued pieces: "+(record?.job_segment_count??"unknown"));
+        parts.push("    Job: "+String(record?.job_kind==="chapter_or_split"&&job.scope==="blocked_split"?"blocked_split (Reader metadata)":record?.job_kind||"unknown")+"; model: "+String(record?.model||"unknown").slice(0,100)+"; segment: "+(record?.attempted_segment??"unknown")+"; queued pieces: "+(record?.job_segment_count??"unknown"));
         parts.push("    Quota metrics: "+vals(record?.quota_metrics)+"; quota IDs: "+vals(record?.quota_ids)+"; stated limits: "+vals(record?.stated_limits));
         parts.push("    Provider Retry-After: "+(record?.retry_after_seconds??"not supplied")+" sec; RetryInfo: "+(record?.retry_info_seconds??"not supplied")+" sec; classified: "+String(record?.cooldown_scope||"unknown"));
         if(Number(record?.scheduled_retry_at)>0)parts.push("    Reader Worker retry: "+new Date(Number(record.scheduled_retry_at)).toISOString());
