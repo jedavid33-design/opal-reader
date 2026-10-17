@@ -92,7 +92,9 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.39"; // manual quota resume and continued book generation
+const APP_VERSION = "1.4.41"; // stop pre-update generation before new synthesis
+const READER_GENERATION_UI_VERSION = "1.4.106";
+const GENERATION_RELEASE_ID = APP_VERSION + "/" + READER_GENERATION_UI_VERSION;
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1338,13 +1340,16 @@ async function previouslyGeneratedChapterAudio(env, payload, segment) {
 function validateAdaptiveRepairPayload(payload) {
   if (payload?.adaptive_repair !== true) return true;
   const parts=payload.segments;
-  if (!Array.isArray(parts) || parts.length > 90 || parts.length < 2 ||
-      payload.diagnostic_job_kind !== "adaptive_repair") return false;
+  if (!Array.isArray(parts) || parts.length > 90 || parts.length < 1 ||
+      payload.diagnostic_job_kind !== "adaptive_repair" ||
+      !["full","mixed",undefined,null].includes(payload.adaptive_source_mode)) return false;
   for(let index=0;index<parts.length;index++){
     const s=parts[index];
     if(s?.provider!=="gemini" || !Number.isInteger(s?.segment_index) ||
        s.segment_index<0 || s.segment_index!==s.repair_source_index ||
-       typeof s.repair_path!=="string" || !/^[LR]{1,12}$/.test(s.repair_path) ||
+       typeof s.repair_path!=="string" ||
+       !(["full","mixed"].includes(payload.adaptive_source_mode)&&s.repair_path===""&&s.repair_parent===-1 ||
+         /^[LR]{1,12}$/.test(s.repair_path)) ||
        !Number.isInteger(s.repair_parent) || s.repair_parent < -1 ||
        s.repair_parent >= index) return false;
     const children=parts.map((v,i)=>v.repair_parent===index?i:-1).filter(i=>i>=0);
@@ -1363,8 +1368,12 @@ function validateAdaptiveRepairPayload(payload) {
     paths.push(s.repair_path);
     rootPaths.set(s.repair_source_index,paths);
   }
-  return rootPaths.size>0&&[...rootPaths.values()].every(
-    paths=>paths.length===2&&paths.includes("L")&&paths.includes("R"));
+  return rootPaths.size>0&&[...rootPaths.values()].every(paths=>{
+    const full=paths.length===1&&paths[0]==="";
+    const preblocked=paths.length===2&&paths.includes("L")&&paths.includes("R");
+    return payload.adaptive_source_mode==="mixed"?(full||preblocked):
+      payload.adaptive_source_mode==="full"?full:preblocked;
+  });
 }
 
 // All queued Gemini jobs share one conservative send pace, not just the 12 s
@@ -1546,6 +1555,28 @@ async function pauseLegacyQuotaJob(env,jobId,original){
     return current;
   }finally{await releaseProcessingLease(env,jobId,"manual-quota-migration")}
 }
+
+// Release fence: every Queue delivery compares the job's release stamp with
+// the currently deployed Worker AND paired Reader UI. Old jobs are parked,
+// with their audio intact. No automatic retry or chained chapter activation.
+const matchesGenerationRelease = value => value?.generation_release===GENERATION_RELEASE_ID &&
+  value?.client_version===READER_GENERATION_UI_VERSION;
+function parkGenerationForUpdate(status) {
+  if(!status || ["ready","partial","failed","paused_update"].includes(status.state))
+    return status;
+  const parked={...status,state:"paused_update",next_retry_at:null,
+    cooldown_reason:null,cooldown_scope:null,
+    error:"Generation paused for a Reader/Worker update. Saved audio is intact. Restart manually.",
+    updated_at:Date.now(),paused_release:GENERATION_RELEASE_ID};
+  addGenerationTrace(parked,"update_pause",null);
+  return parked;
+}
+async function pauseGenerationForUpdate(env,status,jobId){
+  const changed=parkGenerationForUpdate(status);
+  if(changed!==status)await saveGenerationStatus(env,changed);
+  return changed;
+}
+
 async function processGenerationJobLocked(
   env,
   jobId,
@@ -1554,13 +1585,17 @@ async function processGenerationJobLocked(
   attempts = 1,
 ) {
   let status = (await readGenerationStatus(env, jobId)) || payload.status;
+  if(!matchesGenerationRelease(payload)){
+    status=await pauseGenerationForUpdate(env,status,jobId);
+    return {status,next:-1};
+  }
   if(legacyOvernightQuota(status)&&["queued","generating"].includes(status.state)){
     status={...status,state:"paused_quota",next_retry_at:null,
       error:"Gemini quota reached. Select Continue to quota when you want to retry.",
       updated_at:Date.now()};
     await saveGenerationStatus(env,status);
   }
-  if(["ready","partial","paused_quota","parked"].includes(status?.state))
+  if(["ready","partial","paused_quota","paused_update","parked"].includes(status?.state))
     return {status,next:-1};
   // A duplicate, early delivery must never bypass a saved cooldown or
   // between-segment pace window. Long waits chain Queue delays up to 12h.
@@ -1572,11 +1607,15 @@ async function processGenerationJobLocked(
   let activeIndex = -1;
   try {
     const requestedIndex = Number.isInteger(segmentIndex) ? segmentIndex : -1;
-    activeIndex =
-      requestedIndex >= 0 &&
-      !generationSegmentTerminal(status.segments?.[requestedIndex])
-        ? requestedIndex
-        : nextGenerationSegmentIndex(status.segments);
+    // Adaptive jobs must always drain the earliest pending tree leaf.
+    // Delayed/duplicate Queue deliveries with a later index cannot skip a
+    // blocked parent's split children and move to the next source segment.
+    activeIndex = payload.adaptive_repair
+      ? nextGenerationSegmentIndex(status.segments)
+      : requestedIndex >= 0 &&
+        !generationSegmentTerminal(status.segments?.[requestedIndex])
+          ? requestedIndex
+          : nextGenerationSegmentIndex(status.segments);
 
     if (activeIndex < 0) {
       addGenerationTrace(status, "queue_complete", null);
@@ -1846,6 +1885,11 @@ async function activateNextContinueJob(env,payload){
   try{
     const current=await readGenerationStatus(env,id);
     if(!current||current.state!=="parked")return false;
+    const nextPayload=await readGenerationPayload(env,id);
+    if(!matchesGenerationRelease(nextPayload)){
+      await pauseGenerationForUpdate(env,current,id);
+      return false;
+    }
     const next=nextGenerationSegmentIndex(current.segments);
     if(next<0){
       const done={...current,updated_at:Date.now()};
@@ -1876,7 +1920,8 @@ function validContinuePayload(p,bookId){
 async function stageContinueSession(env,plan){
   const sessionId=plan?.session_id,bookId=plan?.book_id,jobs=plan?.jobs;
   if(!validJobId(sessionId)||!validId(bookId)||!Array.isArray(jobs)||
-     !jobs.length||jobs.length>30||jobs.some(p=>!validContinuePayload(p,bookId)))
+     !jobs.length||jobs.length>30||
+     jobs.some(p=>!validContinuePayload(p,bookId)||!matchesGenerationRelease(p)))
     throw Error("Invalid Continue to quota plan.");
   const ids=jobs.map(p=>p.job_id);
   if(new Set(ids).size!==ids.length||
@@ -1946,6 +1991,11 @@ async function resumeQuotaJob(env,jobId){
   try{
     let status=await readGenerationStatus(env,jobId);
     if(!status)throw Error("Generation job not found.");
+    const payload=await readGenerationPayload(env,jobId);
+    if(!matchesGenerationRelease(payload)){
+      status=await pauseGenerationForUpdate(env,status,jobId);
+      return {resumed:false,status};
+    }
     if(!["paused_quota"].includes(status.state))
       return {resumed:false,status};
     const next=nextGenerationSegmentIndex(status.segments);
@@ -2390,6 +2440,8 @@ export default {
             env,
           );
         const payload = await request.json();
+        if (!matchesGenerationRelease(payload))
+          return json({error:"Reader/Worker generation versions differ. Reload Reader and restart after the update."},409,origin,env);
         if (
           !validateAdaptiveRepairPayload(payload) ||
           !validJobId(payload.job_id) ||
@@ -2497,10 +2549,22 @@ export default {
         let status = await readGenerationStatus(env, jobId);
         if (!status)
           return json({ error: "Generation job not found." }, 404, origin, env);
-        if (!["ready","paused_quota","parked"].includes(status.state)) {
+        // Reconcile old-release jobs on status reads too, including parked
+        // next chapters and existing quota-paused jobs. Nothing is deleted.
+        const generationPayload = await readGenerationPayload(env, jobId);
+        if(generationPayload&&!matchesGenerationRelease(generationPayload) &&
+           !["ready","partial","failed","paused_update"].includes(status.state)){
+          status=await pauseGenerationForUpdate(env,status,jobId);
+          return json(status,200,origin,env);
+        }
+        if (!["ready","paused_quota","paused_update","parked"].includes(status.state)) {
           status = await pauseLegacyQuotaJob(env, jobId, status);
           if(status.state==="paused_quota")return json(status,200,origin,env);
-          const payload = await readGenerationPayload(env, jobId);
+          const payload = generationPayload;
+          if(payload&&!matchesGenerationRelease(payload)){
+            status=await pauseGenerationForUpdate(env,status,jobId);
+            return json(status,200,origin,env);
+          }
           if (payload) {
             const ready = await Promise.all(
               payload.segments.map((segment) =>
