@@ -2016,6 +2016,26 @@ export default {
         env,
       );
     try {
+      if(url.pathname==="/api/generation/continue"&&request.method==="POST"){
+        if(!env.OPALREADER_GENERATION||!syncReady(env))
+          return json({error:"Generation queue unavailable."},503,origin,env);
+        try{
+          const result=await stageContinueSession(env,await request.json());
+          return json(result,202,origin,env);
+        }catch(error){
+          return json({error:String(error?.message||"Continue setup failed.")},400,origin,env);
+        }
+      }
+      if(url.pathname.startsWith("/api/generation/jobs/")&&
+         url.pathname.endsWith("/resume")&&request.method==="POST"){
+        const raw=url.pathname.slice("/api/generation/jobs/".length,-"/resume".length);
+        const jobId=decodeURIComponent(raw);
+        if(!validJobId(jobId))return json({error:"Invalid job."},400,origin,env);
+        try{return json(await resumeQuotaJob(env,jobId),200,origin,env)}
+        catch(error){
+          return json({error:String(error?.message||"Resume failed.")},409,origin,env);
+        }
+      }
       if (url.pathname === "/api/usage/report" && request.method === "GET")
         return json(await usageReport(env, url), 200, origin, env);
       if (url.pathname === "/api/quota/gemini" && request.method === "GET")
