@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.39"; // manual quota resume and continued book generation
+const APP_VERSION = "1.4.40"; // split each blocked Continue passage before the next source segment
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1338,13 +1338,16 @@ async function previouslyGeneratedChapterAudio(env, payload, segment) {
 function validateAdaptiveRepairPayload(payload) {
   if (payload?.adaptive_repair !== true) return true;
   const parts=payload.segments;
-  if (!Array.isArray(parts) || parts.length > 90 || parts.length < 2 ||
-      payload.diagnostic_job_kind !== "adaptive_repair") return false;
+  if (!Array.isArray(parts) || parts.length > 90 || parts.length < 1 ||
+      payload.diagnostic_job_kind !== "adaptive_repair" ||
+      payload.adaptive_source_mode!=null&&payload.adaptive_source_mode!=="full") return false;
   for(let index=0;index<parts.length;index++){
     const s=parts[index];
     if(s?.provider!=="gemini" || !Number.isInteger(s?.segment_index) ||
        s.segment_index<0 || s.segment_index!==s.repair_source_index ||
-       typeof s.repair_path!=="string" || !/^[LR]{1,12}$/.test(s.repair_path) ||
+       typeof s.repair_path!=="string" ||
+       !(payload.adaptive_source_mode==="full"&&s.repair_path===""&&s.repair_parent===-1 ||
+         /^[LR]{1,12}$/.test(s.repair_path)) ||
        !Number.isInteger(s.repair_parent) || s.repair_parent < -1 ||
        s.repair_parent >= index) return false;
     const children=parts.map((v,i)=>v.repair_parent===index?i:-1).filter(i=>i>=0);
@@ -1363,8 +1366,10 @@ function validateAdaptiveRepairPayload(payload) {
     paths.push(s.repair_path);
     rootPaths.set(s.repair_source_index,paths);
   }
-  return rootPaths.size>0&&[...rootPaths.values()].every(
-    paths=>paths.length===2&&paths.includes("L")&&paths.includes("R"));
+  return rootPaths.size>0&&[...rootPaths.values()].every(paths=>
+    payload.adaptive_source_mode==="full"
+      ?paths.length===1&&paths[0]===""
+      :paths.length===2&&paths.includes("L")&&paths.includes("R"));
 }
 
 // All queued Gemini jobs share one conservative send pace, not just the 12 s
