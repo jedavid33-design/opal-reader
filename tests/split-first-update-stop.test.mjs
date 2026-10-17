@@ -72,7 +72,8 @@ test("Adaptive processing always prioritizes newly activated split pieces",()=>{
    readGenerationStatus:async()=>JSON.parse(JSON.stringify(s)),
    saveGenerationStatus:async(_,st)=>{s=JSON.parse(JSON.stringify(st))},
    hasCachedAudio:async()=>false,previouslyGeneratedChapterAudio:async()=>null,
-   reserveGeminiQueuePace:async()=>({ready:true}),
+   acquireProcessingLease:async()=>true,releaseProcessingLease:async()=>{},
+   r2Get:async()=>null,
    synthesizeAudio:async(_,__,node)=>{
      seen.push(node.repair_path||"source"+node.segment_index);
      if(node.repair_path===""){
@@ -90,7 +91,7 @@ test("Adaptive processing always prioritizes newly activated split pieces",()=>{
  for(let n=0;n<10;n++){
    s.next_retry_at=0;
    if(!s.segments.some(x=>x.state==="queued"))break;
-   await core({},s.job_id,{generation_release:"1.4.41/1.4.106",client_version:"1.4.106",
+   await core({OPALREADER_STORAGE:{put:async()=>{}}},s.job_id,{generation_release:"1.4.41/1.4.106",client_version:"1.4.106",
      adaptive_repair:true,adaptive_source_mode:"mixed",
      diagnostic_job_kind:"adaptive_repair",segments:nodes},3,1);
  }
