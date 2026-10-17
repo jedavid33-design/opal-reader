@@ -1918,8 +1918,10 @@ async function stageContinueSession(env,plan){
       if(s?.state==="queued"&&!s.continue_started){
         const next=nextGenerationSegmentIndex(s.segments);
         if(next>=0){
-          await saveGenerationStatus(env,{...s,continue_started:true,updated_at:Date.now()});
+          // Send first, then record the acknowledgement. If Queue.send fails,
+          // a retry of the same session can safely send the same job ID.
           await env.OPALREADER_GENERATION.send({job_id:firstId,segment_index:next});
+          await saveGenerationStatus(env,{...s,continue_started:true,updated_at:Date.now()});
         }else{
           const done={...s,continue_started:true,updated_at:Date.now()};
           finishGenerationState(done);
