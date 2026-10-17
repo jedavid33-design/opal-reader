@@ -1044,6 +1044,7 @@ async function continueAdaptiveBatches(chapterIndex,full){
     const original=ch.segments[index],candidate=full.segments[index];
     if(!original||!candidate||original.systemVoiceFallback||original.generationFailure)continue;
     const blocked=gemini400Blocked(ch,original);
+    if(original.generationBlocked&&!blocked)continue; // never re-bill exhausted or ineligible text
     if(!blocked&&original.audioKey&&!original.audioStale)continue;
     if(candidate.provider!=="gemini"){skippedVoice++;continue}
     const voice=segmentVoice(ch,original);
@@ -1068,6 +1069,7 @@ async function continueAdaptiveBatches(chapterIndex,full){
       await addPiece(halves[1],path+"R",n);
     }
     const raw=String(original.speechText||original.text||"");
+    if(!raw.trim())continue;
     if(blocked){
       const point=naturalBlockedSplitPoint(plainSpeech(raw));
       if(point<0){original.splitExhausted=true;continue}
