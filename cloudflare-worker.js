@@ -1579,11 +1579,15 @@ async function processGenerationJobLocked(
   let activeIndex = -1;
   try {
     const requestedIndex = Number.isInteger(segmentIndex) ? segmentIndex : -1;
-    activeIndex =
-      requestedIndex >= 0 &&
-      !generationSegmentTerminal(status.segments?.[requestedIndex])
-        ? requestedIndex
-        : nextGenerationSegmentIndex(status.segments);
+    // Adaptive jobs must always drain the earliest pending tree leaf.
+    // Delayed/duplicate Queue deliveries with a later index cannot skip a
+    // blocked parent's split children and move to the next source segment.
+    activeIndex = payload.adaptive_repair
+      ? nextGenerationSegmentIndex(status.segments)
+      : requestedIndex >= 0 &&
+        !generationSegmentTerminal(status.segments?.[requestedIndex])
+          ? requestedIndex
+          : nextGenerationSegmentIndex(status.segments);
 
     if (activeIndex < 0) {
       addGenerationTrace(status, "queue_complete", null);
