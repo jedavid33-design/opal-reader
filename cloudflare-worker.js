@@ -2549,10 +2549,18 @@ export default {
         let status = await readGenerationStatus(env, jobId);
         if (!status)
           return json({ error: "Generation job not found." }, 404, origin, env);
+        // Reconcile old-release jobs on status reads too, including parked
+        // next chapters and existing quota-paused jobs. Nothing is deleted.
+        const generationPayload = await readGenerationPayload(env, jobId);
+        if(generationPayload&&!matchesGenerationRelease(generationPayload) &&
+           !["ready","partial","failed","paused_update"].includes(status.state)){
+          status=await pauseGenerationForUpdate(env,status,jobId);
+          return json(status,200,origin,env);
+        }
         if (!["ready","paused_quota","paused_update","parked"].includes(status.state)) {
           status = await pauseLegacyQuotaJob(env, jobId, status);
           if(status.state==="paused_quota")return json(status,200,origin,env);
-          const payload = await readGenerationPayload(env, jobId);
+          const payload = generationPayload;
           if(payload&&!matchesGenerationRelease(payload)){
             status=await pauseGenerationForUpdate(env,status,jobId);
             return json(status,200,origin,env);
