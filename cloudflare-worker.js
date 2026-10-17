@@ -1912,6 +1912,31 @@ async function stageContinueSession(env,plan){
   }))};
 }
 
+
+async function resumeQuotaJob(env,jobId){
+  if(!env.OPALREADER_GENERATION||!syncReady(env))throw Error("Generation queue unavailable.");
+  if(!await acquireProcessingLease(env,jobId,"job"))
+    return {busy:true,status:await readGenerationStatus(env,jobId)};
+  try{
+    let status=await readGenerationStatus(env,jobId);
+    if(!status)throw Error("Generation job not found.");
+    if(!["paused_quota"].includes(status.state))
+      return {resumed:false,status};
+    const next=nextGenerationSegmentIndex(status.segments);
+    if(next<0){
+      finishGenerationState(status);status.updated_at=Date.now();
+      await saveGenerationStatus(env,status);
+      return {resumed:false,status};
+    }
+    const updated={...status,state:"queued",error:null,quota_exceeded:false,
+      cooldown_reason:null,cooldown_scope:null,next_retry_at:null,updated_at:Date.now()};
+    addGenerationTrace(updated,"manual_resume",null);
+    await saveGenerationStatus(env,updated);
+    await env.OPALREADER_GENERATION.send({job_id:jobId,segment_index:next});
+    return {resumed:true,status:updated};
+  }finally{await releaseProcessingLease(env,jobId,"job")}
+}
+
 async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
   const payload = await readGenerationPayload(env, jobId);
   if (!payload) throw new Error("Generation job payload was not found.");
@@ -1948,6 +1973,8 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
       seconds ? {delaySeconds: seconds} : undefined,
     );
   }
+  if(outcome?.next<0&&["ready","partial"].includes(outcome?.status?.state))
+    await activateNextContinueJob(env,payload);
   return outcome?.status || payload.status;
 }
 
