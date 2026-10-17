@@ -92,7 +92,9 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.40"; // split each blocked Continue passage before the next source segment
+const APP_VERSION = "1.4.41"; // stop pre-update generation before new synthesis
+const READER_GENERATION_UI_VERSION = "1.4.106";
+const GENERATION_RELEASE_ID = APP_VERSION + "/" + READER_GENERATION_UI_VERSION;
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1553,6 +1555,28 @@ async function pauseLegacyQuotaJob(env,jobId,original){
     return current;
   }finally{await releaseProcessingLease(env,jobId,"manual-quota-migration")}
 }
+
+// Release fence: every Queue delivery compares the job's release stamp with
+// the currently deployed Worker AND paired Reader UI. Old jobs are parked,
+// with their audio intact. No automatic retry or chained chapter activation.
+const matchesGenerationRelease = value => value?.generation_release===GENERATION_RELEASE_ID &&
+  value?.client_version===READER_GENERATION_UI_VERSION;
+function parkGenerationForUpdate(status) {
+  if(!status || ["ready","partial","failed","paused_update"].includes(status.state))
+    return status;
+  const parked={...status,state:"paused_update",next_retry_at:null,
+    cooldown_reason:null,cooldown_scope:null,
+    error:"Generation paused for a Reader/Worker update. Saved audio is intact. Restart manually.",
+    updated_at:Date.now(),paused_release:GENERATION_RELEASE_ID};
+  addGenerationTrace(parked,"update_pause",null);
+  return parked;
+}
+async function pauseGenerationForUpdate(env,status,jobId){
+  const changed=parkGenerationForUpdate(status);
+  if(changed!==status)await saveGenerationStatus(env,changed);
+  return changed;
+}
+
 async function processGenerationJobLocked(
   env,
   jobId,
@@ -1561,13 +1585,17 @@ async function processGenerationJobLocked(
   attempts = 1,
 ) {
   let status = (await readGenerationStatus(env, jobId)) || payload.status;
+  if(!matchesGenerationRelease(payload)){
+    status=await pauseGenerationForUpdate(env,status,jobId);
+    return {status,next:-1};
+  }
   if(legacyOvernightQuota(status)&&["queued","generating"].includes(status.state)){
     status={...status,state:"paused_quota",next_retry_at:null,
       error:"Gemini quota reached. Select Continue to quota when you want to retry.",
       updated_at:Date.now()};
     await saveGenerationStatus(env,status);
   }
-  if(["ready","partial","paused_quota","parked"].includes(status?.state))
+  if(["ready","partial","paused_quota","paused_update","parked"].includes(status?.state))
     return {status,next:-1};
   // A duplicate, early delivery must never bypass a saved cooldown or
   // between-segment pace window. Long waits chain Queue delays up to 12h.
@@ -1857,6 +1885,11 @@ async function activateNextContinueJob(env,payload){
   try{
     const current=await readGenerationStatus(env,id);
     if(!current||current.state!=="parked")return false;
+    const nextPayload=await readGenerationPayload(env,id);
+    if(!matchesGenerationRelease(nextPayload)){
+      await pauseGenerationForUpdate(env,current,id);
+      return false;
+    }
     const next=nextGenerationSegmentIndex(current.segments);
     if(next<0){
       const done={...current,updated_at:Date.now()};
@@ -1887,7 +1920,8 @@ function validContinuePayload(p,bookId){
 async function stageContinueSession(env,plan){
   const sessionId=plan?.session_id,bookId=plan?.book_id,jobs=plan?.jobs;
   if(!validJobId(sessionId)||!validId(bookId)||!Array.isArray(jobs)||
-     !jobs.length||jobs.length>30||jobs.some(p=>!validContinuePayload(p,bookId)))
+     !jobs.length||jobs.length>30||
+     jobs.some(p=>!validContinuePayload(p,bookId)||!matchesGenerationRelease(p)))
     throw Error("Invalid Continue to quota plan.");
   const ids=jobs.map(p=>p.job_id);
   if(new Set(ids).size!==ids.length||
@@ -1957,6 +1991,11 @@ async function resumeQuotaJob(env,jobId){
   try{
     let status=await readGenerationStatus(env,jobId);
     if(!status)throw Error("Generation job not found.");
+    const payload=await readGenerationPayload(env,jobId);
+    if(!matchesGenerationRelease(payload)){
+      status=await pauseGenerationForUpdate(env,status,jobId);
+      return {resumed:false,status};
+    }
     if(!["paused_quota"].includes(status.state))
       return {resumed:false,status};
     const next=nextGenerationSegmentIndex(status.segments);
@@ -2401,6 +2440,8 @@ export default {
             env,
           );
         const payload = await request.json();
+        if (!matchesGenerationRelease(payload))
+          return json({error:"Reader/Worker generation versions differ. Reload Reader and restart after the update."},409,origin,env);
         if (
           !validateAdaptiveRepairPayload(payload) ||
           !validJobId(payload.job_id) ||
@@ -2508,10 +2549,14 @@ export default {
         let status = await readGenerationStatus(env, jobId);
         if (!status)
           return json({ error: "Generation job not found." }, 404, origin, env);
-        if (!["ready","paused_quota","parked"].includes(status.state)) {
+        if (!["ready","paused_quota","paused_update","parked"].includes(status.state)) {
           status = await pauseLegacyQuotaJob(env, jobId, status);
           if(status.state==="paused_quota")return json(status,200,origin,env);
           const payload = await readGenerationPayload(env, jobId);
+          if(payload&&!matchesGenerationRelease(payload)){
+            status=await pauseGenerationForUpdate(env,status,jobId);
+            return json(status,200,origin,env);
+          }
           if (payload) {
             const ready = await Promise.all(
               payload.segments.map((segment) =>
