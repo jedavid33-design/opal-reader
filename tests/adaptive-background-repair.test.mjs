@@ -44,7 +44,10 @@ test("durable Worker queue finishes a nested blocked passage without browser cal
       return {cache:"MISS",model:p.model_id,calculated_cost:0.0002};
     },
     recordTtsUsage:async()=>{},addGenerationTrace:()=>{},
-    extractGeminiQuotaDiagnostics:()=>({http_status:429})
+    extractGeminiQuotaDiagnostics:()=>({http_status:429}),
+    // Queue simulation: independently test the actual shared pacing below.
+    acquireProcessingLease:async()=>true,releaseProcessingLease:async()=>{},
+    r2Get:async()=>null
   };
   const names=Object.keys(deps);
   const process=new Function(...names,repair+"\nreturn processGenerationJobLocked;")(...names.map(n=>deps[n]));
@@ -52,7 +55,7 @@ test("durable Worker queue finishes a nested blocked passage without browser cal
     saved.next_retry_at=0; // simulate the actual delayed Cloudflare Queue delivery
     const next=saved.segments.findIndex(x=>x.state==="queued");
     if(next<0)break;
-    await process({},saved.job_id,{adaptive_repair:true,segments:tree,
+    await process({OPALREADER_STORAGE:{put:async()=>{}}},saved.job_id,{adaptive_repair:true,segments:tree,
       book_id:"book_12345678",chapter_index:0},next,1);
   }
   assert.deepEqual(calls,["L","LL","LR","R"]);
@@ -81,4 +84,22 @@ test("reconnect merges leaves by exact original segment while keeping neighborin
   assert.equal(apply(ch,local,response),true);
   assert.deepEqual(ch.segments.map(x=>x.audioKey),["existing","x","y","existing2"]);
   assert.equal(apply(ch,local,response),false);
+});
+
+test("shared Gemini queue pace reserves at most one new call per seven seconds",async()=>{
+  const source=section(worker,"const GEMINI_GLOBAL_PACE_MS","function adaptiveRepairCounts(");
+  let now=10000,stamp=null,puts=0,locks=0;
+  const reserve=new Function("Date","acquireProcessingLease","releaseProcessingLease","r2Get",
+    source+"\nreturn reserveGeminiQueuePace;")(
+    {now:()=>now},async()=>{locks++;return true},async()=>{},
+    async()=>stamp?{json:async()=>stamp}:null);
+  const env={OPALREADER_STORAGE:{put:async(_key,raw)=>{stamp=JSON.parse(raw);puts++}}};
+  const first=await reserve(env),second=await reserve(env);
+  assert.equal(first.ready,true);
+  assert.equal(second.ready,false);
+  assert.equal(second.retryAt,17000);
+  now=17000;
+  assert.equal((await reserve(env)).ready,true);
+  assert.equal(puts,2);
+  assert.equal(locks,3);
 });
