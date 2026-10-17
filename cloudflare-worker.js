@@ -1836,7 +1836,14 @@ async function activateNextContinueJob(env,payload){
     const current=await readGenerationStatus(env,id);
     if(!current||current.state!=="parked")return false;
     const next=nextGenerationSegmentIndex(current.segments);
-    if(next<0)return false;
+    if(next<0){
+      const done={...current,updated_at:Date.now()};
+      finishGenerationState(done);
+      await saveGenerationStatus(env,done);
+      const nextPayload=await readGenerationPayload(env,id);
+      if(nextPayload)await activateNextContinueJob(env,nextPayload);
+      return true;
+    }
     const activated={...current,state:"queued",error:null,updated_at:Date.now()};
     addGenerationTrace(activated,"continue_activated",null);
     await saveGenerationStatus(env,activated);
@@ -2471,8 +2478,9 @@ export default {
         let status = await readGenerationStatus(env, jobId);
         if (!status)
           return json({ error: "Generation job not found." }, 404, origin, env);
-        if (status.state !== "ready") {
+        if (!["ready","paused_quota","parked"].includes(status.state)) {
           status = await pauseLegacyQuotaJob(env, jobId, status);
+          if(status.state==="paused_quota")return json(status,200,origin,env);
           const payload = await readGenerationPayload(env, jobId);
           if (payload) {
             const ready = await Promise.all(
@@ -2493,6 +2501,7 @@ export default {
                 updated_at: Date.now(),
               };
               await saveGenerationStatus(env, status);
+              await activateNextContinueJob(env,payload);
             } else if (
               ["queued", "generating"].includes(status.state) &&
               !generationDelaySeconds(status) &&
