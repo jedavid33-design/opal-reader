@@ -735,8 +735,10 @@ function continueQuotaHeader(){
   const s=a.book?.continueSession;
   const label=s?.state==="paused"?"Resume to quota":
     s?.state==="running"?"Continue running…":"Continue to quota";
+  const done=s?.jobs?.filter(j=>["ready","partial"].includes(j.state)).length||0;
+  const count=s?.jobs?.length||0;
   const note=s?.state==="paused"?"Gemini stopped the queue. Manual restart required.":
-    s?.state==="running"?"Generating upcoming chapters in the background.":
+    s?.state==="running"?"Generating in the background · "+done+"/"+count+" batches complete.":
     s?.state==="error"?String(s.error||"Queue needs attention"):
     "Generate missing audio through upcoming chapters, stopping at Gemini quota.";
   return '<div class="row"><button class="primary" id="continueToQuota"'+
@@ -978,10 +980,12 @@ async function runAutoSplit(chapterIndex){
 // previous job finishes; a Gemini 429 pauses the entire chain until a tap.
 const continueTerminal=new Set(["ready","partial","failed"]);
 let continueBusy=false;
-async function refreshContinueSession(){
+async function refreshContinueSession({force=false}={}){
   const book=a.book,session=book?.continueSession;
   if(!session||!session.jobs?.length||!a.apiBase||!a.accessToken)return;
-  if(session.state==="paused"||session.state==="complete"||session.state==="error")return;
+  if(session.state==="complete"||session.state==="error"||
+     session.state==="paused"&&!force)return;
+  if(session.state==="paused"&&force)session.state="running";
   let changed=false;
   for(let checks=0;checks<4;checks++){
     const job=session.jobs.find(j=>!continueTerminal.has(j.state));
@@ -1034,7 +1038,7 @@ async function continueToQuota(){
           method:"POST",body:JSON.stringify({session_id:session.id,book_id:book.id,jobs:session.requests})});
         await accepted.json();delete session.requests;session.state="running";await pe();se();ct();return;
       }
-      await refreshContinueSession();
+      await refreshContinueSession({force:true});
       if(session.state==="paused"){
         const job=session.jobs.find(j=>j.state==="paused_quota");
         if(!job)throw Error("No paused job found. Copy Gemini diagnostics before retrying.");
