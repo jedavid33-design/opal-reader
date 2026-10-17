@@ -1118,7 +1118,8 @@ async function continueToQuota(){
        ". Worst-case estimated generation: "+Pe(forecast)+". Continue?"))return;
     if(!confirm("Continue Gemini generation into upcoming chapters of this book until "+
       "Google reports a quota limit? Reader will stop and wait for your manual "+
-      "Continue tap the next morning. "+jobs.length+" queued chapter/repair batch(es)."))return;
+      "Continue tap the next morning. "+jobs.length+" queued chapter/repair batch(es)."+
+      (skippedVoice?" "+skippedVoice+" non-Gemini segment(s) will be skipped, without changing their voices.":"")))return;
     session={id:sessionId,state:"staging_unconfirmed",jobs:localJobs,
       requests:jobs,startedAt:Date.now()};
     book.continueSession=session;
