@@ -1340,13 +1340,13 @@ function validateAdaptiveRepairPayload(payload) {
   const parts=payload.segments;
   if (!Array.isArray(parts) || parts.length > 90 || parts.length < 1 ||
       payload.diagnostic_job_kind !== "adaptive_repair" ||
-      payload.adaptive_source_mode!=null&&payload.adaptive_source_mode!=="full") return false;
+      !["full","mixed",undefined,null].includes(payload.adaptive_source_mode)) return false;
   for(let index=0;index<parts.length;index++){
     const s=parts[index];
     if(s?.provider!=="gemini" || !Number.isInteger(s?.segment_index) ||
        s.segment_index<0 || s.segment_index!==s.repair_source_index ||
        typeof s.repair_path!=="string" ||
-       !(payload.adaptive_source_mode==="full"&&s.repair_path===""&&s.repair_parent===-1 ||
+       !(["full","mixed"].includes(payload.adaptive_source_mode)&&s.repair_path===""&&s.repair_parent===-1 ||
          /^[LR]{1,12}$/.test(s.repair_path)) ||
        !Number.isInteger(s.repair_parent) || s.repair_parent < -1 ||
        s.repair_parent >= index) return false;
@@ -1366,10 +1366,12 @@ function validateAdaptiveRepairPayload(payload) {
     paths.push(s.repair_path);
     rootPaths.set(s.repair_source_index,paths);
   }
-  return rootPaths.size>0&&[...rootPaths.values()].every(paths=>
-    payload.adaptive_source_mode==="full"
-      ?paths.length===1&&paths[0]===""
-      :paths.length===2&&paths.includes("L")&&paths.includes("R"));
+  return rootPaths.size>0&&[...rootPaths.values()].every(paths=>{
+    const full=paths.length===1&&paths[0]==="";
+    const preblocked=paths.length===2&&paths.includes("L")&&paths.includes("R");
+    return payload.adaptive_source_mode==="mixed"?(full||preblocked):
+      payload.adaptive_source_mode==="full"?full:preblocked;
+  });
 }
 
 // All queued Gemini jobs share one conservative send pace, not just the 12 s
