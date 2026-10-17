@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.38"; // durable adaptive Gemini policy-block repair
+const APP_VERSION = "1.4.39"; // manual quota resume and continued book generation
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1525,43 +1525,24 @@ function generationDelaySeconds(status, now = Date.now()) {
 // v1.4.32: v1.4.31 mistook a fourth generic 429 for a daily reset.
 // Migrate only that specific legacy scope when an existing job is polled.
 // An explicitly detected daily quota retains its original Pacific reset.
-async function shortenLegacyGeneric429(env, jobId, original) {
-  const legacy = original?.state === "queued" &&
-    original?.cooldown_scope === "unknown_wait_until_reset";
-  if ((!legacy && !original?.cooldown_migration_pending) ||
-      !env.OPALREADER_GENERATION) return original;
-  if (!(await acquireProcessingLease(env, jobId, "quota-migrate")))
-    return original;
-  try {
-    let status = await readGenerationStatus(env, jobId) || original;
-    const isLegacy = status.state === "queued" &&
-      status.cooldown_scope === "unknown_wait_until_reset";
-    if (isLegacy) {
-      const soon = Date.now() + 120 * 1000;
-      status = {
-        ...status, cooldown_scope: "temporary",
-        next_retry_at: Math.min(Number(status.next_retry_at) || soon, soon),
-        cooldown_migration_pending: true,
-        error: "Gemini temporary 429: shorter retry scheduled. Completed audio is preserved.",
-        updated_at: Date.now(),
-      };
-      await saveGenerationStatus(env, status);
+// Older jobs may already have a delayed Pacific-midnight Queue message.
+// Persist a manual-only pause before those messages can make another call.
+async function pauseLegacyQuotaJob(env,jobId,original){
+  if(!original || !["queued","generating"].includes(original.state) ||
+      original.cooldown_reason!=="quota")return original;
+  if(!(await acquireProcessingLease(env,jobId,"manual-quota-migration")))return original;
+  try{
+    const current=await readGenerationStatus(env,jobId)||original;
+    if(["queued","generating"].includes(current.state)&&current.cooldown_reason==="quota"){
+      const paused={...current,state:"paused_quota",next_retry_at:null,
+        error:"Gemini quota reached. Paused until you manually select Continue to quota.",
+        updated_at:Date.now()};
+      addGenerationTrace(paused,"manual_quota_pause",null);
+      await saveGenerationStatus(env,paused);
+      return paused;
     }
-    if (status.cooldown_migration_pending && status.state === "queued") {
-      const next = nextGenerationSegmentIndex(status.segments);
-      if (next >= 0) {
-        await env.OPALREADER_GENERATION.send(
-          {job_id: jobId, segment_index: next},
-          {delaySeconds: Math.max(1, generationDelaySeconds(status))},
-        );
-      }
-      status = {...status, cooldown_migration_pending: false, updated_at: Date.now()};
-      await saveGenerationStatus(env, status);
-    }
-    return status;
-  } finally {
-    await releaseProcessingLease(env, jobId, "quota-migrate");
-  }
+    return current;
+  }finally{await releaseProcessingLease(env,jobId,"manual-quota-migration")}
 }
 async function processGenerationJobLocked(
   env,
@@ -1571,7 +1552,14 @@ async function processGenerationJobLocked(
   attempts = 1,
 ) {
   let status = (await readGenerationStatus(env, jobId)) || payload.status;
-  if (status?.state === "ready") return { status, next: -1 };
+  if(status?.cooldown_reason==="quota"&&["queued","generating"].includes(status.state)){
+    status={...status,state:"paused_quota",next_retry_at:null,
+      error:"Gemini quota reached. Select Continue to quota when you want to retry.",
+      updated_at:Date.now()};
+    await saveGenerationStatus(env,status);
+  }
+  if(["ready","partial","paused_quota","parked"].includes(status?.state))
+    return {status,next:-1};
   // A duplicate, early delivery must never bypass a saved cooldown or
   // between-segment pace window. Long waits chain Queue delays up to 12h.
   if (status?.state === "queued" && generationDelaySeconds(status)) {
@@ -1779,20 +1767,18 @@ async function processGenerationJobLocked(
           quota_exceeded: false, model: segment?.model_id || null,
         };
       }
-      status.state = "queued";
+      status.state = "paused_quota";
       status.quota_exceeded = true;
       status.quota_cooldown_count = count;
       status.cooldown_reason = "quota";
       status.cooldown_scope = cooldown.scope;
-      status.next_retry_at = cooldown.retryAt;
-      addGenerationTrace(status, "quota_pause", segment,
-        {scope: cooldown.scope, retry_at: cooldown.retryAt});
-      status.error = "Gemini 429: chapter paused until " +
-        new Date(cooldown.retryAt).toISOString() +
-        ". Completed segments are saved; remaining work resumes automatically.";
+      status.next_retry_at = null;
+      addGenerationTrace(status, "quota_manual_pause", segment,{scope:cooldown.scope});
+      status.error = "Gemini 429: paused until you manually select Continue to quota. " +
+        "Completed audio and remaining queue work are saved.";
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
-      return {status, next: index, delaySeconds: cooldown.delaySeconds};
+      return {status,next:-1};
     }
 
     if (error?.providerInternal) {
@@ -2354,7 +2340,7 @@ export default {
         if (!status)
           return json({ error: "Generation job not found." }, 404, origin, env);
         if (status.state !== "ready") {
-          status = await shortenLegacyGeneric429(env, jobId, status);
+          status = await pauseLegacyQuotaJob(env, jobId, status);
           const payload = await readGenerationPayload(env, jobId);
           if (payload) {
             const ready = await Promise.all(
