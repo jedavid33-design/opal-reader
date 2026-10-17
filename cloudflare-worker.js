@@ -1757,6 +1757,9 @@ async function processGenerationJobLocked(
       // Keep only structured quota evidence; never persist the provider's raw
       // response, transcript, API credentials or project identifiers.
       const evidence = extractGeminiQuotaDiagnostics(error, segment, payload, cooldown);
+      // The provider-derived time is only a hint, not a scheduled Worker retry.
+      evidence.scheduled_retry_at = null;
+      evidence.manual_resume_required = true;
       status.quota_diagnostics = [
         ...(Array.isArray(status.quota_diagnostics) ? status.quota_diagnostics : []).slice(-7),
         evidence,
@@ -1908,6 +1911,11 @@ async function stageContinueSession(env,plan){
         if(next>=0){
           await saveGenerationStatus(env,{...s,continue_started:true,updated_at:Date.now()});
           await env.OPALREADER_GENERATION.send({job_id:firstId,segment_index:next});
+        }else{
+          const done={...s,continue_started:true,updated_at:Date.now()};
+          finishGenerationState(done);
+          await saveGenerationStatus(env,done);
+          await activateNextContinueJob(env,{continue_next_job_id:ids[1]||null});
         }
       }
     }finally{await releaseProcessingLease(env,firstId,"first-start")}
