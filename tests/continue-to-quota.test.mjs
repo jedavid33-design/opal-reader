@@ -89,7 +89,7 @@ test("Continue stage is sequential and idempotent; manual resume enqueues exactl
 });
 test("Older 3AM cooldown messages are migrated to manual pause",async()=>{
   const code=between(w,"async function pauseLegacyQuotaJob(","async function processGenerationJobLocked(");
-  let state={job_id:"a".repeat(64),state:"queued",cooldown_reason:"quota",
+  let state={job_id:"a".repeat(64),state:"queued",cooldown_reason:"quota",cooldown_scope:"daily",
     next_retry_at:Date.now()+800000,segments:[{state:"queued"}]};
   const deps={acquireProcessingLease:async()=>true,releaseProcessingLease:async()=>{},
     readGenerationStatus:async()=>state,
@@ -112,4 +112,35 @@ test("Frontend shows manual restart and isolates the book to upcoming Gemini cha
   assert.doesNotMatch(app,/Auto-retry at/);
   assert.match(app,/for\(let i=start;i<book\.chapters\.length/);
   assert.match(app,/candidate\?\.provider!=="gemini"/);
+});
+
+test("Temporary Gemini minute-rate 429 backs off but does not require morning tap",async()=>{
+  const code=between(w,"async function processGenerationJobLocked(","async function activateNextContinueJob(");
+  let state={job_id:"a".repeat(64),state:"queued",completed:0,total:1,
+    segments:[{cache_key:"b".repeat(64),state:"queued"}]};
+  let calls=0;
+  const deps={
+    readGenerationStatus:async()=>JSON.parse(JSON.stringify(state)),
+    saveGenerationStatus:async(_,v)=>{state=JSON.parse(JSON.stringify(v))},
+    hasCachedAudio:async()=>false,previouslyGeneratedChapterAudio:async()=>null,
+    reserveGeminiQueuePace:async()=>({ready:true}),
+    synthesizeAudio:async()=>{calls++;const e=new Error("per minute rate limit");
+      e.quotaExceeded=true;throw e},
+    gemini429Cooldown:()=>({scope:"temporary",retryAt:Date.now()+90000,delaySeconds:90}),
+    extractGeminiQuotaDiagnostics:()=>({http_status:429}),
+    addGenerationTrace:()=>{},generationDelaySeconds:()=>0,
+    nextGenerationSegmentIndex:arr=>arr.findIndex(x=>
+      !["ready","blocked","provider_failed","dormant","split"].includes(x.state)),
+    generationSegmentTerminal:item=>["ready","blocked","provider_failed","dormant","split"].includes(item?.state)
+  };
+  const names=Object.keys(deps),fn=new Function(...names,code+"\nreturn processGenerationJobLocked;")(
+    ...names.map(n=>deps[n]));
+  const response=await fn({},state.job_id,{segments:[{provider:"gemini",text:"T",
+    voice_id:"Puck",cache_key:"b".repeat(64)}]},0,1);
+  assert.equal(response.next,0);
+  assert.equal(response.delaySeconds,90);
+  assert.equal(state.state,"queued");
+  assert.ok(state.next_retry_at>Date.now());
+  assert.equal(state.quota_diagnostics[0].manual_resume_required,false);
+  assert.equal(calls,1);
 });
