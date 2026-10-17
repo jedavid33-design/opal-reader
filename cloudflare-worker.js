@@ -1527,13 +1527,15 @@ function generationDelaySeconds(status, now = Date.now()) {
 // An explicitly detected daily quota retains its original Pacific reset.
 // Older jobs may already have a delayed Pacific-midnight Queue message.
 // Persist a manual-only pause before those messages can make another call.
+const legacyOvernightQuota = status => status?.cooldown_reason==="quota" &&
+  ["daily","unknown_wait_until_reset"].includes(status.cooldown_scope);
 async function pauseLegacyQuotaJob(env,jobId,original){
   if(!original || !["queued","generating"].includes(original.state) ||
-      original.cooldown_reason!=="quota"||original.cooldown_scope!=="daily")return original;
+      !legacyOvernightQuota(original))return original;
   if(!(await acquireProcessingLease(env,jobId,"manual-quota-migration")))return original;
   try{
     const current=await readGenerationStatus(env,jobId)||original;
-    if(["queued","generating"].includes(current.state)&&current.cooldown_reason==="quota"&&current.cooldown_scope==="daily"){
+    if(["queued","generating"].includes(current.state)&&legacyOvernightQuota(current)){
       const paused={...current,state:"paused_quota",next_retry_at:null,
         error:"Gemini quota reached. Paused until you manually select Continue to quota.",
         updated_at:Date.now()};
@@ -1552,7 +1554,7 @@ async function processGenerationJobLocked(
   attempts = 1,
 ) {
   let status = (await readGenerationStatus(env, jobId)) || payload.status;
-  if(status?.cooldown_reason==="quota"&&status.cooldown_scope==="daily"&&["queued","generating"].includes(status.state)){
+  if(legacyOvernightQuota(status)&&["queued","generating"].includes(status.state)){
     status={...status,state:"paused_quota",next_retry_at:null,
       error:"Gemini quota reached. Select Continue to quota when you want to retry.",
       updated_at:Date.now()};
