@@ -992,7 +992,7 @@ async function refreshContinueSession({force=false}={}){
     if(!job){
       session.state="complete";changed=true;break;
     }
-    if(job.state==="paused_quota"){session.state="paused";changed=true;break}
+    if(job.state==="paused_quota"&&!force){session.state="paused";changed=true;break}
     let status;
     try{status=await kr(a.apiBase,a.accessToken,job.jobId)}
     catch(err){
