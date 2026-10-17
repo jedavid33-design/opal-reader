@@ -24,6 +24,7 @@ test("Gemini 429 pauses permanently until a manual action; late deliveries canno
     gemini429Cooldown:()=>({scope:"daily",retryAt:Date.now()+500000,delaySeconds:500}),
     extractGeminiQuotaDiagnostics:()=>({http_status:429}),
     addGenerationTrace:()=>{},generationDelaySeconds:()=>0,
+    legacyOvernightQuota:()=>false,
     nextGenerationSegmentIndex:arr=>arr.findIndex(x=>
       !["ready","blocked","provider_failed","dormant","split"].includes(x.state)),
     generationSegmentTerminal:item=>["ready","blocked","provider_failed","dormant","split"].includes(item?.state)
@@ -88,7 +89,7 @@ test("Continue stage is sequential and idempotent; manual resume enqueues exactl
   assert.equal(messages.length,3);
 });
 test("Older 3AM cooldown messages are migrated to manual pause",async()=>{
-  const code=between(w,"async function pauseLegacyQuotaJob(","async function processGenerationJobLocked(");
+  const code=between(w,"const legacyOvernightQuota =","async function processGenerationJobLocked(");
   let state={job_id:"a".repeat(64),state:"queued",cooldown_reason:"quota",cooldown_scope:"daily",
     next_retry_at:Date.now()+800000,segments:[{state:"queued"}]};
   const deps={acquireProcessingLease:async()=>true,releaseProcessingLease:async()=>{},
@@ -129,6 +130,7 @@ test("Temporary Gemini minute-rate 429 backs off but does not require morning ta
     gemini429Cooldown:()=>({scope:"temporary",retryAt:Date.now()+90000,delaySeconds:90}),
     extractGeminiQuotaDiagnostics:()=>({http_status:429}),
     addGenerationTrace:()=>{},generationDelaySeconds:()=>0,
+    legacyOvernightQuota:()=>false,
     nextGenerationSegmentIndex:arr=>arr.findIndex(x=>
       !["ready","blocked","provider_failed","dormant","split"].includes(x.state)),
     generationSegmentTerminal:item=>["ready","blocked","provider_failed","dormant","split"].includes(item?.state)
