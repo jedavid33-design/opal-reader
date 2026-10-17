@@ -1827,6 +1827,33 @@ async function processGenerationJobLocked(
   }
 }
 
+
+async function activateNextContinueJob(env,payload){
+  const id=payload?.continue_next_job_id;
+  if(!validJobId(id)||!env.OPALREADER_GENERATION)return false;
+  if(!await acquireProcessingLease(env,id,"activate"))return false;
+  try{
+    const current=await readGenerationStatus(env,id);
+    if(!current||current.state!=="parked")return false;
+    const next=nextGenerationSegmentIndex(current.segments);
+    if(next<0)return false;
+    const activated={...current,state:"queued",error:null,updated_at:Date.now()};
+    addGenerationTrace(activated,"continue_activated",null);
+    await saveGenerationStatus(env,activated);
+    await env.OPALREADER_GENERATION.send({job_id:id,segment_index:next});
+    return true;
+  }finally{await releaseProcessingLease(env,id,"activate")}
+}
+function validContinuePayload(p,bookId){
+  return p&&validJobId(p.job_id)&&p.book_id===bookId&&
+    Number.isInteger(p.chapter_index)&&p.chapter_index>=0&&
+    Array.isArray(p.segments)&&p.segments.length>0&&p.segments.length<=100&&
+    p.segments.every(s=>s?.provider==="gemini"&&validCacheKey(s.cache_key)&&
+      typeof s.text==="string"&&s.text.length>0&&
+      typeof s.voice_id==="string"&&s.voice_id.length>0)&&
+    validateAdaptiveRepairPayload(p);
+}
+
 async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
   const payload = await readGenerationPayload(env, jobId);
   if (!payload) throw new Error("Generation job payload was not found.");
