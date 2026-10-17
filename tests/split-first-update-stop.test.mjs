@@ -68,7 +68,7 @@ test("Adaptive processing always prioritizes newly activated split pieces",()=>{
    cache_key:["a","b","c","d"][i].repeat(64),model_id:"gemini-3.8-flash-tts",
    text:"This is the unchanged narration text."}));
  const deps={
-   matchesGenerationRelease:()=>true,
+   GENERATION_RELEASE_ID:"1.4.41/1.4.106",
    readGenerationStatus:async()=>JSON.parse(JSON.stringify(s)),
    saveGenerationStatus:async(_,st)=>{s=JSON.parse(JSON.stringify(st))},
    hasCachedAudio:async()=>false,previouslyGeneratedChapterAudio:async()=>null,
@@ -90,7 +90,8 @@ test("Adaptive processing always prioritizes newly activated split pieces",()=>{
  for(let n=0;n<10;n++){
    s.next_retry_at=0;
    if(!s.segments.some(x=>x.state==="queued"))break;
-   await core({},s.job_id,{adaptive_repair:true,adaptive_source_mode:"mixed",
+   await core({},s.job_id,{generation_release:"1.4.41/1.4.106",client_version:"1.4.106",
+     adaptive_repair:true,adaptive_source_mode:"mixed",
      diagnostic_job_kind:"adaptive_repair",segments:nodes},3,1);
  }
  assert.deepEqual(seen,["source0","L","R","source1"]);
