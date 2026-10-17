@@ -68,7 +68,7 @@ test("Adaptive processing always prioritizes newly activated split pieces",()=>{
    cache_key:["a","b","c","d"][i].repeat(64),model_id:"gemini-3.8-flash-tts",
    text:"This is the unchanged narration text."}));
  const deps={
-   GENERATION_RELEASE_ID:"1.4.41/1.4.106",
+   GENERATION_RELEASE_ID:"1.4.41/1.4.106",READER_GENERATION_UI_VERSION:"1.4.106",
    readGenerationStatus:async()=>JSON.parse(JSON.stringify(s)),
    saveGenerationStatus:async(_,st)=>{s=JSON.parse(JSON.stringify(st))},
    hasCachedAudio:async()=>false,previouslyGeneratedChapterAudio:async()=>null,
