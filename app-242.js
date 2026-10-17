@@ -723,13 +723,14 @@ function Ir(e,c,book=a.book){
 function chapterQuotaBanner(ch){
   const job=[ch?.replacementGeneration,ch?.generation].find(
     j=>j?.state==="paused_quota"||
-       j?.cooldown_reason==="quota"&&["queued","generating"].includes(j.state));
-  if(job){
-    const scope=job.cooldown_scope==="daily"?"Gemini daily request limit":"Gemini quota/rate limit";
-    return '<div class="chapter-quota-note" role="status"><strong>Paused for Gemini quota</strong> · '+
-      scope+'. No automatic overnight retry. Saved audio is preserved. Tap Resume or Continue to quota when ready.</div>';
-  }
-  return "";
+       j?.cooldown_reason==="quota"&&j?.state==="queued");
+  if(!job)return "";
+  if(job.state==="paused_quota")
+    return '<div class="chapter-quota-note" role="status"><strong>Gemini daily limit reached</strong> · No automatic 3 AM restart. Generated audio is safe. Tap Resume or Continue to quota when you wake up.</div>';
+  const when=Number(job.next_retry_at)>Date.now()
+    ?new Date(Number(job.next_retry_at)).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})
+    :"shortly";
+  return '<div class="chapter-quota-note" role="status"><strong>Temporary Gemini rate limit</strong> · Retrying '+when+'. This is not an overnight daily reset.</div>';
 }
 function continueQuotaHeader(){
   const s=a.book?.continueSession;
