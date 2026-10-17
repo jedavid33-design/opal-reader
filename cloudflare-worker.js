@@ -1883,8 +1883,9 @@ async function stageContinueSession(env,plan){
         throw Error("An existing job belongs to a different session.");
       continue;
     }
-    const ready=await Promise.all(payload.segments.map(seg=>
-      payload.adaptive_repair?Promise.resolve(false):hasCachedAudio(env,seg.cache_key)));
+    // Do not HEAD every future audio object during plan setup. Each queued
+    // delivery checks R2 before synthesis and never bills a cached segment.
+    const ready=payload.segments.map(()=>false);
     const status={job_id:payload.job_id,book_id:bookId,
       chapter_index:payload.chapter_index,continue_session_id:sessionId,
       state:i===0?"queued":"parked",continue_started:false,
