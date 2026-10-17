@@ -1366,6 +1366,29 @@ function validateAdaptiveRepairPayload(payload) {
   return rootPaths.size>0&&[...rootPaths.values()].every(
     paths=>paths.length===2&&paths.includes("L")&&paths.includes("R"));
 }
+
+// All queued Gemini jobs share one conservative send pace, not just the 12 s
+// spacing within each chapter. R2 conditional leases keep the reservation
+// serialized across devices/jobs without sleeping or consuming a Gemini call.
+const GEMINI_GLOBAL_PACE_MS = 7000; // <10 requests/minute with buffer
+async function reserveGeminiQueuePace(env) {
+  if (!env.OPALREADER_STORAGE) return {ready:false,retryAt:Date.now()+10000};
+  const now=Date.now();
+  if (!(await acquireProcessingLease(env,"gemini-global-pacing","reservation")))
+    return {ready:false,retryAt:now+3000};
+  try{
+    const key="generation/pacing/gemini.json";
+    const object=await r2Get(env,key);
+    const value=object?(object.json?await object.json():JSON.parse(await new Response(object.body).text())):null;
+    const next=Number(value?.next_at)||0;
+    if(next>Date.now())return {ready:false,retryAt:next};
+    const timestamp=Date.now();
+    await env.OPALREADER_STORAGE.put(key,JSON.stringify({next_at:timestamp+GEMINI_GLOBAL_PACE_MS}),{
+      httpMetadata:{contentType:"application/json"}});
+    return {ready:true,retryAt:timestamp+GEMINI_GLOBAL_PACE_MS};
+  }finally{await releaseProcessingLease(env,"gemini-global-pacing","reservation")}
+}
+
 function adaptiveRepairCounts(status) {
   const active=(status.segments||[]).filter(x=>!["dormant","split","skipped"].includes(x.state));
   status.completed=active.filter(x=>x.state==="ready").length;
@@ -1611,6 +1634,18 @@ async function processGenerationJobLocked(
       }
     }
     if (!cached) {
+      if(segment.provider==="gemini"){
+        const slot=await reserveGeminiQueuePace(env);
+        if(!slot.ready){
+          status.state="queued";
+          status.segments[activeIndex]={...status.segments[activeIndex],state:"queued"};
+          status.next_retry_at=slot.retryAt;
+          status.updated_at=Date.now();
+          addGenerationTrace(status,"global_pace_wait",segment,{retry_at:slot.retryAt});
+          await saveGenerationStatus(env,status);
+          return {status,next:activeIndex,delaySeconds:Math.max(1,Math.ceil((slot.retryAt-Date.now())/1000))};
+        }
+      }
       addGenerationTrace(status, "synthesis_started", segment);
       await saveGenerationStatus(env, status);
       result = await synthesizeAudio(env, segment.provider, segment);
