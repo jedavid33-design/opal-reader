@@ -1529,11 +1529,11 @@ function generationDelaySeconds(status, now = Date.now()) {
 // Persist a manual-only pause before those messages can make another call.
 async function pauseLegacyQuotaJob(env,jobId,original){
   if(!original || !["queued","generating"].includes(original.state) ||
-      original.cooldown_reason!=="quota")return original;
+      original.cooldown_reason!=="quota"||original.cooldown_scope!=="daily")return original;
   if(!(await acquireProcessingLease(env,jobId,"manual-quota-migration")))return original;
   try{
     const current=await readGenerationStatus(env,jobId)||original;
-    if(["queued","generating"].includes(current.state)&&current.cooldown_reason==="quota"){
+    if(["queued","generating"].includes(current.state)&&current.cooldown_reason==="quota"&&current.cooldown_scope==="daily"){
       const paused={...current,state:"paused_quota",next_retry_at:null,
         error:"Gemini quota reached. Paused until you manually select Continue to quota.",
         updated_at:Date.now()};
@@ -1552,7 +1552,7 @@ async function processGenerationJobLocked(
   attempts = 1,
 ) {
   let status = (await readGenerationStatus(env, jobId)) || payload.status;
-  if(status?.cooldown_reason==="quota"&&["queued","generating"].includes(status.state)){
+  if(status?.cooldown_reason==="quota"&&status.cooldown_scope==="daily"&&["queued","generating"].includes(status.state)){
     status={...status,state:"paused_quota",next_retry_at:null,
       error:"Gemini quota reached. Select Continue to quota when you want to retry.",
       updated_at:Date.now()};
@@ -1757,9 +1757,10 @@ async function processGenerationJobLocked(
       // Keep only structured quota evidence; never persist the provider's raw
       // response, transcript, API credentials or project identifiers.
       const evidence = extractGeminiQuotaDiagnostics(error, segment, payload, cooldown);
-      // The provider-derived time is only a hint, not a scheduled Worker retry.
-      evidence.scheduled_retry_at = null;
-      evidence.manual_resume_required = true;
+      // A real daily limit is manual-only. Temporary rate limits keep a
+      // bounded automatic retry so remaining daily requests aren't stranded.
+      evidence.scheduled_retry_at = cooldown.scope==="daily"?null:cooldown.retryAt;
+      evidence.manual_resume_required = cooldown.scope==="daily";
       status.quota_diagnostics = [
         ...(Array.isArray(status.quota_diagnostics) ? status.quota_diagnostics : []).slice(-7),
         evidence,
@@ -1770,18 +1771,23 @@ async function processGenerationJobLocked(
           quota_exceeded: false, model: segment?.model_id || null,
         };
       }
-      status.state = "paused_quota";
+      status.state = cooldown.scope==="daily"?"paused_quota":"queued";
       status.quota_exceeded = true;
       status.quota_cooldown_count = count;
       status.cooldown_reason = "quota";
       status.cooldown_scope = cooldown.scope;
-      status.next_retry_at = null;
-      addGenerationTrace(status, "quota_manual_pause", segment,{scope:cooldown.scope});
-      status.error = "Gemini 429: paused until you manually select Continue to quota. " +
-        "Completed audio and remaining queue work are saved.";
+      status.next_retry_at = cooldown.scope==="daily"?null:cooldown.retryAt;
+      addGenerationTrace(status,
+        cooldown.scope==="daily"?"quota_manual_pause":"quota_temporary_wait",
+        segment,{scope:cooldown.scope,
+          ...(cooldown.scope==="temporary"?{retry_at:cooldown.retryAt}:{})});
+      status.error = cooldown.scope==="daily"?
+        "Gemini daily quota reached. Paused until you manually select Continue to quota.":
+        "Gemini temporary rate limit. The queued request will retry after a short delay.";
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
-      return {status,next:-1};
+      return cooldown.scope==="daily"?{status,next:-1}:
+        {status,next:index,delaySeconds:cooldown.delaySeconds};
     }
 
     if (error?.providerInternal) {
