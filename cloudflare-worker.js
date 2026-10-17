@@ -1854,6 +1854,64 @@ function validContinuePayload(p,bookId){
     validateAdaptiveRepairPayload(p);
 }
 
+
+async function stageContinueSession(env,plan){
+  const sessionId=plan?.session_id,bookId=plan?.book_id,jobs=plan?.jobs;
+  if(!validJobId(sessionId)||!validId(bookId)||!Array.isArray(jobs)||
+     !jobs.length||jobs.length>30||jobs.some(p=>!validContinuePayload(p,bookId)))
+    throw Error("Invalid Continue to quota plan.");
+  const ids=jobs.map(p=>p.job_id);
+  if(new Set(ids).size!==ids.length||
+      jobs.some((p,i)=>i>0&&p.chapter_index<jobs[i-1].chapter_index))
+    throw Error("Continue plan contains duplicate or out-of-order jobs.");
+  for(let i=0;i<jobs.length;i++){
+    const payload={...jobs[i],continue_session_id:sessionId,
+      continue_next_job_id:ids[i+1]||null};
+    const existing=await readGenerationStatus(env,payload.job_id);
+    if(existing){
+      if(existing.continue_session_id!==sessionId)
+        throw Error("An existing job belongs to a different session.");
+      continue;
+    }
+    const ready=await Promise.all(payload.segments.map(seg=>
+      payload.adaptive_repair?Promise.resolve(false):hasCachedAudio(env,seg.cache_key)));
+    const status={job_id:payload.job_id,book_id:bookId,
+      chapter_index:payload.chapter_index,continue_session_id:sessionId,
+      state:i===0?"queued":"parked",continue_started:false,
+      completed:ready.filter(Boolean).length,
+      total:payload.adaptive_repair?
+        payload.segments.filter(seg=>seg.repair_parent===-1).length:ready.length,
+      adaptive_repair:payload.adaptive_repair===true,
+      generated_cost:0,error:null,updated_at:Date.now(),
+      segments:payload.segments.map((seg,j)=>({
+        cache_key:seg.cache_key,state:payload.adaptive_repair?
+          (seg.repair_parent===-1?"queued":"dormant"):
+          (ready[j]?"ready":"queued")
+      }))};
+    await env.OPALREADER_STORAGE.put(generationPayloadKey(payload.job_id),
+      JSON.stringify({...payload,status}),{httpMetadata:{contentType:"application/json"}});
+    await saveGenerationStatus(env,status);
+  }
+  const firstId=ids[0];
+  if(await acquireProcessingLease(env,firstId,"first-start")){
+    try{
+      const s=await readGenerationStatus(env,firstId);
+      if(s?.state==="queued"&&!s.continue_started){
+        const next=nextGenerationSegmentIndex(s.segments);
+        if(next>=0){
+          await saveGenerationStatus(env,{...s,continue_started:true,updated_at:Date.now()});
+          await env.OPALREADER_GENERATION.send({job_id:firstId,segment_index:next});
+        }
+      }
+    }finally{await releaseProcessingLease(env,firstId,"first-start")}
+  }
+  return {session_id:sessionId,jobs:await Promise.all(ids.map(async id=>{
+    const s=await readGenerationStatus(env,id);
+    return {job_id:id,chapter_index:s?.chapter_index,state:s?.state,
+      completed:s?.completed,total:s?.total};
+  }))};
+}
+
 async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
   const payload = await readGenerationPayload(env, jobId);
   if (!payload) throw new Error("Generation job payload was not found.");
