@@ -1483,7 +1483,7 @@ function extractGeminiQuotaDiagnostics(error, segment, payload, cooldown) {
     for (const match of message.matchAll(/\bquota[_\s-]*id\s*[:=]\s*['"]?([A-Za-z][A-Za-z0-9_.-]{2,100})/gi)) addQuotaId(match[1]);
   }
   const model=safeName(segment?.model_id);
-  const kind=["blocked_split","single_segment","chapter","replacement"].includes(payload?.diagnostic_job_kind)
+  const kind=["blocked_split","single_segment","chapter","replacement","adaptive_repair"].includes(payload?.diagnostic_job_kind)
     ? payload.diagnostic_job_kind : payload?.segments?.length===1?"single_segment":"chapter_or_split";
   return {
     at:Date.now(), http_status:429,
