@@ -92,7 +92,7 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.37"; // preserve sanitized Gemini 429 quota evidence
+const APP_VERSION = "1.4.38"; // durable adaptive Gemini policy-block repair
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
   ["book_generation", "book_audition", "voice_sample", "other"].includes(value)
@@ -1334,8 +1334,59 @@ async function previouslyGeneratedChapterAudio(env, payload, segment) {
   return (await hasCachedAudio(env, current.audioKey)) ? current.audioKey : null;
 }
 
+
+function validateAdaptiveRepairPayload(payload) {
+  if (payload?.adaptive_repair !== true) return true;
+  const parts=payload.segments;
+  if (!Array.isArray(parts) || parts.length > 90 || parts.length < 2 ||
+      payload.diagnostic_job_kind !== "adaptive_repair") return false;
+  for(let index=0;index<parts.length;index++){
+    const s=parts[index];
+    if(s?.provider!=="gemini" || !Number.isInteger(s?.segment_index) ||
+       s.segment_index<0 || s.segment_index!==s.repair_source_index ||
+       typeof s.repair_path!=="string" || !/^[LR]{1,12}$/.test(s.repair_path) ||
+       !Number.isInteger(s.repair_parent) || s.repair_parent < -1 ||
+       s.repair_parent >= index) return false;
+    const children=parts.map((v,i)=>v.repair_parent===index?i:-1).filter(i=>i>=0);
+    if(children.length!==0&&children.length!==2)return false;
+    if(children.length===2){
+      const [l,r]=children.map(i=>parts[i]);
+      if(l.repair_source_index!==s.repair_source_index ||
+         r.repair_source_index!==s.repair_source_index ||
+         l.repair_path!==s.repair_path+"L" ||
+         r.repair_path!==s.repair_path+"R")return false;
+    }
+  }
+  const rootPaths=new Map();
+  for(const s of parts)if(s.repair_parent===-1){
+    const paths=rootPaths.get(s.repair_source_index)||[];
+    paths.push(s.repair_path);
+    rootPaths.set(s.repair_source_index,paths);
+  }
+  return rootPaths.size>0&&[...rootPaths.values()].every(
+    paths=>paths.length===2&&paths.includes("L")&&paths.includes("R"));
+}
+function adaptiveRepairCounts(status) {
+  const active=(status.segments||[]).filter(x=>!["dormant","split","skipped"].includes(x.state));
+  status.completed=active.filter(x=>x.state==="ready").length;
+  status.total=active.length;
+  status.blocked=active.filter(x=>x.state==="blocked").length;
+  return status;
+}
+function activateAdaptiveChildren(payload,status,index) {
+  const children=payload.segments.map((s,i)=>s.repair_parent===index?i:-1).filter(i=>i>=0);
+  if(children.length!==2)return false;
+  for(const i of children){
+    if(status.segments[i]?.state!=="dormant")throw Error("Adaptive repair tree state mismatch");
+    status.segments[i]={...status.segments[i],state:"queued"};
+  }
+  status.segments[index]={...status.segments[index],state:"split",error:null};
+  adaptiveRepairCounts(status);
+  return true;
+}
+
 const generationSegmentTerminal = (item) =>
-  ["ready", "blocked", "provider_failed"].includes(item?.state) ||
+  ["ready", "blocked", "provider_failed", "split", "dormant", "skipped"].includes(item?.state) ||
   Boolean(item?.provider_internal);
 const nextGenerationSegmentIndex = (segments) =>
   (segments || []).findIndex((item) => !generationSegmentTerminal(item));
@@ -1590,6 +1641,7 @@ async function processGenerationJobLocked(
     status.completed = status.segments.filter(
       (item) => item.state === "ready",
     ).length;
+    if (payload.adaptive_repair) adaptiveRepairCounts(status);
 
     const next = nextGenerationSegmentIndex(status.segments);
     if (next < 0) finishGenerationState(status);
@@ -1617,6 +1669,27 @@ async function processGenerationJobLocked(
 
     if (error?.contentBlocked) {
       addGenerationTrace(status, "blocked_by_provider", segment);
+      if (payload.adaptive_repair === true && index >= 0 && segment) {
+        const didSplit=activateAdaptiveChildren(payload,status,index);
+        if (!didSplit) {
+          status.segments[index]={
+            cache_key:segment.cache_key,state:"blocked",
+            error:error.message||"Gemini blocked this small piece.",
+            block_reason:error.blockReason||"POLICY_BLOCK",
+            finish_reason:error.finishReason||"HTTP_400",
+            model:segment.model_id||null,
+          };
+          adaptiveRepairCounts(status);
+        }
+        addGenerationTrace(status,didSplit?"adaptive_split":"adaptive_exhausted",segment);
+        const next=nextGenerationSegmentIndex(status.segments);
+        if(next<0) finishGenerationState(status);
+        else {status.state="queued";status.error=null}
+        status.next_retry_at=next>=0?Date.now()+chapterNextPace(payload,next)*1000:null;
+        status.updated_at=Date.now();
+        await saveGenerationStatus(env,status);
+        return {status,next};
+      }
       if (index >= 0 && segment) {
         status.segments[index] = {
           cache_key: segment.cache_key,
@@ -1630,6 +1703,7 @@ async function processGenerationJobLocked(
       status.completed = status.segments.filter(
         (item) => item.state === "ready",
       ).length;
+      if(payload.adaptive_repair)adaptiveRepairCounts(status);
       status.blocked = status.segments.filter(
         (item) => item.state === "blocked",
       ).length;
@@ -2138,6 +2212,7 @@ export default {
           );
         const payload = await request.json();
         if (
+          !validateAdaptiveRepairPayload(payload) ||
           !validJobId(payload.job_id) ||
           !validId(payload.book_id) ||
           !Number.isInteger(payload.chapter_index) ||
@@ -2186,23 +2261,28 @@ export default {
           }
           return json(existing, 200, origin, env);
         }
-        const ready = await Promise.all(
-            payload.segments.map((segment) =>
-              hasCachedAudio(env, segment.cache_key),
-            ),
-          ),
+        const ready = payload.adaptive_repair
+            ? payload.segments.map(() => false)
+            : await Promise.all(
+                payload.segments.map((segment) => hasCachedAudio(env, segment.cache_key)),
+              ),
           status = {
             job_id: payload.job_id,
             book_id: payload.book_id,
             chapter_index: payload.chapter_index,
             state: ready.every(Boolean) ? "ready" : "queued",
             completed: ready.filter(Boolean).length,
-            total: payload.segments.length,
+            total: payload.adaptive_repair
+              ? payload.segments.filter(s=>s.repair_parent===-1).length
+              : payload.segments.length,
+            adaptive_repair:payload.adaptive_repair===true,
             generated_cost: Number(existing?.generated_cost) || 0,
             error: null,
             segments: payload.segments.map((segment, index) => ({
               cache_key: segment.cache_key,
-              state: ready[index] ? "ready" : "queued",
+              state: payload.adaptive_repair
+                ? segment.repair_parent===-1?"queued":"dormant"
+                : ready[index] ? "ready" : "queued",
             })),
             updated_at: Date.now(),
           };
@@ -2215,7 +2295,7 @@ export default {
         if (status.state !== "ready")
           await env.OPALREADER_GENERATION.send({
             job_id: payload.job_id,
-            segment_index: ready.findIndex((item) => !item),
+            segment_index: payload.adaptive_repair ? 0 : ready.findIndex((item) => !item),
           });
         return json(status, 202, origin, env);
       }
