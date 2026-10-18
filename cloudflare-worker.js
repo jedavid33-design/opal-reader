@@ -92,7 +92,8 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.41"; // stop pre-update generation before new synthesis
+const APP_VERSION = "1.4.41"; // preserve existing generation-release fence
+const SYNC_PROTOCOL_VERSION = 2; // manifest + one-book-at-a-time transfers
 const READER_GENERATION_UI_VERSION = "1.4.106";
 const GENERATION_RELEASE_ID = APP_VERSION + "/" + READER_GENERATION_UI_VERSION;
 const usageEventPrefix = "usage/events/";
@@ -421,6 +422,39 @@ async function usageReport(env, url) {
 async function libraryIndex(env) {
   return (await env.OPALREADER_KV.get("library:index", "json")) || [];
 }
+// The legacy library:index can contain multi-megabyte base64 book covers.
+// Use only metadata in the index; the complete cover stays with book:<id>.
+function compactIndexRow(row) {
+  return {
+    id: row.id,
+    title: row.title || "",
+    author: row.author || "",
+    updatedAt: Number(row.updatedAt) || 0,
+  };
+}
+// The new manifest lists key names without loading the oversized legacy index
+// or any full book JSON. This prevents one request from materializing all covers.
+async function libraryManifest(env) {
+  const ids = [];
+  let cursor;
+  do {
+    const page = await env.OPALREADER_KV.list({
+      prefix: "book:",
+      limit: 1000,
+      ...(cursor ? { cursor } : {}),
+    });
+    for (const key of page.keys || []) {
+      const id = String(key.name || "").slice("book:".length);
+      if (validId(id)) ids.push(id);
+    }
+    if (page.list_complete) break;
+    if (!page.cursor) throw new Error("Incomplete book listing without cursor");
+    cursor = page.cursor;
+  } while (true);
+  const deleted = await listTombstones(env);
+  const deletedIds = new Set(deleted.map(d => d.id));
+  return { ids: [...new Set(ids)].filter(id => !deletedIds.has(id)), deleted };
+}
 // Deletion tombstones: deleting a book records `deleted:<id>` so that a
 // stale device (or a failed-then-retried sync) can never resurrect it with a
 // PUT, and so other devices learn to drop their local copy on next sync.
@@ -479,18 +513,22 @@ async function saveBook(env, book) {
   if (existing && (existing.updatedAt || 0) > (book.updatedAt || 0))
     return { book: existing, accepted: false };
   await env.OPALREADER_KV.put(key, JSON.stringify(book));
-  const index = await libraryIndex(env),
-    summary = {
-      id: book.id,
-      title: book.title,
-      author: book.author || "",
-      cover: book.cover || null,
-      updatedAt: book.updatedAt || Date.now(),
-    },
-    at = index.findIndex((item) => item.id === book.id);
-  if (at >= 0) index[at] = summary;
-  else index.push(summary);
-  await env.OPALREADER_KV.put("library:index", JSON.stringify(index));
+  const oldIndex = await libraryIndex(env);
+  const index = oldIndex.map(compactIndexRow);
+  const at = index.findIndex((item) => item.id === book.id);
+  const summary = compactIndexRow(book);
+  // Playback progress belongs to book:<id>, not library:index. Skip extra KV
+  // writes on progress-only updates while preserving book covers in each book.
+  let metadataChanged = at < 0;
+  if (at >= 0) {
+    const prior = index[at];
+    metadataChanged = prior.title !== summary.title || prior.author !== summary.author;
+    if (metadataChanged) index[at] = summary;
+  } else index.push(summary);
+  const hadOversizedFields = oldIndex.some((row) =>
+    Object.keys(row).some((key) => !["id", "title", "author", "updatedAt"].includes(key)));
+  if (hadOversizedFields || metadataChanged)
+    await env.OPALREADER_KV.put("library:index", JSON.stringify(index));
   return { book, accepted: true };
 }
 const AUDIO_EXTENSIONS = ["mp3", "wav"];
@@ -2061,7 +2099,7 @@ export default {
       return new Response(null, { status: 204, headers: cors(origin, env) });
     const url = new URL(request.url);
     if ((url.pathname === "/health" || url.pathname === "/health/") && request.method === "GET")
-      return json({ ok: true, app: "OpalReader API", version: APP_VERSION }, 200, origin, env);
+      return json({ ok: true, app: "OpalReader API", version: APP_VERSION, sync_protocol: SYNC_PROTOCOL_VERSION }, 200, origin, env);
     if (url.pathname.startsWith("/api/export/audio/") && request.method === "GET") {
       if (!env.OPALREADER_KV || !env.OPALREADER_STORAGE)
         return json({ error: "Export storage is not configured." }, 503, origin, env);
@@ -2132,6 +2170,24 @@ export default {
           origin,
           env,
         );
+      if (url.pathname === "/api/sync/manifest" && request.method === "GET") {
+        if (!syncReady(env))
+          return json({ error: "Cross-device storage not configured." }, 503, origin, env);
+        return json(await libraryManifest(env), 200, origin, env);
+      }
+      if (url.pathname.startsWith("/api/sync/book/") && request.method === "GET") {
+        if (!syncReady(env))
+          return json({ error: "Cross-device storage not configured." }, 503, origin, env);
+        const id = decodeURIComponent(url.pathname.slice("/api/sync/book/".length));
+        if (!validId(id))
+          return json({ error: "Invalid book identifier." }, 400, origin, env);
+        if (await getTombstone(env, id))
+          return json({ error: "Book was deleted." }, 404, origin, env);
+        const book = await env.OPALREADER_KV.get(`book:${id}`, "json");
+        if (!book)
+          return json({ error: "Book not found." }, 404, origin, env);
+        return json({ book }, 200, origin, env);
+      }
       if (url.pathname === "/api/sync/library" && request.method === "GET") {
         if (!syncReady(env))
           return json(
@@ -2226,7 +2282,7 @@ export default {
         if (filtered.length !== index.length) {
           await env.OPALREADER_KV.put(
             "library:index",
-            JSON.stringify(filtered),
+            JSON.stringify(filtered.map(compactIndexRow)),
           );
         }
         // Record a deletion tombstone so a stale device can never resurrect
