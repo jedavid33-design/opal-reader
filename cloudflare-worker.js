@@ -2133,16 +2133,53 @@ function validContinuePayload(p,bookId){
 }
 
 
+
+function describeContinuePayloadIssue(p,bookId){
+  if(!p||typeof p!=="object")return "Job data is missing.";
+  if(!validJobId(p.job_id))return "Job ID is missing or malformed.";
+  if(p.book_id!==bookId)return "Book ID does not match this session.";
+  if(!Number.isInteger(p.chapter_index)||p.chapter_index<0)
+    return "Chapter index must be a nonnegative integer.";
+  if(!Array.isArray(p.segments)||p.segments.length<1||p.segments.length>100)
+    return "Segment count must be between 1 and 100 (got "+
+      (Array.isArray(p.segments)?p.segments.length:"missing")+").";
+  for(let i=0;i<p.segments.length;i++){
+    const seg=p.segments[i];
+    if(seg?.provider!=="gemini")return "Segment "+(i+1)+" must use Gemini.";
+    if(!validCacheKey(seg.cache_key))return "Segment "+(i+1)+" has an invalid cache key.";
+    if(typeof seg.text!=="string"||seg.text.length<1)
+      return "Segment "+(i+1)+" has no narration text.";
+    if(typeof seg.voice_id!=="string"||seg.voice_id.length<1)
+      return "Segment "+(i+1)+" is missing its Gemini voice ID.";
+  }
+  if(!validateAdaptiveRepairPayload(p))
+    return "Adaptive repair tree is invalid (check parent IDs, paths and split pairs).";
+  if(!matchesGenerationRelease(p))
+    return "Reader/Worker generation release mismatch; expected "+GENERATION_RELEASE_ID+".";
+  return null;
+}
+
 async function stageContinueSession(env,plan){
   const sessionId=plan?.session_id,bookId=plan?.book_id,jobs=plan?.jobs;
-  if(!validJobId(sessionId)||!validId(bookId)||!Array.isArray(jobs)||
-     !jobs.length||jobs.length>30||
-     jobs.some(p=>!validContinuePayload(p,bookId)||!matchesGenerationRelease(p)))
-    throw Error("Invalid Continue to quota plan.");
-  const ids=jobs.map(p=>p.job_id);
-  if(new Set(ids).size!==ids.length||
-      jobs.some((p,i)=>i>0&&p.chapter_index<jobs[i-1].chapter_index))
-    throw Error("Continue plan contains duplicate or out-of-order jobs.");
+  if(!validJobId(sessionId))
+    throw Error("Continue setup: session ID is missing or malformed.");
+  if(!validId(bookId))
+    throw Error("Continue setup: book ID is missing or malformed.");
+  if(!Array.isArray(jobs)||jobs.length<1||jobs.length>30)
+    throw Error("Continue setup: expected 1–30 jobs; received "+
+      (Array.isArray(jobs)?jobs.length:"no job list")+".");
+  const ids=jobs.map(p=>p?.job_id);
+  for(let i=0;i<jobs.length;i++){
+    const p=jobs[i],reason=describeContinuePayloadIssue(p,bookId);
+    const chapter=Number.isInteger(p?.chapter_index)?String(p.chapter_index+1):"unknown";
+    const where="job "+(i+1)+", chapter "+chapter+
+      " (ID "+String(p?.job_id||"missing").slice(0,12)+")";
+    if(reason)throw Error("Continue plan rejected at "+where+": "+reason);
+    if(i>0&&p.chapter_index<jobs[i-1].chapter_index)
+      throw Error("Continue plan rejected at "+where+": jobs are out of chapter order.");
+    if(ids.indexOf(p.job_id)!==i)
+      throw Error("Continue plan rejected at "+where+": duplicate job ID.");
+  }
   for(let i=0;i<jobs.length;i++){
     const payload={...jobs[i],continue_session_id:sessionId,
       continue_next_job_id:ids[i+1]||null};
