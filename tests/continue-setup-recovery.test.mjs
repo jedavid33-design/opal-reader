@@ -79,7 +79,9 @@ test("Discard refuses partially staged jobs and uncertain network replies",async
  }
 });
 test("Worker will not report a payload-only partially staged job as missing",()=>{
- const check=extract(worker,'if (\n        url.pathname.startsWith("/api/generation/jobs/") &&\n        request.method === "GET"','if (\n        url.pathname.startsWith("/api/generation/jobs/") &&\n        request.method === "POST"');
+ const start=worker.indexOf('request.method === "GET"',worker.indexOf('url.pathname.startsWith("/api/generation/jobs/")'));
+ assert.ok(start>=0);
+ const check=worker.slice(start,start+1900);
  assert.ok(check.includes("await readGenerationPayload(env, jobId)"));
  assert.match(check,/state: "staging_incomplete"/);
  assert.match(check,/if \(stagedPayload\)/);
