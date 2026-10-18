@@ -634,13 +634,64 @@ function bookCostBanner(){
 }function segmentFallbackTarget(){const m=/^segfb:(\d+):(\d+)$/.exec(a.voiceTarget||"");return m?{chapter:+m[1],segment:+m[2]}:null}
 function ot(){const t=segmentFallbackTarget();if(t)return`Segment ${t.segment+1} fallback`;return a.voiceTarget==="default"?null:a.book?.povs.find(e=>e.id===a.voiceTarget)?.name}
 function Cr(){const t=segmentFallbackTarget();if(t)return a.book?.chapters?.[t.chapter]?.segments?.[t.segment]?.text?.length||0;const e=ot();return a.book?.chapters.flatMap(c=>c.segments).filter(c=>e?c.pov===e:!c.pov).reduce((c,r)=>c+r.text.length,0)||0}
-function Ar(){const t=segmentFallbackTarget(),target=t?a.book?.chapters?.[t.chapter]?.segments?.[t.segment]?.text:null,e=t?null:ot(),c=target||a.book?.chapters.flatMap(r=>r.segments).find(r=>e?r.pov===e:!r.pov)?.text||a.book?.chapters[0]?.segments[0]?.text||"Welcome to OpalReader.",m=c.slice(0,190),s=Math.max(m.lastIndexOf(". "),m.lastIndexOf("! "),m.lastIndexOf("? "));return(s>=110?m.slice(0,s+1):m).trim()}function Ze(e){return a.voiceProfiles[`${e.provider}:${e.voice_id}`]||{favorite:!1,tags:[],notes:""}}function Ve(){const e=new Date().toISOString().slice(0,7);return a.usage.month!==e&&(a.usage={month:e,spent:0}),a.usage}async function Ae(){const e={id:"main",apiBase:a.apiBase,accessToken:a.accessToken,voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:Date.now()};if(await ke("settings",e),a.providers.sync){const c={voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,updatedAt:e.sharedUpdatedAt};St(a.apiBase,a.accessToken,c).catch(()=>{})}}function xr(e){return{...e,epub:e.epub?{name:e.epub.name}:null}}async function Ee(e,strict=false){
+function Ar(){const t=segmentFallbackTarget(),target=t?a.book?.chapters?.[t.chapter]?.segments?.[t.segment]?.text:null,e=t?null:ot(),c=target||a.book?.chapters.flatMap(r=>r.segments).find(r=>e?r.pov===e:!r.pov)?.text||a.book?.chapters[0]?.segments[0]?.text||"Welcome to OpalReader.",m=c.slice(0,190),s=Math.max(m.lastIndexOf(". "),m.lastIndexOf("! "),m.lastIndexOf("? "));return(s>=110?m.slice(0,s+1):m).trim()}function Ze(e){return a.voiceProfiles[`${e.provider}:${e.voice_id}`]||{favorite:!1,tags:[],notes:""}}function Ve(){const e=new Date().toISOString().slice(0,7);return a.usage.month!==e&&(a.usage={month:e,spent:0}),a.usage}async function Ae(){const e={id:"main",apiBase:a.apiBase,accessToken:a.accessToken,voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:Date.now()};if(await ke("settings",e),a.providers.sync){const c={voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,updatedAt:e.sharedUpdatedAt};St(a.apiBase,a.accessToken,c).catch(()=>{})}}function xr(e){return{...e,epub:e.epub?{name:e.epub.name}:null}}
+/* Preserve newer in-flight generation IDs when an older cloud/device snapshot wins
+   a book timestamp race. Never resubmit jobs here: Worker statuses remain authoritative. */
+function preserveInFlightGenerationSession(selected,other){
+  if(!selected||!other||selected.id!==other.id)return selected;
+  const held=other.continueSession,current=selected.continueSession;
+  const pending=s=>s&&["running","staging_unconfirmed","paused"].includes(s.state)&&
+    Array.isArray(s.jobs)&&s.jobs.length>0&&Number(s.startedAt)>0;
+  if(!pending(held))return selected;
+  if(current?.id===held.id)return selected; // A paused/completed server state must not be resurrected.
+  if(current&&Number(current.startedAt||0)>=Number(held.startedAt||0))return selected;
+  const result={...selected,continueSession:held,
+    updatedAt:Math.max(Date.now(),Number(selected.updatedAt)||0,Number(other.updatedAt)||0)+1};
+  const jobIds=new Set(held.jobs.map(j=>j?.jobId).filter(Boolean));
+  result.chapters=(selected.chapters||[]).map((chapter,i)=>{
+    const previous=other.chapters?.[i];
+    if(!previous)return chapter;
+    let next=chapter;
+    const donor=[previous.generation,previous.replacementGeneration];
+    for(const key of ["generation","replacementGeneration"]){
+      const g=previous[key];
+      if(g?.jobId&&jobIds.has(g.jobId)&&chapter[key]?.jobId!==g.jobId){
+        if(next===chapter)next={...chapter};
+        next[key]=g;
+      }
+    }
+    // Preserve matching already-generated audio, not stale or altered passages.
+    if(previous.segments?.length===chapter.segments?.length){
+      const segs=chapter.segments.map((seg,j)=>{
+        const old=previous.segments[j];
+        return old?.audioKey&&!old.audioStale&&!seg.audioKey&&
+          old.text===seg.text&&old.speechText===seg.speechText&&old.pov===seg.pov
+          ?{...seg,audioKey:old.audioKey}:seg;
+      });
+      if(segs.some((seg,j)=>seg!==chapter.segments[j])){
+        if(next===chapter)next={...chapter};
+        next.segments=segs;
+      }
+    }
+    return next;
+  });
+  return result;
+}
+async function Ee(e,strict=false){
+  // A three-minute timer or background upload may hold an obsolete book object.
+  // Always read the newest local copy before uploading its generation session.
+  const latest=await Oe("books",e?.id).catch(()=>null);
+  if(latest){
+    const newer=(Number(latest.updatedAt)||0)>=(Number(e?.updatedAt)||0)?latest:e;
+    e=preserveInFlightGenerationSession(newer,newer===latest?e:latest);
+  }
   if(!a.providers.sync||!e)return false;
   try{
     const c=await _r(a.apiBase,a.accessToken,xr(e));
     if(!c.accepted&&c.book){
-      const m=xe({...c.book});
+      const m=xe(preserveInFlightGenerationSession({...c.book},e));
       await ke("books",m);
+      if(m.continueSession===e.continueSession)Er(m);
       if(a.book?.id===m.id)a.book=m;
     }
     a.syncStatus="Synced";
@@ -737,7 +788,29 @@ function releaseOldPlaybackForCloudResume(previous,incoming){
   ee._compositeEndSegment=0;
   ee._waitingForGeneration=false;
 }
-async function rt(){if(await $e(),!a.providers.sync)return se();a.syncStatus="Syncing…",a.syncError=null;let syncPhase="starting synchronization";se();try{const[{books:e=[],deleted:dl=[]},c]=await Promise.all([syncReadWithRetry(()=>yr(a.apiBase,a.accessToken),"downloading cloud library"),syncReadWithRetry(()=>wr(a.apiBase,a.accessToken),"downloading shared settings")]),r=await Be("books"),m=new Map(r.map(o=>[o.id,xe(o)]));syncPhase="reconciling book records";for(const td of dl||[]){const tid=td&&td.id;if(!tid)continue;dtAdd(tid);if(m.has(tid)){await dtPurgeLocal(tid);m.delete(tid)}}for(const o of e){const u=xe(o);if(dtHas(u.id)){try{await be(a.apiBase,a.accessToken,"/api/sync/book/"+encodeURIComponent(u.id),{method:"DELETE"})}catch(_){}continue}const _=m.get(u.id);!_||(u.updatedAt||0)>(_.updatedAt||0)?(await ke("books",u),m.set(u.id,u),a.book?.id===u.id&&(releaseOldPlaybackForCloudResume(a.book,u),a.book=u)):(_.updatedAt||0)>(u.updatedAt||0)&&await Ee(_,true)}for(const o of m.values()){if(dtHas(o.id))continue;e.some(u=>u.id===o.id)||await Ee(o,true)}syncPhase="checking EPUB cloud copies";for(const o of m.values())if(!o.epubCloudSynced){const u=await localEpubGet(o.id);u?.blob&&(await Ct(a.apiBase,a.accessToken,o.id,u.blob),o.epubCloudSynced=!0,await ke("books",o))}syncPhase="updating shared settings";const s=c.settings,i=await Oe("settings","main"),l=i?.sharedUpdatedAt||0;s&&(s.updatedAt||0)>l?(a.voiceProfiles=s.voiceProfiles||a.voiceProfiles,a.monthlyCap=s.monthlyCap??a.monthlyCap,a.usage=s.usage||a.usage,a.fishModel=s.fishModel||a.fishModel,a.openaiModel=s.openaiModel||a.openaiModel,a.geminiModel=normalizeGeminiModel(s.geminiModel||a.geminiModel),a.geminiLane=s.geminiLane==="standard"?"standard":"batch",a.playbackRate=Ie(s.playbackRate??a.playbackRate),a.shelfApiBase=s.shelfApiBase||a.shelfApiBase,a.shelfLogEnabled=s.shelfLogEnabled??a.shelfLogEnabled,me(),await ke("settings",{...i,id:"main",voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:s.updatedAt})):(!s||l>(s.updatedAt||0))&&await (async()=>{syncPhase="uploading shared settings";return syncSharedSettingsWithRetry({voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,updatedAt:l||Date.now()})})(),a.books=(await Be("books")).map(xe),a.syncError=null,a.syncStatus="Synced"}catch(err){const status=Number(err?.status)||0;const reason=status===401?"HTTP 401: the access token was rejected.":status===403?"HTTP 403: access denied.":status===413?"HTTP 413: upload too large.":status===429?"HTTP 429: rate limit; retry later.":status>=500?`HTTP ${status}: server or storage request failed.`:status?`HTTP ${status}: sync request failed.`:err?.name==="QuotaExceededError"?"Local device storage is full.":err?.name==="SyntaxError"?"The Worker returned an unreadable response.":err?.name==="TypeError"?"The browser could not read the Worker response (network or gateway error).":"Unexpected sync error; no HTTP response was reported.";a.syncError={phase:err?.syncPhase||syncPhase,reason};if(["updating shared settings","uploading shared settings"].includes(syncPhase)){try{a.books=(await Be("books")).map(xe)}catch(_){ }a.syncStatus="Books synced · settings pending"}else a.syncStatus="Sync pending"}se()}function se(){me();const e=a.book;const _sm=document.querySelector(".modal-back .modal"),_st=_sm?_sm.scrollTop:0;Sr.innerHTML=`<main class="shell"><header class="top"><div><div class="brand">✦ OpalReader <button id="versionInfo" class="version-info" aria-label="Show OpalReader version" title="Version">i</button>${quotaMiniMarkup()}</div><div class="sync-line">${ie(a.syncStatus)}${a.syncError?` <button type="button" id="syncDetailsBtn" class="sync-details-button">Details</button>`:""}</div></div><nav class="tabs"><button data-view="library" class="${a.view==="library"?"active":""}">Library</button>${e?`<button data-view="cast" class="${a.view==="cast"?"active":""}">Cast</button><button data-view="chapters" class="${a.view==="chapters"?"active":""}">Chapters</button>`:""}<button data-view="settings" class="${a.view==="settings"?"active":""}">Setup</button></nav></header>${zr()}</main>${a.modal?$r():""}${e?jr():""}`;const _sm2=document.querySelector(".modal-back .modal");if(_sm2&&_st)_sm2.scrollTop=_st;Zr(),me()}function zr(){return a.view==="settings"?Tr():!a.book||a.view==="library"?Rr():a.view==="cast"?Or():Pr()}let quotaBadgeRequest=null,quotaBadgeTimer=null;
+async function rt(){if(await $e(),!a.providers.sync)return se();a.syncStatus="Syncing…",a.syncError=null;let syncPhase="starting synchronization";se();try{const[{books:e=[],deleted:dl=[]},c]=await Promise.all([syncReadWithRetry(()=>yr(a.apiBase,a.accessToken),"downloading cloud library"),syncReadWithRetry(()=>wr(a.apiBase,a.accessToken),"downloading shared settings")]),r=await Be("books"),m=new Map(r.map(o=>[o.id,xe(o)]));syncPhase="reconciling book records";for(const td of dl||[]){const tid=td&&td.id;if(!tid)continue;dtAdd(tid);if(m.has(tid)){await dtPurgeLocal(tid);m.delete(tid)}}for(const o of e){
+    const incoming=xe(o);
+    if(dtHas(incoming.id)){
+      try{await be(a.apiBase,a.accessToken,"/api/sync/book/"+encodeURIComponent(incoming.id),{method:"DELETE"})}catch(_){}
+      continue;
+    }
+    const local=m.get(incoming.id);
+    if(!local){
+      await ke("books",incoming);m.set(incoming.id,incoming);
+      if(a.book?.id===incoming.id){releaseOldPlaybackForCloudResume(a.book,incoming);a.book=incoming}
+      continue;
+    }
+    const cloudNewer=Number(incoming.updatedAt||0)>Number(local.updatedAt||0);
+    const selected=cloudNewer?incoming:local;
+    const reconciled=preserveInFlightGenerationSession(selected,cloudNewer?local:incoming);
+    if(cloudNewer||reconciled!==selected){
+      await ke("books",reconciled);m.set(incoming.id,reconciled);
+      if(a.book?.id===incoming.id){
+        releaseOldPlaybackForCloudResume(a.book,reconciled);a.book=reconciled;
+      }
+    }
+    if(!cloudNewer||reconciled!==selected)await Ee(reconciled,true);
+  }for(const o of m.values()){if(dtHas(o.id))continue;e.some(u=>u.id===o.id)||await Ee(o,true)}syncPhase="checking EPUB cloud copies";for(const o of m.values())if(!o.epubCloudSynced){const u=await localEpubGet(o.id);u?.blob&&(await Ct(a.apiBase,a.accessToken,o.id,u.blob),o.epubCloudSynced=!0,await ke("books",o))}syncPhase="updating shared settings";const s=c.settings,i=await Oe("settings","main"),l=i?.sharedUpdatedAt||0;s&&(s.updatedAt||0)>l?(a.voiceProfiles=s.voiceProfiles||a.voiceProfiles,a.monthlyCap=s.monthlyCap??a.monthlyCap,a.usage=s.usage||a.usage,a.fishModel=s.fishModel||a.fishModel,a.openaiModel=s.openaiModel||a.openaiModel,a.geminiModel=normalizeGeminiModel(s.geminiModel||a.geminiModel),a.geminiLane=s.geminiLane==="standard"?"standard":"batch",a.playbackRate=Ie(s.playbackRate??a.playbackRate),a.shelfApiBase=s.shelfApiBase||a.shelfApiBase,a.shelfLogEnabled=s.shelfLogEnabled??a.shelfLogEnabled,me(),await ke("settings",{...i,id:"main",voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:s.updatedAt})):(!s||l>(s.updatedAt||0))&&await (async()=>{syncPhase="uploading shared settings";return syncSharedSettingsWithRetry({voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,updatedAt:l||Date.now()})})(),a.books=(await Be("books")).map(xe),a.syncError=null,a.syncStatus="Synced"}catch(err){const status=Number(err?.status)||0;const reason=status===401?"HTTP 401: the access token was rejected.":status===403?"HTTP 403: access denied.":status===413?"HTTP 413: upload too large.":status===429?"HTTP 429: rate limit; retry later.":status>=500?`HTTP ${status}: server or storage request failed.`:status?`HTTP ${status}: sync request failed.`:err?.name==="QuotaExceededError"?"Local device storage is full.":err?.name==="SyntaxError"?"The Worker returned an unreadable response.":err?.name==="TypeError"?"The browser could not read the Worker response (network or gateway error).":"Unexpected sync error; no HTTP response was reported.";a.syncError={phase:err?.syncPhase||syncPhase,reason};if(["updating shared settings","uploading shared settings"].includes(syncPhase)){try{a.books=(await Be("books")).map(xe)}catch(_){ }a.syncStatus="Books synced · settings pending"}else a.syncStatus="Sync pending"}se()}function se(){me();const e=a.book;const _sm=document.querySelector(".modal-back .modal"),_st=_sm?_sm.scrollTop:0;Sr.innerHTML=`<main class="shell"><header class="top"><div><div class="brand">✦ OpalReader <button id="versionInfo" class="version-info" aria-label="Show OpalReader version" title="Version">i</button>${quotaMiniMarkup()}</div><div class="sync-line">${ie(a.syncStatus)}${a.syncError?` <button type="button" id="syncDetailsBtn" class="sync-details-button">Details</button>`:""}</div></div><nav class="tabs"><button data-view="library" class="${a.view==="library"?"active":""}">Library</button>${e?`<button data-view="cast" class="${a.view==="cast"?"active":""}">Cast</button><button data-view="chapters" class="${a.view==="chapters"?"active":""}">Chapters</button>`:""}<button data-view="settings" class="${a.view==="settings"?"active":""}">Setup</button></nav></header>${zr()}</main>${a.modal?$r():""}${e?jr():""}`;const _sm2=document.querySelector(".modal-back .modal");if(_sm2&&_st)_sm2.scrollTop=_st;Zr(),me()}function zr(){return a.view==="settings"?Tr():!a.book||a.view==="library"?Rr():a.view==="cast"?Or():Pr()}let quotaBadgeRequest=null,quotaBadgeTimer=null;
 function quotaMiniStamp(value){
   if(!value)return"none";
   const d=new Date(value);if(!Number.isFinite(d.getTime()))return"none";
