@@ -853,14 +853,14 @@ function continueQuotaHeader(){
   const s=a.book?.continueSession;
   const label=s?.state==="paused"?"Resume to quota":
     s?.state==="update_paused"?"Restart after update":
-    s?.state==="running"?"Continue running…":"Continue to quota";
+    s?.state==="running"?"Continue running…":a.geminiLane==="batch"?"Generate ahead (Batch)":"Continue to quota";
   const done=s?.jobs?.filter(j=>["ready","partial"].includes(j.state)).length||0;
   const count=s?.jobs?.length||0;
   const note=s?.state==="paused"?"Gemini stopped the queue. Manual restart required.":
     s?.state==="update_paused"?"Older queue stopped after update. Restart manually with saved audio.":
     s?.state==="running"?"Generating in the background · "+done+"/"+count+" batches complete.":
     s?.state==="error"?String(s.error||"Queue needs attention"):
-    "Generate missing audio through upcoming chapters, stopping at Gemini quota.";
+    a.geminiLane==="batch"?"Generate missing audio ahead with discounted, asynchronous Gemini Batch (may take up to 24 hours).":"Generate missing audio through upcoming chapters, stopping at Gemini quota.";
   return '<div class="row"><label>Gemini pathway <select id="chapterLane" class="field"><option value="batch" '+(a.geminiLane!=="standard"?"selected":"")+'>Batch · half price</option><option value="standard" '+(a.geminiLane==="standard"?"selected":"")+'>Standard · faster</option></select></label></div><div class="row"><button class="primary" id="continueToQuota"'+
     (s?.state==="running"?' disabled':'')+'>'+ie(label)+
     '</button><span class="muted tiny">'+ie(note)+'</span></div>';
@@ -1297,9 +1297,7 @@ async function continueToQuota(){
     if(a.monthlyCap>0&&Ve().spent+forecast>a.monthlyCap&&!confirm(
        "Continue to quota could exceed your monthly soft cap of $"+a.monthlyCap.toFixed(2)+
        ". Worst-case estimated generation: "+Pe(forecast)+". Continue?"))return;
-    if(!confirm("Continue Gemini generation into upcoming chapters of this book until "+
-      "Google reports a quota limit? Reader will stop and wait for your manual "+
-      "Continue tap the next morning. "+jobs.length+" queued chapter/repair batch(es)."+
+    if(!confirm((a.geminiLane==="batch"?"Generate ahead using Gemini Batch? Jobs may take up to 24 hours and will not automatically fall back to Standard. ":"Continue Gemini generation into upcoming chapters of this book until Google reports a quota limit? Reader will stop and wait for your manual Continue tap the next morning. ")+jobs.length+" queued chapter/repair batch(es)."+
       (skippedVoice?" "+skippedVoice+" non-Gemini segment(s) will be skipped, without changing their voices.":"")))return;
     session={id:sessionId,release:GENERATION_RELEASE_ID,state:"staging_unconfirmed",jobs:localJobs,
       requests:jobs,startedAt:Date.now()};
@@ -1356,7 +1354,7 @@ function ct(){clearTimeout(a.generationPoll);const active=a.book?.chapters.some(
     const firstOriginal=selected[0].segment_index,lastOriginal=selected[selected.length-1].segment_index,cost=selected.reduce((sum,x)=>sum+(Number(x.estimated_cost)||0),0),usage=Ve();
     if(a.monthlyCap>0&&usage.spent+cost>a.monthlyCap&&!confirm(`Generating the rest of this chapter is estimated to bring locally tracked generation to ${Pe(usage.spent+cost)}, above your ${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;
     const range=firstOriginal===lastOriginal?`Segment ${firstOriginal+1}`:`Segments ${firstOriginal+1}–${lastOriginal+1}`;
-    if(!confirm(`Generate the rest of the chapter from here? Reader will queue ${selected.length} missing or stale segment${selected.length===1?"":"s"} (${range}) and reuse everything already generated. Estimated new synthesis: about ${Pe(cost)}.`))return;
+    if(!confirm(`Generate the rest of the chapter from here via ${a.geminiLane==="batch"?"Gemini Batch (asynchronous)":"Standard"}? Reader will queue ${selected.length} missing or stale segment${selected.length===1?"":"s"} (${range}) and reuse everything already generated. Estimated new synthesis: about ${Pe(cost)}.`))return;
     const jobId=await tt(JSON.stringify({release:GENERATION_RELEASE_ID,book:a.book.id,chapter:e,from:Math.max(0,Number(startIndex)||0),keys:selected.map(x=>x.cache_key)}));
     const payload={...full,job_id:jobId,segments:selected};
     ch.autoSplitEnabled=true;ch.autoSplitStatus=null;ch.generation={jobId,state:"queued",completed:0,total:selected.length,segmentKeys,segmentFingerprints,recordedCost:0,error:null,rangeStart:Math.max(0,Number(startIndex)||0)};
