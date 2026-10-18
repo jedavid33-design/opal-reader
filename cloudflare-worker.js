@@ -2122,17 +2122,8 @@ async function activateNextContinueJob(env,payload){
     return true;
   }finally{await releaseProcessingLease(env,id,"activate")}
 }
-function validContinuePayload(p,bookId){
-  return p&&validJobId(p.job_id)&&p.book_id===bookId&&
-    Number.isInteger(p.chapter_index)&&p.chapter_index>=0&&
-    Array.isArray(p.segments)&&p.segments.length>0&&p.segments.length<=100&&
-    p.segments.every(s=>s?.provider==="gemini"&&validCacheKey(s.cache_key)&&
-      typeof s.text==="string"&&s.text.length>0&&
-      typeof s.voice_id==="string"&&s.voice_id.length>0)&&
-    validateAdaptiveRepairPayload(p);
-}
 
-
+// Worker is the single authority for Continue plan validation and error details.
 
 function describeContinuePayloadIssue(p,bookId){
   if(!p||typeof p!=="object")return "Job data is missing.";
