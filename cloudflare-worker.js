@@ -2809,8 +2809,17 @@ export default {
         if (!validJobId(jobId))
           return json({ error: "Invalid generation job." }, 400, origin, env);
         let status = await readGenerationStatus(env, jobId);
-        if (!status)
+        if (!status) {
+          // Continue staging writes its R2 payload before the status record.
+          // A payload-only job is NOT safe to discard as "missing".
+          const stagedPayload = await readGenerationPayload(env, jobId);
+          if (stagedPayload)
+            return json({
+              job_id: jobId, state: "staging_incomplete",
+              error: "A generation payload exists, but its status is not yet available."
+            }, 200, origin, env);
           return json({ error: "Generation job not found." }, 404, origin, env);
+        }
         // Reconcile old-release jobs on status reads too, including parked
         // next chapters and existing quota-paused jobs. Nothing is deleted.
         const generationPayload = await readGenerationPayload(env, jobId);
