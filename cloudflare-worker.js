@@ -1679,7 +1679,14 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
         {method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":env.GEMINI_API_KEY},
         body:JSON.stringify(body),signal:AbortSignal.timeout(120000)}
       );
-      if(!response.ok) await throwProviderError(response,"gemini");
+      if(!response.ok){
+        // Google answered, so the submission outcome is known: rejected.
+        // Clear the ambiguity fence so a later manual retry is not blocked
+        // forever by a submission that was never accepted.
+        item.batch_submit_attempted=false;
+        await saveGenerationStatus(env,status);
+        await throwProviderError(response,"gemini");
+      }
       const accepted=await response.json();
       name=accepted?.name;
       if(typeof name!=="string"||!/^batches\/[A-Za-z0-9_-]+$/.test(name))
@@ -1706,16 +1713,30 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
   });
   if(!response.ok)await throwProviderError(response,"gemini");
   const batch=await response.json();
-  if(!["JOB_STATE_SUCCEEDED","JOB_STATE_FAILED","JOB_STATE_CANCELLED","JOB_STATE_EXPIRED"].includes(batch?.state)){
+  // The Batch GET returns a long-running Operation, not the Batch resource:
+  // progress lives in metadata.state (BATCH_STATE_*), completion is the
+  // top-level done flag, failures arrive as a top-level error, and inline
+  // results nest at response.inlinedResponses.inlinedResponses. Verified
+  // live 2026-10-18 against this account: the reply has no top-level state
+  // field and no dest field.
+  const metaState=String(batch?.metadata?.state||"");
+  if(batch?.error||["BATCH_STATE_FAILED","BATCH_STATE_CANCELLED","BATCH_STATE_EXPIRED"].includes(metaState)){
+    const detail=String(batch?.error?.message||metaState||"Batch job failed.").slice(0,320);
+    const error=Error("Gemini Batch: "+detail);
+    error.noRetry=true;
+    if(/POLICY_BLOCK|PROHIBITED_CONTENT|BLOCKED|SAFETY/i.test(detail)){
+      error.contentBlocked=true;error.blockReason="POLICY_BLOCK";error.finishReason="HTTP_400";
+    }else error.providerInternal=true;
+    throw error;
+  }
+  if(!batch?.done){
     const waiting=markBatchPending(status,index,name);
     await saveGenerationStatus(env,status);
     return waiting;
   }
-  if(batch.state!=="JOB_STATE_SUCCEEDED"){
-    const error=Error("Gemini Batch finished in "+String(batch.state||"unknown")+" state.");
-    error.noRetry=true;error.providerInternal=true;throw error;
-  }
-  const records=batch?.dest?.inlinedResponses;
+  let records=batch?.response?.inlinedResponses;
+  if(records&&!Array.isArray(records))
+    records=records.inlinedResponses||records.inlined_responses;
   if(!Array.isArray(records)||records.length!==1) {
     const error=Error("Gemini Batch completed without its single inline response.");
     error.noRetry=true;error.providerInternal=true;throw error;

@@ -20,6 +20,7 @@ function harness(fetchImpl){
   plainSpeechText:x=>x,hasCachedAudio:async()=>false,
   storeAudioWithRetry:async(_e,key,bytes)=>{stored.push({key,bytes})},
   decodeBase64:data=>new Uint8Array(Buffer.from(data,"base64")),
+  throwProviderError:async response=>{const e=Error("provider "+response.status);e.status=response.status;throw e;},
   geminiUsageAccounting:()=>({calculated_cost:1,input_price_per_million:0.5,
     output_price_per_million:9,input_tokens:5,output_tokens:12}),
  };
@@ -46,11 +47,11 @@ test("Batch submission is one-time, polls same name and stores playable WAV",asy
     return new Response(JSON.stringify({name:"batches/test_123"}),{status:200});
   }
   gets++;
-  if(gets===1)return new Response(JSON.stringify({state:"JOB_STATE_RUNNING"}),{status:200});
-  return new Response(JSON.stringify({state:"JOB_STATE_SUCCEEDED",
-    dest:{inlinedResponses:[{response:{candidates:[{content:{parts:[
+  if(gets===1)return new Response(JSON.stringify({done:false,metadata:{state:"BATCH_STATE_RUNNING"}}),{status:200});
+  return new Response(JSON.stringify({done:true,metadata:{state:"BATCH_STATE_SUCCEEDED"},
+    response:{inlinedResponses:{inlinedResponses:[{metadata:{key:"seg-0"},response:{candidates:[{content:{parts:[
       {inlineData:{data:h.audio.toString("base64"),mimeType:"audio/wav"}}
-    ]}}],usageMetadata:{promptTokenCount:5,candidatesTokenCount:12}}}]}}),{status:200});
+    ]}}],usageMetadata:{promptTokenCount:5,candidatesTokenCount:12}}}]}}}),{status:200});
  });
  const status={state:"generating",segments:[{state:"generating"}]};
  const env={GEMINI_API_KEY:"secret"};
@@ -87,4 +88,24 @@ test("Mode control is saved and included in new jobs only",()=>{
  assert.match(worker,/const APP_VERSION = "1\.4\.42"/);
  assert.match(worker,/const READER_GENERATION_UI_VERSION = "1\.4\.116"/);
  assert.match(app,/const APP_UI_VERSION="1\.4\.116"/);
+});
+
+test("A definitive Batch rejection clears the ambiguity fence",async()=>{
+ let posts=0,allow=false;
+ const h=harness(async(_url,req)=>{
+  if(req?.method==="POST"){
+    posts++;
+    if(!allow)return new Response(JSON.stringify({error:{message:"batch capacity"}}),{status:429});
+    return new Response(JSON.stringify({name:"batches/test_429"}),{status:200});
+  }
+  return new Response(JSON.stringify({done:false,metadata:{state:"BATCH_STATE_RUNNING"}}),{status:200});
+ });
+ const status={state:"generating",segments:[{state:"generating"}]},env={GEMINI_API_KEY:"secret"};
+ await assert.rejects(h.run(env,"f".repeat(64),fakeSegment,status,0));
+ assert.equal(status.segments[0].batch_submit_attempted,false,"known rejection must clear the fence");
+ allow=true;
+ const retry=await h.run(env,"f".repeat(64),fakeSegment,status,0);
+ assert.equal(retry.waiting,true);
+ assert.equal(posts,2,"a cleared fence permits exactly one later resubmission");
+ assert.equal(status.segments[0].batch_job_name,"batches/test_429");
 });
