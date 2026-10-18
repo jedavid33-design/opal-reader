@@ -224,3 +224,49 @@ html,body{overscroll-behavior-y:none}
 /* v1.4.108: sync troubleshooting without exposing credentials */
 .sync-details-button{border:0;background:transparent;color:#654f70;text-decoration:underline;font-size:12px;cursor:pointer;padding:2px}
 .sync-issue{padding:12px 14px;border-radius:14px;border:1px solid #dfc9d9;background:#fbf5fa;color:#694b67;display:grid;gap:5px;overflow-wrap:anywhere}
+
+
+/* iPhone paused-generation cards: the original mobile grid auto-placed
+   the quota banner and resume control into competing cells. Keep chapter
+   names/narrators visible and use full-width diagnostic messages. */
+@media(max-width:600px){
+  .chapter.quota-paused{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:8px 10px;
+  }
+  .chapter.quota-paused .chapter-main{
+    display:block;
+    flex:1 1 170px;
+    min-width:0;
+    width:auto;
+  }
+  .chapter.quota-paused .chapter-actions{
+    display:flex;
+    flex:0 0 auto;
+    margin-left:auto;
+    max-width:100%;
+  }
+  .chapter.quota-paused .chapter-title h3{
+    display:block;
+    white-space:normal;
+    overflow:visible;
+    text-overflow:clip;
+    -webkit-line-clamp:unset;
+    line-clamp:unset;
+    overflow-wrap:break-word;
+  }
+  .chapter.quota-paused > [data-resume-quota]{
+    flex:0 1 auto;
+  }
+  .chapter.quota-paused .chapter-quota-note{
+    flex:0 0 100%;
+    width:100%;
+    min-width:0;
+    overflow-wrap:anywhere;
+  }
+  .shell{
+    padding-bottom:calc(315px + env(safe-area-inset-bottom));
+  }
+}
