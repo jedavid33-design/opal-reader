@@ -92,9 +92,9 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.41"; // preserve existing generation-release fence
+const APP_VERSION = "1.4.42"; // selectable Gemini Standard / Batch generation
 const SYNC_PROTOCOL_VERSION = 2; // manifest + one-book-at-a-time transfers
-const READER_GENERATION_UI_VERSION = "1.4.106";
+const READER_GENERATION_UI_VERSION = "1.4.116";
 const GENERATION_RELEASE_ID = APP_VERSION + "/" + READER_GENERATION_UI_VERSION;
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>
@@ -164,6 +164,7 @@ async function recordTtsUsage(env, body, details = {}) {
       voice_id: body?.voice_id || null,
       voice_name: body?.voice_name || null,
       model: details.model || body?.model_id || null,
+      generation_mode: details.generation_mode || "standard",
       provider_request_id: details.provider_request_id || null,
       character_count_sent: details.provider_call ? String(body?.text || "").length : 0,
       provider_call_duration_ms: Number(details.duration_ms) || 0,
@@ -1615,6 +1616,180 @@ async function pauseGenerationForUpdate(env,status,jobId){
   return changed;
 }
 
+// Gemini 3.8 Batch uses generateContent, not Interactions. A submitted Batch
+// name is durable in the existing Queue status: re-delivery polls that name
+// instead of submitting another potentially billable request.
+const GEMINI_BATCH_WAIT_MS = 60000;
+const geminiBatchMode = (payload, seg) =>
+  payload?.generation_mode === "batch" && seg?.provider === "gemini";
+function markBatchPending(status, index, batchName) {
+  status.state = "queued";
+  status.error = null;
+  status.next_retry_at = Date.now() + GEMINI_BATCH_WAIT_MS;
+  status.updated_at = Date.now();
+  status.segments[index] = {
+    ...status.segments[index], state: "queued",
+    ...(batchName ? {batch_job_name: batchName} : {}),
+  };
+  return {waiting:true,status,delaySeconds:Math.ceil(GEMINI_BATCH_WAIT_MS/1000)};
+}
+async function stepGeminiBatch(env, jobId, segment, status, index) {
+  if (!env.GEMINI_API_KEY) throw Error("Gemini API key is not configured.");
+  const model = String(segment.model_id || "gemini-3.8-flash-tts");
+  if (!/^gemini-3\.8-flash(?:-lite)?-tts$/.test(model))
+    throw Error("Batch generation is available only for Gemini 3.8 TTS.");
+  const item = status.segments[index];
+  let name = item.batch_job_name;
+  if (!name) {
+    // Write this fence BEFORE the billable POST. If Google accepted a POST
+    // whose response we never receive, automatic retry could double-bill.
+    if (item.batch_submit_attempted) {
+      const e = Error("Batch submission has an unknown outcome. Do not resubmit before checking Google Batch jobs.");
+      e.noRetry=true; e.providerInternal=true; throw e;
+    }
+    item.batch_submit_attempted = true;
+    item.batch_submit_at = Date.now();
+    await saveGenerationStatus(env,status);
+    const style = [String(segment.style_direction||"").trim().slice(0,300),
+      "clear normal speaking voice; never whisper, murmur, or speak softly"].filter(Boolean).join(". ");
+    const body = {
+      batch: {
+        display_name: "opalreader-" + jobId.slice(0,16) + "-" + index,
+        input_config: {
+          requests: {requests: [{
+            request: {
+              contents: [{role:"user",parts:[{
+                text:plainSpeechText(segment.text),
+                speech_metadata:{style},
+              }]}],
+              generationConfig:{
+                responseModalities:["AUDIO"],
+                speechConfig:{voiceConfig:{voice:segment.voice_id}},
+              },
+            },
+            metadata:{key:"seg-"+index},
+          }]},
+        },
+      },
+    };
+    let response;
+    try {
+      response = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(model) + ":batchGenerateContent",
+        {method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":env.GEMINI_API_KEY},
+        body:JSON.stringify(body),signal:AbortSignal.timeout(120000)}
+      );
+      if(!response.ok){
+        // Google answered, so the submission outcome is known: rejected.
+        // Clear the ambiguity fence so a later manual retry is not blocked
+        // forever by a submission that was never accepted.
+        item.batch_submit_attempted=false;
+        await saveGenerationStatus(env,status);
+        await throwProviderError(response,"gemini");
+      }
+      const accepted=await response.json();
+      name=accepted?.name;
+      if(typeof name!=="string"||!/^batches\/[A-Za-z0-9_-]+$/.test(name))
+        throw Error("Gemini accepted Batch but returned no valid job ID. Manual reconciliation required.");
+    }catch(err){
+      // Never retry an unacknowledged POST. A 429 here reflects Batch capacity,
+      // not necessarily Standard's 100-requests-per-day quota.
+      err.noRetry=true;
+      err.quotaExceeded=false;
+      if(!err.contentBlocked)err.providerInternal=true;
+      throw err;
+    }
+    addGenerationTrace(status,"batch_accepted",segment);
+    const waiting=markBatchPending(status,index,name);
+    await saveGenerationStatus(env,status);
+    return waiting;
+  }
+
+  if(!/^batches\/[A-Za-z0-9_-]+$/.test(name))
+    throw Error("Invalid saved Batch job identifier.");
+  const response=await fetch("https://generativelanguage.googleapis.com/v1beta/"+name,{
+    headers:{"x-goog-api-key":env.GEMINI_API_KEY},
+    signal:AbortSignal.timeout(120000),
+  });
+  if(!response.ok)await throwProviderError(response,"gemini");
+  const batch=await response.json();
+  // The Batch GET returns a long-running Operation, not the Batch resource:
+  // progress lives in metadata.state (BATCH_STATE_*), completion is the
+  // top-level done flag, failures arrive as a top-level error, and inline
+  // results nest at response.inlinedResponses.inlinedResponses. Verified
+  // live 2026-10-18 against this account: the reply has no top-level state
+  // field and no dest field.
+  const metaState=String(batch?.metadata?.state||"");
+  if(batch?.error||["BATCH_STATE_FAILED","BATCH_STATE_CANCELLED","BATCH_STATE_EXPIRED"].includes(metaState)){
+    const detail=String(batch?.error?.message||metaState||"Batch job failed.").slice(0,320);
+    const error=Error("Gemini Batch: "+detail);
+    error.noRetry=true;
+    if(/POLICY_BLOCK|PROHIBITED_CONTENT|BLOCKED|SAFETY/i.test(detail)){
+      error.contentBlocked=true;error.blockReason="POLICY_BLOCK";error.finishReason="HTTP_400";
+    }else error.providerInternal=true;
+    throw error;
+  }
+  if(!batch?.done){
+    const waiting=markBatchPending(status,index,name);
+    await saveGenerationStatus(env,status);
+    return waiting;
+  }
+  let records=batch?.response?.inlinedResponses;
+  if(records&&!Array.isArray(records))
+    records=records.inlinedResponses||records.inlined_responses;
+  if(!Array.isArray(records)||records.length!==1) {
+    const error=Error("Gemini Batch completed without its single inline response.");
+    error.noRetry=true;error.providerInternal=true;throw error;
+  }
+  const first=records[0];
+  if(first?.error){
+    const detail=String(first.error?.message||first.error?.status||"Batch TTS request failed.").slice(0,320);
+    const error=Error("Gemini Batch: "+detail);
+    error.noRetry=true;
+    if(/POLICY_BLOCK|PROHIBITED_CONTENT|BLOCKED|SAFETY/i.test(detail)){
+      error.contentBlocked=true;error.blockReason="POLICY_BLOCK";error.finishReason="HTTP_400";
+    }else error.providerInternal=true;
+    throw error;
+  }
+  const generated=first?.response;
+  const parts=generated?.candidates?.[0]?.content?.parts||[];
+  const audio=parts.find(part=>part?.inlineData?.data&&/audio/i.test(String(part.inlineData.mimeType||"audio/wav")));
+  if(!audio?.inlineData?.data){
+    const error=Error("Gemini Batch returned no playable audio.");
+    error.noRetry=true;error.providerInternal=true;throw error;
+  }
+  const decoded=decodeBase64(audio.inlineData.data);
+  const bytes=decoded.buffer.slice(decoded.byteOffset,decoded.byteOffset+decoded.byteLength);
+  const h=new Uint8Array(bytes);
+  if(h.length<44||String.fromCharCode(...h.slice(0,4))!=="RIFF"){
+    const error=Error("Gemini Batch returned invalid WAV data.");
+    error.noRetry=true;error.providerInternal=true;throw error;
+  }
+  // The same deterministic key is used for Batch and Standard; never
+  // overwrite an existing take, even if another device generated it.
+  if(!await hasCachedAudio(env,segment.cache_key))
+    await storeAudioWithRetry(env,segment.cache_key,bytes,{
+      provider:"gemini",voiceId:segment.voice_id,format:"wav",generationMode:"batch"
+    });
+  const usage=geminiUsageAccounting(model,generated?.usageMetadata);
+  const discounted=usage?{
+    ...usage,calculated_cost:usage.calculated_cost*0.5,
+    input_price_per_million:usage.input_price_per_million*0.5,
+    output_price_per_million:usage.output_price_per_million*0.5,
+    cost_source:"gemini_batch_usage_metadata_estimate",
+  }:null;
+  await recordGeminiGenerationSuccess(env,segment,model,name);
+  await recordTtsUsage(env,segment,{
+    provider:"gemini",provider_call:true,request_status:"succeeded",
+    cache_status:"provider_call",generation_mode:"batch",
+    provider_request_id:name,model,audio_bytes:bytes.byteLength,r2_write_success:true,
+    ...(discounted||{}),
+  });
+  addGenerationTrace(status,"batch_audio_saved",segment);
+  return {body:bytes,cache:"MISS",audioFormat:"wav",provider_request_id:name,
+    model,calculated_cost:discounted?.calculated_cost??null};
+}
+
 async function processGenerationJobLocked(
   env,
   jobId,
@@ -1701,7 +1876,7 @@ async function processGenerationJobLocked(
       }
     }
     if (!cached) {
-      if(segment.provider==="gemini"){
+      if(segment.provider==="gemini"&&!geminiBatchMode(payload,segment)){
         const slot=await reserveGeminiQueuePace(env);
         if(!slot.ready){
           status.state="queued";
@@ -1715,7 +1890,10 @@ async function processGenerationJobLocked(
       }
       addGenerationTrace(status, "synthesis_started", segment);
       await saveGenerationStatus(env, status);
-      result = await synthesizeAudio(env, segment.provider, segment);
+      result = geminiBatchMode(payload,segment)
+        ? await stepGeminiBatch(env,jobId,segment,status,activeIndex)
+        : await synthesizeAudio(env, segment.provider, segment);
+      if (result?.waiting) return {status:result.status,next:activeIndex,delaySeconds:result.delaySeconds};
       if (result.cache === "MISS")
         status.generated_cost =
           (status.generated_cost || 0) +
