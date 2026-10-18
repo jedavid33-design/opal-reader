@@ -79,9 +79,9 @@ test("Discard refuses partially staged jobs and uncertain network replies",async
  }
 });
 test("Worker will not report a payload-only partially staged job as missing",()=>{
- const start=worker.indexOf('request.method === "GET"',worker.indexOf('url.pathname.startsWith("/api/generation/jobs/")'));
- assert.ok(start>=0);
- const check=worker.slice(start,start+1900);
+ const start=worker.indexOf("const stagedPayload = await readGenerationPayload(env, jobId);");
+ assert.ok(start>=0,"Worker GET should check an R2 payload before reporting 404");
+ const check=worker.slice(start,start+430);
  assert.ok(check.includes("await readGenerationPayload(env, jobId)"));
  assert.match(check,/state: "staging_incomplete"/);
  assert.match(check,/if \(stagedPayload\)/);
