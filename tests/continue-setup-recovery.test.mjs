@@ -78,6 +78,12 @@ test("Discard refuses partially staged jobs and uncertain network replies",async
    assert.match(messages.at(-1),/NOT discarded/);
  }
 });
+test("Worker will not report a payload-only partially staged job as missing",()=>{
+ const check=extract(worker,'if (\n        url.pathname.startsWith("/api/generation/jobs/") &&\n        request.method === "GET"','if (\n        url.pathname.startsWith("/api/generation/jobs/") &&\n        request.method === "POST"');
+ assert.ok(check.includes("await readGenerationPayload(env, jobId)"));
+ assert.match(check,/state: "staging_incomplete"/);
+ assert.match(check,/if \(stagedPayload\)/);
+});
 test("UI wires discard action but leaves release fence and narration unchanged",()=>{
  assert.match(app,/id="discardUnconfirmedContinue"/);
  assert.match(app,/addEventListener\("click",discardUnconfirmedContinueSetup\)/);
