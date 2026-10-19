@@ -2298,6 +2298,38 @@ async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
   return outcome?.status || payload.status;
 }
 
+// Sync diagnostics: when a sync request fails, record the failing operation
+// and the underlying error in Workers Logs so the failure can be identified
+// later. Only the method, path, book id (taken from the path), and the
+// error's type, message and stack are logged. Book contents, request bodies,
+// access tokens and other credentials are never logged.
+function logSyncFailure(request, url, error) {
+  try {
+    const bookMatch = /^\/api\/sync\/book\/([^/]+)$/.exec(url.pathname);
+    let bookId = null;
+    if (bookMatch) {
+      try {
+        bookId = decodeURIComponent(bookMatch[1]);
+      } catch (_) {
+        bookId = bookMatch[1];
+      }
+    }
+    console.error(
+      JSON.stringify({
+        event: "opalreader_sync_failure",
+        method: request.method,
+        path: url.pathname,
+        bookId,
+        errorName: error?.name || "Error",
+        errorMessage: String(error?.message || error || "Unknown error").slice(0, 500),
+        errorStack: error?.stack ? String(error.stack).slice(0, 2000) : null,
+      }),
+    );
+  } catch (_) {
+    // Diagnostics must never interfere with the error response itself.
+  }
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
@@ -3038,6 +3070,7 @@ export default {
       }
             return json({ error: "Not found" }, 404, origin, env);
     } catch (error) {
+      if (url.pathname.startsWith("/api/sync/")) logSyncFailure(request, url, error);
       return json(
         {
           error: error.message || "Provider request failed.",

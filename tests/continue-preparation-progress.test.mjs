@@ -32,5 +32,5 @@ test("chapter and passage preparation yields before submit; confirmation still p
 test("Worker release stays compatible and frontend file gets cache-busted",()=>{
  assert.match(app,/const APP_UI_VERSION="1\.4\.116"/);
  assert.match(app,/const GENERATION_WORKER_VERSION="1\.4\.42"/);
- assert.match(page,/app-254\.js\?v=batch-progress-20261018/);
+ assert.match(page,/app-255\.js\?v=sync-diagnostics-20261019/);
 });
