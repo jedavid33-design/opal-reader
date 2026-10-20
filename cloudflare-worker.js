@@ -238,6 +238,19 @@ const geminiLastSuccessObjectKey = "usage/gemini-last-success.json";
 // decreases. Bounded retries; on persistent contention a later success
 // event advances the pointer instead (every success also writes its own
 // immutable usage-ledger event, so nothing is lost).
+// R2 conditional puts: an If-Match header must carry the QUOTED etag
+// (the binding's httpEtag). The raw etag throws "Invalid ETag in
+// if-match header" against real R2 — probe-verified 2026-10-19 after
+// the first coalescing deploy's smoke test caught production mirrors
+// never confirming: every etag-matched put in this file threw, and the
+// catch-and-yield handlers silently absorbed it. (The original mock
+// compared raw etags, so the suite could not see it; the mock now
+// models the real semantics.)
+function quotedEtag(object) {
+  if (!object) return null;
+  return object.httpEtag || (object.etag ? `"${object.etag}"` : null);
+}
+
 async function advanceGeminiLastSuccess(storage, candidate) {
   for (let attempt = 0; attempt < 3; attempt++) {
     let current = null;
@@ -245,7 +258,7 @@ async function advanceGeminiLastSuccess(storage, candidate) {
     try {
       const object = await storage.get(geminiLastSuccessObjectKey);
       if (object) {
-        etag = object.etag || null;
+        etag = quotedEtag(object);
         current = object.json
           ? await object.json()
           : JSON.parse(await new Response(object.body).text());
@@ -1504,7 +1517,7 @@ async function persistMirrorMeta(storage, metaKey, epoch, patch) {
     try {
       const object = await storage.get(metaKey);
       if (object) {
-        etag = object.etag || null;
+        etag = quotedEtag(object);
         current = object.json
           ? await object.json()
           : JSON.parse(await new Response(object.body).text());
@@ -1699,7 +1712,9 @@ async function runMirrorAttempt(env, jobId, reason) {
       const head = await storage.head(lockKey).catch(() => null);
       if (head?.etag) {
         epoch = Math.max(epoch, (Number(existing.epoch) || 0) + 1);
-        acquired = await putLock(new Headers({ "If-Match": head.etag }));
+        acquired = await putLock(
+          new Headers({ "If-Match": quotedEtag(head) }),
+        );
       }
     }
   }
@@ -1744,7 +1759,7 @@ async function runMirrorAttempt(env, jobId, reason) {
           released_at: Date.now(),
         }),
         {
-          onlyIf: new Headers({ "If-Match": object.etag }),
+          onlyIf: new Headers({ "If-Match": quotedEtag(object) }),
           httpMetadata: { contentType: "application/json" },
         },
       );

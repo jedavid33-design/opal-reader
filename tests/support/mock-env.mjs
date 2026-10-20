@@ -89,6 +89,7 @@ function makeR2Object(key, entry) {
   return {
     key,
     etag: entry.etag,
+    httpEtag: `"${entry.etag}"`,
     uploaded: new Date(entry.uploadedMs),
     size: byteSize(raw),
     body: raw,
@@ -123,6 +124,7 @@ export class MockR2 {
     return {
       key,
       etag: entry.etag,
+      httpEtag: `"${entry.etag}"`,
       uploaded: new Date(entry.uploadedMs),
       size: byteSize(entry.raw),
     };
@@ -134,7 +136,14 @@ export class MockR2 {
     const onlyIf = options?.onlyIf;
     if (onlyIf?.get?.("if-none-match") === "*" && existing) return null;
     const ifMatch = onlyIf?.get?.("if-match");
-    if (ifMatch && (!existing || existing.etag !== ifMatch)) return null;
+    if (ifMatch) {
+      // Real R2 semantics (probe-verified 2026-10-19): an If-Match
+      // header must carry the QUOTED http etag — the raw etag throws,
+      // and a stale quoted etag fails the precondition (null).
+      if (!/^".*"$/.test(ifMatch))
+        throw new Error("Invalid ETag in if-match header");
+      if (!existing || `"${existing.etag}"` !== ifMatch) return null;
+    }
     const raw =
       typeof value === "string"
         ? value
