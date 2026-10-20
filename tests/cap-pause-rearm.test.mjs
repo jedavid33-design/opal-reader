@@ -15,6 +15,12 @@
 //     busts the cap). The full repair-tree check stays at queue time.
 //  3. No Resume affordance without repairable blocked work, and the
 //     derivation cannot throw on unresolvable voices.
+//
+// Re-review fix (Rowan, PR #6): adopting or restarting a job the Worker
+// already holds seeds the local record's recordedCost from the server
+// status's cumulative generated_cost, so lt()'s delta math never
+// credits the same job's spend into the shared monthly ledger twice.
+// The ledger tests at the bottom drive the REAL lt() to prove it.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -433,4 +439,197 @@ test("behavior: near-cap boundary — base fits, repair tree does not; the queue
   const accepted = makeQueueEnv({ server: "404", monthlyCap: 50, spent: 35, plan, confirmAnswers: [true, true] });
   await accepted.queueAdaptiveRepair(0, { manual: true });
   assert.equal(accepted.calls.xt.length, 1, "explicit consent at the real number proceeds");
+});
+
+// ---------------------------------------------------------------------
+// Ledger accounting (Rowan re-review blocker): adopting or restarting
+// a job the Worker already holds must not re-credit its cumulative
+// generated_cost into the shared monthly ledger. The fix seeds the
+// fresh local record's recordedCost from the verified server status;
+// lt() then credits only the delta accrued after that point. These
+// tests drive the REAL lt() (extracted below) against a shared,
+// mutable usage object standing in for the synced settings ledger.
+// lt()'s own dependencies are stubbed; `or` is stubbed to its real
+// record-merge line (the only part of or() the accounting reads:
+// it writes the merged status and the recordedCost checkpoint).
+// ---------------------------------------------------------------------
+const ltSrc = extract(app, "async function lt(", "const adaptiveQueueStarting=");
+const orMergeStub = (chapter, status, { replacement = false, recordedCost = 0 } = {}) => {
+  const key = replacement ? "replacementGeneration" : "generation";
+  const prev = chapter[key] || {};
+  chapter[key] = { ...prev, ...status, jobId: status.job_id || status.jobId, recordedCost };
+};
+
+function makeLedgerEnv({ server = "404", usage, submitStatus, monthlyCap = 0, localGeneration, plan } = {}) {
+  const shared = usage || { month: "2026-10", spent: 0 };
+  const chapter = {
+    title: "Chapter 1",
+    segments: [],
+    autoSplitEnabled: false,
+    autoSplitPauseReason: "cap",
+    autoSplitStatus: CAP_BANNER,
+  };
+  if (localGeneration !== undefined) chapter.generation = localGeneration;
+  const book = { id: "book1", title: "Book", chapters: [chapter] };
+  const a = { book, monthlyCap, providers: { generation: true }, apiBase: "https://worker.test", accessToken: "tok", usage: shared };
+  const usePlan = plan || {
+    nodes: [{ cache_key: "k1", estimated_cost: 1 }, { cache_key: "k2", estimated_cost: 1 }],
+    roots: [{ index: 0 }],
+  };
+  const jobId = "H[" + JSON.stringify({
+    book: "book1", chapter: 0, release: RELEASE, kind: "adaptive_repair",
+    keys: usePlan.nodes.map((n) => n.cache_key),
+  }) + "]";
+  const calls = { kr: [], xt: [], ae: 0 };
+  const Ve = () => shared;
+  const lt = new Function(
+    "a", "applyAdaptiveRepair", "or", "Ve", "Ae", "quotaQueueFailure", "pe", "scheduleAutoSplit",
+    ltSrc + "return lt;",
+  )(
+    a,
+    () => true, // applyAdaptiveRepair: mapping applies cleanly; accounting does not depend on it
+    orMergeStub,
+    Ve,
+    async () => { calls.ae += 1; },
+    () => false, // quotaQueueFailure
+    async () => {},
+    () => {},
+  );
+  const queueAdaptiveRepair = new Function(
+    "a", "adaptiveQueueStarting", "adaptiveWorkerReady", "splitBlockedSegment", "runAutoSplit",
+    "adaptiveRepairPlan", "Ve", "tt", "kr", "xt", "lt", "pe", "se", "ct", "$e",
+    "GENERATION_RELEASE_ID", "confirm", "alert",
+    queueSrc + "return queueAdaptiveRepair;",
+  )(
+    a, new Set(), async () => true,
+    () => { throw new Error("local split fallback must not run"); },
+    () => { throw new Error("legacy auto-split must not run"); },
+    async () => usePlan,
+    Ve,
+    async (s) => "H[" + s + "]",
+    async (_base, _token, id) => {
+      calls.kr.push(id);
+      if (server === "404") { const e = new Error("Generation job not found."); e.status = 404; throw e; }
+      return { ...server, job_id: id };
+    },
+    async (_base, _token, payload) => {
+      calls.xt.push(payload);
+      return { job_id: payload.job_id, state: "queued", generated_cost: 0, ...(submitStatus || {}) };
+    },
+    lt,
+    async () => {}, () => {}, () => {},
+    async () => {},
+    RELEASE,
+    () => true,
+    () => {},
+  );
+  // applyStatus drives the real lt() the way the poller (Ye) does when
+  // a later status for this chapter's job arrives.
+  return { queueAdaptiveRepair, applyStatus: (status) => lt(0, status), chapter, calls, jobId, usage: shared };
+}
+
+test("ledger: queue staging seeds recordedCost from the verified server status", () => {
+  const queue = extract(app, "async function queueAdaptiveRepair(", "async function runAutoSplitSmart(");
+  assert.match(queue, /recordedCostSeed=serverJob\?Number\(serverJob\.generated_cost\)\|\|0:0/,
+    "the seed comes from the server job's cumulative generated_cost (0 when absent/404)");
+  assert.match(queue, /recordedCost:recordedCostSeed/, "the staged record carries the seed into lt()");
+});
+
+test("ledger: Rowan repro — adopting a ready job already paid into synced usage (16.61 incl. 0.18) does not re-credit", async () => {
+  // Rowan's executed reproduction: usage $16.61 already includes the
+  // $0.18 device A recorded for this job; this device's cap-paused
+  // chapter has no cost checkpoint. Before the seed, lt() yielded
+  // $16.79 — the same $0.18 credited a second time.
+  const env = makeLedgerEnv({
+    usage: { month: "2026-10", spent: 16.61 },
+    server: { state: "ready", completed: 4, total: 4, generated_cost: 0.18, segments: [] },
+  });
+  await env.queueAdaptiveRepair(0, { manual: true });
+  assert.equal(env.calls.xt.length, 0, "the held job is adopted, not resubmitted");
+  assert.equal(env.usage.spent, 16.61, "the already-recorded $0.18 is not credited again");
+  assert.equal(env.chapter.generation.recordedCost, 0.18, "the checkpoint is seeded from the server status");
+  assert.equal(env.calls.ae, 0, "no credit means no ledger sync write");
+});
+
+test("ledger (a): adopting ready/partial jobs whose spend is already in synced usage leaves spent unchanged", async () => {
+  for (const state of ["ready", "partial"]) {
+    const env = makeLedgerEnv({
+      usage: { month: "2026-10", spent: 40 },
+      server: { state, completed: 3, total: 4, generated_cost: 2.5, segments: [] },
+    });
+    await env.queueAdaptiveRepair(0, { manual: true });
+    assert.equal(env.calls.xt.length, 0, state + ": adopted, not resubmitted");
+    assert.equal(env.usage.spent, 40, state + ": the $2.50 already in the ledger is not credited again");
+    assert.equal(env.chapter.generation.recordedCost, 2.5, state + ": checkpoint seeded");
+  }
+});
+
+test("ledger (b): confirmed-failed restart seeds the retained generated_cost — no re-credit", async () => {
+  // The Worker retains the failed job's cumulative generated_cost
+  // ($0.75, already recorded into synced usage by another device).
+  // The restart's submit response reports that same cumulative figure;
+  // only the seed keeps lt() from crediting it a second time.
+  const env = makeLedgerEnv({
+    usage: { month: "2026-10", spent: 10.75 },
+    server: { state: "failed", completed: 1, total: 4, generated_cost: 0.75, error: "boom" },
+    submitStatus: { generated_cost: 0.75 },
+  });
+  await env.queueAdaptiveRepair(0, { manual: true });
+  assert.equal(env.calls.xt.length, 1, "a confirmed-failed job is restarted via the normal submit");
+  assert.equal(env.usage.spent, 10.75, "the retained $0.75 is not re-credited on restart");
+  assert.equal(env.chapter.generation.recordedCost, 0.75, "the checkpoint survives the restart");
+});
+
+test("ledger (c): spend accruing after adoption is credited once, as the increment only", async () => {
+  const env = makeLedgerEnv({
+    usage: { month: "2026-10", spent: 21.25 },
+    server: { state: "generating", completed: 1, total: 4, generated_cost: 1.25 },
+  });
+  await env.queueAdaptiveRepair(0, { manual: true });
+  assert.equal(env.usage.spent, 21.25, "adoption itself credits nothing already known");
+  assert.equal(env.chapter.generation.recordedCost, 1.25);
+  // The job finishes with $0.50 more accrued; the poller applies it.
+  await env.applyStatus({ job_id: env.jobId, state: "ready", generated_cost: 1.75, adaptive_repair: true, segments: [] });
+  assert.equal(env.usage.spent, 21.75, "only the $0.50 increment is credited");
+  assert.equal(env.calls.ae, 1, "exactly one ledger credit/sync for the increment");
+  // Re-applying the same status (next poll) credits nothing further.
+  await env.applyStatus({ job_id: env.jobId, state: "ready", generated_cost: 1.75, adaptive_repair: true, segments: [] });
+  assert.equal(env.usage.spent, 21.75, "the increment is credited exactly once");
+  assert.equal(env.calls.ae, 1);
+});
+
+test("ledger (d): two devices, one synced ledger — adoption adds nothing, later accrual adds only the delta", async () => {
+  // The shared, synced usage object is carried between device contexts.
+  const shared = { month: "2026-10", spent: 0 };
+  // Device A queues the job fresh and records its cost as it runs.
+  const devA = makeLedgerEnv({ usage: shared, server: "404" });
+  await devA.queueAdaptiveRepair(0, { manual: true });
+  assert.equal(devA.calls.xt.length, 1, "device A submits the new job");
+  await devA.applyStatus({ job_id: devA.jobId, state: "generating", generated_cost: 0.5, adaptive_repair: true });
+  assert.equal(shared.spent, 0.5, "device A's recording lands in the shared ledger");
+  // Device B is stale: cap-paused chapter, no generation record, no
+  // checkpoint — but the same deterministic plan id finds the job.
+  const devB = makeLedgerEnv({
+    usage: shared,
+    server: { state: "ready", completed: 4, total: 4, generated_cost: 0.5, segments: [] },
+  });
+  assert.equal(devB.jobId, devA.jobId, "both devices derive the same deterministic job id");
+  await devB.queueAdaptiveRepair(0, { manual: true });
+  assert.equal(devB.calls.xt.length, 0, "device B adopts instead of submitting a duplicate");
+  assert.equal(shared.spent, 0.5, "device B's adoption credits nothing a second time");
+  assert.equal(devB.chapter.generation.recordedCost, 0.5, "device B now holds the checkpoint");
+  // The job accrues $0.375 more; device B observes it first.
+  await devB.applyStatus({ job_id: devB.jobId, state: "ready", generated_cost: 0.875, adaptive_repair: true, segments: [] });
+  assert.equal(shared.spent, 0.875, "only the $0.375 increment is added");
+});
+
+test("ledger: fresh 404 submission still seeds zero and accrues normally (regression)", async () => {
+  const env = makeLedgerEnv({ usage: { month: "2026-10", spent: 3 }, server: "404" });
+  await env.queueAdaptiveRepair(0, { manual: true });
+  assert.equal(env.calls.xt.length, 1, "a genuinely new job is submitted");
+  assert.equal(env.chapter.generation.recordedCost, 0, "a new job starts with a zero checkpoint");
+  assert.equal(env.usage.spent, 3, "submission alone credits nothing");
+  await env.applyStatus({ job_id: env.jobId, state: "ready", generated_cost: 0.5, adaptive_repair: true, segments: [] });
+  assert.equal(env.usage.spent, 3.5, "the new job's spend accrues in full");
+  assert.equal(env.chapter.generation.recordedCost, 0.5);
 });
