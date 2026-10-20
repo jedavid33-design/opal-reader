@@ -1,6 +1,6 @@
 # KV Write Coalescing — Implementation Results
 
-Branch: `kv-write-coalescing` (based on deployed main `1ad64946`). Local only — nothing deployed, nothing pushed.
+Branch: `kv-write-coalescing` (based on deployed main `1ad64946`). Pushed to GitHub as a review branch at Rowan's request (2026-10-19) — nothing deployed.
 Design contract: `KV-COALESCING-DESIGN.md` (v2.1, approved by Rowan).
 Release identifiers unchanged: Worker `1.4.42`, Reader UI `1.4.116`, release id `1.4.42/1.4.116`.
 
@@ -10,7 +10,7 @@ Release identifiers unchanged: Worker `1.4.42`, Reader UI `1.4.116`, release id 
 - The Gemini quota counters no longer write KV at all: attempts are R2 ledger markers, last-success is an R2 pointer object maintained inside `recordTtsUsage`.
 - Benchmark, Finding-Home-shaped day: **1,742 → 252 KV writes** (target band 150–300; free-plan cap 1,000/day; Oct 19 measured actual 1,403).
 - Behavior is provably unchanged in the harness: identical R2 status-save counts and identical Google API call counts before/after, per workload.
-- Tests: **134 total, 125 pass, 9 fail — the 9 failures are exactly the pre-existing baseline set** (see below). 17 new tests, all passing.
+- Tests: **135 total, 126 pass, 9 fail — the 9 failures are exactly the pre-existing baseline set** (see below). 18 new tests, all passing.
 
 ## Accounting matrix — Gemini counters vs R2 ledger
 
@@ -103,7 +103,7 @@ The 9 pre-existing failures, by name (all in stale sliced-harness suites; verifi
 - `generation-manual-queue-reuse.test.mjs`: "saved matching manual audio avoids a new Gemini request"; "mismatched fingerprint, stale audio and missing R2 never skip synthesis"; "intentional forced regeneration bypasses manual reuse"
 - `split-first-update-stop.test.mjs`: file-level failure (stale suite)
 
-Branch totals: **134 tests, 125 pass, 9 fail — zero new failures.**
+Branch totals: **135 tests, 126 pass, 9 fail — zero new failures** (135/126 after the check-4 addendum below added one test; the 9 named failures are unchanged).
 
 ## Benchmark
 
@@ -139,9 +139,26 @@ Modeled-fidelity note: the mock Batch day (1,732 pre-patch) runs somewhat hotter
 
 ## Deployment safety plan (for when Rowan approves — not executed)
 
+0. **Pre-deploy activity check (added at Rowan's request, 2026-10-19):** before replacing the Worker, verify read-only that no generation is in flight — scan the R2 `generation/` status objects and Continue-session records for any job or session in a non-terminal state (queued / generating / staged / paused_update with pending work, or a session with `continue_started` and unfinished jobs). If anything is active, wait for it to finish (or get Julie's explicit direction) — never deploy over live generation.
 1. Deploy the exact branch bytes of `cloudflare-worker.js` via `python3 ~/workspace/ops/deploy-opal-reader-worker.py <file>` (multipart upload, `main_module`, compat date **2026-08-29** preserved, secrets as `{"type":"inherit"}`).
 2. **Immediately re-check script-settings observability** (a code upload silently resets it to null): GET `/workers/scripts/opalreader-api/script-settings`; if observability is null, re-apply the settings-only PATCH (enabled, head_sampling_rate 1, logs enabled + invocation_logs + destinations ["cloudflare"] + persist true), then confirm the script etag is unchanged by the PATCH.
 3. Verify: `/health` (or equivalent) responds; all 12 bindings present via live read; script etag matches the upload; `APP_VERSION` "1.4.42" / `READER_GENERATION_UI_VERSION` "1.4.116" / `GENERATION_RELEASE_ID` unchanged in the deployed bytes.
 4. Smoke: one small Standard chapter generation + one status poll; watch KV write rate and confirm mirror objects (`generation/mirror-meta/`) appear in R2; confirm `/api/quota/gemini` returns sane counts (legacy union should show the day's pre-deploy attempts).
 5. **Rollback:** redeploy the `1ad64946` bytes (`git show 1ad64946:cloudflare-worker.js`) through the same script, then repeat step 2 (observability re-check). Rollback is safe in both directions: the patch's R2 objects (attempt markers, last-success pointer, mirror meta/locks) are additive and ignored by the old code; `_statusVersion` is an additive status field the old code passes through untouched; the old code resumes its KV writes immediately.
 6. Post-deploy watch: KV daily writes should track the benchmark (~250 on a Finding-Home day). If writes run hot, the mirror meta objects identify the job and transition class responsible.
+
+## Post-review addendum — Rowan's decisions and check 4 (2026-10-19)
+
+Rowan's preliminary verdict: **architecture approved; deployment pending final code inspection.** His rulings on the three flagged deviations:
+
+1. **Keep** the 48-hour legacy-KV quota read (deploy continuity without new KV writes).
+2. **Keep** the compare-and-swap mirror-meta fix.
+3. **Accept** the 342-write two-book projection (the 150–300 band is a planning goal, not a hard limit; Batch recovery identifiers take precedence).
+
+**Check 4 — `last_success_ms` monotonicity: Rowan's concern was correct.** As first implemented, the R2 last-success pointer was an unconditional put inside `recordTtsUsage`; two concurrent success events whose writes completed out of order could move the pointer backward. Reproduced before fixing, in the same reversed-completion-order style as the catch-up proofs: the older writer stalled inside its pointer put, the newer writer landed first (T0+7000), the older writer then overwrote it with its own stale value (T0) — the pointer regressed by the full gap.
+
+**Fix:** `advanceGeminiLastSuccess` — a monotonic compare-and-swap using the codebase's proven pattern (etag-matched conditional put, `If-None-Match: "*"` on create; re-read and yield whenever the stored timestamp is already at or past the candidate; bounded 3 attempts). New regression test "quota: concurrent last-success updates never move the pointer backward (reversed completion order)" fails on the pre-fix code and passes with the fix. Suite after the fix: **135 tests, 126 pass, 9 fail (baseline set unchanged).**
+
+**Check 2** is now step 0 of the deployment safety plan above (read-only verification that no generation jobs or Continue sessions are active before the Worker is replaced).
+
+**Stale-KV recovery (check 4, second half)** was re-inspected in code and behaves as described: `readGenerationStatus` reads R2 first and uses KV only when no R2 object exists; confirmed stamps advance only after a KV put succeeds *and* the writer still holds its fence; on KV failure only `attempt_failed_at` is recorded, so stale KV content is never marked confirmed; `evaluateMirror` detects KV behind the confirmed version and re-mirrors on subsequent activity, so the mirror converges back to the R2 truth.
