@@ -2715,23 +2715,7 @@ async function stageContinueSession(env,plan){
     }
     // Do not HEAD every future audio object during plan setup. Each queued
     // delivery checks R2 before synthesis and never bills a cached segment.
-    const ready=payload.segments.map(()=>false);
-    const status={job_id:payload.job_id,book_id:bookId,
-      chapter_index:payload.chapter_index,continue_session_id:sessionId,
-      state:i===0?"queued":"parked",continue_started:false,
-      completed:ready.filter(Boolean).length,
-      total:payload.adaptive_repair?
-        payload.segments.filter(seg=>seg.repair_parent===-1).length:ready.length,
-      adaptive_repair:payload.adaptive_repair===true,
-      generated_cost:0,error:null,updated_at:Date.now(),
-      segments:payload.segments.map((seg,j)=>({
-        cache_key:seg.cache_key,state:payload.adaptive_repair?
-          (seg.repair_parent===-1?"queued":"dormant"):
-          (ready[j]?"ready":"queued")
-      }))};
-    await env.OPALREADER_STORAGE.put(generationPayloadKey(payload.job_id),
-      JSON.stringify({...payload,status}),{httpMetadata:{contentType:"application/json"}});
-    await saveGenerationStatus(env,status);
+    await stageOneContinueJob(env,payload,i===0?"queued":"parked");
   }
   const firstId=ids[0];
   if(await acquireProcessingLease(env,firstId,"first-start")){
@@ -2758,6 +2742,257 @@ async function stageContinueSession(env,plan){
     return {job_id:id,chapter_index:s?.chapter_index,state:s?.state,
       completed:s?.completed,total:s?.total};
   }))};
+}
+
+// Shared per-job staging core for both Continue setup paths. Builds the
+// job's initial status in the given state and persists payload + status.
+// The one-shot path stages its first job "queued"; the chunked path
+// stages every job "parked" and activates only at finalize.
+async function stageOneContinueJob(env,payload,state){
+  const ready=payload.segments.map(()=>false);
+  const status={job_id:payload.job_id,book_id:payload.book_id,
+    chapter_index:payload.chapter_index,
+    continue_session_id:payload.continue_session_id,
+    state,continue_started:false,
+    completed:ready.filter(Boolean).length,
+    total:payload.adaptive_repair?
+      payload.segments.filter(seg=>seg.repair_parent===-1).length:ready.length,
+    adaptive_repair:payload.adaptive_repair===true,
+    generated_cost:0,error:null,updated_at:Date.now(),
+    segments:payload.segments.map((seg,j)=>({
+      cache_key:seg.cache_key,state:payload.adaptive_repair?
+        (seg.repair_parent===-1?"queued":"dormant"):
+        (ready[j]?"ready":"queued")
+    }))};
+  await env.OPALREADER_STORAGE.put(generationPayloadKey(payload.job_id),
+    JSON.stringify({...payload,status}),{httpMetadata:{contentType:"application/json"}});
+  await saveGenerationStatus(env,status);
+}
+
+// Chunked Continue staging (CONTINUE-CHUNKED-STAGING.md): the one-shot
+// /continue POST carries the whole plan in a single multi-megabyte body,
+// and a request that dies at intake stages nothing and can only be
+// retried whole. The chunked protocol stages the SAME plan — same
+// session ID, same job IDs — in small slices that are each independently
+// acknowledged. Every job stages "parked"; nothing is enqueued until
+// finalize verifies the complete plan from live statuses and activates
+// the first job exactly as the one-shot path does. Staging is
+// idempotent: a job the Worker already holds for this session is
+// acknowledged, never rewritten, so an interrupted setup resumes by
+// re-sending the remaining slices (or all of them).
+const continueSessionManifestKey=(sessionId)=>
+  `generation/sessions/${sessionId}.json`;
+
+async function readContinueSessionManifest(env,sessionId){
+  // Fail closed: null means ONLY a confirmed-missing manifest (R2
+  // answered with no object). Storage failures and unparseable
+  // contents propagate, so staging stops instead of mistaking an
+  // existing session for an absent one — which would let a retry
+  // repin the plan over it, rewrite its jobs, or strand an active
+  // session's bookkeeping.
+  if(!env.OPALREADER_STORAGE)
+    throw Error("Continue setup: storage is unavailable.");
+  const object=await env.OPALREADER_STORAGE.get(
+    continueSessionManifestKey(sessionId));
+  if(!object)return null;
+  return object.json?await object.json():
+    JSON.parse(await new Response(object.body).text());
+}
+
+async function writeContinueSessionManifest(env,manifest){
+  manifest.updated_at=Date.now();
+  await env.OPALREADER_STORAGE.put(
+    continueSessionManifestKey(manifest.session_id),
+    JSON.stringify(manifest),{httpMetadata:{contentType:"application/json"}});
+}
+
+// Canonical JSON for plan fingerprinting — the exact recipe the Reader
+// uses (object keys sorted at every depth, array order preserved,
+// undefined object fields dropped), so a job's fingerprint is
+// identical on both sides of the wire.
+function stableJsonStringify(value){
+  if(value===null||typeof value!=="object")
+    return JSON.stringify(value===undefined?null:value);
+  if(Array.isArray(value))
+    return "["+value.map(item=>
+      stableJsonStringify(item===undefined?null:item)).join(",")+"]";
+  return "{"+Object.keys(value).filter(k=>value[k]!==undefined).sort()
+    .map(k=>JSON.stringify(k)+":"+stableJsonStringify(value[k])).join(",")+"}";
+}
+
+async function sha256HexText(text){
+  const digest=await crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)]
+    .map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+async function stageContinueSlice(env,body){
+  const sessionId=body?.session_id,bookId=body?.book_id;
+  const jobIds=body?.job_ids,jobs=body?.jobs;
+  if(!validJobId(sessionId))
+    throw Error("Continue setup: session ID is missing or malformed.");
+  if(!validId(bookId))
+    throw Error("Continue setup: book ID is missing or malformed.");
+  if(!Array.isArray(jobIds)||jobIds.length<1||jobIds.length>30||
+    jobIds.some(id=>!validJobId(id))||new Set(jobIds).size!==jobIds.length)
+    throw Error("Continue setup: job_ids must list the plan's 1–30 unique job IDs.");
+  if(!Array.isArray(jobs)||jobs.length<1||jobs.length>10)
+    throw Error("Continue setup: a stage request carries 1–10 jobs; received "+
+      (Array.isArray(jobs)?jobs.length:"no job list")+".");
+  for(let i=0;i<jobs.length;i++){
+    const p=jobs[i],reason=describeContinuePayloadIssue(p,bookId);
+    const chapter=Number.isInteger(p?.chapter_index)?String(p.chapter_index+1):"unknown";
+    const where="job "+(jobIds.indexOf(p?.job_id)+1)+", chapter "+chapter+
+      " (ID "+String(p?.job_id||"missing").slice(0,12)+")";
+    if(reason)throw Error("Continue plan rejected at "+where+": "+reason);
+    if(!jobIds.includes(p.job_id))
+      throw Error("Continue plan rejected at "+where+
+        ": job is not part of the declared plan.");
+    if(i>0&&jobIds.indexOf(p.job_id)<jobIds.indexOf(jobs[i-1].job_id))
+      throw Error("Continue plan rejected at "+where+
+        ": jobs are out of plan order within this request.");
+  }
+  // Plan immutability: the first stage request pins every job's
+  // contents with a SHA-256 fingerprint of its canonical JSON. A job
+  // can never be staged under a plan ID with different contents than
+  // the plan declared — an unstaged ID is not a blank cheque.
+  const pins=body?.job_fingerprints;
+  let manifest=await readContinueSessionManifest(env,sessionId);
+  if(manifest){
+    if(manifest.book_id!==bookId||
+      JSON.stringify(manifest.job_ids)!==JSON.stringify(jobIds))
+      throw Error("Continue setup: the plan does not match the plan "+
+        "already staging under this session ID.");
+    if(!manifest.job_fingerprints)
+      throw Error("Continue setup: this session predates plan pinning "+
+        "and cannot be extended safely.");
+    if(pins!==undefined&&
+      stableJsonStringify(pins)!==stableJsonStringify(manifest.job_fingerprints))
+      throw Error("Continue setup: the plan fingerprints do not match "+
+        "the plan already staging under this session ID.");
+  }else if(!pins||jobIds.some(id=>typeof pins[id]!=="string"||
+    !/^[0-9a-f]{64}$/.test(pins[id]))){
+    throw Error("Continue setup: job_fingerprints must pin the "+
+      "contents of every job in the plan.");
+  }
+  const effectivePins=manifest?manifest.job_fingerprints:pins;
+  for(let i=0;i<jobs.length;i++){
+    const p=jobs[i];
+    const actual=await sha256HexText(stableJsonStringify(p));
+    if(actual!==effectivePins[p.job_id]){
+      const chapter=Number.isInteger(p?.chapter_index)?String(p.chapter_index+1):"unknown";
+      throw Error("Continue plan rejected at job "+
+        (jobIds.indexOf(p?.job_id)+1)+", chapter "+chapter+
+        " (ID "+String(p?.job_id||"missing").slice(0,12)+
+        "): job contents do not match the plan pinned for this session.");
+    }
+  }
+  // Lost finalize acknowledgement: the session is already active, so
+  // reconcile instead of staging or activating again. The caller takes
+  // the finalize summary as the source of truth for its job states.
+  if(manifest?.state==="active")
+    return {session_id:sessionId,already_active:true,accepted:[],
+      staged_total:jobIds.length,plan_total:jobIds.length,complete:true};
+  if(!manifest){
+    manifest={session_id:sessionId,book_id:bookId,job_ids:jobIds,
+      job_fingerprints:Object.fromEntries(jobIds.map(id=>[id,pins[id]])),
+      state:"staging",created_at:Date.now()};
+    await writeContinueSessionManifest(env,manifest);
+  }
+  const accepted=[];
+  for(const p of jobs){
+    const idx=jobIds.indexOf(p.job_id);
+    const payload={...p,continue_session_id:sessionId,
+      continue_next_job_id:jobIds[idx+1]||null};
+    const existing=await readGenerationStatus(env,payload.job_id);
+    if(existing){
+      if(existing.continue_session_id!==sessionId)
+        throw Error("An existing job belongs to a different session.");
+      accepted.push(payload.job_id);
+      continue;
+    }
+    await stageOneContinueJob(env,payload,"parked");
+    accepted.push(payload.job_id);
+  }
+  // Progress is counted from live statuses, never from bookkeeping, so
+  // an acknowledged slice can be re-verified after any interruption.
+  let stagedTotal=0;
+  for(const id of jobIds)if(await readGenerationStatus(env,id))stagedTotal++;
+  return {session_id:sessionId,accepted,staged_total:stagedTotal,
+    plan_total:jobIds.length,complete:stagedTotal===jobIds.length};
+}
+
+async function finalizeContinueSession(env,body){
+  const sessionId=body?.session_id,bookId=body?.book_id;
+  if(!validJobId(sessionId))
+    throw Error("Continue setup: session ID is missing or malformed.");
+  if(!validId(bookId))
+    throw Error("Continue setup: book ID is missing or malformed.");
+  const manifest=await readContinueSessionManifest(env,sessionId);
+  if(!manifest)
+    throw Error("Continue setup: no staged plan found for this session.");
+  if(manifest.book_id!==bookId)
+    throw Error("Continue setup: book ID does not match the staged plan.");
+  const ids=manifest.job_ids;
+  const statuses=[];
+  for(const id of ids){
+    const s=await readGenerationStatus(env,id);
+    if(!s)
+      throw Error("Continue setup is incomplete: "+statuses.length+" of "+
+        ids.length+" jobs staged; job "+(statuses.length+1)+" is missing.");
+    if(s.continue_session_id!==sessionId)
+      throw Error("An existing job belongs to a different session.");
+    statuses.push(s);
+  }
+  for(let i=1;i<statuses.length;i++){
+    if(statuses[i].chapter_index<statuses[i-1].chapter_index)
+      throw Error("Continue plan rejected: jobs are out of chapter order "+
+        "at job "+(i+1)+", chapter "+(statuses[i].chapter_index+1)+".");
+  }
+  const summary=async()=>({session_id:sessionId,
+    jobs:await Promise.all(ids.map(async id=>{
+      const s=await readGenerationStatus(env,id);
+      return {job_id:id,chapter_index:s?.chapter_index,state:s?.state,
+        completed:s?.completed,total:s?.total};
+    }))});
+  if(manifest.state==="active")return summary();
+  const firstId=ids[0];
+  if(!await acquireProcessingLease(env,firstId,"first-start"))
+    throw Error("Continue activation is already in progress; "+
+      "check the same plan again.");
+  try{
+    let s=await readGenerationStatus(env,firstId);
+    if(s?.state==="parked"){
+      const payload=await readGenerationPayload(env,firstId);
+      if(!matchesGenerationRelease(payload)){
+        await pauseGenerationForUpdate(env,s,firstId);
+        return summary();
+      }
+      const queued={...s,state:"queued",error:null,updated_at:Date.now()};
+      addGenerationTrace(queued,"continue_activated",null);
+      await saveGenerationStatus(env,queued);
+      s=queued;
+    }
+    if(s?.state==="queued"&&!s.continue_started){
+      const next=nextGenerationSegmentIndex(s.segments);
+      if(next>=0){
+        // Send first, then record the acknowledgement — the same order
+        // (and the same retry safety) as the one-shot path.
+        await env.OPALREADER_GENERATION.send({job_id:firstId,segment_index:next});
+        await saveGenerationStatus(env,
+          {...s,continue_started:true,updated_at:Date.now()});
+      }else{
+        const done={...s,continue_started:true,updated_at:Date.now()};
+        finishGenerationState(done);
+        await saveGenerationStatus(env,done);
+        await activateNextContinueJob(env,{continue_next_job_id:ids[1]||null});
+      }
+    }
+  }finally{await releaseProcessingLease(env,firstId,"first-start")}
+  manifest.state="active";
+  await writeContinueSessionManifest(env,manifest);
+  return summary();
 }
 
 
@@ -2906,6 +3141,26 @@ export default {
           return json({error:"Generation queue unavailable."},503,origin,env);
         try{
           const result=await stageContinueSession(env,await request.json());
+          return json(result,202,origin,env);
+        }catch(error){
+          return json({error:String(error?.message||"Continue setup failed.")},400,origin,env);
+        }
+      }
+      if(url.pathname==="/api/generation/continue/stage"&&request.method==="POST"){
+        if(!env.OPALREADER_GENERATION||!syncReady(env))
+          return json({error:"Generation queue unavailable."},503,origin,env);
+        try{
+          const result=await stageContinueSlice(env,await request.json());
+          return json(result,202,origin,env);
+        }catch(error){
+          return json({error:String(error?.message||"Continue setup failed.")},400,origin,env);
+        }
+      }
+      if(url.pathname==="/api/generation/continue/finalize"&&request.method==="POST"){
+        if(!env.OPALREADER_GENERATION||!syncReady(env))
+          return json({error:"Generation queue unavailable."},503,origin,env);
+        try{
+          const result=await finalizeContinueSession(env,await request.json());
           return json(result,202,origin,env);
         }catch(error){
           return json({error:String(error?.message||"Continue setup failed.")},400,origin,env);
