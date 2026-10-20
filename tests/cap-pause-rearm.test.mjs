@@ -225,9 +225,11 @@ test("every autoSplitEnabled assignment in the client also assigns the pause rea
   // 21 audited sites + 2 paired pins added by the review fix (the
   // server-adopt reconciliation for paused_quota and parked jobs)
   // + 1 paired site added by Case #4 (the no-staging-write adoption
-  // branch in queueAdaptiveRepair re-arms before lt() merges).
+  // branch in queueAdaptiveRepair re-arms before lt() merges)
+  // + 1 paired site added by the Case #4 final pass (applyAdaptiveRepair
+  // re-arms when untouched blocked roots remain after a capped plan).
   // The invariant under guard is the pairing, not the count.
-  assert.equal(assignments.length, 24, "21 audited assignments + 2 review-fix pins + 1 Case #4 adoption site, all reason-paired");
+  assert.equal(assignments.length, 25, "21 audited assignments + 2 review-fix pins + 1 Case #4 adoption site + 1 final-pass chain site, all reason-paired");
   for (const m of assignments) {
     const after = app.slice(m.index + m[0].length, m.index + m[0].length + 40);
     assert.ok(
@@ -239,7 +241,7 @@ test("every autoSplitEnabled assignment in the client also assigns the pause rea
 
 test("cap pause sites store the cap reason; the true sites clear it", () => {
   assert.equal(app.split('autoSplitPauseReason="cap"').length - 1, 2, "repair-path and legacy-split cap trips");
-  assert.equal(app.split("autoSplitPauseReason=null").length - 1, 9, "all nine re-arm sites clear the reason (incl. Case #4's adoption branch)");
+  assert.equal(app.split("autoSplitPauseReason=null").length - 1, 10, "all ten re-arm sites clear the reason (incl. Case #4's adoption branch and the final-pass chain continuation)");
   assert.equal(app.split('autoSplitPauseReason="quota"').length - 1, 2, "queue-failure site + server-adopt pin");
 });
 

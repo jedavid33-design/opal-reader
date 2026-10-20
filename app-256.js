@@ -1142,10 +1142,28 @@ function applyAdaptiveRepair(ch,local,status){
     ch.segments.splice(x.index,1,...x.pieces);
   }
   ch.text=ch.segments.map(s=>s.text).join("\n\n");
-  local.repairApplied=true;ch.autoSplitEnabled=false;ch.autoSplitPauseReason="completed";
-  ch.autoSplitStatus=ch.segments.some(s=>s.generationBlocked||s.generationFailure)
-    ?"Background repair finished with unresolved pieces."
-    :"Background repair finished; all pieces saved.";
+  local.repairApplied=true;
+  // Case #4 final pass: a repair plan is capped (90 nodes), so a chapter
+  // with many blocked passages can need several plans in a row. Pieces
+  // THIS pass produced are terminal — ready, blocked with
+  // splitExhausted set, or provider-failed — but roots the cap left out
+  // of the plan are untouched and still repairable. Keep the automatic
+  // chain armed for them (lt()'s scheduleAutoSplit queues the next
+  // plan) instead of switching off until a manual tap. The next plan
+  // build re-checks eligibility exactly; if nothing is plannable it
+  // disables the chain itself, and every pass permanently resolves at
+  // least one root, so this cannot loop.
+  const remainingRepairable=ch.segments.some(seg=>seg.generationBlocked&&
+    !seg.splitExhausted&&!seg.audioKey&&!seg.systemVoiceFallback);
+  if(remainingRepairable){
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;
+    ch.autoSplitStatus="Background repair saved this pass; more blocked passages remain, so repair continues automatically.";
+  }else{
+    ch.autoSplitEnabled=false;ch.autoSplitPauseReason="completed";
+    ch.autoSplitStatus=ch.segments.some(s=>s.generationBlocked||s.generationFailure)
+      ?"Background repair finished with unresolved pieces."
+      :"Background repair finished; all pieces saved.";
+  }
   return true;
 }
 function effectivePauseReason(chapter){
@@ -1767,17 +1785,46 @@ const jobDiscoveryAt=new Map();
 // jobs join the runtime watchlist, so a parked job this device never
 // staged is still followed. An older Worker without the endpoint just
 // fails the fetch and Reader keeps today's slot-only behavior.
+// Case #4 final pass (Rowan R1/R2): discovery results are cached per
+// book id together with the book INSTANCE they were applied to.
+//  R1 — the watchlist is keyed by chapter OBJECT, but reopening a book
+//       from IndexedDB builds fresh chapter objects. The per-book
+//       throttle alone would then skip discovery for up to 45s while
+//       the new objects know nothing — a remotely parked job vanished
+//       from the interface again. So on an instance change the cached
+//       jobs are rehydrated onto the new chapter objects immediately
+//       (Rowan's rehydration option); the throttle itself is untouched
+//       and Ye() re-runs discovery every poll cycle, so fresh data
+//       follows within the normal window.
+//  R2 — the response is applied ONLY to the instance that requested
+//       it. The book id and instance are captured before the await;
+//       if the user switched books while the request was in flight,
+//       the stale response is dropped whole — one book's jobs are
+//       never noted onto another book's chapters.
+const discoveryCacheByBook=new Map();
 async function refreshChapterJobDiscovery(force=false){
   if(!a.book?.id||!a.apiBase)return;
-  const now=Date.now();
-  if(!force&&now-(jobDiscoveryAt.get(a.book.id)||0)<45000)return;
-  jobDiscoveryAt.set(a.book.id,now);
+  const book=a.book,bookId=book.id,now=Date.now();
+  const cached=discoveryCacheByBook.get(bookId);
+  const instanceChanged=!!cached&&cached.instance!==book;
+  if(instanceChanged){
+    for(const job of cached.jobs){
+      const ch=book.chapters[job.chapter_index];
+      if(ch)noteChapterJob(ch,job);
+    }
+    discoveryCacheByBook.set(bookId,{...cached,instance:book});
+  }
+  if(!force&&now-(jobDiscoveryAt.get(bookId)||0)<45000)return;
+  jobDiscoveryAt.set(bookId,now);
   try{
     const res=await(await be(a.apiBase,a.accessToken,
-      "/api/generation/books/"+encodeURIComponent(a.book.id)+"/jobs")).json();
+      "/api/generation/books/"+encodeURIComponent(bookId)+"/jobs")).json();
+    if(a.book!==book)return;
     if(res?.quota_park)a.quotaPark=res.quota_park;
-    for(const job of res?.jobs||[]){
-      const ch=a.book.chapters[job.chapter_index];
+    const jobs=Array.isArray(res?.jobs)?res.jobs:[];
+    discoveryCacheByBook.set(bookId,{instance:book,jobs});
+    for(const job of jobs){
+      const ch=book.chapters[job.chapter_index];
       if(ch)noteChapterJob(ch,job);
     }
   }catch{/* discovery unavailable: slot-only behavior, as before */}
