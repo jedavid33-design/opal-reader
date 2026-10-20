@@ -10,7 +10,7 @@ Release identifiers unchanged: Worker `1.4.42`, Reader UI `1.4.116`, release id 
 - The Gemini quota counters no longer write KV at all: attempts are R2 ledger markers, last-success is an R2 pointer object maintained inside `recordTtsUsage`.
 - Benchmark, Finding-Home-shaped day: **1,742 → 252 KV writes** (target band 150–300; free-plan cap 1,000/day; Oct 19 measured actual 1,403).
 - Behavior is provably unchanged in the harness: identical R2 status-save counts and identical Google API call counts before/after, per workload.
-- Tests: **135 total, 126 pass, 9 fail — the 9 failures are exactly the pre-existing baseline set** (see below). 18 new tests, all passing.
+- Tests: **137 total, 128 pass, 9 fail — the 9 failures are exactly the pre-existing baseline set** (see below). 20 new tests, all passing.
 
 ## Accounting matrix — Gemini counters vs R2 ledger
 
@@ -103,7 +103,7 @@ The 9 pre-existing failures, by name (all in stale sliced-harness suites; verifi
 - `generation-manual-queue-reuse.test.mjs`: "saved matching manual audio avoids a new Gemini request"; "mismatched fingerprint, stale audio and missing R2 never skip synthesis"; "intentional forced regeneration bypasses manual reuse"
 - `split-first-update-stop.test.mjs`: file-level failure (stale suite)
 
-Branch totals: **135 tests, 126 pass, 9 fail — zero new failures** (135/126 after the check-4 addendum below added one test; the 9 named failures are unchanged).
+Branch totals: **137 tests, 128 pass, 9 fail — zero new failures** (grew 134/125 → 135/126 with the check-4 test → 137/128 with Rowan's two fix tests; the 9 named failures are unchanged).
 
 ## Benchmark
 
@@ -162,3 +162,15 @@ Rowan's preliminary verdict: **architecture approved; deployment pending final c
 **Check 2** is now step 0 of the deployment safety plan above (read-only verification that no generation jobs or Continue sessions are active before the Worker is replaced).
 
 **Stale-KV recovery (check 4, second half)** was re-inspected in code and behaves as described: `readGenerationStatus` reads R2 first and uses KV only when no R2 object exists; confirmed stamps advance only after a KV put succeeds *and* the writer still holds its fence; on KV failure only `attempt_failed_at` is recorded, so stale KV content is never marked confirmed; `evaluateMirror` detects KV behind the confirmed version and re-mirrors on subsequent activity, so the mirror converges back to the R2 truth.
+
+## Post-review addendum 2 — Rowan's two safety fixes (2026-10-19)
+
+Rowan's verdict after inspecting the code on GitHub: architecture and results accepted; deployment held for two narrow corrections. Both are done, each reproduction-first.
+
+**Fix 1 — lock release is now ownership-safe.** The release path was a read-then-delete: a writer confirmed it owned the lock, then deleted it as a separate unconditional operation. If the 20-second lease expired between the two, a successor could steal the lock and the stale writer's delete would remove the *successor's* lock. Release is now a single conditional step: swap the live lock for a released tombstone (`{owner, epoch, acquired_at, released: true, released_at}`) with an etag-matched put — if the object changed since the writer's ownership read, the put fails and the successor's lock survives. The acquire path treats a released tombstone as immediately stealable (etag-matched replace), so release never delays the next writer, and no mirror-lock object is ever deleted. New test "catch-up safety (e)" parks writer A *inside* its release (after ownership, before the release lands), expires its lease, has successor B steal and stall mid-mirror still holding, then lets A's release execute: on the old code B's lock was deleted (the test failed with exactly that assertion); on the fix it survives with owner and epoch intact, and B converges the mirror.
+
+**Fix 2 — status polling no longer waits on KV.** The status GET awaited read-path mirror catch-up, so a slow or stalled KV write delayed the Reader's status response — contrary to the approved design. Catch-up is now scheduled on the execution context (`ctx.waitUntil`, fire-and-forget fallback when no context is present); the fetch handler takes `ctx` as its third parameter. New test "status polling never waits on a stalled KV catch-up write" parks the catch-up's KV put indefinitely and confirms the poll returns 200 with the current status, that the catch-up was genuinely scheduled (it is found parked at the stalled write), and that the mirror converges once KV recovers. Four existing catch-up tests were updated to observe background completion (flush/poll-for-effect) instead of assuming the poll awaited it.
+
+**Suite after both fixes: 137 tests, 128 pass, 9 fail — the same pre-existing baseline set; all 20 coalescing tests pass. Benchmark re-run after the fixes: identical numbers (Batch 242, Standard 90, stress 60; Finding-Home day 252; two-book day 342)** — the tombstone release is an R2 put replacing an R2 delete, and backgrounding changes timing, not counts.
+
+**Tracked follow-up for the next patch (Rowan, nonblocking):** `geminiQuotaReport` lists every historical R2 attempt marker under `usage/gemini-attempts/` with no retention or date partitioning. The scan grows with total lifetime attempts even though only the Pacific-day and rolling-24h windows are ever counted. Next patch should bound it — e.g., date-partitioned marker keys with listings restricted to the relevant dates, plus pruning of markers older than the rolling window. Not a correctness issue tonight; explicitly tracked here so it is not lost.
