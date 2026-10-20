@@ -100,7 +100,7 @@ function checkpointReaderPlayback(force=false){
   writeReaderBookmark(book,ch,start,position,chunk,force);
   return true;
 }
-function rr(e){const c=Math.max(0,Number(e.currentChapter)||0);for(const[r,m]of e.chapters.entries()){const s=m.playback;m.playback={...Ke,...s||{}},!s&&r===c&&((Number(e.currentSegment)||0)>0||(Number(e.position)||0)>0)&&(m.playback.segment=Math.max(0,Number(e.currentSegment)||0),m.playback.position=Math.max(0,Number(e.position)||0),m.playback.started=!0);normalizeCompletedChapterStatus(m)}return restoreReaderBookmark(e)}function nr(e,c){const r=e.chapters[c],m=r?.playback||Ke;return!m.started||m.completed?{segment:0,position:0}:{segment:Math.min(Math.max(0,Number(m.segment)||0),Math.max(0,(r?.segments.length||1)-1)),position:Math.max(0,Number(m.position)||0)}}function at(e,c,r,m){const s=e.chapters[c];s&&(s.playback={...s.playback||Ke,segment:Math.max(0,Number(r)||0),position:Math.max(0,Number(m)||0),started:!0,completed:!1,updatedAt:Date.now()},delete s.playback.composite,e.currentChapter=c,e.currentSegment=s.playback.segment,e.position=s.playback.position,e.lastPlayedAt=Date.now())}function ar(e,c){const r=e.chapters[c];r&&(r.playback={...r.playback||Ke,position:0,completed:!0,started:!0,updatedAt:Date.now()},delete r.playback.composite,clearCompletedReaderBookmark(e.id,c))}function Ie(e){const c=Number(e);return[.75,1,1.25,1.5,1.75,2].includes(c)?c:1}function _t(e){const c=e?.generation||{},r=Math.max(0,Number(c.total)||e?.segments?.length||0),m=Math.min(r,Math.max(0,Number(c.completed)||0));return{state:c.state||"not_generated",completed:m,total:r,percent:r?Math.round(m/r*100):0}}function _p(u){return["queued","generating"].includes(u.state)?'<div class="chapter-progress" role="status"><span>'+(u.quotaPaused?"Paused for Gemini quota":u.state==="queued"&&u.completed===0?"Queued":"Generating")+'</span><span class="progress-track" aria-hidden="true"><span style="width:'+u.percent+'%"></span></span><strong>'+u.completed+'/'+u.total+'</strong></div>':""}function ir(e){const c=e?.segments||[];return!!c.length&&c.every(i=>i.audioKey)}function sr(e,c){const r=c?.segments||[];return c?.state==="ready"&&Number(c.completed)===e.segments.length&&Number(c.total)===e.segments.length&&r.length===e.segments.length&&r.every(m=>m.state==="ready"&&m.cache_key)}
+function rr(e){const c=Math.max(0,Number(e.currentChapter)||0);for(const[r,m]of e.chapters.entries()){const s=m.playback;m.playback={...Ke,...s||{}},!s&&r===c&&((Number(e.currentSegment)||0)>0||(Number(e.position)||0)>0)&&(m.playback.segment=Math.max(0,Number(e.currentSegment)||0),m.playback.position=Math.max(0,Number(e.position)||0),m.playback.started=!0);normalizeCompletedChapterStatus(m)}return restoreReaderBookmark(e)}function nr(e,c){const r=e.chapters[c],m=r?.playback||Ke;return!m.started||m.completed?{segment:0,position:0}:{segment:Math.min(Math.max(0,Number(m.segment)||0),Math.max(0,(r?.segments.length||1)-1)),position:Math.max(0,Number(m.position)||0)}}function at(e,c,r,m){const s=e.chapters[c];s&&(s.playback={...s.playback||Ke,segment:Math.max(0,Number(r)||0),position:Math.max(0,Number(m)||0),started:!0,completed:!1,updatedAt:Date.now()},delete s.playback.composite,e.currentChapter=c,e.currentSegment=s.playback.segment,e.position=s.playback.position,e.lastPlayedAt=Date.now())}function ar(e,c){const r=e.chapters[c];r&&(r.playback={...r.playback||Ke,position:0,completed:!0,started:!0,updatedAt:Date.now()},delete r.playback.composite,clearCompletedReaderBookmark(e.id,c))}function Ie(e){const c=Number(e);return[.75,1,1.25,1.5,1.75,2].includes(c)?c:1}function _t(e){const c=e?.generation||{},r=Math.max(0,Number(c.total)||e?.segments?.length||0),m=Math.min(r,Math.max(0,Number(c.completed)||0));return{state:c.state||"not_generated",completed:m,total:r,percent:r?Math.round(m/r*100):0}}function _p(u){if(!u||!u.total||!(u.playable>0||u.blocked>0||u.generating||u.quotaPaused||u.complete))return"";const pct=Math.round(u.playable/u.total*100);return'<div class="chapter-progress" role="status"><span>'+(u.complete?"Complete":u.quotaPaused?"Paused for Gemini quota · manual restart":u.generating?"Generating":u.playable>0?"Partial":"Not started")+'</span><span class="progress-track" aria-hidden="true"><span style="width:'+pct+'%"></span></span><strong>'+u.playable+'/'+u.total+'</strong>'+(u.blocked?' · '+u.blocked+' blocked':"")+'</div>'}function ir(e){const c=e?.segments||[];return!!c.length&&c.every(i=>i.audioKey)}function sr(e,c){const r=c?.segments||[];return c?.state==="ready"&&Number(c.completed)===e.segments.length&&Number(c.total)===e.segments.length&&r.length===e.segments.length&&r.every(m=>m.state==="ready"&&m.cache_key)}
 // v1.4.92: Recover older Gemini "Input blocked" HTTP 400 jobs without
 // resending the entire chapter. Only map an unmistakable policy refusal
 // to the exact unfinished passage from saved Queue membership.
@@ -140,9 +140,20 @@ function recoverLegacyGeminiInputBlock(ch,status,localJob=status){
   return true;
 }
 function or(e,c,{replacement:r=!1,recordedCost:m=0}={}){const s=r?"replacementGeneration":"generation",i=e[s]||{},l={...i,...c,jobId:c.job_id||c.jobId,recordedCost:m};
+// Case #4 §4.2: for the SAME jobId, merged progress is monotonic — a
+// stale or partial status merge may never move completed/total
+// backwards in the UI. (A different job may still replace the slot; the
+// slot is only a display cache now, chapter truth comes from segments.)
+if(i.jobId&&l.jobId===i.jobId){if(Number(i.completed)>Number(l.completed))l.completed=i.completed;if(Number(i.total)>Number(l.total))l.total=i.total}
 const _ap=(u,o,src=u)=>{const t=e.segments[u];if(!t)return;if(o?.state==="ready"&&o.cache_key){t.audioKey=o.cache_key;t.audioStale=!1;const fp=i.segmentFingerprints?.[src];t.generationFingerprint=fp||t.generationFingerprint||o.cache_key;o.provider_request_id&&(t.providerRequestId=o.provider_request_id);o.model&&(t.generatedModel=o.model);delete t.generationBlocked;delete t.generationFailure}else if(o?.state==="blocked"){t.generationBlocked={error:o.error||"Gemini blocked this segment.",blockReason:o.block_reason||"PROHIBITED_CONTENT",finishReason:o.finish_reason||"UNKNOWN",model:o.model||null,jobId:l.jobId||null};delete t.generationFailure;recordGeminiFailure(e,t,{...t.generationBlocked}, "policy_block")}else if(o?.state==="provider_failed"||o?.provider_internal){t.generationFailure={error:o.error||"Gemini internal error.",kind:"provider_internal",model:o.model||null,jobId:l.jobId||null};delete t.generationBlocked;recordGeminiFailure(e,t,{...t.generationFailure},"provider_internal")}};
 const keys=Array.isArray(i.segmentKeys)&&i.segmentKeys.length?i.segmentKeys:null,legacy=keys&&keys.every(k=>/^[a-f0-9]{64}$/.test(k||""));
 const exactIndices=Array.isArray(i.segmentIndices)&&i.segmentIndices.length===(c?.segments||[]).length;
+// Case #4 final integration (Rowan): an inline-split status whose tree
+// has NOT been applied to the chapter yet (mapping not aligned to the
+// full, grown status array). Such a status must never be merged
+// through the job's original root mapping by status position — the
+// array has shifted underneath it.
+const inlinePending=c?.inline_split===true&&!exactIndices;
 
 if(i.scope==="background_repair"||c.adaptive_repair){ /* mapped by verified repair roots */ }
 else if(exactIndices){
@@ -154,12 +165,54 @@ else if(exactIndices){
     if(["ready","blocked","provider_failed"].includes(o?.state)||o?.provider_internal)_ap(idx,o,u);
   });
 }
+else if(inlinePending){
+  // Tree pending: split parents and ALL their children are deferred —
+  // a child's audio belongs to a chapter piece that does not exist
+  // until applyInlineSplits expands the tree at ready/partial, and the
+  // child's cache key stays on the job status (and in R2) until then,
+  // so a quota park mid-tree loses nothing and Resume re-derives the
+  // finished tree from the same status. Only roots that never split
+  // merge here, each resolved by JOB ORDER (the k-th root entry ↔ the
+  // k-th staged root), never by its shifted status position, and
+  // double-checked against the staged identity when keys exist.
+  // Case #4 re-review (Rowan): segIdentity is text+POV only — it has
+  // no unique segment ID — so with identical twin passages an identity
+  // match does not say WHICH twin a root belongs to, and consuming
+  // matches in chapter order would guess the earliest twin. A root
+  // therefore merges only when its occurrence is FORCED: staged
+  // segmentIndices (a root whose own repair_source_index anchor
+  // contradicts them is deferred), or the unique resolution
+  // resolveIndicesFromKeys computes from the staged keys. An
+  // ambiguous root is deferred — never guessed onto a twin.
+  const isChild=o=>typeof o?.repair_path==="string"&&o.repair_path.length>0;
+  const rootEntries=(c.segments||[]).filter(o=>!isChild(o));
+  let resolved=null;
+  if(Array.isArray(i.segmentIndices)&&i.segmentIndices.length===rootEntries.length){
+    resolved=rootEntries.map((o,k)=>{
+      const anchor=Number.isInteger(o?.repair_source_index)&&o.repair_source_index>=0?o.repair_source_index:null;
+      return anchor!=null&&i.segmentIndices[k]!==anchor?null:i.segmentIndices[k];
+    });
+  }else if(keys&&keys.length===rootEntries.length&&typeof resolveIndicesFromKeys==="function"){
+    resolved=resolveIndicesFromKeys(e,keys,rootEntries);
+  }
+  let rootPos=-1;
+  (c.segments||[]).forEach(o=>{
+    if(isChild(o))return;
+    rootPos++;
+    if(o?.state==="split")return;
+    if(!["ready","blocked","provider_failed"].includes(o?.state)&&!o?.provider_internal)return;
+    const idx=resolved?resolved[rootPos]:null;
+    if(!Number.isInteger(idx)||idx<0||idx>=e.segments.length)return;
+    if(keys&&segIdentity(e.segments[idx],e.pov)!==keys[rootPos])return;
+    _ap(idx,o,rootPos);
+  });
+}
 else if(legacy||!keys){if((c?.segments||[]).length===(e.segments||[]).length)c.segments.forEach((o,u)=>_ap(u,o,u))}
 else{const byId=new Map();e.segments.forEach((t,u)=>{if(t==null)return;const k=segIdentity(t,e.pov),q=byId.get(k)||[];q.push(u);byId.set(k,q)});c.segments.forEach((o,u)=>{if(!["ready","blocked","provider_failed"].includes(o?.state)&&!o?.provider_internal)return;const q=byId.get(keys[u]),idx=q?.shift();if(idx!=null)_ap(idx,o,u)})}
 // Legacy pre-v1.4.21 failed jobs did not tag the segment. Recover the first
 // unfinished job member from the stored segment keys when the chapter error
 // itself clearly says Gemini 500/internal error.
-if(c?.state==="failed"&&/Gemini error \(500\)|internal error has occurred/i.test(String(c?.error||""))&&!e.segments.some(x=>x.generationFailure)){
+if(!inlinePending&&c?.state==="failed"&&/Gemini error \(500\)|internal error has occurred/i.test(String(c?.error||""))&&!e.segments.some(x=>x.generationFailure)){
   const pending=(c?.segments||[]).findIndex(o=>!["ready","blocked"].includes(o?.state));
   if(pending>=0){
     if(keys&&!legacy){
@@ -178,7 +231,14 @@ if(!r&&chapterPlaybackReady(e)&&!["queued","generating"].includes(l.state)){
   l.state=e.segments.some(seg=>seg.systemVoiceFallback&&!seg.audioKey)?"ready_with_device_fallback":"ready";
   l.error=null;
 }
-return sr(e,c)?(e.generation=l,e.audioKey=null,r&&delete e.replacementGeneration,!0):(e[s]=l,!1)}function ur(e){return{...e,traits:[...e.traits||[]],raw:e.raw?{...e.raw}:e.raw}}function dr(e,c,r){const m=ur(r);if(c==="default")e.defaultVoice=m;else{const s=e.povs.find(i=>i.id===c);if(!s)throw new Error("That cast role could not be found.");s.voice=m}return m}const hr=[.75,1,1.25,1.5,1.75,2];function fr(e){const c=Ie(e);return hr.map(r=>({rate:r,value:String(r),label:`${r}×`,selected:r===c}))}function pr(e,c){const r=Ie(c);return e.defaultPlaybackRate=r,e.playbackRate=r,r}function mr(e,c="Request failed"){const r=new Set;function m(s){if(typeof s=="string")return s.trim();if(!s||typeof s!="object"||r.has(s))return"";if(r.add(s),Array.isArray(s))return s.map(m).filter(Boolean).join("; ");for(const i of["message","error","detail","reason","description","statusText"]){const l=m(s[i]);if(l)return l}return typeof s.status=="string"?s.status.replaceAll("_"," ").toLowerCase():""}return m(e)||c}async function be(e,c,r,m={}){const s=(e||"").replace(/\/$/,"")+r,i=await fetch(s,{...m,headers:{"Content-Type":"application/json",...c?{"X-OpalReader-Token":c}:{},...m.headers||{}}});if(!i.ok){let l=`Request failed (${i.status})`;try{const o=await i.text();if(o.trim())try{l=mr(JSON.parse(o),l)}catch{l=o.trim()}}catch{}const err=new Error(l);err.status=i.status;throw err}return i}const gr=e=>new URLSearchParams(Object.entries(e).filter(([,c])=>c!==""&&c!=null));async function vr(e,c,r,m={}){return(await be(e,c,`/api/providers/${encodeURIComponent(r)}/voices?${gr(m)}`)).json()}async function gt(e,c,r,m){const s=await be(e,c,`/api/providers/${encodeURIComponent(r)}/speech`,{method:"POST",body:JSON.stringify(m)}),i=await s.blob(),cost=s.headers.get("X-OpalReader-Cost"),it=s.headers.get("X-OpalReader-Input-Tokens"),ot=s.headers.get("X-OpalReader-Output-Tokens");return i.opalCache=s.headers.get("X-OpalReader-Cache"),i.opalCost=cost==null?null:Number(cost),i.opalInputTokens=it==null?null:Number(it),i.opalOutputTokens=ot==null?null:Number(ot),i}async function br(e,c){return(await be(e,c,"/api/providers/status")).json()}async function yr(e,c){
+return sr(e,c)?(e.generation=l,e.audioKey=null,r&&delete e.replacementGeneration,!0):(e[s]=l,!1)}function ur(e){return{...e,traits:[...e.traits||[]],raw:e.raw?{...e.raw}:e.raw}}function dr(e,c,r){const m=ur(r);if(c==="default")e.defaultVoice=m;else{const s=e.povs.find(i=>i.id===c);if(!s)throw new Error("That cast role could not be found.");s.voice=m}return m}const hr=[.75,1,1.25,1.5,1.75,2];function fr(e){const c=Ie(e);return hr.map(r=>({rate:r,value:String(r),label:`${r}×`,selected:r===c}))}function pr(e,c){const r=Ie(c);return e.defaultPlaybackRate=r,e.playbackRate=r,r}function mr(e,c="Request failed"){const r=new Set;function m(s){if(typeof s=="string")return s.trim();if(!s||typeof s!="object"||r.has(s))return"";if(r.add(s),Array.isArray(s))return s.map(m).filter(Boolean).join("; ");for(const i of["message","error","detail","reason","description","statusText"]){const l=m(s[i]);if(l)return l}return typeof s.status=="string"?s.status.replaceAll("_"," ").toLowerCase():""}return m(e)||c}async function be(e,c,r,m={}){const s=(e||"").replace(/\/$/,"")+r,i=await fetch(s,{...m,headers:{"Content-Type":"application/json",...c?{"X-OpalReader-Token":c}:{},...m.headers||{}}});if(!i.ok){let l=`Request failed (${i.status})`;try{const o=await i.text();if(o.trim())try{l=mr(JSON.parse(o),l)}catch{l=o.trim()}}catch{}const err=new Error(l);err.status=i.status;throw err}return i}const gr=e=>new URLSearchParams(Object.entries(e).filter(([,c])=>c!==""&&c!=null));async function vr(e,c,r,m={}){return(await be(e,c,`/api/providers/${encodeURIComponent(r)}/voices?${gr(m)}`)).json()}
+// Case #4 (Rowan S3): gt() is the direct speech call. Its ONLY callers
+// are explicit user taps — the voice audition and the prosody compare —
+// one tap, one call, no loop anywhere (audited). That is why Gemini
+// calls through here carry the labeled one-call quota override: during
+// a Worker quota park they may make exactly one test call. Automatic
+// code must NEVER call gt() — generation goes through the Queue.
+async function gt(e,c,r,m){const s=await be(e,c,`/api/providers/${encodeURIComponent(r)}/speech`,{method:"POST",body:JSON.stringify(r==="gemini"?{...m,quota_override:"explicit_single"}:m)}),i=await s.blob(),cost=s.headers.get("X-OpalReader-Cost"),it=s.headers.get("X-OpalReader-Input-Tokens"),ot=s.headers.get("X-OpalReader-Output-Tokens");return i.opalCache=s.headers.get("X-OpalReader-Cache"),i.opalCost=cost==null?null:Number(cost),i.opalInputTokens=it==null?null:Number(it),i.opalOutputTokens=ot==null?null:Number(ot),i}async function br(e,c){return(await be(e,c,"/api/providers/status")).json()}async function yr(e,c){
   let manifest;
   try{manifest=await(await be(e,c,"/api/sync/manifest")).json()}
   catch(err){
@@ -201,8 +261,8 @@ return sr(e,c)?(e.generation=l,e.audioKey=null,r&&delete e.replacementGeneration
   const h=await(await be(e,c,"/health")).json();
   if(h?.version!==GENERATION_WORKER_VERSION)throw Error("Worker update needed. Deploy "+GENERATION_WORKER_VERSION+" before starting new generation.");
   return (await be(e,c,"/api/generation/jobs",{method:"POST",body:JSON.stringify({...r,...generationReleaseStamp()})})).json();
-}async function kr(e,c,r){return(await be(e,c,`/api/generation/jobs/${encodeURIComponent(r)}`)).json()}const APP_UI_VERSION="1.4.116";
-const GENERATION_WORKER_VERSION="1.4.42";
+}async function kr(e,c,r){return(await be(e,c,`/api/generation/jobs/${encodeURIComponent(r)}`)).json()}const APP_UI_VERSION="1.4.117";
+const GENERATION_WORKER_VERSION="1.4.43";
 const GENERATION_RELEASE_ID=GENERATION_WORKER_VERSION+"/"+APP_UI_VERSION;
 const generationReleaseStamp=()=>({client_version:APP_UI_VERSION,generation_release:GENERATION_RELEASE_ID});
 // v1.4.72: Shelf listening outbox now uses stable idempotency keys, never mutates an already-attempted item, flushes without clobbering checkpoints queued mid-request, recovers legacy overlap retries when safely splittable, and shows manual-send errors/re-link guidance.\n// v1.4.71: fully generated cloud-audio chapters use continuous chapter playback again so iOS screen lock cannot suspend JavaScript between TTS segments; partial/device-fallback chapters still use per-segment playback.\n// v1.4.70: header Gemini badge restores last-known values immediately after reload and shows the last successful book generation.\n// v1.4.69: always-visible header badge shows rolling Gemini request count plus next request drop-off; refreshes automatically.\n// v1.4.68: Gemini request tracker now shows a rolling 24-hour window and the next request expiry.\n// v1.4.67: Segment Review pins chapter generation progress under the segment currently holding the Queue.\n// v1.4.66: Gemini generation migrates to 3.8 Flash TTS by default while preserving cast voices/style notes; setup pricing and forecasts are updated.\n// v1.4.65: Gemini 500 failures are isolated per segment, offer retry/device/alternate-cloud recovery, and no longer block later chapter segments.\n// v1.4.64: quota failures are recognized explicitly so failed Queue jobs do not offer an immediate new paid synthesis while Gemini quota is still exhausted.\n// v1.4.63: Segment Review marks only segments actually included in an active chapter job as working; previously every segment inherited the chapter-level busy label.\n// v1.4.62: reverts the unintended compact Segment Review action layout; omission bug is handled by Worker v1.4.17.\n// v1.4.61: compacts Segment Review generation controls so Generate/Regenerate segment and Generate rest sit side-by-side on mobile.\n// v1.4.60: whole-chapter generation/regeneration preserves queued jobs when Safari loses the submit acknowledgement instead of surfacing a false Load failed.\n// v1.4.59: removes chapter-composite/continuous playback; all chapters advance segment-by-segment while -15/+30 seeking still crosses segment and chapter boundaries.\n// v1.4.58: free device/system fallback speech always uses 1.0x, independent of the audiobook playback-speed setting.\n// v1.4.57: hardens iOS device-voice handoff so an auto-start failure stays on the fallback segment and the next Play tap starts it explicitly instead of skipping ahead.\n// v1.4.56: removed the redundant chapter-level provider override and added a Clear error action for failed chapter/non-chapter generation cards.\n// v1.4.55: Segment Review adds Generate rest of chapter, queueing only missing/stale segments from this point forward while preserving current cached audio.\n// v1.4.54: exhausted blocked-segment splits now offer a free device/system voice fallback or a one-segment cloud-voice fallback; device fallback is playable without provider billing.\n// v1.4.53: Gemini PROHIBITED_CONTENT can strand one segment while whole-chapter Queue generation continues; blocked segments can be split at a natural boundary and regenerated without changing text or redoing cached audio.\n// v1.4.52: EPUB import ignores explicit data-opal-narration="skip" regions and native EPUB titlepage regions, preventing OCR Studio title/author pages from becoming TTS chapters.\n// v1.4.51: individual segment generation now uses the durable Cloudflare Queue instead of holding an iOS/Safari request open; adds current-cast full-book and remaining-generation cost forecasts.\n// v1.4.50: direct segment generation recovers completed R2 audio after iOS/network response loss and never blindly resends an ambiguous paid request; true zero cost displays as $0.00.\n// v1.4.49: Gemini TTS billing meter uses provider token usage; pricing labels corrected; Worker ledger separates token-metered cost from legacy estimates; direct TTS calls carry metered cost.
@@ -598,6 +658,59 @@ async function copyGeminiDiagnostics(ch,index){
   }catch(err){prompt("Copy Gemini diagnostic report:",report)}
 }
 
+// Case #4: runtime-only watchlist of every job Reader knows about for a
+// chapter — the slot records plus everything lt() has merged and the
+// Worker's registry discovery has returned. It is NEVER persisted into
+// the book record (no new book fields; sync behavior unchanged) and is
+// rebuilt on every load.
+const chapterJobWatch=new Map();
+function noteChapterJob(ch,status){
+  const jobId=status?.job_id||status?.jobId;
+  if(!ch||!jobId)return;
+  let byId=chapterJobWatch.get(ch);
+  if(!byId){byId=new Map();chapterJobWatch.set(ch,byId)}
+  const prev=byId.get(jobId)||{};
+  byId.set(jobId,{...prev,jobId,
+    state:status.state||prev.state||"unknown",
+    completed:Number.isFinite(status.completed)?status.completed:prev.completed,
+    error:status.error!==undefined?status.error:prev.error,
+    chapterIndex:Number.isInteger(status.chapter_index)?status.chapter_index:prev.chapterIndex,
+    continueSessionId:status.continue_session_id||prev.continueSessionId||null,
+    updatedAt:Date.now()});
+}
+function knownChapterJobs(ch){
+  const byId=new Map();
+  for(const slot of [ch?.generation,ch?.replacementGeneration])
+    if(slot?.jobId)byId.set(slot.jobId,{jobId:slot.jobId,state:slot.state,
+      continueSessionId:slot.continue_session_id||null});
+  const watched=chapterJobWatch.get(ch);
+  if(watched)for(const [jobId,summary] of watched)
+    byId.set(jobId,{...(byId.get(jobId)||{}),...summary});
+  return [...byId.values()];
+}
+// Case #4 (Rowan S1): chapter status is AUDIO-FIRST. The primary status
+// comes from the segments themselves — Complete N/N whenever every
+// current leaf has valid playable audio, whatever any job record says;
+// otherwise Partial N/N or Not started 0/N. Generating / Quota paused /
+// Blocked are separate CURRENT annotations, present only where they
+// still block missing work. Blocked counts missing leaves only: a leaf
+// with a block record AND saved playable audio is not blocked. Pure
+// projection of (segments, known jobs) — same inputs, same truth, on
+// every device.
+function chapterTruth(ch,jobs){
+  const segments=ch?.segments||[],total=segments.length;
+  const playable=segments.filter(seg=>segmentPlayable(seg)&&!seg.audioStale).length,
+    blocked=segments.filter(seg=>seg.generationBlocked&&!(segmentPlayable(seg)&&!seg.audioStale)).length,
+    list=Array.isArray(jobs)?jobs:[],
+    complete=total>0&&playable===total,
+    parkedJob=list.find(j=>j?.state==="paused_quota")||null;
+  return {playable,total,blocked,missing:total-playable,complete,
+    label:complete?`Complete ${playable}/${total}`:playable>0?`Partial ${playable}/${total}`:`Not started 0/${total}`,
+    generating:!complete&&list.some(j=>["queued","generating"].includes(j?.state)),
+    quotaPaused:!complete&&!!parkedJob,
+    quotaParkedJobId:!complete&&parkedJob?parkedJob.jobId||null:null};
+}
+
 // Some blocked pieces are resolved with free device voices rather than audioKey.
 function chapterPlaybackReady(ch){
   return !!ch?.segments?.length&&ch.segments.every(seg=>segmentPlayable(seg)&&!seg.audioStale);
@@ -910,6 +1023,12 @@ function Ir(e,c,book=a.book){
 // Chapter card indicator mirrors the Queue's real quota-cooldown status.
 // A stopped auto-split job is shown separately: it is NOT an automatic retry.
 function chapterQuotaBanner(ch){
+  // Case #4: keyed to the DERIVED truth, not the evictable slot — the
+  // banner shows whenever any KNOWN job for the chapter is quota-parked
+  // and work is still missing (S1: never on a complete chapter), even if
+  // a repair job currently occupies the display slot.
+  if(chapterTruth(ch,knownChapterJobs(ch)).quotaPaused)
+    return '<div class="chapter-quota-note" role="status"><strong>Gemini daily limit reached</strong> · No automatic 3 AM restart. Generated audio is safe. Tap Resume or Continue to quota when you wake up.</div>';
   const job=[ch?.replacementGeneration,ch?.generation].find(
     j=>["paused_quota","paused_update"].includes(j?.state)||
        j?.cooldown_reason==="quota"&&j?.state==="queued");
@@ -943,7 +1062,7 @@ function continueQuotaHeader(){
     '<span class="muted tiny" role="status">'+ie(note)+'</span></div>'+
     '<div id="continuePreparation" class="muted tiny" role="status" aria-live="polite"></div>';
 }
-function Pr(){return`${Tt()}<div class="section-head"><h2>Chapters</h2><button class="secondary" data-view="cast">Manage cast</button></div>${bookCostBanner()}${continueQuotaHeader()}<section class="chapter-list">${a.book.chapters.map((e,c)=>{const quotaBanner=chapterQuotaBanner(e),r=e.segments.map(S=>S.pov||"Narrator").filter((S,h,y)=>h===0||S!==y[h-1]),m=e.segments.some(S=>!st(S.pov)),s=Le(e),p=playable(e),hasAudio=e.segments.some(S=>!!S.audioKey),i=e.generation||{state:"not_generated"},l=e.replacementGeneration,o=s&&l?l:i,u=_t({segments:e.segments,generation:o}),cooling=o?.state==="paused_quota",coolingLabel=cooling?"Paused for Gemini quota · manual restart":null,_=["queued","generating"].includes(u.state),k=_?`<div class="chapter-progress" role="status" aria-label="${ie(cooling?coolingLabel:u.state==="queued"?"Queued":"Generating")} ${u.completed} of ${u.total} segments"><span>${cooling?coolingLabel:u.state==="queued"&&u.completed===0?"Queued":"Generating"}</span><span class="progress-track" aria-hidden="true"><span style="width:${u.percent}%"></span></span><strong>${u.completed}/${u.total}</strong></div>`:"",w=hasAudio?l?`<div class="replacement-detail">Replacement: ${ie(u.state)} ${u.completed}/${u.total}${l.error?`<div class="chapter-error">${ie(l.error)}</div>`:""}</div><button class="ghost" data-regenerate="${c}" ${_?"disabled":""}>${u.state==="failed"?"Retry regeneration":"Regenerate with current cast"}</button>`:`<button class="ghost" data-regenerate="${c}">Regenerate with current cast</button>`:"";return`<article class="card chapter${quotaBanner?" quota-paused":""}"><div class="chapter-main"><div class="chapter-title"><h3>${ie(Ir(e,c))}</h3><details class="chapter-details"><summary aria-label="Chapter details">ⓘ</summary><div class="chapter-detail-pop"><div>${e.text.length.toLocaleString()} characters</div><div>${e.segments.length} narration segment${e.segments.length===1?"":"s"}</div>${r.length>1?'<div class="multi-note">Multiple POV switches</div>':""}<button class="ghost" data-review="${c}">${r.length>1?"Review switches":"Review POV"}</button>${w}</div></details></div><div class="chapter-pov">${ie(r.join(" → "))}</div></div><div class="chapter-actions">${k}${p?`<button class="secondary play-chapter" data-play-chapter="${c}" aria-label="Play ${ie(Ir(e,c))}">▶</button><button class="ghost" data-regen-chapter="${c}" aria-label="Regenerate ${ie(Ir(e,c))}" title="Clear audio and regenerate">↻</button>`:`<button class="${u.state==="failed"?"secondary":"primary"}" data-generate="${c}" ${_?"disabled":""}>${u.state==="failed"?"Retry":_?"Working…":"Generate"}</button>`}</div>${i.state==="paused_quota"?`<button class="secondary" data-resume-quota="${c}">Resume manually</button>`:""}${quotaBanner}${i.state==="partial"&&i.error&&!chapterPlaybackReady(e)?`<div class="chapter-error">${ie(i.error)} Open Review POV to repair the affected segment.</div>`:""}${u.state==="failed"&&i.error&&!chapterPlaybackReady(e)?`<div class="chapter-error">${ie(i.error)} <button class="ghost" data-clear-generation-error="${c}">Clear error</button></div>`:""}</article>`}).join("")}</section>`}function $r(){return a.modal.type==="segments"?Lr(a.modal.chapter):a.modal.type==="systemVoices"?systemVoicePickerMarkup():a.modal.type==="sections"?renderSectionList():Nr()}function Lr(e){const c=a.book.chapters[e],generationState=(Le(c)&&c.replacementGeneration)||c.generation||{},blockedBusy=["queued","generating"].includes(generationState.state),quotaPaused=generationState.state==="paused_quota",activeSegmentKeys=new Set(Array.isArray(generationState.segmentKeys)?generationState.segmentKeys:[]),chapterProgress=_t({segments:c.segments,generation:generationState}),jobSegments=Array.isArray(generationState.segments)?generationState.segments:[],pendingJobIndex=jobSegments.findIndex(t=>!["ready","blocked","provider_failed"].includes(t?.state)&&!t?.provider_internal),progressKey=pendingJobIndex>=0&&Array.isArray(generationState.segmentKeys)?generationState.segmentKeys[pendingJobIndex]:null,progressLocalIndex=progressKey?c.segments.findIndex(t=>segIdentity(t,c.pov)===progressKey):pendingJobIndex>=0&&jobSegments.length===c.segments.length?pendingJobIndex:-1,r=a.modal?.prosodyMatch,m=r?c.segments[r.segment]:null,s=m?st(m.pov):null,i=r&&m?`<div class="prosody-lab"><div class="row"><div><strong>Prosody Lab</strong><div class="muted tiny">Found “${ie(r.query)}” in Segment ${r.segment+1} at ${r.at.toLocaleString()}-${(r.at+r.length).toLocaleString()} · ${s?`${ie(s.name||s.voice_id)} · ${ie(Et(s.provider))}`:"voice not assigned"}</div></div><button id="clearProsodyMatch" class="ghost">Clear</button></div><p class="muted">Each Generate button makes a fresh synthesis request with the exact same current voice. When it is ready, tap Play so iOS treats playback as an explicit user action.</p><div class="prosody-actions"><button class="secondary" data-prosody="full">Generate full segment</button><button class="secondary" data-prosody="context">Generate previous + match paragraph</button><button class="secondary" data-prosody="paragraph">Generate match paragraph only</button><button class="secondary" data-prosody="2000">Generate ~2,000-char context</button><button class="secondary" data-prosody="1500">Generate ~1,500-char context</button><button class="secondary" data-prosody="1000">Generate ~1,000-char context</button></div>${a.modal.prosodyResult?`<div class="prosody-ready"><strong>${ie(a.modal.prosodyResult.label)} ready</strong><div class="muted tiny">${Number(a.modal.prosodyResult.chars||0).toLocaleString()} chars · ${ie(a.modal.prosodyResult.voice||"")}</div><button class="primary" id="playProsodyResult">▶ Play sample</button></div>`:""}${a.modal.prosodyStatus?`<div class="prosody-status">${ie(a.modal.prosodyStatus)}</div>`:""}</div>`:"";const capPause=capRepairPause(c),capPauseHtml=capPause?`<div class="prosody-status" role="status">${capPause.overCap?`Background repair paused at your monthly soft cap. ${Pe(capPause.spent)} of ${Pe(capPause.cap)} spent this month; the blocked passages alone are estimated at ${Pe(capPause.forecast)} before splitting.`:`Background repair paused at your monthly soft cap.${capPause.cap>0?` ${Pe(capPause.spent)} of ${Pe(capPause.cap)} spent this month; blocked passages are estimated at ${Pe(capPause.forecast)} before splitting.`:""} Tap Resume and Reader will check the full repair plan against your cap before queueing anything.`}</div>${capPause.overCap?"":`<div class="row"><button class="secondary" data-resume-cap-repair="${e}">Resume background repair</button></div>`}`:"";return`<div class="modal-back"><section class="modal"><div class="modal-title"><div><h2>${ie(c.title)}</h2><p class="muted">Confirm POV and manage TTS segments. Passage text is hidden until you choose to reveal it.</p></div><button id="closeModal" class="ghost">✕</button></div><div class="row segment-tools"><button id="findSegmentText" class="ghost">Find text in segments</button><button id="copyGeminiDiagnostics" class="ghost">Copy Gemini diagnostics</button>${c.autoSplitEnabled&&c.generation?.scope!=="background_repair"?`<button id="stopAutoSplit" class="secondary">Stop auto-splitting</button>`:""}${c.generation?.scope==="background_repair"&&["queued","generating"].includes(c.generation.state)?`<span class="muted">Background repair continues while Reader is closed. Already queued requests will finish.</span>`:""}</div>${capPauseHtml||(c.autoSplitStatus?`<div class="prosody-status" role="status">${ie(c.autoSplitStatus)}</div>`:"")}${generationState.state==="paused_quota"?`<div class="prosody-status" role="status">Gemini quota pause · no automatic 3 AM retry. Tap Resume manually on the Chapters screen when ready. Saved audio is preserved.</div>`:""}${a.modal?.segmentExportStatus?`<div class="prosody-status regen-bar" role="status">${a.modal.segmentRegenActive?`<span class="progress-track" aria-hidden="true"><span class="regen-indeterminate"></span></span>`:""}<span>${ie(a.modal.segmentExportStatus)}</span></div>`:""}${i}${c.segments.map((r,m)=>{const head=r.text.slice(0,220),geminiHistory=c.geminiBlockHistory?.[r.blockRootId||r.id],recordedFailures=geminiHistory?.failures?.length||0,recordedSplits=geminiHistory?.splits||0,segmentWorking=blockedBusy&&(activeSegmentKeys.size?activeSegmentKeys.has(segIdentity(r,c.pov)):(!r.audioKey||r.audioStale)),showProgress=blockedBusy&&progressLocalIndex===m;return`<article class="segment-review"><div class="row"><strong>Segment ${m+1} · ${r.text.length.toLocaleString()} chars</strong>${r.audioKey||r.systemVoiceFallback?"":` <span class="badge stale">Not generated</span>`}${r.generationBlocked?` <span class="badge stale">Gemini blocked</span>`:""}${r.generationFailure?` <span class="badge stale">Gemini error</span>`:""}${r.systemVoiceFallback?` <span class="badge">Device voice · free</span>`:""}${r.fallbackVoice?` <span class="badge">Fallback: ${ie(r.fallbackVoice.name||r.fallbackVoice.voice_id)}</span>`:""}${r.generatedModel||r.providerRequestId||r.audioKey?`<details class="segment-details"><summary aria-label="Segment synthesis details">ⓘ</summary><div class="segment-detail-pop">${r.generatedModel||r.providerRequestId?`<div class="muted tiny">${r.generatedModel?`Model: ${ie(r.generatedModel)}`:""}${r.providerRequestId?`${r.generatedModel?" · ":""}Request ID: ${ie(r.providerRequestId)}`:""}</div>`:""}${r.audioKey?`<div class="tiny" style="word-break:break-all"><strong>Audio key:</strong> ${ie(r.audioKey)}</div>`:""}</div></details>`:""}<select class="field compact" data-segment-pov="${m}"><option value="">Default Narrator</option>${a.book.povs.map(s=>`<option value="${ie(s.name)}" ${r.pov===s.name?"selected":""}>${ie(s.name)}</option>`).join("")}</select></div><div class="segment-boundary"><div><details class="segment-spoiler"><summary><span class="segment-spoiler-closed">🔒 Reveal text (spoilers)</span><span class="segment-spoiler-open">🔓 Hide text</span></summary><div class="segment-spoiler-content"><span class="muted">START</span><p>${ie(head)}${r.text.length>220?"…":""}</p></div></details></div></div><div class="row">${r.systemVoiceFallback?`<button class="secondary" data-device-fallback="${m}">Change system voice</button><button class="ghost" data-cloud-fallback="${m}">Choose cloud voice instead</button>`:r.generationFailure?`<button class="secondary" data-regenerate-segment="${m}">Retry Gemini</button><button class="secondary" data-device-fallback="${m}">Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:r.generationBlocked&&r.splitExhausted?`<button class="secondary" data-device-fallback="${m}">Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:r.generationBlocked?`<button class="secondary" data-split-blocked="${m}"${blockedBusy?" disabled":""}>${quotaPaused?"Paused for Gemini quota":blockedBusy?"Chapter working…":"Repair blocked chapter in background"}</button><button class="secondary" data-device-fallback="${m}"${blockedBusy?" disabled":""}>Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:`<button class="ghost" data-regenerate-segment="${m}"${a.modal?.segmentRegenSegment===m?" disabled":""}>${r.audioKey?"Regenerate segment":"Generate segment"}</button>${m<c.segments.length-1?`<button class="secondary" data-generate-rest="${m}"${blockedBusy?" disabled":""}>${quotaPaused?"Paused for Gemini quota":segmentWorking?"Chapter working…":"Generate rest of chapter"}</button>`:""}`}</div>${r.systemVoiceFallback?`<div class="muted tiny">Free on-device/browser voice: ${ie(r.systemVoiceFallback.name||"Device voice")}. No cloud TTS request or provider charge.</div>`:r.generationFailure?`<div class="muted tiny">${ie(r.generationFailure.error||"Gemini internal error.")} Reader kept this piece isolated so the rest of the chapter can continue.</div>`:r.generationBlocked?`<div class="muted tiny">${ie(r.generationBlocked.finishReason||"UNKNOWN")}/${ie(r.generationBlocked.blockReason||"PROHIBITED_CONTENT")} · Reader did not retry this text.${r.splitExhausted?" No smaller safe split remains.":""}</div>`:""}${recordedFailures?`<div class="muted tiny">Original passage: ${recordedFailures} recorded Gemini failure${recordedFailures===1?"":"s"} · ${recordedSplits} split${recordedSplits===1?"":"s"}.${recordedFailures>=2&&r.generationBlocked?" Repeated blocks: a free device voice avoids more Gemini requests.":""}</div>`:""}${showProgress?_p({...chapterProgress,quotaPaused}):""}</article>${m<c.segments.length-1?`<div class="tts-boundary-marker">TTS request boundary ↓</div>`:""}`}).join("")}<button id="doneSegments" class="primary">Done</button></section></div>`}function Nr(){const e=Cr(),c=a.voiceList.filter(Ur),fb=segmentFallbackTarget(),r=`<select id="voiceGender" class="field"><option value="">Any gender</option><option value="female" ${a.voiceGender==="female"?"selected":""}>Female</option><option value="male" ${a.voiceGender==="male"?"selected":""}>Male</option><option value="neutral" ${a.voiceGender==="neutral"?"selected":""}>Neutral</option></select>`,s=`<div class="voice-structured">${r}</div>`;return`<div class="modal-back"><section class="modal"><div class="modal-title"><div><h2>${fb?"Fallback voice":"Voice Lab"}</h2><p class="muted">${fb?`This voice applies only to Segment ${fb.segment+1}; the book cast stays unchanged.`:`Book auditions use the same ${ie(ot()||"narrator")} excerpt (up to 300 characters). Gemini auditions use Flash-Lite; full-book generation keeps your selected model. Free samples use the provider’s demo.`}</p></div><button id="closeModal" class="ghost">✕</button></div><div class="tabs provider-tabs"><button data-provider-select="azure" class="${a.provider==="azure"?"active":""}"${a.providers.azure?"":" disabled"}>Azure</button><button data-provider-select="fish" class="${a.provider==="fish"?"active":""}"${a.providers.fish?"":" disabled"}>Fish Audio</button><button data-provider-select="openai" class="${a.provider==="openai"?"active":""}"${a.providers.openai?"":" disabled"}>OpenAI</button><button data-provider-select="gemini" class="${a.provider==="gemini"?"active":""}"${a.providers.gemini?"":" disabled"}>Gemini</button></div><div class="voice-filters"><input id="voiceSearch" class="field" placeholder="Optional descriptive keywords…" value="${ie(a.search)}"><select id="locale" class="field"><option value="">All English locales</option>${["en-US","en-GB","en-AU","en-CA","en-IN","en-IE","en-NZ","en-ZA","en-SG","en-PH"].map(i=>`<option ${a.locale===i?"selected":""}>${i}</option>`).join("")}</select><button id="doSearch" class="secondary">Search</button></div>${s}<div class="estimate-banner"><strong>${e.toLocaleString()} ${fb?"characters in this blocked piece":"characters in this role"}</strong><span>${c.length} matching voice${c.length===1?"":"s"} loaded · ${fb?"only this piece will be regenerated":"book-part estimates are before free allowances"}.</span></div>${(()=>{const t=a.voiceTarget&&a.book?(a.voiceTarget==="default"?a.book.defaultVoice:a.book.povs.find(p=>p.id===a.voiceTarget)?.voice):null,y=t&&t.style_direction&&t.style_direction.trim();return y?`<div class="muted tiny" style="margin:.35em 0">\uD83C\uDFAD Auditions include this role\u2019s style direction (\u201C${ie(y)}\u201D), so what you hear matches chapter audio.</div>`:""})()}${c.length?c.map(i=>Dr(i,e)).join(""):'<div class="empty muted">No voices match these filters. Broaden one filter and search again.</div>'}${a.voiceHasMore?'<button id="loadMoreVoices" class="secondary load-more">Load more voices</button>':""}</section></div>`}function Ur(e){const c=Ze(e),r={"en-US":"american","en-GB":"british","en-AU":"australian","en-CA":"canadian","en-IN":"indian","en-IE":"irish","en-NZ":"new zealand","en-ZA":"south african","en-SG":"singaporean","en-PH":"filipino"},m=r[a.locale],s=String(e.raw?.accent||e.raw?.labels?.accent||e.locale||"").replaceAll("_"," ").toLowerCase(),i=String(e.raw?.gender||e.gender||"").toLowerCase(),l=String(e.raw?.age||e.raw?.labels?.age||"").replaceAll(/[_-]/g," ").toLowerCase(),o=String(e.raw?.use_case||e.raw?.labels?.use_case||"").replaceAll(/[_-]/g," ").toLowerCase(),u=!m||e.provider==="gemini"||e.provider==="openai"||s.includes(m),_=[e.name,e.locale,...e.traits,e.raw?.description,...Object.values(e.raw?.labels||{}),c.tags.join(" "),c.notes].join(" ").toLowerCase();return!u||a.voiceGender&&i!==a.voiceGender?!1:!a.search?!0:a.search.toLowerCase().split(/\s+/).filter(Boolean).every(k=>_.includes(k))}function Dr(e,c){const r=Ze(e),m=He(c,e);return`<article class="voice ${r.favorite?"favorite":""}"><div class="voice-main"><button class="star" data-favorite="${ie(e.voice_id)}" aria-label="Favorite">${r.favorite?"★":"☆"}</button><div><strong>${ie(e.name)}</strong><div class="muted tiny">${ie([Et(e.provider),e.locale,e.gender,...e.traits].filter(Boolean).join(" · "))}</div>${r.tags.length?`<div class="user-tags">${r.tags.map(l=>`<span>${ie(l)}</span>`).join("")}</div>`:""}${r.notes?`<div class="tiny notes">${ie(r.notes)}</div>`:""}</div></div><div class="voice-actions"><span class="cost ${We(e).toLowerCase()}">${We(e)} · ${Pe(m)}</span><button class="ghost" data-tag="${ie(e.voice_id)}">Tag/notes</button>'<span class="preview-unavailable">No free preview available</span>'${a.auditioningVoice===e.voice_id?'<button class="secondary" disabled>⏳ Auditioning…</button>':'<button class="secondary" data-book-preview="'+ie(e.voice_id)+'">▶ Book audition</button>'}<button class="primary" data-choose="${ie(e.voice_id)}">Use voice</button></div></article>`}function jr(){const e=a.book.chapters[a.book.currentChapter]||a.book.chapters[0],c=e?.segments[a.book.currentSegment||0],segN=a.book.currentSegment||0,segCt=e?.segments.length||1,atEnd=(a.book.currentChapter||0)>=a.book.chapters.length-1&&segN>=segCt-1;return`<footer class="player" aria-label="Audiobook player"><div class="player-context">${a.book.cover?`<img class="player-cover" src="${a.book.cover}" alt="">`:'<div class="player-cover player-cover-fallback" aria-hidden="true">✦</div>'}<div class="player-copy"><strong class="player-book-title">${ie(a.book.title||"Current book")}</strong><span class="player-chapter-title">${ie(e?.title||"")}</span><button id="sectionList" class="player-segment player-segment-btn" aria-label="Choose a section">${ee._compositePlayback?`${ie(c?.pov||"Narrator")} · continuous segments ${Number(ee._compositeStartSegment||0)+1}–${Number(ee._compositeEndSegment||e?.segments.length||1)}/${e?.segments.length||1}`:c?.systemVoiceFallback&&!c?.audioKey?`${ie(c?.pov||"Narrator")} · device voice · segment ${(a.book.currentSegment||0)+1}/${e?.segments.length||1}${ee._systemSpeechPending?" · tap Play":""}`:`${ie(c?.pov||"Narrator")} · segment ${(a.book.currentSegment||0)+1}/${e?.segments.length||1}`}</button></div><div class="section-stepper"><button id="prevSection" class="round section-step" aria-label="Previous section">‹</button><button id="nextSection" class="round section-step" aria-label="Next section"${atEnd?" disabled":""}>›</button></div></div><div class="player-controls"><button id="prevChapter" class="round player-skip" aria-label="Previous chapter">|‹</button><button id="back15" class="round player-jump" aria-label="Rewind 15 seconds">−15</button><button id="play" class="round play-toggle" aria-label="${ee.paused?"Play":"Pause"}">${ee.paused?"▶":"Ⅱ"}</button><button id="forward30" class="round player-jump" aria-label="Forward 30 seconds">+30</button><button id="nextChapter" class="round player-skip" aria-label="Next chapter">›|</button><label class="speed-control"><span class="sr-only">Listening speed</span><select id="speed" class="field compact" aria-label="Listening speed">${fr(a.playbackRate).map(m=>`<option value="${m.value}" ${m.selected?"selected":""}>${m.label}</option>`).join("")}</select></label></div><div class="audio-recovery-row"><button id="recoverAudio" type="button" ${!ee.src||ee._systemSpeechActive?"disabled":""}>Restore sound</button><button id="copyPlaybackLog" type="button">Copy playback log</button>${silentRecoveryChapter?.bookId===a.book.id&&silentRecoveryChapter?.chapterIndex===a.book.currentChapter?'<span class="audio-recovery-note">Playing individual segments this chapter</span>':''}</div><div class="timeline"><input id="seek" aria-label="Playback position" type="range" min="0" max="${ee.duration||1}" value="${ee.currentTime||0}" step=".1"><div class="timeline-meta tiny"><span id="elapsed">${vt(ee.currentTime)}</span><span id="duration">${vt(ee.duration)}</span></div></div></footer>`}function Qr(p,m){return p==="fish"?a.fishModel:p==="openai"?a.openaiModel:p==="gemini"?normalizeGeminiModel(a.geminiModel):m}function Fr(e){return a.provider==="azure"?tr(e):(e.voices||[]).map(v=>({...v,model_id:Qr(v.provider,v.model_id)}))}async function Ce(e=!1){if(!a.apiBase)return a.modal=null,a.view="settings",se();try{if(!a.providers.azure&&!a.providers.fish&&!a.providers.openai&&!a.providers.gemini&&await $e(),a.providers[a.provider]||(a.provider=a.providers.gemini?"gemini":a.providers.fish?"fish":a.providers.azure?"azure":a.providers.openai?"openai":a.provider),!a.providers[a.provider])throw new Error("No voice provider is connected. Add provider credentials (Gemini, Fish Audio, Azure, OpenAI) to the Worker.");const c=a.provider==="azure"?{languageCode:a.locale||"en-US"}:{search:a.search,page_size:100,page:a.voicePage,gender:a.voiceGender},r=await vr(a.apiBase,a.accessToken,a.provider,c),m=Fr(r);a.voiceList=e?[...a.voiceList,...m].filter((s,i,l)=>l.findIndex(o=>o.voice_id===s.voice_id)===i):m,a.voiceHasMore=!1,se()}catch(c){alert(c.message)}}async function et(e,c=!1){try{if(Se.pause(),!c)throw new Error("No free preview is available for this voice.");a.auditioningVoice=e.voice_id,se();const m=Ar(),auditionModel=e.provider==="gemini"?"gemini-3.8-flash-lite-tts":Qr(e.provider,e.model_id),auditionRate=e.provider==="gemini"?10.8:zt(e),auditionCost=m.length/1e6*auditionRate,vt=a.voiceTarget&&a.book?(a.voiceTarget==="default"?a.book.defaultVoice:a.book.povs.find(p=>p.id===a.voiceTarget)?.voice):null,vy=((vt&&vt.style_direction||"").trim()||e.style_direction||""),s="preview-"+await tt(m+e.provider+e.voice_id+auditionModel+vy);let i=await Oe("audio",s);if(!i){let l=a.providers.sync?await At(a.apiBase,a.accessToken,s):null,o=!l;if(!l){const u={text:m,voice_id:e.voice_id,voice_name:e.name||e.voice_id,language_code:e.locale,model_id:auditionModel,cache_key:s,style_direction:vy,usage_type:"book_audition",book_id:a.book?.id,book_title:a.book?.title,chapter_index:a.book?.currentChapter??0,chapter_number:(a.book?.currentChapter??0)+1,chapter_title:a.book?.chapters?.[a.book?.currentChapter??0]?.title||"",segment_index:null,total_segments:null,estimated_cost:auditionCost,pricing_rate:auditionRate};l=await gt(a.apiBase,a.accessToken,e.provider,u)}l.opalCache==="HIT"&&(o=!1),i={id:s,blob:l,preview:!0,createdAt:Date.now()},ke("audio",i).catch(()=>{}),o&&(Ve().spent+=(l.opalCost??auditionCost),await Ae())}Se.src?.startsWith("blob:")&&URL.revokeObjectURL(Se.src),Se.src=URL.createObjectURL(i.blob),Se.play()}catch(r){alert(r.message)}finally{a.auditioningVoice===e.voice_id&&(a.auditioningVoice=null),a.modal&&a.modal.type==="voices"&&se()}}function prosodyParagraphs(e){const c=[],r=/\n\s*\n/g;let m=0,s;while((s=r.exec(e))){const i=e.slice(m,s.index);i.trim()&&c.push({start:m,end:s.index,text:i.trim()}),m=r.lastIndex}const i=e.slice(m);return i.trim()&&c.push({start:m,end:e.length,text:i.trim()}),c}function prosodyTestText(e){const c=a.modal?.prosodyMatch;if(!c)throw new Error("Find the problem text first.");const r=a.book.chapters[a.modal.chapter],m=r.segments[c.segment];if(!m)throw new Error("That TTS segment is no longer available.");if(e==="full")return{label:"Full segment",text:m.speechText||m.text,segment:m};const s=prosodyParagraphs(m.text),i=s.findIndex(l=>c.at>=l.start&&c.at<=l.end);if(i<0)throw new Error("I could not isolate the matching paragraph.");if(e==="paragraph")return{label:"Matched paragraph",text:s[i].text,segment:m};if(e==="context")return{label:"Previous + matched paragraph",text:[s[Math.max(0,i-1)].text,...i>0?[s[i].text]:[]].join("\n\n"),segment:m};if(e==="2000"||e==="1500"||e==="1000"){const target=e==="2000"?2000:e==="1500"?1500:1000;let start=i,text=s[i].text;while(start>0){const candidate=s[start-1].text+"\n\n"+text;if(candidate.length>target&&text.length>=target*.7)break;text=candidate,start--;if(text.length>=target)break}return{label:`~${target.toLocaleString()} char context`,text,segment:m}}throw new Error("Unknown prosody test.")}async function runProsodyAudition(e){try{if(!a.apiBase)throw new Error("Connect the Worker first.");const c=prosodyTestText(e),r=st(c.segment.pov);if(!r)throw new Error(`Choose a voice for ${c.segment.pov||"Default Narrator"} first.`);Se.pause();const s=Qr(r.provider,r.model_id),i=`prosody-${await tt(c.text+r.provider+r.voice_id+s)}-${crypto.randomUUID()}`,l={text:c.text,voice_id:r.voice_id,voice_name:r.name||r.voice_id,language_code:r.locale,model_id:s,cache_key:i,style_direction:r.style_direction||"",usage_type:"book_audition",book_id:a.book.id,book_title:a.book.title,chapter_index:a.modal.chapter,chapter_number:a.modal.chapter+1,chapter_title:a.book.chapters[a.modal.chapter].title,segment_index:a.modal.prosodyMatch.segment,total_segments:a.book.chapters[a.modal.chapter].segments.length,estimated_cost:He(c.text.length,r),pricing_rate:zt(r)};a.modal.prosodyStatus=`Generating ${c.label}…`;a.modal.prosodyResult=null;se();const o=await gt(a.apiBase,a.accessToken,r.provider,l);Ve().spent+=(o.opalCost??He(c.text.length,r)),await Ae(),Se.src?.startsWith("blob:")&&URL.revokeObjectURL(Se.src);const u=URL.createObjectURL(o);Se.src=u,a.modal&&(a.modal.prosodyResult={label:c.label,chars:c.text.length,voice:r.name||r.voice_id,url:u},a.modal.prosodyStatus=`${c.label} is ready. Tap Play sample.`,se())}catch(c){a.modal&&(a.modal.prosodyStatus=null,se()),alert(c.message||"Prosody audition failed.")}}async function playProsodyResult(){try{if(!a.modal?.prosodyResult?.url)throw new Error("Generate a prosody sample first.");Se.pause();Se.src=a.modal.prosodyResult.url;await Se.play();a.modal&&(a.modal.prosodyStatus=`Playing ${a.modal.prosodyResult.label}…`,se())}catch(e){alert(e.message||"Prosody sample could not play.")}}async function qe(e,{forceFresh=!1,segmentIndices=null}={}){
+function Pr(){return`${Tt()}<div class="section-head"><h2>Chapters</h2><button class="secondary" data-view="cast">Manage cast</button></div>${bookCostBanner()}${continueQuotaHeader()}<section class="chapter-list">${a.book.chapters.map((e,c)=>{const quotaBanner=chapterQuotaBanner(e),r=e.segments.map(S=>S.pov||"Narrator").filter((S,h,y)=>h===0||S!==y[h-1]),m=e.segments.some(S=>!st(S.pov)),s=Le(e),p=playable(e),hasAudio=e.segments.some(S=>!!S.audioKey),i=e.generation||{state:"not_generated"},l=e.replacementGeneration,o=s&&l?l:i,u=_t({segments:e.segments,generation:o}),truth=chapterTruth(e,knownChapterJobs(e)),_=["queued","generating"].includes(u.state),k=(truth.total>0&&(truth.playable>0||truth.blocked>0||truth.generating||truth.quotaPaused))?`<div class="chapter-progress" role="status" aria-label="${ie(truth.label)}"><span>${truth.complete?"Complete":truth.playable+" of "+truth.total+" sections ready"}${truth.blocked?" · "+truth.blocked+" blocked":""}${truth.generating?" · Generating":""}${truth.quotaPaused?" · Paused for Gemini quota · manual restart":""}</span><span class="progress-track" aria-hidden="true"><span style="width:${Math.round(truth.playable/truth.total*100)}%"></span></span><strong>${truth.playable}/${truth.total}</strong></div>`:"",w=hasAudio?l?`<div class="replacement-detail">Replacement: ${ie(u.state)} ${u.completed}/${u.total}${l.error?`<div class="chapter-error">${ie(l.error)}</div>`:""}</div><button class="ghost" data-regenerate="${c}" ${_?"disabled":""}>${u.state==="failed"?"Retry regeneration":"Regenerate with current cast"}</button>`:`<button class="ghost" data-regenerate="${c}">Regenerate with current cast</button>`:"";return`<article class="card chapter${quotaBanner?" quota-paused":""}"><div class="chapter-main"><div class="chapter-title"><h3>${ie(Ir(e,c))}</h3><details class="chapter-details"><summary aria-label="Chapter details">ⓘ</summary><div class="chapter-detail-pop"><div>${e.text.length.toLocaleString()} characters</div><div>${e.segments.length} narration segment${e.segments.length===1?"":"s"}</div>${r.length>1?'<div class="multi-note">Multiple POV switches</div>':""}<button class="ghost" data-review="${c}">${r.length>1?"Review switches":"Review POV"}</button>${w}</div></details></div><div class="chapter-pov">${ie(r.join(" → "))}</div></div><div class="chapter-actions">${k}${p?`<button class="secondary play-chapter" data-play-chapter="${c}" aria-label="Play ${ie(Ir(e,c))}">▶</button><button class="ghost" data-regen-chapter="${c}" aria-label="Regenerate ${ie(Ir(e,c))}" title="Clear audio and regenerate">↻</button>`:`<button class="${u.state==="failed"?"secondary":"primary"}" data-generate="${c}" ${_?"disabled":""}>${u.state==="failed"?"Retry":_?"Working…":"Generate"}</button>`}</div>${i.state==="paused_quota"||truth.quotaParkedJobId?`<button class="secondary" data-resume-quota="${c}">Resume manually</button>`:""}${quotaBanner}${i.state==="partial"&&i.error&&!chapterPlaybackReady(e)?`<div class="chapter-error">${ie(i.error)} Open Review POV to repair the affected segment.</div>`:""}${u.state==="failed"&&i.error&&!chapterPlaybackReady(e)?`<div class="chapter-error">${ie(i.error)} <button class="ghost" data-clear-generation-error="${c}">Clear error</button></div>`:""}</article>`}).join("")}</section>`}function $r(){return a.modal.type==="segments"?Lr(a.modal.chapter):a.modal.type==="systemVoices"?systemVoicePickerMarkup():a.modal.type==="sections"?renderSectionList():Nr()}function Lr(e){const c=a.book.chapters[e],generationState=(Le(c)&&c.replacementGeneration)||c.generation||{},blockedBusy=["queued","generating"].includes(generationState.state),quotaPaused=chapterTruth(c,knownChapterJobs(c)).quotaPaused,activeSegmentKeys=new Set(Array.isArray(generationState.segmentKeys)?generationState.segmentKeys:[]),chapterProgress=chapterTruth(c,knownChapterJobs(c)),jobSegments=Array.isArray(generationState.segments)?generationState.segments:[],pendingJobIndex=jobSegments.findIndex(t=>!["ready","blocked","provider_failed"].includes(t?.state)&&!t?.provider_internal),progressKey=pendingJobIndex>=0&&Array.isArray(generationState.segmentKeys)?generationState.segmentKeys[pendingJobIndex]:null,progressLocalIndex=progressKey?c.segments.findIndex(t=>segIdentity(t,c.pov)===progressKey):pendingJobIndex>=0&&jobSegments.length===c.segments.length?pendingJobIndex:-1,r=a.modal?.prosodyMatch,m=r?c.segments[r.segment]:null,s=m?st(m.pov):null,i=r&&m?`<div class="prosody-lab"><div class="row"><div><strong>Prosody Lab</strong><div class="muted tiny">Found “${ie(r.query)}” in Segment ${r.segment+1} at ${r.at.toLocaleString()}-${(r.at+r.length).toLocaleString()} · ${s?`${ie(s.name||s.voice_id)} · ${ie(Et(s.provider))}`:"voice not assigned"}</div></div><button id="clearProsodyMatch" class="ghost">Clear</button></div><p class="muted">Each Generate button makes a fresh synthesis request with the exact same current voice. When it is ready, tap Play so iOS treats playback as an explicit user action.</p><div class="prosody-actions"><button class="secondary" data-prosody="full">Generate full segment</button><button class="secondary" data-prosody="context">Generate previous + match paragraph</button><button class="secondary" data-prosody="paragraph">Generate match paragraph only</button><button class="secondary" data-prosody="2000">Generate ~2,000-char context</button><button class="secondary" data-prosody="1500">Generate ~1,500-char context</button><button class="secondary" data-prosody="1000">Generate ~1,000-char context</button></div>${a.modal.prosodyResult?`<div class="prosody-ready"><strong>${ie(a.modal.prosodyResult.label)} ready</strong><div class="muted tiny">${Number(a.modal.prosodyResult.chars||0).toLocaleString()} chars · ${ie(a.modal.prosodyResult.voice||"")}</div><button class="primary" id="playProsodyResult">▶ Play sample</button></div>`:""}${a.modal.prosodyStatus?`<div class="prosody-status">${ie(a.modal.prosodyStatus)}</div>`:""}</div>`:"";const capPause=capRepairPause(c),capPauseHtml=capPause?`<div class="prosody-status" role="status">${capPause.overCap?`Background repair paused at your monthly soft cap. ${Pe(capPause.spent)} of ${Pe(capPause.cap)} spent this month; the blocked passages alone are estimated at ${Pe(capPause.forecast)} before splitting.`:`Background repair paused at your monthly soft cap.${capPause.cap>0?` ${Pe(capPause.spent)} of ${Pe(capPause.cap)} spent this month; blocked passages are estimated at ${Pe(capPause.forecast)} before splitting.`:""} Tap Resume and Reader will check the full repair plan against your cap before queueing anything.`}</div>${capPause.overCap?"":`<div class="row"><button class="secondary" data-resume-cap-repair="${e}">Resume background repair</button></div>`}`:"";return`<div class="modal-back"><section class="modal"><div class="modal-title"><div><h2>${ie(c.title)}</h2><p class="muted">Confirm POV and manage TTS segments. Passage text is hidden until you choose to reveal it.</p></div><button id="closeModal" class="ghost">✕</button></div><div class="row segment-tools"><button id="findSegmentText" class="ghost">Find text in segments</button><button id="copyGeminiDiagnostics" class="ghost">Copy Gemini diagnostics</button>${c.autoSplitEnabled&&c.generation?.scope!=="background_repair"?`<button id="stopAutoSplit" class="secondary">Stop auto-splitting</button>`:""}${c.generation?.scope==="background_repair"&&["queued","generating"].includes(c.generation.state)?`<span class="muted">Background repair continues while Reader is closed. Already queued requests will finish.</span>`:""}</div>${capPauseHtml||(c.autoSplitStatus?`<div class="prosody-status" role="status">${ie(c.autoSplitStatus)}</div>`:"")}${quotaPaused?`<div class="prosody-status" role="status">Gemini quota pause · no automatic 3 AM retry. Tap Resume manually on the Chapters screen when ready. Saved audio is preserved.</div>`:""}${a.modal?.segmentExportStatus?`<div class="prosody-status regen-bar" role="status">${a.modal.segmentRegenActive?`<span class="progress-track" aria-hidden="true"><span class="regen-indeterminate"></span></span>`:""}<span>${ie(a.modal.segmentExportStatus)}</span></div>`:""}${i}${c.segments.map((r,m)=>{const head=r.text.slice(0,220),geminiHistory=c.geminiBlockHistory?.[r.blockRootId||r.id],recordedFailures=geminiHistory?.failures?.length||0,recordedSplits=geminiHistory?.splits||0,segmentWorking=blockedBusy&&(activeSegmentKeys.size?activeSegmentKeys.has(segIdentity(r,c.pov)):(!r.audioKey||r.audioStale)),showProgress=blockedBusy&&progressLocalIndex===m;return`<article class="segment-review"><div class="row"><strong>Segment ${m+1} · ${r.text.length.toLocaleString()} chars</strong>${r.audioKey||r.systemVoiceFallback?"":` <span class="badge stale">Not generated</span>`}${r.generationBlocked?` <span class="badge stale">Gemini blocked</span>`:""}${r.generationFailure?` <span class="badge stale">Gemini error</span>`:""}${r.systemVoiceFallback?` <span class="badge">Device voice · free</span>`:""}${r.fallbackVoice?` <span class="badge">Fallback: ${ie(r.fallbackVoice.name||r.fallbackVoice.voice_id)}</span>`:""}${r.generatedModel||r.providerRequestId||r.audioKey?`<details class="segment-details"><summary aria-label="Segment synthesis details">ⓘ</summary><div class="segment-detail-pop">${r.generatedModel||r.providerRequestId?`<div class="muted tiny">${r.generatedModel?`Model: ${ie(r.generatedModel)}`:""}${r.providerRequestId?`${r.generatedModel?" · ":""}Request ID: ${ie(r.providerRequestId)}`:""}</div>`:""}${r.audioKey?`<div class="tiny" style="word-break:break-all"><strong>Audio key:</strong> ${ie(r.audioKey)}</div>`:""}</div></details>`:""}<select class="field compact" data-segment-pov="${m}"><option value="">Default Narrator</option>${a.book.povs.map(s=>`<option value="${ie(s.name)}" ${r.pov===s.name?"selected":""}>${ie(s.name)}</option>`).join("")}</select></div><div class="segment-boundary"><div><details class="segment-spoiler"><summary><span class="segment-spoiler-closed">🔒 Reveal text (spoilers)</span><span class="segment-spoiler-open">🔓 Hide text</span></summary><div class="segment-spoiler-content"><span class="muted">START</span><p>${ie(head)}${r.text.length>220?"…":""}</p></div></details></div></div><div class="row">${r.systemVoiceFallback?`<button class="secondary" data-device-fallback="${m}">Change system voice</button><button class="ghost" data-cloud-fallback="${m}">Choose cloud voice instead</button>`:r.generationFailure?`<button class="secondary" data-regenerate-segment="${m}">Retry Gemini</button><button class="secondary" data-device-fallback="${m}">Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:r.generationBlocked&&r.splitExhausted?`<button class="secondary" data-device-fallback="${m}">Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:r.generationBlocked?`<button class="secondary" data-split-blocked="${m}"${blockedBusy?" disabled":""}>${quotaPaused?"Paused for Gemini quota":blockedBusy?"Chapter working…":"Repair blocked chapter in background"}</button><button class="secondary" data-device-fallback="${m}"${blockedBusy?" disabled":""}>Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:`<button class="ghost" data-regenerate-segment="${m}"${a.modal?.segmentRegenSegment===m?" disabled":""}>${r.audioKey?"Regenerate segment":"Generate segment"}</button>${m<c.segments.length-1?`<button class="secondary" data-generate-rest="${m}"${blockedBusy?" disabled":""}>${quotaPaused?"Paused for Gemini quota":segmentWorking?"Chapter working…":"Generate rest of chapter"}</button>`:""}`}</div>${r.systemVoiceFallback?`<div class="muted tiny">Free on-device/browser voice: ${ie(r.systemVoiceFallback.name||"Device voice")}. No cloud TTS request or provider charge.</div>`:r.generationFailure?`<div class="muted tiny">${ie(r.generationFailure.error||"Gemini internal error.")} Reader kept this piece isolated so the rest of the chapter can continue.</div>`:r.generationBlocked?`<div class="muted tiny">${ie(r.generationBlocked.finishReason||"UNKNOWN")}/${ie(r.generationBlocked.blockReason||"PROHIBITED_CONTENT")} · Reader did not retry this text.${r.splitExhausted?" No smaller safe split remains.":""}</div>`:""}${recordedFailures?`<div class="muted tiny">Original passage: ${recordedFailures} recorded Gemini failure${recordedFailures===1?"":"s"} · ${recordedSplits} split${recordedSplits===1?"":"s"}.${recordedFailures>=2&&r.generationBlocked?" Repeated blocks: a free device voice avoids more Gemini requests.":""}</div>`:""}${showProgress?_p({...chapterProgress,quotaPaused}):""}</article>${m<c.segments.length-1?`<div class="tts-boundary-marker">TTS request boundary ↓</div>`:""}`}).join("")}<button id="doneSegments" class="primary">Done</button></section></div>`}function Nr(){const e=Cr(),c=a.voiceList.filter(Ur),fb=segmentFallbackTarget(),r=`<select id="voiceGender" class="field"><option value="">Any gender</option><option value="female" ${a.voiceGender==="female"?"selected":""}>Female</option><option value="male" ${a.voiceGender==="male"?"selected":""}>Male</option><option value="neutral" ${a.voiceGender==="neutral"?"selected":""}>Neutral</option></select>`,s=`<div class="voice-structured">${r}</div>`;return`<div class="modal-back"><section class="modal"><div class="modal-title"><div><h2>${fb?"Fallback voice":"Voice Lab"}</h2><p class="muted">${fb?`This voice applies only to Segment ${fb.segment+1}; the book cast stays unchanged.`:`Book auditions use the same ${ie(ot()||"narrator")} excerpt (up to 300 characters). Gemini auditions use Flash-Lite; full-book generation keeps your selected model. Free samples use the provider’s demo.`}</p></div><button id="closeModal" class="ghost">✕</button></div><div class="tabs provider-tabs"><button data-provider-select="azure" class="${a.provider==="azure"?"active":""}"${a.providers.azure?"":" disabled"}>Azure</button><button data-provider-select="fish" class="${a.provider==="fish"?"active":""}"${a.providers.fish?"":" disabled"}>Fish Audio</button><button data-provider-select="openai" class="${a.provider==="openai"?"active":""}"${a.providers.openai?"":" disabled"}>OpenAI</button><button data-provider-select="gemini" class="${a.provider==="gemini"?"active":""}"${a.providers.gemini?"":" disabled"}>Gemini</button></div><div class="voice-filters"><input id="voiceSearch" class="field" placeholder="Optional descriptive keywords…" value="${ie(a.search)}"><select id="locale" class="field"><option value="">All English locales</option>${["en-US","en-GB","en-AU","en-CA","en-IN","en-IE","en-NZ","en-ZA","en-SG","en-PH"].map(i=>`<option ${a.locale===i?"selected":""}>${i}</option>`).join("")}</select><button id="doSearch" class="secondary">Search</button></div>${s}<div class="estimate-banner"><strong>${e.toLocaleString()} ${fb?"characters in this blocked piece":"characters in this role"}</strong><span>${c.length} matching voice${c.length===1?"":"s"} loaded · ${fb?"only this piece will be regenerated":"book-part estimates are before free allowances"}.</span></div>${(()=>{const t=a.voiceTarget&&a.book?(a.voiceTarget==="default"?a.book.defaultVoice:a.book.povs.find(p=>p.id===a.voiceTarget)?.voice):null,y=t&&t.style_direction&&t.style_direction.trim();return y?`<div class="muted tiny" style="margin:.35em 0">\uD83C\uDFAD Auditions include this role\u2019s style direction (\u201C${ie(y)}\u201D), so what you hear matches chapter audio.</div>`:""})()}${c.length?c.map(i=>Dr(i,e)).join(""):'<div class="empty muted">No voices match these filters. Broaden one filter and search again.</div>'}${a.voiceHasMore?'<button id="loadMoreVoices" class="secondary load-more">Load more voices</button>':""}</section></div>`}function Ur(e){const c=Ze(e),r={"en-US":"american","en-GB":"british","en-AU":"australian","en-CA":"canadian","en-IN":"indian","en-IE":"irish","en-NZ":"new zealand","en-ZA":"south african","en-SG":"singaporean","en-PH":"filipino"},m=r[a.locale],s=String(e.raw?.accent||e.raw?.labels?.accent||e.locale||"").replaceAll("_"," ").toLowerCase(),i=String(e.raw?.gender||e.gender||"").toLowerCase(),l=String(e.raw?.age||e.raw?.labels?.age||"").replaceAll(/[_-]/g," ").toLowerCase(),o=String(e.raw?.use_case||e.raw?.labels?.use_case||"").replaceAll(/[_-]/g," ").toLowerCase(),u=!m||e.provider==="gemini"||e.provider==="openai"||s.includes(m),_=[e.name,e.locale,...e.traits,e.raw?.description,...Object.values(e.raw?.labels||{}),c.tags.join(" "),c.notes].join(" ").toLowerCase();return!u||a.voiceGender&&i!==a.voiceGender?!1:!a.search?!0:a.search.toLowerCase().split(/\s+/).filter(Boolean).every(k=>_.includes(k))}function Dr(e,c){const r=Ze(e),m=He(c,e);return`<article class="voice ${r.favorite?"favorite":""}"><div class="voice-main"><button class="star" data-favorite="${ie(e.voice_id)}" aria-label="Favorite">${r.favorite?"★":"☆"}</button><div><strong>${ie(e.name)}</strong><div class="muted tiny">${ie([Et(e.provider),e.locale,e.gender,...e.traits].filter(Boolean).join(" · "))}</div>${r.tags.length?`<div class="user-tags">${r.tags.map(l=>`<span>${ie(l)}</span>`).join("")}</div>`:""}${r.notes?`<div class="tiny notes">${ie(r.notes)}</div>`:""}</div></div><div class="voice-actions"><span class="cost ${We(e).toLowerCase()}">${We(e)} · ${Pe(m)}</span><button class="ghost" data-tag="${ie(e.voice_id)}">Tag/notes</button>'<span class="preview-unavailable">No free preview available</span>'${a.auditioningVoice===e.voice_id?'<button class="secondary" disabled>⏳ Auditioning…</button>':'<button class="secondary" data-book-preview="'+ie(e.voice_id)+'">▶ Book audition</button>'}<button class="primary" data-choose="${ie(e.voice_id)}">Use voice</button></div></article>`}function jr(){const e=a.book.chapters[a.book.currentChapter]||a.book.chapters[0],c=e?.segments[a.book.currentSegment||0],segN=a.book.currentSegment||0,segCt=e?.segments.length||1,atEnd=(a.book.currentChapter||0)>=a.book.chapters.length-1&&segN>=segCt-1;return`<footer class="player" aria-label="Audiobook player"><div class="player-context">${a.book.cover?`<img class="player-cover" src="${a.book.cover}" alt="">`:'<div class="player-cover player-cover-fallback" aria-hidden="true">✦</div>'}<div class="player-copy"><strong class="player-book-title">${ie(a.book.title||"Current book")}</strong><span class="player-chapter-title">${ie(e?.title||"")}</span><button id="sectionList" class="player-segment player-segment-btn" aria-label="Choose a section">${ee._compositePlayback?`${ie(c?.pov||"Narrator")} · continuous segments ${Number(ee._compositeStartSegment||0)+1}–${Number(ee._compositeEndSegment||e?.segments.length||1)}/${e?.segments.length||1}`:c?.systemVoiceFallback&&!c?.audioKey?`${ie(c?.pov||"Narrator")} · device voice · segment ${(a.book.currentSegment||0)+1}/${e?.segments.length||1}${ee._systemSpeechPending?" · tap Play":""}`:`${ie(c?.pov||"Narrator")} · segment ${(a.book.currentSegment||0)+1}/${e?.segments.length||1}`}</button></div><div class="section-stepper"><button id="prevSection" class="round section-step" aria-label="Previous section">‹</button><button id="nextSection" class="round section-step" aria-label="Next section"${atEnd?" disabled":""}>›</button></div></div><div class="player-controls"><button id="prevChapter" class="round player-skip" aria-label="Previous chapter">|‹</button><button id="back15" class="round player-jump" aria-label="Rewind 15 seconds">−15</button><button id="play" class="round play-toggle" aria-label="${ee.paused?"Play":"Pause"}">${ee.paused?"▶":"Ⅱ"}</button><button id="forward30" class="round player-jump" aria-label="Forward 30 seconds">+30</button><button id="nextChapter" class="round player-skip" aria-label="Next chapter">›|</button><label class="speed-control"><span class="sr-only">Listening speed</span><select id="speed" class="field compact" aria-label="Listening speed">${fr(a.playbackRate).map(m=>`<option value="${m.value}" ${m.selected?"selected":""}>${m.label}</option>`).join("")}</select></label></div><div class="audio-recovery-row"><button id="recoverAudio" type="button" ${!ee.src||ee._systemSpeechActive?"disabled":""}>Restore sound</button><button id="copyPlaybackLog" type="button">Copy playback log</button>${silentRecoveryChapter?.bookId===a.book.id&&silentRecoveryChapter?.chapterIndex===a.book.currentChapter?'<span class="audio-recovery-note">Playing individual segments this chapter</span>':''}</div><div class="timeline"><input id="seek" aria-label="Playback position" type="range" min="0" max="${ee.duration||1}" value="${ee.currentTime||0}" step=".1"><div class="timeline-meta tiny"><span id="elapsed">${vt(ee.currentTime)}</span><span id="duration">${vt(ee.duration)}</span></div></div></footer>`}function Qr(p,m){return p==="fish"?a.fishModel:p==="openai"?a.openaiModel:p==="gemini"?normalizeGeminiModel(a.geminiModel):m}function Fr(e){return a.provider==="azure"?tr(e):(e.voices||[]).map(v=>({...v,model_id:Qr(v.provider,v.model_id)}))}async function Ce(e=!1){if(!a.apiBase)return a.modal=null,a.view="settings",se();try{if(!a.providers.azure&&!a.providers.fish&&!a.providers.openai&&!a.providers.gemini&&await $e(),a.providers[a.provider]||(a.provider=a.providers.gemini?"gemini":a.providers.fish?"fish":a.providers.azure?"azure":a.providers.openai?"openai":a.provider),!a.providers[a.provider])throw new Error("No voice provider is connected. Add provider credentials (Gemini, Fish Audio, Azure, OpenAI) to the Worker.");const c=a.provider==="azure"?{languageCode:a.locale||"en-US"}:{search:a.search,page_size:100,page:a.voicePage,gender:a.voiceGender},r=await vr(a.apiBase,a.accessToken,a.provider,c),m=Fr(r);a.voiceList=e?[...a.voiceList,...m].filter((s,i,l)=>l.findIndex(o=>o.voice_id===s.voice_id)===i):m,a.voiceHasMore=!1,se()}catch(c){alert(c.message)}}async function et(e,c=!1){try{if(Se.pause(),!c)throw new Error("No free preview is available for this voice.");a.auditioningVoice=e.voice_id,se();const m=Ar(),auditionModel=e.provider==="gemini"?"gemini-3.8-flash-lite-tts":Qr(e.provider,e.model_id),auditionRate=e.provider==="gemini"?10.8:zt(e),auditionCost=m.length/1e6*auditionRate,vt=a.voiceTarget&&a.book?(a.voiceTarget==="default"?a.book.defaultVoice:a.book.povs.find(p=>p.id===a.voiceTarget)?.voice):null,vy=((vt&&vt.style_direction||"").trim()||e.style_direction||""),s="preview-"+await tt(m+e.provider+e.voice_id+auditionModel+vy);let i=await Oe("audio",s);if(!i){let l=a.providers.sync?await At(a.apiBase,a.accessToken,s):null,o=!l;if(!l){const u={text:m,voice_id:e.voice_id,voice_name:e.name||e.voice_id,language_code:e.locale,model_id:auditionModel,cache_key:s,style_direction:vy,usage_type:"book_audition",book_id:a.book?.id,book_title:a.book?.title,chapter_index:a.book?.currentChapter??0,chapter_number:(a.book?.currentChapter??0)+1,chapter_title:a.book?.chapters?.[a.book?.currentChapter??0]?.title||"",segment_index:null,total_segments:null,estimated_cost:auditionCost,pricing_rate:auditionRate};l=await gt(a.apiBase,a.accessToken,e.provider,u)}l.opalCache==="HIT"&&(o=!1),i={id:s,blob:l,preview:!0,createdAt:Date.now()},ke("audio",i).catch(()=>{}),o&&(Ve().spent+=(l.opalCost??auditionCost),await Ae())}Se.src?.startsWith("blob:")&&URL.revokeObjectURL(Se.src),Se.src=URL.createObjectURL(i.blob),Se.play()}catch(r){alert(r.message)}finally{a.auditioningVoice===e.voice_id&&(a.auditioningVoice=null),a.modal&&a.modal.type==="voices"&&se()}}function prosodyParagraphs(e){const c=[],r=/\n\s*\n/g;let m=0,s;while((s=r.exec(e))){const i=e.slice(m,s.index);i.trim()&&c.push({start:m,end:s.index,text:i.trim()}),m=r.lastIndex}const i=e.slice(m);return i.trim()&&c.push({start:m,end:e.length,text:i.trim()}),c}function prosodyTestText(e){const c=a.modal?.prosodyMatch;if(!c)throw new Error("Find the problem text first.");const r=a.book.chapters[a.modal.chapter],m=r.segments[c.segment];if(!m)throw new Error("That TTS segment is no longer available.");if(e==="full")return{label:"Full segment",text:m.speechText||m.text,segment:m};const s=prosodyParagraphs(m.text),i=s.findIndex(l=>c.at>=l.start&&c.at<=l.end);if(i<0)throw new Error("I could not isolate the matching paragraph.");if(e==="paragraph")return{label:"Matched paragraph",text:s[i].text,segment:m};if(e==="context")return{label:"Previous + matched paragraph",text:[s[Math.max(0,i-1)].text,...i>0?[s[i].text]:[]].join("\n\n"),segment:m};if(e==="2000"||e==="1500"||e==="1000"){const target=e==="2000"?2000:e==="1500"?1500:1000;let start=i,text=s[i].text;while(start>0){const candidate=s[start-1].text+"\n\n"+text;if(candidate.length>target&&text.length>=target*.7)break;text=candidate,start--;if(text.length>=target)break}return{label:`~${target.toLocaleString()} char context`,text,segment:m}}throw new Error("Unknown prosody test.")}async function runProsodyAudition(e){try{if(!a.apiBase)throw new Error("Connect the Worker first.");const c=prosodyTestText(e),r=st(c.segment.pov);if(!r)throw new Error(`Choose a voice for ${c.segment.pov||"Default Narrator"} first.`);Se.pause();const s=Qr(r.provider,r.model_id),i=`prosody-${await tt(c.text+r.provider+r.voice_id+s)}-${crypto.randomUUID()}`,l={text:c.text,voice_id:r.voice_id,voice_name:r.name||r.voice_id,language_code:r.locale,model_id:s,cache_key:i,style_direction:r.style_direction||"",usage_type:"book_audition",book_id:a.book.id,book_title:a.book.title,chapter_index:a.modal.chapter,chapter_number:a.modal.chapter+1,chapter_title:a.book.chapters[a.modal.chapter].title,segment_index:a.modal.prosodyMatch.segment,total_segments:a.book.chapters[a.modal.chapter].segments.length,estimated_cost:He(c.text.length,r),pricing_rate:zt(r)};a.modal.prosodyStatus=`Generating ${c.label}…`;a.modal.prosodyResult=null;se();const o=await gt(a.apiBase,a.accessToken,r.provider,l);Ve().spent+=(o.opalCost??He(c.text.length,r)),await Ae(),Se.src?.startsWith("blob:")&&URL.revokeObjectURL(Se.src);const u=URL.createObjectURL(o);Se.src=u,a.modal&&(a.modal.prosodyResult={label:c.label,chars:c.text.length,voice:r.name||r.voice_id,url:u},a.modal.prosodyStatus=`${c.label} is ready. Tap Play sample.`,se())}catch(c){a.modal&&(a.modal.prosodyStatus=null,se()),alert(c.message||"Prosody audition failed.")}}async function playProsodyResult(){try{if(!a.modal?.prosodyResult?.url)throw new Error("Generate a prosody sample first.");Se.pause();Se.src=a.modal.prosodyResult.url;await Se.play();a.modal&&(a.modal.prosodyStatus=`Playing ${a.modal.prosodyResult.label}…`,se())}catch(e){alert(e.message||"Prosody sample could not play.")}}async function qe(e,{forceFresh=!1,segmentIndices=null}={}){
   const c=a.book.chapters[e],r=[];
   const indices=Array.isArray(segmentIndices)?segmentIndices:c.segments.map((_,m)=>m);
   for(const m of indices){
@@ -963,7 +1082,18 @@ function Pr(){return`${Tt()}<div class="section-head"><h2>Chapters</h2><button c
   return{job_id:await tt(JSON.stringify({release:GENERATION_RELEASE_ID,mode:a.geminiLane,book:a.book.id,chapter:e,keys:r.map(sg=>sg.cache_key)})),...generationReleaseStamp(),generation_mode:a.geminiLane,book_id:a.book.id,book_title:a.book.title,
     chapter_index:e,chapter_number:e+1,chapter_title:c.title,segments:r};
 }
-async function lt(e,c,{replacement:r=!1}={}){const m=a.book.chapters[e],s=r?m.replacementGeneration||{}:m.generation||{},i=Number(s.recordedCost)||0,l=Number(c.generated_cost)||0,o=Math.max(0,l-i);if(c?.state==="paused_update"){m.autoSplitEnabled=false;m.autoSplitPauseReason="update";m.autoSplitStatus="Generation paused for update. Saved audio is intact; restart manually.";}if(!r&&s.scope==="background_repair"&&c.adaptive_repair){const ok=applyAdaptiveRepair(m,s,c);if(!ok&&["ready","partial"].includes(c?.state)&&!s.repairApplied){m.autoSplitEnabled=false;m.autoSplitPauseReason="error";m.autoSplitStatus="Background repair audio is saved, but passage mapping changed. Copy diagnostics before retrying.";}}or(m,c,{replacement:r,recordedCost:l}),o&&(Ve().spent+=o,await Ae());if(c?.state==="failed"&&quotaQueueFailure(c)){m.autoSplitEnabled=false;m.autoSplitPauseReason="quota";m.autoSplitStatus="Automatic splitting paused: Gemini request quota reached."}await pe();scheduleAutoSplit(e)}
+async function lt(e,c,{replacement:r=!1}={}){const m=a.book.chapters[e],s=r?m.replacementGeneration||{}:m.generation||{},i=Number(s.recordedCost)||0,l=Number(c.generated_cost)||0,o=Math.max(0,l-i);if(c?.state==="paused_update"){m.autoSplitEnabled=false;m.autoSplitPauseReason="update";m.autoSplitStatus="Generation paused for update. Saved audio is intact; restart manually.";}if(c?.inline_split===true&&typeof ensureInlineMapping==="function")await ensureInlineMapping(e,m,s,c);if(c?.inline_split===true&&typeof applyInlineSplits==="function")applyInlineSplits(m,s,c);if(!r&&s.scope==="background_repair"&&c.adaptive_repair){const ok=applyAdaptiveRepair(m,s,c);if(!ok&&["ready","partial"].includes(c?.state)&&!s.repairApplied){m.autoSplitEnabled=false;m.autoSplitPauseReason="error";m.autoSplitStatus="Background repair audio is saved, but passage mapping changed. Copy diagnostics before retrying.";}}// Case #4: every status merged through lt() joins the chapter's job
+// watchlist. Guarded typeof: lt() is also exercised by extracted-code
+// harnesses that don't provide the watchlist helper — the watchlist is
+// runtime-only and rebuildable, so skipping the note there is safe.
+if(typeof noteChapterJob==="function")noteChapterJob(m,c);or(m,c,{replacement:r,recordedCost:l}),o&&(Ve().spent+=o,await Ae());
+// Case #4 final integration: if the slot record was only created by
+// the merge above (a job first seen through discovery), it carried no
+// staged mapping into applyInlineSplits. Give a finished tree one
+// second chance against the record that now exists, then re-merge so
+// the leaves' results land through the aligned mapping. One-shot:
+// applyInlineSplits itself refuses a second expansion.
+if(c?.inline_split===true&&["ready","partial"].includes(c?.state)&&typeof ensureInlineMapping==="function"&&typeof applyInlineSplits==="function"){const s2=r?m.replacementGeneration:m.generation;if(s2&&!s2.inlineApplied){await ensureInlineMapping(e,m,s2,c);if(applyInlineSplits(m,s2,c))or(m,c,{replacement:r,recordedCost:l})}}if(c?.state==="failed"&&quotaQueueFailure(c)){m.autoSplitEnabled=false;m.autoSplitPauseReason="quota";m.autoSplitStatus="Automatic splitting paused: Gemini request quota reached."}await pe();scheduleAutoSplit(e)}
 const adaptiveQueueStarting=new Set();
 let adaptiveWorkerCheck={ok:false,at:0};
 async function adaptiveWorkerReady(){
@@ -1019,6 +1149,262 @@ async function adaptiveRepairPlan(chapterIndex){
   }
   return {nodes,roots};
 }
+// Case #4 final integration (Rowan): applyInlineSplits consumes a
+// root-to-chapter mapping (local.segmentIndices, one chapter index per
+// job root, in job order). New jobs are staged WITH it (Mr,
+// generateRestOfChapter, Wr), but jobs staged before that — or first
+// seen through discovery, where the slot record was rebuilt from a
+// status alone — may lack it. Derive it here, at reconciliation time,
+// rather than abandoning those jobs' split trees:
+//   1. from the staged segmentKeys (text identities, job order),
+//      anchored and disambiguated as described below.
+//   2. failing that, from the job status itself: recompute the chapter
+//      payload with qe() and match the roots' cache keys against it,
+//      anchor-filtered the same way.
+// Any doubt (edited text, changed voices, ambiguous order) leaves the
+// record untouched: applyInlineSplits stays closed and or()'s inline
+// guard keeps merges identity-safe in the meantime.
+//
+// Case #4 re-review (Rowan): segIdentity is narration text + POV only
+// — it carries no unique segment ID — so when two chapter segments are
+// identical twins, matching identities in chapter order picks the
+// EARLIEST twin, which may be the wrong occurrence (and the split
+// tree's text-integrity check cannot tell identical passages apart).
+// Recovery therefore never chooses an occurrence by position alone. A
+// root's occurrence is used only when it is FORCED:
+//   - pinned by the root's repair_source_index: the Worker stamps
+//     every split parent with its root's payload segment_index (split
+//     parents keep their root's cache key, and every tree entry's
+//     repair_source_index is its root's payload segment_index, which
+//     for ordinary jobs IS the chapter index). That value is
+//     authoritative: a derived or stored index that disagrees with it
+//     is wrong, and a derivation that cannot be reconciled with every
+//     available anchor fails safe; or
+//   - the unique solution of the strictly-increasing assignment of all
+//     roots to their identity/cache-key matches (job order IS chapter
+//     order), computed as earliest-greedy vs latest-greedy: a root is
+//     resolved only where both assignments agree.
+// A stored mapping that contradicts an anchor is cleared when no safe
+// recovery replaces it, so nothing downstream can expand or merge
+// onto the wrong twin.
+function inlineRootEntries(status){
+  return (Array.isArray(status?.segments)?status.segments:[])
+    .filter(o=>!(typeof o?.repair_path==="string"&&o.repair_path.length>0));
+}
+function inlineRootAnchor(o){
+  return Number.isInteger(o?.repair_source_index)&&o.repair_source_index>=0?o.repair_source_index:null;
+}
+// One ascending candidate list per root (job order): compute the
+// component-wise earliest and latest strictly-increasing assignments.
+// A position is FORCED only where both agree; anything else comes back
+// null (ambiguous — the caller defers or refuses, never guesses).
+// Returns null when no assignment exists at all.
+function forcedIndexAssignment(sets){
+  const n=sets.length,earliest=new Array(n).fill(null),latest=new Array(n).fill(null);
+  let prev=-1;
+  for(let k=0;k<n;k++){let pick=null;for(const u of sets[k])if(u>prev){pick=u;break}if(pick==null)return null;earliest[k]=pick;prev=pick}
+  prev=Infinity;
+  for(let k=n-1;k>=0;k--){let pick=null;const q=sets[k];for(let j=q.length-1;j>=0;j--)if(q[j]<prev){pick=q[j];break}if(pick==null)return null;latest[k]=pick;prev=pick}
+  return earliest.map((u,k)=>u===latest[k]?u:null);
+}
+// Resolve each job root to its chapter index from the staged identity
+// keys: an anchored root pins its occurrence (and the staged identity
+// there must agree, else that root is unresolvable); every other root
+// resolves only where the joint assignment forces it. Unresolvable
+// roots come back null. Returns null only for malformed input.
+function resolveIndicesFromKeys(ch,keys,roots){
+  if(!Array.isArray(keys)||!Array.isArray(roots)||!roots.length||keys.length!==roots.length)return null;
+  if(!Array.isArray(ch?.segments))return null;
+  const cand=new Map();
+  ch.segments.forEach((t,u)=>{if(t==null)return;const id=segIdentity(t,ch.pov),q=cand.get(id)||[];q.push(u);cand.set(id,q)});
+  const sets=roots.map((o,k)=>{
+    const anchor=inlineRootAnchor(o);
+    if(anchor!=null)return anchor<ch.segments.length&&segIdentity(ch.segments[anchor],ch.pov)===keys[k]?[anchor]:[];
+    return (cand.get(keys[k])||[]).slice();
+  });
+  if(sets.some(q=>!q.length))return roots.map(()=>null);
+  return forcedIndexAssignment(sets)||roots.map(()=>null);
+}
+function deriveIndicesFromKeys(ch,keys,count,roots){
+  if(!Array.isArray(keys)||!count||keys.length!==count)return null;
+  if(!Array.isArray(roots)||roots.length!==count)return null;
+  const resolved=resolveIndicesFromKeys(ch,keys,roots);
+  return resolved&&resolved.every(u=>Number.isInteger(u))?resolved:null;
+}
+async function ensureInlineMapping(e,ch,local,status){
+  try{
+    if(!local||typeof local!=="object"||local.inlineApplied)return;
+    if(local.scope==="background_repair"||status?.adaptive_repair)return;
+    const roots=inlineRootEntries(status);
+    if(!roots.length||!Array.isArray(ch?.segments))return;
+    const existing=Array.isArray(local.segmentIndices)?local.segmentIndices:null;
+    let anchorConflict=false;
+    if(existing&&existing.length===roots.length){
+      const keys=Array.isArray(local.segmentKeys)?local.segmentKeys:null;
+      const ok=existing.every((idx,k)=>Number.isInteger(idx)&&idx>=0&&idx<ch.segments.length
+        &&(inlineRootAnchor(roots[k])==null||idx===inlineRootAnchor(roots[k]))
+        &&(!keys||keys.length!==roots.length||segIdentity(ch.segments[idx],ch.pov)===keys[k]));
+      if(ok)return;
+      anchorConflict=existing.some((idx,k)=>inlineRootAnchor(roots[k])!=null&&idx!==inlineRootAnchor(roots[k]));
+    }
+    const fromKeys=deriveIndicesFromKeys(ch,local.segmentKeys,roots.length,roots);
+    if(fromKeys){local.segmentIndices=fromKeys;return}
+    if(typeof qe==="function"){
+      const payload=await qe(e),segs=Array.isArray(payload?.segments)?payload.segments:[];
+      const sets=roots.map(root=>{
+        const anchor=inlineRootAnchor(root),values=[];
+        for(const sg of segs){
+          if(!sg||(sg.cache_key!==root.cache_key&&sg.fingerprint!==root.cache_key))continue;
+          if(anchor!=null&&sg.segment_index!==anchor)continue;
+          values.push(sg.segment_index);
+        }
+        return values;
+      });
+      if(!sets.some(q=>!q.length)){
+        const forced=forcedIndexAssignment(sets);
+        if(forced&&forced.every(u=>Number.isInteger(u))){local.segmentIndices=forced;return}
+      }
+    }
+    // Nothing could be recovered safely. A stored mapping that
+    // contradicts a Worker anchor is worse than none at all: clear it
+    // so applyInlineSplits stays closed and or() defers, instead of
+    // expanding or merging onto the wrong twin. The job's audio stays
+    // on its server-side status either way — nothing is lost.
+    if(anchorConflict)local.segmentIndices=null;
+  }catch{/* best-effort: or()'s inline guard keeps merges safe without a mapping */}
+}
+function applyInlineSplits(ch,local,status){
+  // Case #4 final review (Rowan Blocker 1): an ordinary generation job
+  // now resolves POLICY_BLOCKs inline on the Worker, and its status
+  // carries the split tree (repair_path / repair_source_index /
+  // speech_text per node). When such a job finishes, expand each split
+  // chapter root into the tree's terminal leaves -- the same chapter
+  // surgery applyAdaptiveRepair performs for repair jobs -- then
+  // rebuild the local record's segment mapping aligned to the FULL
+  // status array, so the ordinary or() merge applies every leaf's
+  // result exactly (audio, blocked-for-fallback, provider failure).
+  // Integrity: the leaves' joined plain text must reproduce the
+  // original passage (whitespace-insensitive) before anything splices;
+  // on any mismatch the chapter is left untouched.
+  if(local?.inlineApplied||!["ready","partial"].includes(status?.state))return false;
+  if(status?.inline_split!==true||!Array.isArray(status.segments))return false;
+  const jobId=status.job_id||status.jobId||null;
+  if(local?.jobId&&jobId&&local.jobId!==jobId)return false;
+  const items=status.segments;
+  const isChild=s=>typeof s?.repair_path==="string"&&s.repair_path.length>0;
+  const roots=items.filter(s=>!isChild(s));
+  if(!Array.isArray(local?.segmentIndices)||local.segmentIndices.length!==roots.length)return false;
+  // Root entries in status order map through the local record's
+  // submit-time segmentIndices (roots-only alignment).
+  const rootChapterIndex=new Map();
+  { let k=0;
+    for(let u=0;u<items.length;u++){
+      if(isChild(items[u]))continue;
+      rootChapterIndex.set(u,local.segmentIndices[k++]);
+    } }
+  const edits=[];
+  for(let u=0;u<items.length;u++){
+    const s=items[u];
+    if(s?.state!=="split"||isChild(s)||!Number.isInteger(s?.repair_source_index))continue;
+    const leaves=items.filter(x=>isChild(x)&&x.repair_source_index===s.repair_source_index&&
+      ["ready","blocked","provider_failed"].includes(x.state));
+    if(!leaves.length||leaves.some(x=>typeof x.speech_text!=="string"))return false;
+    const chapterIndex=rootChapterIndex.get(u);
+    // The Worker's anchor is authoritative: repair_source_index IS
+    // this root's chapter index, so a mapping that sends the root
+    // anywhere else is wrong. Refuse rather than expand the wrong
+    // occurrence — the text-integrity check below cannot catch this
+    // when another segment is an identical twin of the passage.
+    if(chapterIndex!==s.repair_source_index)return false;
+    const old=Number.isInteger(chapterIndex)?ch.segments[chapterIndex]:null;
+    if(!old)return false;
+    const joined=leaves.map(x=>plainSpeech(x.speech_text)).join("");
+    const original=plainSpeech(old.speechText||old.text||"");
+    if(joined.replace(/\s+/g,"")!==original.replace(/\s+/g,""))return false;
+    const pieces=leaves.map((leaf,n)=>{
+      const seg={...old,id:n?crypto.randomUUID():old.id||crypto.randomUUID(),
+        text:plainSpeech(leaf.speech_text),speechText:leaf.speech_text,
+        blockRootId:old.blockRootId||old.id||null,
+        audioKey:null,audioStale:false,generationFingerprint:null,
+        providerRequestId:null,generatedModel:null};
+      delete seg.generationBlocked;delete seg.generationFailure;
+      delete seg.segmentGeneration;delete seg.splitExhausted;delete seg.systemVoiceFallback;
+      if(n)delete seg.sceneBreakBefore;
+      if(leaf.state==="ready"){seg.audioKey=leaf.cache_key||null;
+        seg.generationFingerprint=leaf.cache_key||null;seg.generatedModel=leaf.model||null}
+      if(leaf.state==="blocked"){seg.generationBlocked={
+        error:leaf.error||"Gemini blocked this small piece.",
+        blockReason:leaf.block_reason||"POLICY_BLOCK",finishReason:leaf.finish_reason||"HTTP_400",
+        model:leaf.model||null,jobId};seg.splitExhausted=true}
+      if(leaf.state==="provider_failed")seg.generationFailure={
+        error:leaf.error||"Gemini provider error.",kind:"provider_internal",
+        model:leaf.model||null,jobId};
+      return seg;
+    });
+    edits.push({statusIndex:u,sourceIndex:s.repair_source_index,chapterIndex,old,pieces,
+      splitCount:items.filter(x=>x.repair_source_index===s.repair_source_index&&x.state==="split").length});
+  }
+  if(!edits.length)return false;
+  // Splice descending so earlier chapter indices stay valid.
+  const shiftAt=new Map();
+  for(const x of edits.sort((p,q)=>q.chapterIndex-p.chapterIndex)){
+    if(typeof geminiRootInfo==="function"){
+      const hist=geminiRootInfo(ch,x.old);
+      if(hist)hist.splits=(Number(hist.splits)||0)+x.splitCount;
+    }
+    ch.segments.splice(x.chapterIndex,1,...x.pieces);
+    shiftAt.set(x.chapterIndex,x.pieces.length-1);
+  }
+  ch.text=ch.segments.map(s=>s.text).join("\n\n");
+  // Rebuild the local mapping aligned to the FULL status array (the
+  // convention or()'s exact-index path expects): roots shift by the
+  // expansions before them; a split parent points at its first piece
+  // (its state maps as a no-op there); each terminal leaf points at
+  // its own piece; internal split nodes point at their root's first
+  // piece. Keys are re-derived from the expanded chapter; fingerprints
+  // keep root values and take each leaf's cache key.
+  const shiftBefore=idx=>{let d=0;for(const[at,delta]of shiftAt)if(at<idx)d+=delta;return d};
+  const newIndices=new Array(items.length).fill(-1),
+        newKeys=new Array(items.length).fill(null),
+        newFingerprints=new Array(items.length).fill(null);
+  const firstPieceAt=new Map();
+  { let k=0;
+    for(let u=0;u<items.length;u++){
+      const s=items[u];
+      if(isChild(s))continue;
+      const base=local.segmentIndices[k];
+      const at=Number.isInteger(base)?base+shiftBefore(base):-1;
+      newIndices[u]=at;
+      newKeys[u]=at>=0&&ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+      newFingerprints[u]=Array.isArray(local.segmentFingerprints)?local.segmentFingerprints[k]??null:null;
+      k++;
+      if(s?.state==="split")firstPieceAt.set(s.repair_source_index,at);
+    } }
+  { const cursor=new Map();
+    for(let u=0;u<items.length;u++){
+      const s=items[u];
+      if(!isChild(s))continue;
+      if(["ready","blocked","provider_failed"].includes(s.state)){
+        const start=firstPieceAt.get(s.repair_source_index);
+        if(start==null||start<0)continue;
+        const at=start+(cursor.get(s.repair_source_index)||0);
+        cursor.set(s.repair_source_index,(cursor.get(s.repair_source_index)||0)+1);
+        newIndices[u]=at;
+        newKeys[u]=ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+        newFingerprints[u]=s.cache_key||null;
+      }else{
+        const at=firstPieceAt.get(s.repair_source_index);
+        if(at==null||at<0)continue;
+        newIndices[u]=at;
+        newKeys[u]=ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+      }
+    } }
+  local.segmentIndices=newIndices;
+  local.segmentKeys=newKeys;
+  local.segmentFingerprints=newFingerprints;
+  local.inlineApplied=true;
+  return true;
+}
 function applyAdaptiveRepair(ch,local,status){
   if(local?.repairApplied||!["ready","partial"].includes(status?.state))return false;
   if(!Array.isArray(local?.repairNodes)||!Array.isArray(local?.repairRoots)||
@@ -1067,10 +1453,28 @@ function applyAdaptiveRepair(ch,local,status){
     ch.segments.splice(x.index,1,...x.pieces);
   }
   ch.text=ch.segments.map(s=>s.text).join("\n\n");
-  local.repairApplied=true;ch.autoSplitEnabled=false;ch.autoSplitPauseReason="completed";
-  ch.autoSplitStatus=ch.segments.some(s=>s.generationBlocked||s.generationFailure)
-    ?"Background repair finished with unresolved pieces."
-    :"Background repair finished; all pieces saved.";
+  local.repairApplied=true;
+  // Case #4 final pass: a repair plan is capped (90 nodes), so a chapter
+  // with many blocked passages can need several plans in a row. Pieces
+  // THIS pass produced are terminal — ready, blocked with
+  // splitExhausted set, or provider-failed — but roots the cap left out
+  // of the plan are untouched and still repairable. Keep the automatic
+  // chain armed for them (lt()'s scheduleAutoSplit queues the next
+  // plan) instead of switching off until a manual tap. The next plan
+  // build re-checks eligibility exactly; if nothing is plannable it
+  // disables the chain itself, and every pass permanently resolves at
+  // least one root, so this cannot loop.
+  const remainingRepairable=ch.segments.some(seg=>seg.generationBlocked&&
+    !seg.splitExhausted&&!seg.audioKey&&!seg.systemVoiceFallback);
+  if(remainingRepairable){
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;
+    ch.autoSplitStatus="Background repair saved this pass; more blocked passages remain, so repair continues automatically.";
+  }else{
+    ch.autoSplitEnabled=false;ch.autoSplitPauseReason="completed";
+    ch.autoSplitStatus=ch.segments.some(s=>s.generationBlocked||s.generationFailure)
+      ?"Background repair finished with unresolved pieces."
+      :"Background repair finished; all pieces saved.";
+  }
   return true;
 }
 function effectivePauseReason(chapter){
@@ -1179,12 +1583,26 @@ async function queueAdaptiveRepair(chapterIndex,{manual=false}={}){
     // double-counts the common two-device case and can falsely trip
     // the cap. A confirmed-absent job (404) is genuinely new: seed 0.
     const recordedCostSeed=serverJob?Number(serverJob.generated_cost)||0:0;
-    ch.generation={jobId,state:"queued",completed:0,total:plan.roots.length*2,
-      scope:"background_repair",repairNodes:plan.nodes,repairRoots:plan.roots,
-      repairApplied:false,recordedCost:recordedCostSeed,error:null};
-    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus="Background repair queued; Reader may be closed.";
-    await pe();se();
     if(serverJob&&serverJob.state!=="failed"){
+      // Case #4 §4.2: adoption performs NO staging write. The old order
+      // overwrote the slot with {completed:0, total:roots*2} BEFORE the
+      // adoption branch ran — evicting a parked job's record and
+      // repainting the chapter as 0/2 (the Oct 20 flip-flop). Now only
+      // the repair-mapping context is merged onto the existing record
+      // (applyAdaptiveRepair needs scope/nodes/roots on the pre-merge
+      // slot to map a finished repair); progress fields (state,
+      // completed, total) are never reset, and lt() merges the server's
+      // real status directly. Two non-progress fields DO ride along:
+      // jobId (the record now names the adopted job) and recordedCost —
+      // Case #2's ledger seed, which must be on the record BEFORE lt()
+      // merges, or adoption would re-credit spend another device
+      // already recorded. A stale submitUnconfirmed flag is cleared:
+      // the server holding this job IS the confirmation.
+      ch.generation={...ch.generation,jobId,scope:"background_repair",
+        repairNodes:plan.nodes,repairRoots:plan.roots,repairApplied:false,
+        recordedCost:recordedCostSeed};
+      delete ch.generation.submitUnconfirmed;
+      ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;
       // Adopt/reconcile the server's job instead of submitting a second
       // one. lt() applies finished repairs and merges live progress; the
       // pins below keep paused/parked outcomes from re-arming the
@@ -1204,6 +1622,13 @@ async function queueAdaptiveRepair(chapterIndex,{manual=false}={}){
       }
       se();ct();return;
     }
+    // Genuine submit (server 404, or a confirmed-failed job restarting):
+    // only NOW may the staging write create the slot record.
+    ch.generation={jobId,state:"queued",completed:0,total:plan.roots.length*2,
+      scope:"background_repair",repairNodes:plan.nodes,repairRoots:plan.roots,
+      repairApplied:false,recordedCost:recordedCostSeed,error:null};
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus="Background repair queued; Reader may be closed.";
+    await pe();se();
     try{const status=await xt(a.apiBase,a.accessToken,payload);
       await lt(chapterIndex,status);se();ct();
     }catch(err){
@@ -1220,6 +1645,12 @@ async function runAutoSplitSmart(chapterIndex){
   const ch=a.book?.chapters?.[chapterIndex];
   if(!ch?.autoSplitEnabled)return;
   if([ch.generation,ch.replacementGeneration].some(j=>["queued","generating"].includes(j?.state)))return;
+  // Case #4 §4.4: automatic repair never stages while ANY known job for
+  // the chapter is quota-parked — the Oct 20 loop burned 11 calls exactly
+  // here, because the old guard only looked at the local slot. (Manual
+  // taps call queueAdaptiveRepair directly and are NOT gated here; the
+  // Worker's park gate is the server-side backstop either way.)
+  if(knownChapterJobs(ch).some(j=>j.state==="paused_quota"))return;
   return queueAdaptiveRepair(chapterIndex);
 }
 
@@ -1540,6 +1971,16 @@ async function continueToQuota(){
             method:"POST",body:"{}"})).json();
         if(!result.resumed&&result.status?.state!=="queued"&&result.status?.state!=="generating")
           throw Error("The Worker did not resume this job. "+(result.status?.error||""));
+        if(result.probe){
+          // Case #4 §4.5 + Rowan S3/S5: while the park is active,
+          // Continue consumes exactly ONE probe total — on the session's
+          // earliest parked job (the one resumed above). The session
+          // stays paused and says so honestly, instead of flipping to
+          // "running" and silently re-parking a moment later.
+          session.state="paused";
+          session.error="Quota still full — one test call was made on the earliest parked chapter. Generation stays parked until the daily reset; tap Continue again to test once more.";
+          await pe();se();ct();return;
+        }
         job.state="queued";session.state="running";
         session.error=null;await pe();se();ct();return;
       }
@@ -1625,17 +2066,149 @@ async function continueToQuota(){
   }
 }
 async function resumeChapterQuota(i){
-  const ch=a.book?.chapters?.[i],job=ch?.generation;
-  if(!job?.jobId||job.state!=="paused_quota")return;
+  const ch=a.book?.chapters?.[i];
+  // Case #4: Resume targets the chapter's parked job from the DERIVED
+  // truth — including a registry-discovered job this device never staged
+  // (the slot may currently hold a different job's record).
+  const slotJob=ch?.generation?.state==="paused_quota"?ch.generation:null;
+  const jobId=slotJob?.jobId||chapterTruth(ch,knownChapterJobs(ch)).quotaParkedJobId;
+  if(!jobId)return;
   try{
     const result=await(await be(a.apiBase,a.accessToken,
-      "/api/generation/jobs/"+encodeURIComponent(job.jobId)+"/resume",{
+      "/api/generation/jobs/"+encodeURIComponent(jobId)+"/resume",{
         method:"POST",body:"{}"})).json();
-    if(result.status){await lt(i,result.status);se();ct()}
+    if(result.status){await lt(i,result.status,{replacement:ch?.replacementGeneration?.jobId===jobId});se();ct()}
+    if(result.probe)
+      alert("The Gemini daily limit is still parked, so Resume sent ONE test call instead of restarting everything. If the limit has actually reset, generation continues; otherwise the chapter re-parks and shows the new reset time.");
   }catch(err){alert(String(err?.message||"Could not resume chapter."))}
 }
 
-function ct(){clearTimeout(a.generationPoll);const active=a.book?.chapters.some(c=>[c.generation,c.replacementGeneration].some(r=>["queued","generating"].includes(r?.state)))||a.book?.continueSession?.state==="running";if(active&&document.visibilityState!=="hidden")a.generationPoll=setTimeout(Ye,2500)}async function Ye(){if(!a.book||!a.apiBase)return;let e=!1;for(const[c,r]of a.book.chapters.entries())for(const m of[!1,!0]){const s=m?r.replacementGeneration:r.generation,i=s?.jobId;if(!i||!["queued","generating"].includes(s.state)||a.book.continueSession?.jobs?.some(j=>j.jobId===i))continue;try{const l=await kr(a.apiBase,a.accessToken,i);if(s.pollFailures||s.pollFirstFailureAt){delete s.pollFailures;delete s.pollFirstFailureAt;await pe(),e=!0}(l.state!==s.state||l.completed!==s.completed||l.error!==s.error||l.next_retry_at!==s.next_retry_at)&&(await lt(c,l,{replacement:m}),scheduleQuotaBadgeRefresh(),e=!0)}catch(l){console.warn("Generation status refresh failed",l);if(l&&l.status===404){s.state="failed";s.error="Generation expired \u2014 tap Generate to restart.";delete s.pollFailures;delete s.pollFirstFailureAt}else{const n=(Number(s.pollFailures)||0)+1;s.pollFailures=n;if(!s.pollFirstFailureAt)s.pollFirstFailureAt=Date.now();if(Date.now()-s.pollFirstFailureAt>10*60*1000){s.state="failed";s.error="Lost contact with the worker \u2014 tap Generate to check again.";delete s.pollFailures;delete s.pollFirstFailureAt}}e=!0;await pe()}}e&&se();await refreshContinueSession();for(const [idx,ch] of a.book.chapters.entries())if(ch.autoSplitEnabled&&!a.book.continueSession?.jobs?.some(j=>j.chapterIndex===idx&&["parked","queued","generating","paused_quota"].includes(j.state)))scheduleAutoSplit(idx);ct()}async function Mr(e,{forceFresh=!1}={}){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet. Add the OPALREADER_GENERATION Queue binding to the Worker.");const r=await qe(e,{forceFresh}),m=r.segments.filter((u,_)=>{const k=c.segments[_],current=k.generationFingerprint||k.audioKey;return forceFresh||!(c.generation?.segments?.[_]?.state==="ready"&&c.generation.segments[_].cache_key===u.cache_key)&&(k.audioStale||current!==u.fingerprint)}).reduce((u,_)=>u+_.estimated_cost,0),s=Ve();if(a.monthlyCap>0&&s.spent+m>a.monthlyCap&&!confirm(`This chapter is estimated to bring locally tracked generation to ${Pe(s.spent+m)}, above your ${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;const i=c.generation?.jobId===r.job_id&&Number(c.generation.recordedCost)||0,l=c.generation?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.generation={jobId:r.job_id,state:"queued",completed:l&&Number(c.generation.completed)||0,total:r.segments.length,segmentKeys:c.segments.map(sg=>segIdentity(sg,c.pov)),segmentFingerprints:r.segments.map(sg=>sg.fingerprint),recordedCost:i,error:null},await pe(),se();try{const o=await xt(a.apiBase,a.accessToken,r);await lt(e,o),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.generation={...c.generation,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the queue acknowledgement, but the chapter job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.generation={...c.generation||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}async function generateRestOfChapter(e,startIndex){
+const watchPollAt=new Map();
+// Rowan review fix (Case #4): the discovery throttle is PER BOOK. A
+// single global timestamp let opening Book B within 45s of discovering
+// Book A suppress B's first discovery entirely — and with no locally
+// known job in B, no later poll was guaranteed, so a remote parked job
+// in B could stay invisible indefinitely. Keyed by book id, every book
+// gets its own initial discovery the moment it is opened.
+const jobDiscoveryAt=new Map();
+// Case #4 §4.3: fetch the Worker's job registry for the open book
+// (throttled; also refreshed on visibility regain via Ye). Discovered
+// jobs join the runtime watchlist, so a parked job this device never
+// staged is still followed. An older Worker without the endpoint just
+// fails the fetch and Reader keeps today's slot-only behavior.
+// Case #4 final pass (Rowan R1/R2): discovery results are cached per
+// book id together with the book INSTANCE they were applied to.
+//  R1 — the watchlist is keyed by chapter OBJECT, but reopening a book
+//       from IndexedDB builds fresh chapter objects. The per-book
+//       throttle alone would then skip discovery for up to 45s while
+//       the new objects know nothing — a remotely parked job vanished
+//       from the interface again. So on an instance change the cached
+//       jobs are rehydrated onto the new chapter objects immediately
+//       (Rowan's rehydration option); the throttle itself is untouched
+//       and Ye() re-runs discovery every poll cycle, so fresh data
+//       follows within the normal window.
+//  R2 — the response is applied ONLY to the instance that requested
+//       it. The book id and instance are captured before the await;
+//       if the user switched books while the request was in flight,
+//       the stale response is dropped whole — one book's jobs are
+//       never noted onto another book's chapters.
+const discoveryCacheByBook=new Map();
+async function refreshChapterJobDiscovery(force=false){
+  if(!a.book?.id||!a.apiBase)return;
+  const book=a.book,bookId=book.id,now=Date.now();
+  const cached=discoveryCacheByBook.get(bookId);
+  const instanceChanged=!!cached&&cached.instance!==book;
+  if(instanceChanged){
+    for(const job of cached.jobs){
+      const ch=book.chapters[job.chapter_index];
+      if(ch)noteChapterJob(ch,job);
+    }
+    discoveryCacheByBook.set(bookId,{...cached,instance:book});
+  }
+  if(!force&&now-(jobDiscoveryAt.get(bookId)||0)<45000)return;
+  jobDiscoveryAt.set(bookId,now);
+  try{
+    const res=await(await be(a.apiBase,a.accessToken,
+      "/api/generation/books/"+encodeURIComponent(bookId)+"/jobs")).json();
+    // Case #4 final review (Blocker 3, combined R1+R2): a response
+    // applies to the CURRENT instance of the SAME book. Reopening book
+    // A as a fresh instance while A's first discovery is still in
+    // flight must not drop the response -- the reopened instance has
+    // no cache to rehydrate and the 45s throttle blocks a refetch, so
+    // dropping it would hide a remotely parked job until some
+    // unrelated UI event. A response is dropped only when a DIFFERENT
+    // book is open now, which keeps cross-book contamination
+    // impossible (the accepted R2 behavior).
+    if(a.book?.id!==bookId)return;
+    const current=a.book;
+    if(res?.quota_park)a.quotaPark=res.quota_park;
+    const jobs=Array.isArray(res?.jobs)?res.jobs:[];
+    discoveryCacheByBook.set(bookId,{instance:current,jobs});
+    for(const job of jobs){
+      const ch=current.chapters[job.chapter_index];
+      if(ch)noteChapterJob(ch,job);
+    }
+  }catch{
+    // Discovery unavailable: slot-only behavior, as before -- but a
+    // failed fetch must not throttle the next refresh into silence,
+    // so clear this call's stamp and let a reopen retry promptly.
+    if(jobDiscoveryAt.get(bookId)===now)jobDiscoveryAt.delete(bookId);
+  }
+}
+function ct(){clearTimeout(a.generationPoll);const continueOwned=id=>a.book?.continueSession?.jobs?.some(j=>j.jobId===id);
+// Rowan review fix (Case #4): "active" is derived from EVERY known job
+// (knownChapterJobs — slots ∪ watchlist), not only the two slots. A
+// queued/generating job evicted from both slots by a later job is
+// still followed by Ye(), so it must also keep the polling timer
+// alive; before, its timer simply never scheduled. Continue-owned jobs
+// are excluded here — refreshContinueSession polls them, and a running
+// session already counts as active via the check at the end.
+const active=a.book?.chapters.some(c=>knownChapterJobs(c).some(j=>["queued","generating"].includes(j.state)&&!j.continueSessionId&&!continueOwned(j.jobId)))||a.book?.continueSession?.state==="running";
+// Case #4 §4.3: a book whose only jobs are parked still gets a slow
+// poll (60s, visible only). Before, ct() scheduled nothing in that
+// state — the timer died and parked jobs were never re-checked.
+const parkedKnown=!active&&a.book?.chapters.some(c=>knownChapterJobs(c).some(j=>j.state==="paused_quota"));
+if(active&&document.visibilityState!=="hidden")a.generationPoll=setTimeout(Ye,2500);else if(parkedKnown&&document.visibilityState!=="hidden")a.generationPoll=setTimeout(Ye,60000)}async function Ye(){if(!a.book||!a.apiBase)return;let e=!1;for(const[c,r]of a.book.chapters.entries())for(const m of[!1,!0]){const s=m?r.replacementGeneration:r.generation,i=s?.jobId;if(!i||!["queued","generating"].includes(s.state)||a.book.continueSession?.jobs?.some(j=>j.jobId===i))continue;try{const l=await kr(a.apiBase,a.accessToken,i);if(s.pollFailures||s.pollFirstFailureAt){delete s.pollFailures;delete s.pollFirstFailureAt;await pe(),e=!0}(l.state!==s.state||l.completed!==s.completed||l.error!==s.error||l.next_retry_at!==s.next_retry_at)&&(await lt(c,l,{replacement:m}),scheduleQuotaBadgeRefresh(),e=!0)}catch(l){console.warn("Generation status refresh failed",l);if(l&&l.status===404){s.state="failed";s.error="Generation expired \u2014 tap Generate to restart.";delete s.pollFailures;delete s.pollFirstFailureAt}else{const n=(Number(s.pollFailures)||0)+1;s.pollFailures=n;if(!s.pollFirstFailureAt)s.pollFirstFailureAt=Date.now();if(Date.now()-s.pollFirstFailureAt>10*60*1000){s.state="failed";s.error="Lost contact with the worker \u2014 tap Generate to check again.";delete s.pollFailures;delete s.pollFirstFailureAt}}e=!0;await pe()}}await refreshChapterJobDiscovery();
+// Case #4 §4.3 watchlist: jobs known beyond the slots (registry-
+// discovered, or evicted from the slot by a later job) are followed
+// with GETs only — never a POST. Parked jobs poll at most once a
+// minute; Continue-session jobs are owned by refreshContinueSession
+// and are never touched here.
+// Rowan review fixes (Case #4):
+//  (1) Terminal jobs (ready/partial/failed) are NEVER polled from the
+//      watchlist. Discovery can surface many historical jobs; polling
+//      them burns a status GET every cycle, forever. A slot job's own
+//      terminal transition still lands through the slot loop above —
+//      it polls while the slot reads queued/generating — so chapter
+//      completion renders exactly as before.
+//  (2) A fetched status is merged through lt() ONLY into a slot the
+//      job actually owns (its own generation/replacement slot), or
+//      adopted into an EMPTY generation slot. A job occupying neither
+//      slot updates the watchlist only. Discovery summaries omit
+//      `error`, so a fetched `error: null` otherwise counted as a
+//      "change" and lt() painted an old finished job over the
+//      chapter's current, unrelated generation slot.
+const TERMINAL_JOB_STATES=["ready","partial","failed"];
+for(const[c,r]of a.book.chapters.entries()){
+  const watched=chapterJobWatch.get(r);if(!watched)continue;
+  for(const[jobId,summary]of watched){
+    if(a.book.continueSession?.jobs?.some(j=>j.jobId===jobId))continue;
+    if(TERMINAL_JOB_STATES.includes(summary.state))continue;
+    const isRepSlot=r.replacementGeneration?.jobId===jobId;
+    const inSlot=isRepSlot||r.generation?.jobId===jobId;
+    if(inSlot&&["queued","generating"].includes(summary.state))continue;
+    if(summary.state==="paused_quota"&&Date.now()-(watchPollAt.get(jobId)||0)<60000)continue;
+    watchPollAt.set(jobId,Date.now());
+    try{
+      const l=await kr(a.apiBase,a.accessToken,jobId);
+      noteChapterJob(r,l);
+      const ownsSlot=inSlot||!r.generation?.jobId;
+      if(ownsSlot&&(l.state!==summary.state||l.completed!==summary.completed||l.error!==summary.error))
+        {await lt(c,l,{replacement:isRepSlot});scheduleQuotaBadgeRefresh();e=!0}
+    }catch{/* silent: the next poll cycle retries */}
+  }
+}
+e&&se();await refreshContinueSession();for(const [idx,ch] of a.book.chapters.entries())if(ch.autoSplitEnabled&&!a.book.continueSession?.jobs?.some(j=>j.chapterIndex===idx&&["parked","queued","generating","paused_quota"].includes(j.state)))scheduleAutoSplit(idx);ct()}async function Mr(e,{forceFresh=!1}={}){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet. Add the OPALREADER_GENERATION Queue binding to the Worker.");const r=await qe(e,{forceFresh}),m=r.segments.filter((u,_)=>{const k=c.segments[_],current=k.generationFingerprint||k.audioKey;return forceFresh||!(c.generation?.segments?.[_]?.state==="ready"&&c.generation.segments[_].cache_key===u.cache_key)&&(k.audioStale||current!==u.fingerprint)}).reduce((u,_)=>u+_.estimated_cost,0),s=Ve();if(a.monthlyCap>0&&s.spent+m>a.monthlyCap&&!confirm(`This chapter is estimated to bring locally tracked generation to ${Pe(s.spent+m)}, above your ${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;const i=c.generation?.jobId===r.job_id&&Number(c.generation.recordedCost)||0,l=c.generation?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.generation={jobId:r.job_id,state:"queued",completed:l&&Number(c.generation.completed)||0,total:r.segments.length,segmentKeys:c.segments.map(sg=>segIdentity(sg,c.pov)),segmentFingerprints:r.segments.map(sg=>sg.fingerprint),segmentIndices:r.segments.map(sg=>sg.segment_index),recordedCost:i,error:null},await pe(),se();try{const o=await xt(a.apiBase,a.accessToken,r);await lt(e,o),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.generation={...c.generation,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the queue acknowledgement, but the chapter job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.generation={...c.generation||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}async function generateRestOfChapter(e,startIndex){
   const ch=a.book.chapters[e];
   try{
     if(!ch)throw new Error("That chapter could not be found.");
@@ -1659,7 +2232,7 @@ function ct(){clearTimeout(a.generationPoll);const active=a.book?.chapters.some(
     if(!confirm(`Generate the rest of the chapter from here via ${a.geminiLane==="batch"?"Gemini Batch (asynchronous)":"Standard"}? Reader will queue ${selected.length} missing or stale segment${selected.length===1?"":"s"} (${range}) and reuse everything already generated. Estimated new synthesis: about ${Pe(cost)}.`))return;
     const jobId=await tt(JSON.stringify({release:GENERATION_RELEASE_ID,book:a.book.id,chapter:e,from:Math.max(0,Number(startIndex)||0),keys:selected.map(x=>x.cache_key)}));
     const payload={...full,job_id:jobId,segments:selected};
-    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;ch.generation={jobId,state:"queued",completed:0,total:selected.length,segmentKeys,segmentFingerprints,recordedCost:0,error:null,rangeStart:Math.max(0,Number(startIndex)||0)};
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;ch.generation={jobId,state:"queued",completed:0,total:selected.length,segmentKeys,segmentFingerprints,segmentIndices:selected.map(x=>x.segment_index),recordedCost:0,error:null,rangeStart:Math.max(0,Number(startIndex)||0)};
     await pe();se();
     try{
       const status=await xt(a.apiBase,a.accessToken,payload);
@@ -1678,7 +2251,7 @@ function ct(){clearTimeout(a.generationPoll);const active=a.book?.chapters.some(
     await pe();se();alert(err.message||"The rest of the chapter could not be queued.");
   }
 }
-async function Wr(e){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet.");const r=await qe(e),m=c.segments.map(k=>k.generationFingerprint||k.audioKey),s=r.segments.map(k=>k.fingerprint);if(m.every((k,w)=>k===s[w]))return alert("This chapter already uses the current cast.");const i=r.segments.reduce((k,w)=>k+w.estimated_cost,0);if(!confirm(`Regenerate this chapter with the current cast? New synthesis may use provider credits (about ${Pe(i)} gross). The existing audio stays playable until the replacement is fully ready.`))return;const l=c.segments.map(sg=>segIdentity(sg,c.pov)),o=c.replacementGeneration,u=o?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.replacementGeneration={jobId:r.job_id,state:"queued",completed:u&&Number(o.completed)||0,total:r.segments.length,segmentKeys:l,segmentFingerprints:r.segments.map(sg=>sg.fingerprint),recordedCost:u&&Number(o.recordedCost)||0,error:null},await pe(),se();try{const status=await xt(a.apiBase,a.accessToken,r);await lt(e,status,{replacement:!0}),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.replacementGeneration={...c.replacementGeneration,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the regeneration acknowledgement, but the replacement job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.replacementGeneration={...c.replacementGeneration||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}function queuedSegmentPayload(e,c,j){
+async function Wr(e){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet.");const r=await qe(e),m=c.segments.map(k=>k.generationFingerprint||k.audioKey),s=r.segments.map(k=>k.fingerprint);if(m.every((k,w)=>k===s[w]))return alert("This chapter already uses the current cast.");const i=r.segments.reduce((k,w)=>k+w.estimated_cost,0);if(!confirm(`Regenerate this chapter with the current cast? New synthesis may use provider credits (about ${Pe(i)} gross). The existing audio stays playable until the replacement is fully ready.`))return;const l=c.segments.map(sg=>segIdentity(sg,c.pov)),o=c.replacementGeneration,u=o?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.replacementGeneration={jobId:r.job_id,state:"queued",completed:u&&Number(o.completed)||0,total:r.segments.length,segmentKeys:l,segmentFingerprints:r.segments.map(sg=>sg.fingerprint),segmentIndices:r.segments.map(sg=>sg.segment_index),recordedCost:u&&Number(o.recordedCost)||0,error:null},await pe(),se();try{const status=await xt(a.apiBase,a.accessToken,r);await lt(e,status,{replacement:!0}),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.replacementGeneration={...c.replacementGeneration,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the regeneration acknowledgement, but the replacement job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.replacementGeneration={...c.replacementGeneration||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}function queuedSegmentPayload(e,c,j){
   const ch=a.book.chapters[e],seg=ch?.segments?.[c],text=seg?.speechText||seg?.text||"";
   return{job_id:j.jobId,diagnostic_job_kind:"single_segment",book_id:a.book.id,book_title:a.book.title,chapter_index:e,chapter_number:e+1,chapter_title:ch.title,segments:[{text,provider:j.provider,voice_id:j.voiceId,voice_name:j.voiceName,language_code:j.locale,model_id:j.model,cache_key:j.cacheKey,fingerprint:j.fingerprint,style_direction:j.styleDirection||"",estimated_cost:Number(j.estimatedCost)||0,pricing_rate:Number(j.pricingRate)||0,usage_type:"book_generation",book_id:a.book.id,book_title:a.book.title,chapter_index:e,chapter_number:e+1,chapter_title:ch.title,segment_index:c,total_segments:ch.segments.length}]};
 }

@@ -11,7 +11,7 @@ function extract(source,start,end){
  return source.slice(a,b);
 }
 const validator=extract(worker,"function describeContinuePayloadIssue(","async function stageContinueSession(");
-const release="1.4.42/1.4.116";
+const release="1.4.43/1.4.117";
 const isId=x=>typeof x==="string"&&/^[0-9a-f]{64}$/.test(x);
 const validate=new Function("validJobId","validCacheKey","validateAdaptiveRepairPayload","matchesGenerationRelease","GENERATION_RELEASE_ID",
  validator+"return describeContinuePayloadIssue;")(
@@ -90,6 +90,6 @@ test("UI wires discard action but leaves release fence and narration unchanged",
  assert.match(app,/id="discardUnconfirmedContinue"/);
  assert.match(app,/addEventListener\("click",discardUnconfirmedContinueSetup\)/);
  assert.match(app,/const APP_UI_VERSION="1\.4\.116"/);
- assert.match(worker,/const READER_GENERATION_UI_VERSION = "1\.4\.116"/);
- assert.match(worker,/const APP_VERSION = "1\.4\.42"/);
+ assert.match(worker,/const READER_GENERATION_UI_VERSION = "1\.4\.117"/);
+ assert.match(worker,/const APP_VERSION = "1\.4\.43"/);
 });
