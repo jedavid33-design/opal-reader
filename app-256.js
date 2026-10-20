@@ -1147,6 +1147,14 @@ async function queueAdaptiveRepair(chapterIndex,{manual=false}={}){
     // confirmed "failed" falls through to the normal submit, which
     // restarts that same job. Any uncertain lookup fails closed: the
     // throw lands in the outer catch and nothing is submitted.
+    // Scope boundary: the lookup is keyed by THIS device's deterministic
+    // plan id, so it can only find the same job (same book, chapter,
+    // release, and plan cache keys). A repair submitted under a
+    // different plan — e.g. by another device whose cast changed,
+    // changing the cache keys — is not discoverable from the client.
+    // Comprehensive cross-device duplicate protection needs a
+    // Worker-side job index (Roundtable Case #3) and is not claimed
+    // here.
     let serverJob=null;
     try{serverJob=await kr(a.apiBase,a.accessToken,jobId)}
     catch(err){if(err?.status!==404)throw new Error("Background repair could not verify this chapter's job with the Worker. Check your connection and try again.")}
@@ -1156,9 +1164,24 @@ async function queueAdaptiveRepair(chapterIndex,{manual=false}={}){
       chapter_number:chapterIndex+1,chapter_title:ch.title,
       diagnostic_job_kind:"adaptive_repair",adaptive_repair:true,
       segments:plan.nodes.map(({speechText,...p})=>({...p,text:speechText}))};
+    // Ledger seed (Case #2 re-review): when the Worker already holds
+    // this job, its status carries the job's cumulative generated_cost.
+    // Seed the fresh local record's recordedCost with that figure, so
+    // lt()'s delta (generated_cost - recordedCost) credits only spend
+    // accrued AFTER this adoption/restart. Without the seed, resuming
+    // on a second device re-credits cost another device already
+    // recorded into the shared, synced monthly ledger — inflating
+    // spent and corrupting the cap accounting this feature exists to
+    // fix. Accepted tradeoff: server-accrued cost that no device has
+    // recorded yet at adoption time is treated as already accounted
+    // and never credited (a bounded undercount of the local estimate).
+    // That is the safer error for a soft-cap ledger: re-crediting
+    // double-counts the common two-device case and can falsely trip
+    // the cap. A confirmed-absent job (404) is genuinely new: seed 0.
+    const recordedCostSeed=serverJob?Number(serverJob.generated_cost)||0:0;
     ch.generation={jobId,state:"queued",completed:0,total:plan.roots.length*2,
       scope:"background_repair",repairNodes:plan.nodes,repairRoots:plan.roots,
-      repairApplied:false,recordedCost:0,error:null};
+      repairApplied:false,recordedCost:recordedCostSeed,error:null};
     ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus="Background repair queued; Reader may be closed.";
     await pe();se();
     if(serverJob&&serverJob.state!=="failed"){
