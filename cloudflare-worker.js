@@ -288,10 +288,16 @@ async function advanceGeminiLastSuccess(storage, candidate) {
     // write is already newer.
   }
 }
-async function recordGeminiQuotaAttemptLedger(env, body, model) {
+async function recordGeminiQuotaAttemptLedger(env, body, model, route = "interactions") {
   if (!env.OPALREADER_STORAGE) return;
   try {
     const now = Date.now();
+    // Schema v2 (Case #4, additive): route/job_id/provider let Batch
+    // submissions be counted in the same ledger as Standard dispatches.
+    // S5 honesty rule: a marker records an ATTEMPTED provider request —
+    // including submissions Google rejects — never a proven quota unit.
+    // The key format is unchanged, so geminiQuotaReport's key-timestamp
+    // counting totals both routes with no reader changes.
     const marker = {
       timestamp: now,
       model: model || body?.model_id || null,
@@ -303,6 +309,9 @@ async function recordGeminiQuotaAttemptLedger(env, body, model) {
       segment_index: Number.isInteger(body?.segment_index)
         ? body.segment_index
         : null,
+      route: route === "batch" ? "batch" : "interactions",
+      job_id: body?.queue_job_id || body?.job_id || null,
+      provider: "gemini",
     };
     await env.OPALREADER_STORAGE.put(
       `${geminiAttemptPrefix}${String(now).padStart(13, "0")}-${crypto.randomUUID()}.json`,
@@ -312,6 +321,321 @@ async function recordGeminiQuotaAttemptLedger(env, body, model) {
   } catch (error) {
     console.warn("Gemini quota attempt ledger write failed", error);
   }
+}
+// --- Case #4: project-wide Gemini quota park + job registry ---------------
+// One shared "quota full" sign for the whole Gemini project (one project,
+// one daily pool — the Oct 20, 2026 forensics: 95 Standard-path calls plus
+// ~5 Batch submissions hit the same ~100/day wall). The first daily-scope
+// 429 writes the park; every automatic route reads it before dispatching.
+// All state here is R2 — this design adds ZERO KV writes (invariant I6).
+const GEMINI_PARK_KEY = "quota/gemini-park.json";
+// r2Get returns the raw R2 object; the Case #4 helpers need parsed JSON.
+async function r2GetJson(env, key) {
+  const object = await retryStorageRead(() => env.OPALREADER_STORAGE.get(key));
+  if (!object) return null;
+  if (object.json) return object.json();
+  return JSON.parse(await new Response(object.body).text());
+}
+async function readGeminiQuotaPark(env) {
+  if (!env.OPALREADER_STORAGE) return null;
+  try {
+    const park = await r2GetJson(env, GEMINI_PARK_KEY);
+    if (!park || !Number.isFinite(Number(park.parked_until))) return null;
+    return { ...park, parked_until: Number(park.parked_until) };
+  } catch {
+    return null;
+  }
+}
+const geminiParkIsActive = (park, now = Date.now()) =>
+  !!park && Number(park.parked_until) > now;
+function parkUntilLabel(park) {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles",
+      hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    }).format(new Date(Number(park?.parked_until) || 0));
+  } catch {
+    return "the daily reset";
+  }
+}
+// Monotone CAS write (invariant I1: parked_until never moves earlier),
+// reusing the advanceGeminiLastSuccess pattern: read -> yield if the
+// stored value already dominates -> conditional put with the QUOTED etag
+// (If-Match, or If-None-Match: * when absent), at most 3 attempts.
+// Concurrency bound (Rowan S4, stated honestly): this CAS does NOT
+// serialize project-wide dispatch — a dispatch that already passed its
+// gate when a park lands still completes (at most one in-flight dispatch
+// per concurrent job; see the note at reserveGeminiQueuePace). What the
+// park guarantees is: no NEW automatic dispatch after its gate observes
+// the active park, and no unbounded retry loop.
+async function recordGeminiQuotaPark(env, candidate) {
+  if (!env.OPALREADER_STORAGE) return null;
+  const until = Number(candidate?.parked_until);
+  if (!Number.isFinite(until) || until <= 0) return null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let object = null, current = null;
+    try {
+      object = await env.OPALREADER_STORAGE.get(GEMINI_PARK_KEY);
+      if (object)
+        current = object.json
+          ? await object.json()
+          : JSON.parse(await new Response(object.body).text());
+    } catch {
+      return null;
+    }
+    if ((Number(current?.parked_until) || 0) >= until)
+      return current; // a longer park already stands — never shorten it
+    const merged = {
+      ...(current || {}),
+      ...candidate,
+      scope: "daily",
+      parked_until: Math.max(until, Number(current?.parked_until) || 0),
+    };
+    let result = null;
+    try {
+      result = await env.OPALREADER_STORAGE.put(
+        GEMINI_PARK_KEY,
+        JSON.stringify(merged),
+        {
+          onlyIf: object
+            ? new Headers({ "If-Match": quotedEtag(object) })
+            : new Headers({ "If-None-Match": "*" }),
+          httpMetadata: { contentType: "application/json" },
+        },
+      );
+    } catch {
+      return current;
+    }
+    if (result) return merged;
+    // Lost the race: loop re-reads; the max-check above yields if the
+    // winning write already dominates this candidate.
+  }
+  return readGeminiQuotaPark(env);
+}
+// Job registry (Option B): one small marker per job in an R2 keyspace —
+// independent idempotent PUTs, no read-modify-write list, so concurrent
+// registrations can never lose each other (invariant I3). Discovery
+// (discoverBookJobs) reads the keyspace back.
+const JOB_REGISTRY_PREFIX = "generation/registry/";
+const JOB_REGISTRY_PENDING_PREFIX = "generation/registry-pending/";
+const jobRegistryKey = (bookId, chapterIndex, jobId) =>
+  `${JOB_REGISTRY_PREFIX}${bookId}/${chapterIndex}/${jobId}.json`;
+const jobRegistryScanKey = (bookId) =>
+  `${JOB_REGISTRY_PREFIX}${bookId}/_scan.json`;
+function jobRegistryFields(source) {
+  if (!source || typeof source !== "object") return null;
+  const jobId = source.job_id || source.jobId;
+  const bookId = source.book_id;
+  const chapterIndex = source.chapter_index;
+  if (!validJobId(jobId) || !validId(bookId) || !Number.isInteger(chapterIndex))
+    return null;
+  const kind =
+    source.adaptive_repair === true ||
+    source.diagnostic_job_kind === "adaptive_repair"
+      ? "adaptive_repair"
+      : source.continue_session_id
+        ? "continue"
+        : source.diagnostic_job_kind === "single_segment"
+          ? "single_segment"
+          : "chapter";
+  return {
+    job_id: jobId,
+    book_id: bookId,
+    chapter_index: chapterIndex,
+    kind,
+    continue_session_id: source.continue_session_id || null,
+    generation_release: source.generation_release || null,
+    created_at: Date.now(),
+  };
+}
+async function writeJobRegistryMarker(env, fields) {
+  if (!fields || !env.OPALREADER_STORAGE) return false;
+  try {
+    await env.OPALREADER_STORAGE.put(
+      jobRegistryKey(fields.book_id, fields.chapter_index, fields.job_id),
+      JSON.stringify(fields),
+      { httpMetadata: { contentType: "application/json" } },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+// Registration is RELIABLE, not fire-and-forget (Rowan S2): callers await
+// this. A failed marker write leaves a durable pending record that
+// discovery reconciles before it reports coverage — registration trouble
+// degrades discovery honesty, never generation itself (this never throws).
+async function recordJobRegistryMarker(env, source) {
+  const fields = jobRegistryFields(source);
+  if (!fields) return false;
+  if (await writeJobRegistryMarker(env, fields)) return true;
+  try {
+    await env.OPALREADER_STORAGE.put(
+      `${JOB_REGISTRY_PENDING_PREFIX}${fields.job_id}.json`,
+      JSON.stringify({ ...fields, failed_at: Date.now() }),
+      { httpMetadata: { contentType: "application/json" } },
+    );
+  } catch {}
+  return false;
+}
+// Bounded read-time backfill (S2): create-if-absent. At most one PUT, and
+// only when the marker is actually missing — never a PUT per poll.
+async function ensureJobRegistryMarker(env, source) {
+  const fields = jobRegistryFields(source);
+  if (!fields || !env.OPALREADER_STORAGE) return false;
+  try {
+    const existing = await env.OPALREADER_STORAGE.get(
+      jobRegistryKey(fields.book_id, fields.chapter_index, fields.job_id),
+    );
+    if (existing) return true;
+  } catch {
+    return false;
+  }
+  return writeJobRegistryMarker(env, fields);
+}
+// Drain durable registration failures left by recordJobRegistryMarker.
+// Returns how many pending records remain unprocessed afterwards.
+async function reconcileJobRegistryPending(env, limit = 25) {
+  if (!env.OPALREADER_STORAGE) return 0;
+  let listed;
+  try {
+    listed = await env.OPALREADER_STORAGE.list({
+      prefix: JOB_REGISTRY_PENDING_PREFIX,
+      limit,
+    });
+  } catch {
+    return -1;
+  }
+  let remaining = listed.truncated ? limit : 0;
+  for (const object of listed.objects || []) {
+    const pending = await r2GetJson(env, object.key).catch(() => null);
+    const fields = pending ? jobRegistryFields(pending) : null;
+    if (fields && (await writeJobRegistryMarker(env, fields))) {
+      try {
+        await env.OPALREADER_STORAGE.delete(object.key);
+      } catch {}
+    } else if (!fields) {
+      // An unreadable pending record can never reconcile; drop it rather
+      // than reporting it forever. (Writers only ever store valid fields.)
+      try {
+        await env.OPALREADER_STORAGE.delete(object.key);
+      } catch {}
+    } else remaining++;
+  }
+  return remaining;
+}
+// Legacy backfill (S2): jobs created before the registry have status
+// objects that already carry book_id + chapter_index, so a bounded scan of
+// generation/status/ rebuilds their markers exactly. The scan runs
+// whenever the scan-done marker is absent — EVEN IF new markers already
+// exist — and the done marker is written ONLY when pagination completed
+// AND every marker write succeeded; anything less reports "deferred" and
+// retries on a later discovery call.
+async function backfillJobRegistryLegacy(env, bookId) {
+  const statusPrefix = "generation/status/";
+  let cursor, pages = 0, writesOk = true;
+  try {
+    do {
+      const page = await env.OPALREADER_STORAGE.list({
+        prefix: statusPrefix,
+        cursor,
+        limit: 1000,
+      });
+      pages++;
+      for (const object of page.objects || []) {
+        const status = await r2GetJson(env, object.key).catch(() => null);
+        if (!status || status.book_id !== bookId) continue;
+        const fields = jobRegistryFields(status);
+        if (fields && !(await writeJobRegistryMarker(env, fields)))
+          writesOk = false;
+      }
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor && pages < 5);
+  } catch {
+    return "deferred";
+  }
+  if (cursor || !writesOk) return "deferred";
+  try {
+    await env.OPALREADER_STORAGE.put(
+      jobRegistryScanKey(bookId),
+      JSON.stringify({ book_id: bookId, scanned_at: Date.now(), pages }),
+      { httpMetadata: { contentType: "application/json" } },
+    );
+  } catch {
+    return "deferred";
+  }
+  return "complete";
+}
+// Discovery: every known job for one book, with live status summaries and
+// the active park (if any). This is what lets a device find a parked job
+// whose ID it never staged — the Forever Pucked Chapter 3 case.
+async function discoverBookJobs(env, bookId, chapterIndex) {
+  const pendingRemaining = await reconcileJobRegistryPending(env);
+  let legacyScan = "not_needed";
+  let scanDone = null;
+  try {
+    scanDone = await env.OPALREADER_STORAGE.get(jobRegistryScanKey(bookId));
+  } catch {}
+  if (!scanDone) legacyScan = await backfillJobRegistryLegacy(env, bookId);
+  const prefix = `${JOB_REGISTRY_PREFIX}${bookId}/`;
+  const markerKeys = [];
+  let cursor, truncated = false;
+  try {
+    do {
+      const page = await env.OPALREADER_STORAGE.list({
+        prefix,
+        cursor,
+        limit: 1000,
+      });
+      for (const object of page.objects || []) {
+        if (object.key.endsWith("/_scan.json")) continue;
+        if (markerKeys.length >= 1000) {
+          truncated = true;
+          break;
+        }
+        markerKeys.push(object.key);
+      }
+      if (page.truncated && markerKeys.length >= 1000) truncated = true;
+      cursor = page.truncated && !truncated ? page.cursor : undefined;
+    } while (cursor);
+  } catch {}
+  const jobs = [];
+  for (const key of markerKeys) {
+    const marker = await r2GetJson(env, key).catch(() => null);
+    if (!marker || !validJobId(marker.job_id)) continue;
+    if (
+      Number.isInteger(chapterIndex) &&
+      marker.chapter_index !== chapterIndex
+    )
+      continue;
+    const status = await readGenerationStatus(env, marker.job_id).catch(
+      () => null,
+    );
+    jobs.push({
+      job_id: marker.job_id,
+      chapter_index: marker.chapter_index,
+      kind: marker.kind || "chapter",
+      state: status?.state || "unknown",
+      completed: Number(status?.completed) || 0,
+      total: Number(status?.total) || 0,
+      blocked: Array.isArray(status?.segments)
+        ? status.segments.filter((s) => s?.state === "blocked").length
+        : 0,
+      updated_at: status?.updated_at || marker.created_at || null,
+      continue_session_id:
+        status?.continue_session_id || marker.continue_session_id || null,
+    });
+  }
+  jobs.sort((x, y) => (x.chapter_index - y.chapter_index) || String(x.job_id).localeCompare(String(y.job_id)));
+  const park = await readGeminiQuotaPark(env);
+  return {
+    book_id: bookId,
+    quota_park: geminiParkIsActive(park) ? park : null,
+    jobs,
+    truncated,
+    legacy_scan: legacyScan,
+    registry_pending: pendingRemaining,
+  };
 }
 function zoneOffsetMs(ts, timeZone) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -362,6 +686,11 @@ async function geminiQuotaReport(env) {
     next_expiry_ms:null, last_success_ms:null,
     resets_at_ms:day.end, reset_timezone:"America/Los_Angeles",
     tracking_mode:"pacific_day_and_rolling_24h", approximate:true,
+    // S5: these totals count ATTEMPTED provider requests (Standard +
+    // Batch, including rejected submissions), not proven Google quota
+    // units. Provider-confirmed usage stays distinct (last_success_ms
+    // derives from recorded success events, not attempt markers).
+    counting:"attempted_provider_requests",
   };
   // A DST fall-back Pacific day can span 25 hours.
   const scanStart = Math.min(rollingStart, day.start);
@@ -438,6 +767,9 @@ async function geminiQuotaReport(env) {
     last_success_ms:lastSuccessMs,
     resets_at_ms:day.end, reset_timezone:"America/Los_Angeles",
     tracking_mode:"pacific_day_and_rolling_24h", approximate:true,
+    // S5: totals count ATTEMPTED provider requests (see the fallback
+    // return above); provider-confirmed usage stays distinct.
+    counting:"attempted_provider_requests",
   };
 }
 async function usageReport(env, url) {
@@ -1922,6 +2254,15 @@ function validateAdaptiveRepairPayload(payload) {
 // spacing within each chapter. R2 conditional leases keep the reservation
 // serialized across devices/jobs without sleeping or consuming a Gemini call.
 const GEMINI_GLOBAL_PACE_MS = 7000; // <10 requests/minute with buffer
+// Case #4 concurrency note (Rowan S4) — what this pace reservation does
+// and does NOT do: it spaces the START of Gemini dispatches at least
+// GEMINI_GLOBAL_PACE_MS apart project-wide, but the pacing lease is
+// RELEASED before the provider fetch, so it does not serialize calls —
+// dispatches from different jobs can be in flight simultaneously.
+// Combined with the per-job lease and the quota park, the honest bound
+// is: no NEW automatic dispatch after its gate observes the active park,
+// no unbounded retry loop, and a worst case of one already-in-flight
+// dispatch per concurrent job across routes when a park lands.
 async function reserveGeminiQueuePace(env) {
   if (!env.OPALREADER_STORAGE) return {ready:false,retryAt:Date.now()+10000};
   const now=Date.now();
@@ -2172,6 +2513,23 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
     item.batch_submit_attempted = true;
     item.batch_submit_at = Date.now();
     await saveGenerationStatus(env,status);
+    // Case #4 (§3.4/§7): a Batch submission spends the same project quota
+    // pool as a Standard call, so it writes the same pre-dispatch attempt
+    // marker — here, after the fence is durable and BEFORE the POST, so a
+    // rejected submission is still counted (S5: markers count attempted
+    // provider requests). Polls of an accepted Batch name write nothing.
+    // (The typeof guard only matters for the extraction-based unit tests
+    // that eval this region with a fixed dependency list; in the Worker
+    // module the ledger function is always defined.)
+    if (typeof recordGeminiQuotaAttemptLedger === "function") {
+      await recordGeminiQuotaAttemptLedger(env, {
+        ...segment,
+        book_id: segment.book_id ?? status.book_id ?? null,
+        chapter_index: segment.chapter_index ?? status.chapter_index ?? null,
+        segment_index: segment.segment_index ?? index,
+        queue_job_id: jobId,
+      }, model, "batch");
+    }
     const style = [String(segment.style_direction||"").trim().slice(0,300),
       "clear normal speaking voice; never whisper, murmur, or speak softly"].filter(Boolean).join(". ");
     const body = {
@@ -2216,11 +2574,23 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
       if(typeof name!=="string"||!/^batches\/[A-Za-z0-9_-]+$/.test(name))
         throw Error("Gemini accepted Batch but returned no valid job ID. Manual reconciliation required.");
     }catch(err){
-      // Never retry an unacknowledged POST. A 429 here reflects Batch capacity,
-      // not necessarily Standard's 100-requests-per-day quota.
+      // Never retry an unacknowledged POST. A 429 here MAY reflect Batch
+      // capacity rather than the shared daily pool — but the Oct 20, 2026
+      // forensic total (95 Standard-path calls + ~5 Batch submissions ≈
+      // the ~100 wall) only reconciles if Batch draws on the same daily
+      // quota, so a 429 carrying DAILY-quota evidence is treated as
+      // shared-quota evidence (Case #4 §3.4): restore quotaExceeded so the
+      // consumer's quota branch parks the job and writes the project park.
+      // A 429 without daily evidence, and any ambiguous network failure,
+      // keeps the provider-internal ambiguity treatment unchanged.
       err.noRetry=true;
       err.quotaExceeded=false;
       if(!err.contentBlocked)err.providerInternal=true;
+      if(err?.status===429&&!err?.contentBlocked&&
+        gemini429Cooldown(err,1).scope==="daily"){
+        err.quotaExceeded=true;
+        err.providerInternal=false;
+      }
       throw err;
     }
     addGenerationTrace(status,"batch_accepted",segment);
@@ -2408,7 +2778,56 @@ async function processGenerationJobLocked(
         reusedManual = true;
       }
     }
+    let probeDispatch = false, probeParkUntil = 0;
     if (!cached) {
+      // Case #4 §3.3: pre-dispatch quota-park gate. Placement is the
+      // point: AFTER the cache checks above (cached segments still finish
+      // for free during a park — invariant I7) and BEFORE the pace
+      // reservation (a parked job must not even consume a pace slot).
+      // Covers Standard, adaptive repair, and Batch SUBMISSIONS; polling
+      // an already-submitted Batch name spends no generation quota and is
+      // deliberately NOT gated.
+      if (segment.provider === "gemini") {
+        const batchWouldSubmit = geminiBatchMode(payload, segment) &&
+          !status.segments[activeIndex]?.batch_job_name;
+        if (!geminiBatchMode(payload, segment) || batchWouldSubmit) {
+          const park = await readGeminiQuotaPark(env);
+          if (geminiParkIsActive(park)) {
+            if (status.quota_probe) {
+              // An explicit Resume during the park stamped a one-shot
+              // probe token on this job (§6): exactly one dispatch is
+              // authorized, then the success path re-parks instead of
+              // chaining (or the 429 path re-parks with new evidence).
+              // The token is NOT deleted here — the pace reservation
+              // below may defer this delivery, and the token must
+              // survive until the dispatch is actually imminent. It is
+              // deleted immediately before the provider call, under
+              // this same per-job lease, so it can never be spent twice.
+              probeDispatch = true;
+              probeParkUntil = park.parked_until;
+              addGenerationTrace(status, "quota_probe_dispatch", segment);
+            } else {
+              status.segments[activeIndex] = {
+                ...status.segments[activeIndex], state: "queued",
+              };
+              status.state = "paused_quota";
+              status.error = `Gemini daily quota is parked until ~${parkUntilLabel(park)}. This job paused before spending a call. Tap Resume after the reset — or tap Resume now to make one test call.`;
+              status.next_retry_at = null;
+              status.cooldown_reason = "quota";
+              status.cooldown_scope = "daily";
+              status.updated_at = Date.now();
+              addGenerationTrace(status, "quota_park_gate", segment);
+              await saveGenerationStatus(env, status);
+              return { status, next: -1 };
+            }
+          } else if (status.quota_probe) {
+            // The park lifted before this delivery ran: the probe is
+            // moot. Clear the stale token so a FUTURE park can never
+            // find it and mistake an automatic delivery for a probe.
+            delete status.quota_probe;
+          }
+        }
+      }
       if(segment.provider==="gemini"&&!geminiBatchMode(payload,segment)){
         const slot=await reserveGeminiQueuePace(env);
         if(!slot.ready){
@@ -2421,6 +2840,10 @@ async function processGenerationJobLocked(
           return {status,next:activeIndex,delaySeconds:Math.max(1,Math.ceil((slot.retryAt-Date.now())/1000))};
         }
       }
+      // The probe token is consumed HERE — deleted and persisted by the
+      // save immediately below, right before the one dispatch it
+      // authorizes (see the gate above).
+      if (probeDispatch) delete status.quota_probe;
       addGenerationTrace(status, "synthesis_started", segment);
       await saveGenerationStatus(env, status);
       result = geminiBatchMode(payload,segment)
@@ -2457,6 +2880,22 @@ async function processGenerationJobLocked(
     if (payload.adaptive_repair) adaptiveRepairCounts(status);
 
     const next = nextGenerationSegmentIndex(status.segments);
+    if (probeDispatch && next >= 0) {
+      // §6 + S5: one successful test call does NOT lift the park or drain
+      // the job — Google occasionally lets a call through early (Oct 20's
+      // 12:49 anomaly). The audio is saved above; re-park honestly and
+      // let Julie decide whether to test again. (If next < 0 the probe
+      // finished the job's last segment and it completes normally.)
+      status.state = "paused_quota";
+      status.error = `Test call worked, but the daily limit is still parked until ~${parkUntilLabel({ parked_until: probeParkUntil })}. Tap Resume to test again.`;
+      status.next_retry_at = null;
+      status.cooldown_reason = "quota";
+      status.cooldown_scope = "daily";
+      status.updated_at = Date.now();
+      addGenerationTrace(status, "quota_probe_repark", segment);
+      await saveGenerationStatus(env, status);
+      return { status, next: -1 };
+    }
     if (next < 0) finishGenerationState(status);
     else {
       status.state = "queued";
@@ -2547,10 +2986,31 @@ async function processGenerationJobLocked(
       // Keep only structured quota evidence; never persist the provider's raw
       // response, transcript, API credentials or project identifiers.
       const evidence = extractGeminiQuotaDiagnostics(error, segment, payload, cooldown);
+      // Case #4 §3.3: a daily-scope 429 (re)writes the monotone project
+      // park. And while a park is already active, even a "temporary"-scope
+      // 429 is treated as daily FOR THIS JOB — no automatic backoff ladder
+      // into a wall the project already knows about.
+      const parkNow = await readGeminiQuotaPark(env);
+      const effectiveScope = cooldown.scope === "daily" ||
+        geminiParkIsActive(parkNow) ? "daily" : cooldown.scope;
+      if (effectiveScope === "daily") {
+        await recordGeminiQuotaPark(env, {
+          parked_until: cooldown.retryAt,
+          model: segment?.model_id || null,
+          route: payload?.generation_mode === "batch" ? "batch" : "interactions",
+          job_id: jobId,
+          at: Date.now(),
+          retry_after_seconds: evidence.retry_after_seconds ??
+            evidence.retry_info_seconds ?? null,
+          quota_metrics: evidence.quota_metrics,
+          stated_limits: evidence.stated_limits,
+        });
+      }
+      evidence.cooldown_scope = effectiveScope;
       // A real daily limit is manual-only. Temporary rate limits keep a
       // bounded automatic retry so remaining daily requests aren't stranded.
-      evidence.scheduled_retry_at = cooldown.scope==="daily"?null:cooldown.retryAt;
-      evidence.manual_resume_required = cooldown.scope==="daily";
+      evidence.scheduled_retry_at = effectiveScope==="daily"?null:cooldown.retryAt;
+      evidence.manual_resume_required = effectiveScope==="daily";
       status.quota_diagnostics = [
         ...(Array.isArray(status.quota_diagnostics) ? status.quota_diagnostics : []).slice(-7),
         evidence,
@@ -2561,22 +3021,22 @@ async function processGenerationJobLocked(
           quota_exceeded: false, model: segment?.model_id || null,
         };
       }
-      status.state = cooldown.scope==="daily"?"paused_quota":"queued";
+      status.state = effectiveScope==="daily"?"paused_quota":"queued";
       status.quota_exceeded = true;
       status.quota_cooldown_count = count;
       status.cooldown_reason = "quota";
-      status.cooldown_scope = cooldown.scope;
-      status.next_retry_at = cooldown.scope==="daily"?null:cooldown.retryAt;
+      status.cooldown_scope = effectiveScope;
+      status.next_retry_at = effectiveScope==="daily"?null:cooldown.retryAt;
       addGenerationTrace(status,
-        cooldown.scope==="daily"?"quota_manual_pause":"quota_temporary_wait",
-        segment,{scope:cooldown.scope,
-          ...(cooldown.scope==="temporary"?{retry_at:cooldown.retryAt}:{})});
-      status.error = cooldown.scope==="daily"?
+        effectiveScope==="daily"?"quota_manual_pause":"quota_temporary_wait",
+        segment,{scope:effectiveScope,
+          ...(effectiveScope==="temporary"?{retry_at:cooldown.retryAt}:{})});
+      status.error = effectiveScope==="daily"?
         "Gemini daily quota reached. Paused until you manually select Continue to quota.":
         "Gemini temporary rate limit. The queued request will retry after a short delay.";
       status.updated_at = Date.now();
       await saveGenerationStatus(env, status);
-      return cooldown.scope==="daily"?{status,next:-1}:
+      return effectiveScope==="daily"?{status,next:-1}:
         {status,next:index,delaySeconds:cooldown.delaySeconds};
     }
 
@@ -2767,6 +3227,13 @@ async function stageOneContinueJob(env,payload,state){
   await env.OPALREADER_STORAGE.put(generationPayloadKey(payload.job_id),
     JSON.stringify({...payload,status}),{httpMetadata:{contentType:"application/json"}});
   await saveGenerationStatus(env,status);
+  // Case #4 registry: every Continue job (both setup paths share this
+  // staging core) is registered at creation — awaited per S2, with the
+  // durable pending-record fallback inside recordJobRegistryMarker.
+  await recordJobRegistryMarker(env,{...payload,
+    job_id:status.job_id,book_id:status.book_id,
+    chapter_index:status.chapter_index,
+    continue_session_id:status.continue_session_id});
 }
 
 // Chunked Continue staging (CONTINUE-CHUNKED-STAGING.md): the one-shot
@@ -3016,18 +3483,34 @@ async function resumeQuotaJob(env,jobId){
       await saveGenerationStatus(env,status);
       return {resumed:false,status};
     }
+    // Case #4 §6: if the project park is still active, this explicit tap
+    // issues a ONE-SHOT PROBE instead of a full resume: stamp the token,
+    // flip to queued, enqueue one delivery. The consumer's gate consumes
+    // the token for exactly one dispatch and then re-parks (invariant
+    // I4). Token issue + consumption both happen under this per-job
+    // lease, so two devices tapping Resume cannot mint two probes (R3).
+    // Park expired/absent: the original full-resume behavior, unchanged —
+    // and any stale token from an earlier probe is cleared.
+    const park=await readGeminiQuotaPark(env);
+    const probe=geminiParkIsActive(park);
     const updated={...status,state:"queued",error:null,quota_exceeded:false,
       cooldown_reason:null,cooldown_scope:null,next_retry_at:null,updated_at:Date.now()};
-    addGenerationTrace(updated,"manual_resume",null);
+    if(probe)updated.quota_probe={issued_at:Date.now(),park_until:park.parked_until};
+    else delete updated.quota_probe;
+    addGenerationTrace(updated,probe?"quota_probe_issued":"manual_resume",null);
     await saveGenerationStatus(env,updated);
     await env.OPALREADER_GENERATION.send({job_id:jobId,segment_index:next});
-    return {resumed:true,status:updated};
+    return {resumed:true,...(probe?{probe:true,park_until:park.parked_until}:{}),status:updated};
   }finally{await releaseProcessingLease(env,jobId,"job")}
 }
 
 async function processGenerationJob(env, jobId, segmentIndex, attempts = 1) {
   const payload = await readGenerationPayload(env, jobId);
   if (!payload) throw new Error("Generation job payload was not found.");
+  // Case #4 write-through: guarantee this job's registry marker exists
+  // (create-if-absent; bounded — a PUT only when actually missing), so
+  // jobs staged by any path stay discoverable (S2).
+  await ensureJobRegistryMarker(env, payload).catch(() => {});
 
   // v1.4.26: serialize the entire job, not just individual segments. Queue
   // delivery is at-least-once, and two different segment deliveries can
@@ -3549,14 +4032,18 @@ export default {
         const existing = await readGenerationStatus(env, payload.job_id);
         if (
           existing &&
-          ["queued", "generating", "ready", "partial"].includes(existing.state)
+          ["queued", "generating", "ready", "partial", "paused_quota"].includes(existing.state)
         ) {
+          // Case #4 §3.3: an existing paused_quota job is adopted UNCHANGED
+          // (and excluded from the stale-heartbeat resume below) — an
+          // automatic re-stage must never resurrect a parked job (R5).
           // A1: stale-heartbeat resume. If the job claims to be in flight but
           // has not been touched for ~5 minutes, its queue message was lost —
           // re-enqueue the next pending segment instead of returning the stuck
           // status forever. Tapping Generate is the recovery path.
           const stale =
             existing.state !== "ready" &&
+            existing.state !== "paused_quota" &&
             !generationDelaySeconds(existing) &&
             Number(existing.updated_at) > 0 &&
             Date.now() - Number(existing.updated_at) > 5 * 60 * 1000;
@@ -3604,13 +4091,60 @@ export default {
           JSON.stringify({ ...payload, status }),
           { httpMetadata: { contentType: "application/json" } },
         );
+        // Case #4 §3.3 submission gate: during an active project park, a
+        // new job with uncached Gemini work is created PARKED — payload +
+        // status persisted and registered below, nothing enqueued. The
+        // job is real and discoverable; Resume (probe or full) starts it
+        // through the normal endpoint. An all-cached job still completes
+        // as "ready" for free during a park (invariant I7).
+        const park = await readGeminiQuotaPark(env);
+        if (
+          status.state === "queued" &&
+          geminiParkIsActive(park) &&
+          payload.segments.some((segment) => segment.provider === "gemini")
+        ) {
+          status.state = "paused_quota";
+          status.error = `Gemini daily quota is parked until ~${parkUntilLabel(park)}. This job was saved without spending a call. Tap Resume after the reset — or tap Resume now to make one test call.`;
+          status.cooldown_reason = "quota";
+          status.cooldown_scope = "daily";
+          status.updated_at = Date.now();
+        }
         await saveGenerationStatus(env, status);
-        if (status.state !== "ready")
+        // Registry (S2): awaited — a failure leaves a durable pending
+        // record that discovery reconciles; it never fails this request.
+        await recordJobRegistryMarker(env, payload);
+        if (status.state !== "ready" && status.state !== "paused_quota")
           await env.OPALREADER_GENERATION.send({
             job_id: payload.job_id,
             segment_index: payload.adaptive_repair ? 0 : ready.findIndex((item) => !item),
           });
         return json(status, 202, origin, env);
+      }
+      if (
+        url.pathname.startsWith("/api/generation/books/") &&
+        url.pathname.endsWith("/jobs") &&
+        request.method === "GET"
+      ) {
+        // Case #4 discovery (Option B): every registered job for a book,
+        // with live summaries + the active quota park. Behind the same
+        // global token check as every other /api route.
+        const bookId = decodeURIComponent(
+          url.pathname.slice("/api/generation/books/".length, -"/jobs".length),
+        );
+        if (!validId(bookId))
+          return json({ error: "Invalid book identifier." }, 400, origin, env);
+        const chapterParam = url.searchParams.get("chapter_index");
+        const chapterIndex = chapterParam === null ? null : Number(chapterParam);
+        return json(
+          await discoverBookJobs(
+            env,
+            bookId,
+            Number.isInteger(chapterIndex) ? chapterIndex : null,
+          ),
+          200,
+          origin,
+          env,
+        );
       }
       if (
         url.pathname.startsWith("/api/generation/jobs/") &&
@@ -3640,6 +4174,10 @@ export default {
             }, 200, origin, env);
           return json({ error: "Generation job not found." }, 404, origin, env);
         }
+        // Case #4 write-through: a status read also guarantees the job's
+        // registry marker (create-if-absent — a PUT only when missing, so
+        // polling stays read-only in the steady state; S2).
+        await ensureJobRegistryMarker(env, status).catch(() => {});
         // Reconcile old-release jobs on status reads too, including parked
         // next chapters and existing quota-paused jobs. Nothing is deleted.
         const generationPayload = await readGenerationPayload(env, jobId);
@@ -3860,7 +4398,51 @@ export default {
         request.method === "POST"
       ) {
         const body = await request.json();
-        const result = await synthesizeAudio(env, "gemini", body);
+        // Case #4 + Rowan S3: this direct endpoint spends the SAME
+        // project quota as the Queue, so the shared park governs it too
+        // (the plan's route list called these the "/api/tts/*" endpoints;
+        // in this Worker they are /api/providers/<provider>/speech, and
+        // only the Gemini one draws on the Gemini daily pool). During an
+        // active park the only way through is the labeled one-call
+        // override — quota_override: "explicit_single" — which the client
+        // sets ONLY from an explicit user tap (voice audition / prosody
+        // compare; audited: gt() has no automatic callers). One request
+        // is one call by construction, and synthesizeAudio's cache check
+        // deduplicates an identical segment+voice to a free HIT. No
+        // automatic path may set the override.
+        const park = await readGeminiQuotaPark(env);
+        if (geminiParkIsActive(park) && body?.quota_override !== "explicit_single")
+          return json(
+            {
+              error: `Gemini daily quota is parked until ~${parkUntilLabel(park)}. Direct calls are paused too; an explicit single-segment retry may still make one test call.`,
+              code: "quota_parked",
+              quota_park: park,
+            },
+            429,
+            origin,
+            env,
+          );
+        let result;
+        try {
+          result = await synthesizeAudio(env, "gemini", body);
+        } catch (error) {
+          // An override call that meets a daily 429 re-parks from the new
+          // evidence (monotone), exactly like the Queue path.
+          if (error?.quotaExceeded) {
+            const cooldown = gemini429Cooldown(error, 1);
+            if (cooldown.scope === "daily")
+              await recordGeminiQuotaPark(env, {
+                parked_until: cooldown.retryAt,
+                model: body?.model_id || null,
+                route: "direct",
+                job_id: null,
+                at: Date.now(),
+                retry_after_seconds: Number(error?.retryAfterSeconds) || null,
+                quota_metrics: [], stated_limits: [],
+              });
+          }
+          throw error;
+        }
         return relay(result.body, 200, audioContentType(result.audioFormat), origin, env, {
           "X-OpalReader-Cache": result.cache,
           ...(result.calculated_cost == null ? {} : { "X-OpalReader-Cost": String(result.calculated_cost) }),
