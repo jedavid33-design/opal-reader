@@ -1755,7 +1755,13 @@ async function resumeChapterQuota(i){
 }
 
 const watchPollAt=new Map();
-let jobDiscoveryAt=0;
+// Rowan review fix (Case #4): the discovery throttle is PER BOOK. A
+// single global timestamp let opening Book B within 45s of discovering
+// Book A suppress B's first discovery entirely — and with no locally
+// known job in B, no later poll was guaranteed, so a remote parked job
+// in B could stay invisible indefinitely. Keyed by book id, every book
+// gets its own initial discovery the moment it is opened.
+const jobDiscoveryAt=new Map();
 // Case #4 §4.3: fetch the Worker's job registry for the open book
 // (throttled; also refreshed on visibility regain via Ye). Discovered
 // jobs join the runtime watchlist, so a parked job this device never
@@ -1764,8 +1770,8 @@ let jobDiscoveryAt=0;
 async function refreshChapterJobDiscovery(force=false){
   if(!a.book?.id||!a.apiBase)return;
   const now=Date.now();
-  if(!force&&now-jobDiscoveryAt<45000)return;
-  jobDiscoveryAt=now;
+  if(!force&&now-(jobDiscoveryAt.get(a.book.id)||0)<45000)return;
+  jobDiscoveryAt.set(a.book.id,now);
   try{
     const res=await(await be(a.apiBase,a.accessToken,
       "/api/generation/books/"+encodeURIComponent(a.book.id)+"/jobs")).json();
@@ -1776,7 +1782,15 @@ async function refreshChapterJobDiscovery(force=false){
     }
   }catch{/* discovery unavailable: slot-only behavior, as before */}
 }
-function ct(){clearTimeout(a.generationPoll);const active=a.book?.chapters.some(c=>[c.generation,c.replacementGeneration].some(r=>["queued","generating"].includes(r?.state)))||a.book?.continueSession?.state==="running";
+function ct(){clearTimeout(a.generationPoll);const continueOwned=id=>a.book?.continueSession?.jobs?.some(j=>j.jobId===id);
+// Rowan review fix (Case #4): "active" is derived from EVERY known job
+// (knownChapterJobs — slots ∪ watchlist), not only the two slots. A
+// queued/generating job evicted from both slots by a later job is
+// still followed by Ye(), so it must also keep the polling timer
+// alive; before, its timer simply never scheduled. Continue-owned jobs
+// are excluded here — refreshContinueSession polls them, and a running
+// session already counts as active via the check at the end.
+const active=a.book?.chapters.some(c=>knownChapterJobs(c).some(j=>["queued","generating"].includes(j.state)&&!j.continueSessionId&&!continueOwned(j.jobId)))||a.book?.continueSession?.state==="running";
 // Case #4 §4.3: a book whose only jobs are parked still gets a slow
 // poll (60s, visible only). Before, ct() scheduled nothing in that
 // state — the timer died and parked jobs were never re-checked.
@@ -1787,19 +1801,37 @@ if(active&&document.visibilityState!=="hidden")a.generationPoll=setTimeout(Ye,25
 // with GETs only — never a POST. Parked jobs poll at most once a
 // minute; Continue-session jobs are owned by refreshContinueSession
 // and are never touched here.
+// Rowan review fixes (Case #4):
+//  (1) Terminal jobs (ready/partial/failed) are NEVER polled from the
+//      watchlist. Discovery can surface many historical jobs; polling
+//      them burns a status GET every cycle, forever. A slot job's own
+//      terminal transition still lands through the slot loop above —
+//      it polls while the slot reads queued/generating — so chapter
+//      completion renders exactly as before.
+//  (2) A fetched status is merged through lt() ONLY into a slot the
+//      job actually owns (its own generation/replacement slot), or
+//      adopted into an EMPTY generation slot. A job occupying neither
+//      slot updates the watchlist only. Discovery summaries omit
+//      `error`, so a fetched `error: null` otherwise counted as a
+//      "change" and lt() painted an old finished job over the
+//      chapter's current, unrelated generation slot.
+const TERMINAL_JOB_STATES=["ready","partial","failed"];
 for(const[c,r]of a.book.chapters.entries()){
   const watched=chapterJobWatch.get(r);if(!watched)continue;
   for(const[jobId,summary]of watched){
     if(a.book.continueSession?.jobs?.some(j=>j.jobId===jobId))continue;
-    const inSlot=r.generation?.jobId===jobId||r.replacementGeneration?.jobId===jobId;
+    if(TERMINAL_JOB_STATES.includes(summary.state))continue;
+    const isRepSlot=r.replacementGeneration?.jobId===jobId;
+    const inSlot=isRepSlot||r.generation?.jobId===jobId;
     if(inSlot&&["queued","generating"].includes(summary.state))continue;
     if(summary.state==="paused_quota"&&Date.now()-(watchPollAt.get(jobId)||0)<60000)continue;
     watchPollAt.set(jobId,Date.now());
     try{
       const l=await kr(a.apiBase,a.accessToken,jobId);
       noteChapterJob(r,l);
-      if(l.state!==summary.state||l.completed!==summary.completed||l.error!==summary.error)
-        {await lt(c,l,{replacement:r.replacementGeneration?.jobId===jobId});scheduleQuotaBadgeRefresh();e=!0}
+      const ownsSlot=inSlot||!r.generation?.jobId;
+      if(ownsSlot&&(l.state!==summary.state||l.completed!==summary.completed||l.error!==summary.error))
+        {await lt(c,l,{replacement:isRepSlot});scheduleQuotaBadgeRefresh();e=!0}
     }catch{/* silent: the next poll cycle retries */}
   }
 }
