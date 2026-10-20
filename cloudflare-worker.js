@@ -2291,6 +2291,133 @@ async function reserveGeminiQueuePace(env) {
   }finally{await releaseProcessingLease(env,"gemini-global-pacing","reservation")}
 }
 
+
+// --- Case #4 final review (Rowan Blocker 1): inline split-before-advance
+// in the ordinary generation path ---------------------------------------
+// naturalBlockedSplitPoint and splitSpeechMarkup below are verbatim ports
+// of the client's functions (the same pair the client repair planner
+// uses), and plainSpeechText is byte-identical to the client's
+// plainSpeech -- so a split computed here yields exactly the pieces, and
+// via the shared fingerprint formula sha256(speechText +
+// JSON.stringify({provider, voice, model, rate: 1, style})) exactly the
+// cache keys, the client planner would produce for the same passage.
+// Book text is never rewritten: a split only cuts at an existing
+// boundary and trims the halves, preserving wording, punctuation, and
+// reading order.
+function naturalBlockedSplitPoint(text,minPart=140){
+  const s=String(text||""),mid=s.length/2,candidates=[];
+  const add=p=>{if(p>=minPart&&s.length-p>=minPart)candidates.push(p)};
+  for(const m of s.matchAll(/\n\s*\n/g))add(m.index+m[0].length);
+  if(!candidates.length)for(const m of s.matchAll(/[.!?]["'”’)]?\s+/g))add(m.index+m[0].length);
+  if(!candidates.length)for(const m of s.matchAll(/\s+/g))add(m.index+m[0].length);
+  if(!candidates.length)return-1;
+  return candidates.reduce((best,p)=>Math.abs(p-mid)<Math.abs(best-mid)?p:best,candidates[0]);
+}
+function splitSpeechMarkup(raw,plainIndex){
+  const s=String(raw||""),OPEN="<emphasis>",CLOSE="</emphasis>";let pos=0,plain=0,inEm=!1;
+  while(pos<s.length&&plain<plainIndex){
+    if(s.startsWith(OPEN,pos)){inEm=!0;pos+=OPEN.length;continue}
+    if(s.startsWith(CLOSE,pos)){inEm=!1;pos+=CLOSE.length;continue}
+    plain++;pos++;
+  }
+  let left=s.slice(0,pos),right=s.slice(pos);
+  if(inEm){left+=CLOSE;right=OPEN+right}
+  return[left.trim(),right.trim()];
+}
+
+// Status-entry fields that carry a generation job's inline split tree
+// to the client. When a job carrying these finishes, the client expands
+// the chapter root into the tree's terminal leaves (applyInlineSplits)
+// -- the same chapter surgery adaptive repairs get. The slim status
+// rewrites in processGenerationJobLocked spread-preserve these fields.
+function inlineTreeMeta(entry) {
+  if (!entry || typeof entry.repair_path !== "string") return {};
+  return {
+    repair_path: entry.repair_path,
+    repair_source_index: entry.repair_source_index,
+    ...(typeof entry.speech_text === "string"
+      ? { speech_text: entry.speech_text } : {}),
+  };
+}
+
+async function saveGenerationPayload(env, payload, status) {
+  await env.OPALREADER_STORAGE.put(
+    generationPayloadKey(payload.job_id),
+    JSON.stringify({ ...payload, status }),
+    { httpMetadata: { contentType: "application/json" } },
+  );
+}
+
+// Resolve a POLICY_BLOCK on an ordinary generation segment inline:
+// split the segment at a safe natural boundary and splice the two
+// children into the job's segment arrays (pre-order, immediately after
+// the parent), so the job drains the whole split tree depth-first
+// BEFORE the next original segment is attempted -- the ordering the
+// adaptive-repair lane already had, now in the generation path itself,
+// for Standard and Batch jobs alike (children inherit the job's mode).
+// Returns true when a split was spliced in. False means no safe split
+// remains -- bounded exactly like the client planner (path length < 12,
+// both halves >= 140 plain characters) -- and the caller falls back to
+// marking the segment blocked; only THEN may the job advance past that
+// original segment.
+async function tryInlineGenerationSplit(env, payload, status, index) {
+  const segment = payload.segments?.[index];
+  if (!segment || segment.provider !== "gemini") return false;
+  const path = typeof segment.repair_path === "string" ? segment.repair_path : "";
+  if (path.length >= 12) return false;
+  // Hard growth bound so one hostile passage cannot expand a job
+  // without limit (the client planner's node cap is the same idea).
+  if ((status.segments || []).length >= 200) return false;
+  const plain = plainSpeechText(segment.text);
+  const cut = naturalBlockedSplitPoint(plain);
+  if (cut < 0) return false;
+  const halves = splitSpeechMarkup(segment.text, cut);
+  if (!Array.isArray(halves) || halves.length !== 2) return false;
+  if (halves.some((half) => plainSpeechText(half).trim().length < 140)) return false;
+  const sourceIndex = Number.isInteger(segment.repair_source_index)
+    ? segment.repair_source_index
+    : Number.isInteger(segment.segment_index) ? segment.segment_index : index;
+  const cfgJson = JSON.stringify({
+    provider: segment.provider, voice: segment.voice_id,
+    model: segment.model_id, rate: 1, style: segment.style_direction || "",
+  });
+  const parentPlainLength = Math.max(1, plain.trim().length);
+  const children = [];
+  for (const [side, raw] of [["L", halves[0]], ["R", halves[1]]]) {
+    const fingerprint = await sha256HexText(raw + cfgJson);
+    const child = { ...segment };
+    delete child.queue_job_id;
+    delete child.retry_attempt;
+    child.text = raw;
+    child.cache_key = fingerprint;
+    child.fingerprint = fingerprint;
+    child.repair_path = path + side;
+    child.repair_source_index = sourceIndex;
+    child.repair_parent = index;
+    child.estimated_cost = (Number(segment.estimated_cost) || 0) *
+      (plainSpeechText(raw).trim().length / parentPlainLength);
+    children.push(child);
+  }
+  payload.segments.splice(index + 1, 0, children[0], children[1]);
+  status.segments.splice(index + 1, 0, ...children.map((child) => ({
+    cache_key: child.cache_key, state: "queued",
+    repair_path: child.repair_path,
+    repair_source_index: sourceIndex,
+    speech_text: child.text,
+  })));
+  status.segments[index] = {
+    cache_key: segment.cache_key, state: "split",
+    repair_path: path, repair_source_index: sourceIndex,
+  };
+  status.inline_split = true;
+  payload.inline_split = true;
+  status.total = status.segments.filter((item) => item.state !== "split").length;
+  status.completed = status.segments.filter((item) => item.state === "ready").length;
+  addGenerationTrace(status, "inline_split", segment);
+  await saveGenerationPayload(env, payload, status);
+  return true;
+}
+
 function adaptiveRepairCounts(status) {
   const active=(status.segments||[]).filter(x=>!["dormant","split","skipped"].includes(x.state));
   status.completed=active.filter(x=>x.state==="ready").length;
@@ -2736,7 +2863,10 @@ async function processGenerationJobLocked(
     // Adaptive jobs must always drain the earliest pending tree leaf.
     // Delayed/duplicate Queue deliveries with a later index cannot skip a
     // blocked parent's split children and move to the next source segment.
-    activeIndex = payload.adaptive_repair
+    // The same holds once an ordinary generation job has split a segment
+    // inline (Blocker 1): its children sit immediately after their parent
+    // in pre-order and must drain before the next original segment.
+    activeIndex = payload.adaptive_repair || payload.inline_split === true
       ? nextGenerationSegmentIndex(status.segments)
       : requestedIndex >= 0 &&
         !generationSegmentTerminal(status.segments?.[requestedIndex])
@@ -2881,6 +3011,7 @@ async function processGenerationJobLocked(
     status.segments[activeIndex] = {
       cache_key: segment.cache_key,
       state: "ready",
+      ...inlineTreeMeta(status.segments[activeIndex]),
       provider_request_id: result?.provider_request_id || null,
       model: result?.model || segment.model_id || null,
     };
@@ -2952,10 +3083,29 @@ async function processGenerationJobLocked(
         await saveGenerationStatus(env,status);
         return {status,next};
       }
+      if (payload.adaptive_repair !== true && index >= 0 && segment) {
+        // Blocker 1: an ordinary generation job resolves a blocked
+        // segment's split tree inline, depth-first, before advancing
+        // to the next original segment. Only when no safe split
+        // remains does it fall through to marking the segment blocked.
+        const didInlineSplit =
+          await tryInlineGenerationSplit(env, payload, status, index);
+        if (didInlineSplit) {
+          const next = nextGenerationSegmentIndex(status.segments);
+          if (next < 0) finishGenerationState(status);
+          else { status.state = "queued"; status.error = null; }
+          status.next_retry_at = next >= 0
+            ? Date.now() + chapterNextPace(payload, next) * 1000 : null;
+          status.updated_at = Date.now();
+          await saveGenerationStatus(env, status);
+          return { status, next };
+        }
+      }
       if (index >= 0 && segment) {
         status.segments[index] = {
           cache_key: segment.cache_key,
           state: "blocked",
+          ...inlineTreeMeta(status.segments[index]),
           error: error.message || "Gemini blocked this segment.",
           block_reason: error.blockReason || "PROHIBITED_CONTENT",
           finish_reason: error.finishReason || "UNKNOWN",
@@ -4210,7 +4360,7 @@ export default {
                 hasCachedAudio(env, segment.cache_key),
               ),
             );
-            if (ready.every(Boolean)) {
+            if (ready.every(Boolean) && !payload.inline_split) {
               status = {
                 ...status,
                 state: "ready",
