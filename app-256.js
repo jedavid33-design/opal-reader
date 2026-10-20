@@ -148,6 +148,12 @@ if(i.jobId&&l.jobId===i.jobId){if(Number(i.completed)>Number(l.completed))l.comp
 const _ap=(u,o,src=u)=>{const t=e.segments[u];if(!t)return;if(o?.state==="ready"&&o.cache_key){t.audioKey=o.cache_key;t.audioStale=!1;const fp=i.segmentFingerprints?.[src];t.generationFingerprint=fp||t.generationFingerprint||o.cache_key;o.provider_request_id&&(t.providerRequestId=o.provider_request_id);o.model&&(t.generatedModel=o.model);delete t.generationBlocked;delete t.generationFailure}else if(o?.state==="blocked"){t.generationBlocked={error:o.error||"Gemini blocked this segment.",blockReason:o.block_reason||"PROHIBITED_CONTENT",finishReason:o.finish_reason||"UNKNOWN",model:o.model||null,jobId:l.jobId||null};delete t.generationFailure;recordGeminiFailure(e,t,{...t.generationBlocked}, "policy_block")}else if(o?.state==="provider_failed"||o?.provider_internal){t.generationFailure={error:o.error||"Gemini internal error.",kind:"provider_internal",model:o.model||null,jobId:l.jobId||null};delete t.generationBlocked;recordGeminiFailure(e,t,{...t.generationFailure},"provider_internal")}};
 const keys=Array.isArray(i.segmentKeys)&&i.segmentKeys.length?i.segmentKeys:null,legacy=keys&&keys.every(k=>/^[a-f0-9]{64}$/.test(k||""));
 const exactIndices=Array.isArray(i.segmentIndices)&&i.segmentIndices.length===(c?.segments||[]).length;
+// Case #4 final integration (Rowan): an inline-split status whose tree
+// has NOT been applied to the chapter yet (mapping not aligned to the
+// full, grown status array). Such a status must never be merged
+// through the job's original root mapping by status position — the
+// array has shifted underneath it.
+const inlinePending=c?.inline_split===true&&!exactIndices;
 
 if(i.scope==="background_repair"||c.adaptive_repair){ /* mapped by verified repair roots */ }
 else if(exactIndices){
@@ -159,12 +165,39 @@ else if(exactIndices){
     if(["ready","blocked","provider_failed"].includes(o?.state)||o?.provider_internal)_ap(idx,o,u);
   });
 }
+else if(inlinePending){
+  // Tree pending: split parents and ALL their children are deferred —
+  // a child's audio belongs to a chapter piece that does not exist
+  // until applyInlineSplits expands the tree at ready/partial, and the
+  // child's cache key stays on the job status (and in R2) until then,
+  // so a quota park mid-tree loses nothing and Resume re-derives the
+  // finished tree from the same status. Only roots that never split
+  // merge here, each resolved by JOB ORDER (the k-th root entry ↔ the
+  // k-th staged root), never by its shifted status position, and
+  // double-checked against the staged identity when keys exist.
+  const isChild=o=>typeof o?.repair_path==="string"&&o.repair_path.length>0;
+  let byId=null;
+  if(!Array.isArray(i.segmentIndices)&&keys){byId=new Map();e.segments.forEach((t,u)=>{if(t==null)return;const k=segIdentity(t,e.pov),q=byId.get(k)||[];q.push(u);byId.set(k,q)})}
+  let rootPos=-1;
+  (c.segments||[]).forEach(o=>{
+    if(isChild(o))return;
+    rootPos++;
+    if(o?.state==="split")return;
+    if(!["ready","blocked","provider_failed"].includes(o?.state)&&!o?.provider_internal)return;
+    let idx=null;
+    if(Array.isArray(i.segmentIndices))idx=i.segmentIndices[rootPos];
+    else if(byId){const q=byId.get(keys[rootPos]);idx=q?q.shift():null}
+    if(!Number.isInteger(idx)||idx<0||idx>=e.segments.length)return;
+    if(keys&&segIdentity(e.segments[idx],e.pov)!==keys[rootPos])return;
+    _ap(idx,o,rootPos);
+  });
+}
 else if(legacy||!keys){if((c?.segments||[]).length===(e.segments||[]).length)c.segments.forEach((o,u)=>_ap(u,o,u))}
 else{const byId=new Map();e.segments.forEach((t,u)=>{if(t==null)return;const k=segIdentity(t,e.pov),q=byId.get(k)||[];q.push(u);byId.set(k,q)});c.segments.forEach((o,u)=>{if(!["ready","blocked","provider_failed"].includes(o?.state)&&!o?.provider_internal)return;const q=byId.get(keys[u]),idx=q?.shift();if(idx!=null)_ap(idx,o,u)})}
 // Legacy pre-v1.4.21 failed jobs did not tag the segment. Recover the first
 // unfinished job member from the stored segment keys when the chapter error
 // itself clearly says Gemini 500/internal error.
-if(c?.state==="failed"&&/Gemini error \(500\)|internal error has occurred/i.test(String(c?.error||""))&&!e.segments.some(x=>x.generationFailure)){
+if(!inlinePending&&c?.state==="failed"&&/Gemini error \(500\)|internal error has occurred/i.test(String(c?.error||""))&&!e.segments.some(x=>x.generationFailure)){
   const pending=(c?.segments||[]).findIndex(o=>!["ready","blocked"].includes(o?.state));
   if(pending>=0){
     if(keys&&!legacy){
@@ -1034,11 +1067,18 @@ function Pr(){return`${Tt()}<div class="section-head"><h2>Chapters</h2><button c
   return{job_id:await tt(JSON.stringify({release:GENERATION_RELEASE_ID,mode:a.geminiLane,book:a.book.id,chapter:e,keys:r.map(sg=>sg.cache_key)})),...generationReleaseStamp(),generation_mode:a.geminiLane,book_id:a.book.id,book_title:a.book.title,
     chapter_index:e,chapter_number:e+1,chapter_title:c.title,segments:r};
 }
-async function lt(e,c,{replacement:r=!1}={}){const m=a.book.chapters[e],s=r?m.replacementGeneration||{}:m.generation||{},i=Number(s.recordedCost)||0,l=Number(c.generated_cost)||0,o=Math.max(0,l-i);if(c?.state==="paused_update"){m.autoSplitEnabled=false;m.autoSplitPauseReason="update";m.autoSplitStatus="Generation paused for update. Saved audio is intact; restart manually.";}if(c?.inline_split===true&&typeof applyInlineSplits==="function")applyInlineSplits(m,s,c);if(!r&&s.scope==="background_repair"&&c.adaptive_repair){const ok=applyAdaptiveRepair(m,s,c);if(!ok&&["ready","partial"].includes(c?.state)&&!s.repairApplied){m.autoSplitEnabled=false;m.autoSplitPauseReason="error";m.autoSplitStatus="Background repair audio is saved, but passage mapping changed. Copy diagnostics before retrying.";}}// Case #4: every status merged through lt() joins the chapter's job
+async function lt(e,c,{replacement:r=!1}={}){const m=a.book.chapters[e],s=r?m.replacementGeneration||{}:m.generation||{},i=Number(s.recordedCost)||0,l=Number(c.generated_cost)||0,o=Math.max(0,l-i);if(c?.state==="paused_update"){m.autoSplitEnabled=false;m.autoSplitPauseReason="update";m.autoSplitStatus="Generation paused for update. Saved audio is intact; restart manually.";}if(c?.inline_split===true&&typeof ensureInlineMapping==="function")await ensureInlineMapping(e,m,s,c);if(c?.inline_split===true&&typeof applyInlineSplits==="function")applyInlineSplits(m,s,c);if(!r&&s.scope==="background_repair"&&c.adaptive_repair){const ok=applyAdaptiveRepair(m,s,c);if(!ok&&["ready","partial"].includes(c?.state)&&!s.repairApplied){m.autoSplitEnabled=false;m.autoSplitPauseReason="error";m.autoSplitStatus="Background repair audio is saved, but passage mapping changed. Copy diagnostics before retrying.";}}// Case #4: every status merged through lt() joins the chapter's job
 // watchlist. Guarded typeof: lt() is also exercised by extracted-code
 // harnesses that don't provide the watchlist helper — the watchlist is
 // runtime-only and rebuildable, so skipping the note there is safe.
-if(typeof noteChapterJob==="function")noteChapterJob(m,c);or(m,c,{replacement:r,recordedCost:l}),o&&(Ve().spent+=o,await Ae());if(c?.state==="failed"&&quotaQueueFailure(c)){m.autoSplitEnabled=false;m.autoSplitPauseReason="quota";m.autoSplitStatus="Automatic splitting paused: Gemini request quota reached."}await pe();scheduleAutoSplit(e)}
+if(typeof noteChapterJob==="function")noteChapterJob(m,c);or(m,c,{replacement:r,recordedCost:l}),o&&(Ve().spent+=o,await Ae());
+// Case #4 final integration: if the slot record was only created by
+// the merge above (a job first seen through discovery), it carried no
+// staged mapping into applyInlineSplits. Give a finished tree one
+// second chance against the record that now exists, then re-merge so
+// the leaves' results land through the aligned mapping. One-shot:
+// applyInlineSplits itself refuses a second expansion.
+if(c?.inline_split===true&&["ready","partial"].includes(c?.state)&&typeof ensureInlineMapping==="function"&&typeof applyInlineSplits==="function"){const s2=r?m.replacementGeneration:m.generation;if(s2&&!s2.inlineApplied){await ensureInlineMapping(e,m,s2,c);if(applyInlineSplits(m,s2,c))or(m,c,{replacement:r,recordedCost:l})}}if(c?.state==="failed"&&quotaQueueFailure(c)){m.autoSplitEnabled=false;m.autoSplitPauseReason="quota";m.autoSplitStatus="Automatic splitting paused: Gemini request quota reached."}await pe();scheduleAutoSplit(e)}
 const adaptiveQueueStarting=new Set();
 let adaptiveWorkerCheck={ok:false,at:0};
 async function adaptiveWorkerReady(){
@@ -1093,6 +1133,69 @@ async function adaptiveRepairPlan(chapterIndex){
       begin,count:forest.length});
   }
   return {nodes,roots};
+}
+// Case #4 final integration (Rowan): applyInlineSplits consumes a
+// root-to-chapter mapping (local.segmentIndices, one chapter index per
+// job root, in job order). New jobs are staged WITH it (Mr,
+// generateRestOfChapter, Wr), but jobs staged before that — or first
+// seen through discovery, where the slot record was rebuilt from a
+// status alone — may lack it. Derive it here, at reconciliation time,
+// rather than abandoning those jobs' split trees:
+//   1. from the staged segmentKeys (text identities, job order): each
+//      root identity is matched against chapter segments in order;
+//      duplicate texts consume in chapter order, and the result must
+//      be strictly increasing (job order IS chapter order).
+//   2. failing that, from the job status itself: recompute the chapter
+//      payload with qe() and match the roots' cache keys against it in
+//      order, cross-checked against repair_source_index where a root
+//      carries one (split parents keep their root's cache key, and
+//      every tree entry's repair_source_index is its root's payload
+//      segment_index, which for ordinary jobs IS the chapter index).
+// Any doubt (edited text, changed voices, ambiguous order) leaves the
+// record untouched: applyInlineSplits stays closed and or()'s inline
+// guard keeps merges identity-safe in the meantime.
+function inlineRootEntries(status){
+  return (Array.isArray(status?.segments)?status.segments:[])
+    .filter(o=>!(typeof o?.repair_path==="string"&&o.repair_path.length>0));
+}
+function deriveIndicesFromKeys(ch,keys,count){
+  if(!Array.isArray(keys)||!count||keys.length!==count)return null;
+  const byId=new Map();
+  ch.segments.forEach((t,u)=>{if(t==null)return;const k=segIdentity(t,ch.pov),q=byId.get(k)||[];q.push(u);byId.set(k,q)});
+  const out=[];
+  for(const k of keys){const q=byId.get(k);if(!q||!q.length)return null;out.push(q.shift())}
+  for(let i=1;i<out.length;i++)if(out[i]<=out[i-1])return null;
+  return out;
+}
+async function ensureInlineMapping(e,ch,local,status){
+  try{
+    if(!local||typeof local!=="object"||local.inlineApplied)return;
+    if(local.scope==="background_repair"||status?.adaptive_repair)return;
+    const roots=inlineRootEntries(status);
+    if(!roots.length||!Array.isArray(ch?.segments))return;
+    const existing=Array.isArray(local.segmentIndices)?local.segmentIndices:null;
+    if(existing&&existing.length===roots.length){
+      const keys=Array.isArray(local.segmentKeys)?local.segmentKeys:null;
+      const ok=existing.every((idx,k)=>Number.isInteger(idx)&&idx>=0&&idx<ch.segments.length
+        &&(!keys||keys.length!==roots.length||segIdentity(ch.segments[idx],ch.pov)===keys[k]));
+      if(ok)return;
+    }
+    const fromKeys=deriveIndicesFromKeys(ch,local.segmentKeys,roots.length);
+    if(fromKeys){local.segmentIndices=fromKeys;return}
+    if(typeof qe!=="function")return;
+    const payload=await qe(e),segs=Array.isArray(payload?.segments)?payload.segments:[];
+    let cursor=0;const out=[];
+    for(const root of roots){
+      let found=-1;
+      for(let j=cursor;j<segs.length;j++){
+        if(segs[j].cache_key===root.cache_key||segs[j].fingerprint===root.cache_key){found=j;break}
+      }
+      if(found<0)return;
+      if(Number.isInteger(root.repair_source_index)&&segs[found].segment_index!==root.repair_source_index)return;
+      out.push(segs[found].segment_index);cursor=found+1;
+    }
+    if(out.length===roots.length)local.segmentIndices=out;
+  }catch{/* best-effort: or()'s inline guard keeps merges safe without a mapping */}
 }
 function applyInlineSplits(ch,local,status){
   // Case #4 final review (Rowan Blocker 1): an ordinary generation job
@@ -2023,7 +2126,7 @@ for(const[c,r]of a.book.chapters.entries()){
     }catch{/* silent: the next poll cycle retries */}
   }
 }
-e&&se();await refreshContinueSession();for(const [idx,ch] of a.book.chapters.entries())if(ch.autoSplitEnabled&&!a.book.continueSession?.jobs?.some(j=>j.chapterIndex===idx&&["parked","queued","generating","paused_quota"].includes(j.state)))scheduleAutoSplit(idx);ct()}async function Mr(e,{forceFresh=!1}={}){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet. Add the OPALREADER_GENERATION Queue binding to the Worker.");const r=await qe(e,{forceFresh}),m=r.segments.filter((u,_)=>{const k=c.segments[_],current=k.generationFingerprint||k.audioKey;return forceFresh||!(c.generation?.segments?.[_]?.state==="ready"&&c.generation.segments[_].cache_key===u.cache_key)&&(k.audioStale||current!==u.fingerprint)}).reduce((u,_)=>u+_.estimated_cost,0),s=Ve();if(a.monthlyCap>0&&s.spent+m>a.monthlyCap&&!confirm(`This chapter is estimated to bring locally tracked generation to ${Pe(s.spent+m)}, above your ${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;const i=c.generation?.jobId===r.job_id&&Number(c.generation.recordedCost)||0,l=c.generation?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.generation={jobId:r.job_id,state:"queued",completed:l&&Number(c.generation.completed)||0,total:r.segments.length,segmentKeys:c.segments.map(sg=>segIdentity(sg,c.pov)),segmentFingerprints:r.segments.map(sg=>sg.fingerprint),recordedCost:i,error:null},await pe(),se();try{const o=await xt(a.apiBase,a.accessToken,r);await lt(e,o),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.generation={...c.generation,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the queue acknowledgement, but the chapter job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.generation={...c.generation||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}async function generateRestOfChapter(e,startIndex){
+e&&se();await refreshContinueSession();for(const [idx,ch] of a.book.chapters.entries())if(ch.autoSplitEnabled&&!a.book.continueSession?.jobs?.some(j=>j.chapterIndex===idx&&["parked","queued","generating","paused_quota"].includes(j.state)))scheduleAutoSplit(idx);ct()}async function Mr(e,{forceFresh=!1}={}){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet. Add the OPALREADER_GENERATION Queue binding to the Worker.");const r=await qe(e,{forceFresh}),m=r.segments.filter((u,_)=>{const k=c.segments[_],current=k.generationFingerprint||k.audioKey;return forceFresh||!(c.generation?.segments?.[_]?.state==="ready"&&c.generation.segments[_].cache_key===u.cache_key)&&(k.audioStale||current!==u.fingerprint)}).reduce((u,_)=>u+_.estimated_cost,0),s=Ve();if(a.monthlyCap>0&&s.spent+m>a.monthlyCap&&!confirm(`This chapter is estimated to bring locally tracked generation to ${Pe(s.spent+m)}, above your ${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;const i=c.generation?.jobId===r.job_id&&Number(c.generation.recordedCost)||0,l=c.generation?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.generation={jobId:r.job_id,state:"queued",completed:l&&Number(c.generation.completed)||0,total:r.segments.length,segmentKeys:c.segments.map(sg=>segIdentity(sg,c.pov)),segmentFingerprints:r.segments.map(sg=>sg.fingerprint),segmentIndices:r.segments.map(sg=>sg.segment_index),recordedCost:i,error:null},await pe(),se();try{const o=await xt(a.apiBase,a.accessToken,r);await lt(e,o),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.generation={...c.generation,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the queue acknowledgement, but the chapter job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.generation={...c.generation||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}async function generateRestOfChapter(e,startIndex){
   const ch=a.book.chapters[e];
   try{
     if(!ch)throw new Error("That chapter could not be found.");
@@ -2047,7 +2150,7 @@ e&&se();await refreshContinueSession();for(const [idx,ch] of a.book.chapters.ent
     if(!confirm(`Generate the rest of the chapter from here via ${a.geminiLane==="batch"?"Gemini Batch (asynchronous)":"Standard"}? Reader will queue ${selected.length} missing or stale segment${selected.length===1?"":"s"} (${range}) and reuse everything already generated. Estimated new synthesis: about ${Pe(cost)}.`))return;
     const jobId=await tt(JSON.stringify({release:GENERATION_RELEASE_ID,book:a.book.id,chapter:e,from:Math.max(0,Number(startIndex)||0),keys:selected.map(x=>x.cache_key)}));
     const payload={...full,job_id:jobId,segments:selected};
-    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;ch.generation={jobId,state:"queued",completed:0,total:selected.length,segmentKeys,segmentFingerprints,recordedCost:0,error:null,rangeStart:Math.max(0,Number(startIndex)||0)};
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;ch.generation={jobId,state:"queued",completed:0,total:selected.length,segmentKeys,segmentFingerprints,segmentIndices:selected.map(x=>x.segment_index),recordedCost:0,error:null,rangeStart:Math.max(0,Number(startIndex)||0)};
     await pe();se();
     try{
       const status=await xt(a.apiBase,a.accessToken,payload);
@@ -2066,7 +2169,7 @@ e&&se();await refreshContinueSession();for(const [idx,ch] of a.book.chapters.ent
     await pe();se();alert(err.message||"The rest of the chapter could not be queued.");
   }
 }
-async function Wr(e){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet.");const r=await qe(e),m=c.segments.map(k=>k.generationFingerprint||k.audioKey),s=r.segments.map(k=>k.fingerprint);if(m.every((k,w)=>k===s[w]))return alert("This chapter already uses the current cast.");const i=r.segments.reduce((k,w)=>k+w.estimated_cost,0);if(!confirm(`Regenerate this chapter with the current cast? New synthesis may use provider credits (about ${Pe(i)} gross). The existing audio stays playable until the replacement is fully ready.`))return;const l=c.segments.map(sg=>segIdentity(sg,c.pov)),o=c.replacementGeneration,u=o?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.replacementGeneration={jobId:r.job_id,state:"queued",completed:u&&Number(o.completed)||0,total:r.segments.length,segmentKeys:l,segmentFingerprints:r.segments.map(sg=>sg.fingerprint),recordedCost:u&&Number(o.recordedCost)||0,error:null},await pe(),se();try{const status=await xt(a.apiBase,a.accessToken,r);await lt(e,status,{replacement:!0}),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.replacementGeneration={...c.replacementGeneration,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the regeneration acknowledgement, but the replacement job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.replacementGeneration={...c.replacementGeneration||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}function queuedSegmentPayload(e,c,j){
+async function Wr(e){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet.");const r=await qe(e),m=c.segments.map(k=>k.generationFingerprint||k.audioKey),s=r.segments.map(k=>k.fingerprint);if(m.every((k,w)=>k===s[w]))return alert("This chapter already uses the current cast.");const i=r.segments.reduce((k,w)=>k+w.estimated_cost,0);if(!confirm(`Regenerate this chapter with the current cast? New synthesis may use provider credits (about ${Pe(i)} gross). The existing audio stays playable until the replacement is fully ready.`))return;const l=c.segments.map(sg=>segIdentity(sg,c.pov)),o=c.replacementGeneration,u=o?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.replacementGeneration={jobId:r.job_id,state:"queued",completed:u&&Number(o.completed)||0,total:r.segments.length,segmentKeys:l,segmentFingerprints:r.segments.map(sg=>sg.fingerprint),segmentIndices:r.segments.map(sg=>sg.segment_index),recordedCost:u&&Number(o.recordedCost)||0,error:null},await pe(),se();try{const status=await xt(a.apiBase,a.accessToken,r);await lt(e,status,{replacement:!0}),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.replacementGeneration={...c.replacementGeneration,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the regeneration acknowledgement, but the replacement job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.replacementGeneration={...c.replacementGeneration||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}function queuedSegmentPayload(e,c,j){
   const ch=a.book.chapters[e],seg=ch?.segments?.[c],text=seg?.speechText||seg?.text||"";
   return{job_id:j.jobId,diagnostic_job_kind:"single_segment",book_id:a.book.id,book_title:a.book.title,chapter_index:e,chapter_number:e+1,chapter_title:ch.title,segments:[{text,provider:j.provider,voice_id:j.voiceId,voice_name:j.voiceName,language_code:j.locale,model_id:j.model,cache_key:j.cacheKey,fingerprint:j.fingerprint,style_direction:j.styleDirection||"",estimated_cost:Number(j.estimatedCost)||0,pricing_rate:Number(j.pricingRate)||0,usage_type:"book_generation",book_id:a.book.id,book_title:a.book.title,chapter_index:e,chapter_number:e+1,chapter_title:ch.title,segment_index:c,total_segments:ch.segments.length}]};
 }
