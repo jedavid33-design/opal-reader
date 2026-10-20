@@ -195,25 +195,23 @@ async function recordTtsUsage(env, body, details = {}) {
     // success pointer lives in R2 now. Previously this was a KV put on
     // every successful book-generation segment — one of the largest
     // daily write sources. Same gating as the old KV writer: Gemini
-    // provider calls that did not fail, for book_generation only.
+    // provider calls that did not fail, for book_generation only. The
+    // advance is a monotonic compare-and-swap (advanceGeminiLastSuccess)
+    // so concurrent success events can never move the pointer backward.
     if (
       event.provider === "gemini" &&
       event.provider_call &&
       event.request_status !== "failed" &&
       event.usage_type === "book_generation"
     ) {
-      await env.OPALREADER_STORAGE.put(
-        geminiLastSuccessObjectKey,
-        JSON.stringify({
-          timestamp: now,
-          model: event.model,
-          provider_request_id: event.provider_request_id,
-          book_id: event.book_id,
-          chapter_index: event.chapter_index,
-          segment_index: event.segment_index,
-        }),
-        { httpMetadata: { contentType: "application/json" } },
-      );
+      await advanceGeminiLastSuccess(env.OPALREADER_STORAGE, {
+        timestamp: now,
+        model: event.model,
+        provider_request_id: event.provider_request_id,
+        book_id: event.book_id,
+        chapter_index: event.chapter_index,
+        segment_index: event.segment_index,
+      });
     }
   } catch (error) {
     console.warn("TTS usage ledger write failed", error);
@@ -230,6 +228,53 @@ const geminiLastSuccessKey = "quota:gemini:last-success";
 // so the union of both sources is exact, never double-counted.
 const geminiAttemptPrefix = "usage/gemini-attempts/";
 const geminiLastSuccessObjectKey = "usage/gemini-last-success.json";
+// Advance the last-success pointer monotonically (Rowan's pre-deployment
+// check 4, 2026-10-19). Two success events can complete their R2 writes
+// out of order; an unconditional put would let the older event's write,
+// landing last, move the pointer backward. This compare-and-swap —
+// etag-matched conditional put, same pattern as persistMirrorMeta —
+// re-reads on a lost race and yields whenever the stored pointer is
+// already at or past the candidate, so the stored timestamp never
+// decreases. Bounded retries; on persistent contention a later success
+// event advances the pointer instead (every success also writes its own
+// immutable usage-ledger event, so nothing is lost).
+async function advanceGeminiLastSuccess(storage, candidate) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let current = null;
+    let etag = null;
+    try {
+      const object = await storage.get(geminiLastSuccessObjectKey);
+      if (object) {
+        etag = object.etag || null;
+        current = object.json
+          ? await object.json()
+          : JSON.parse(await new Response(object.body).text());
+      }
+    } catch {
+      return;
+    }
+    if ((Number(current?.timestamp) || 0) >= candidate.timestamp) return;
+    let result = null;
+    try {
+      result = await storage.put(
+        geminiLastSuccessObjectKey,
+        JSON.stringify(candidate),
+        {
+          onlyIf: etag
+            ? new Headers({ "If-Match": etag })
+            : new Headers({ "If-None-Match": "*" }),
+          httpMetadata: { contentType: "application/json" },
+        },
+      );
+    } catch {
+      return;
+    }
+    if (result) return;
+    // Lost the race: a concurrent writer created or advanced the
+    // pointer first. Loop re-reads; the max-check above yields if that
+    // write is already newer.
+  }
+}
 async function recordGeminiQuotaAttemptLedger(env, body, model) {
   if (!env.OPALREADER_STORAGE) return;
   try {

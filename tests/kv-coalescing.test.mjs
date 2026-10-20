@@ -616,6 +616,62 @@ test("quota: standard success counts one attempt and sets last-success from the 
   h.restore();
 });
 
+test("quota: concurrent last-success updates never move the pointer backward (reversed completion order)", async () => {
+  // Rowan's pre-deployment check 4 (2026-10-19): two success events whose
+  // pointer writes complete out of order must not regress
+  // last_success_ms. Writer A computes its timestamp first, but its
+  // pointer write lands last.
+  let gate = null;
+  let gateArmed = false;
+  const pointerKey = "usage/gemini-last-success.json";
+  const h = makeHarness(worker, {
+    clockStart: T0,
+    r2Hooks: {
+      onPut: async (key) => {
+        if (gateArmed && key === pointerKey) {
+          gateArmed = false;
+          await gate.promise; // writer A stalls inside its pointer write
+        }
+      },
+    },
+  });
+  const jobA = sha256Hex("quota-last-success-a");
+  await postJob(h, jobA, [makeSegment("ls-a")]);
+  gate = deferred();
+  gateArmed = true;
+  const deliveryA = (async () => {
+    h.queue.pending.sort((a, b) => a.due - b.due);
+    const msg = h.queue.pending.shift();
+    await worker.queue(
+      { messages: [{ body: msg.body, attempts: 1, ack() {}, retry() {} }] },
+      h.env,
+    );
+  })();
+  assert.ok(
+    await spinUntil(() => !gateArmed),
+    "writer A never reached its pointer write",
+  );
+  // Writer B succeeds 5s later and its pointer write lands first.
+  h.clock.advance(5_000);
+  const jobB = sha256Hex("quota-last-success-b");
+  await postJob(h, jobB, [makeSegment("ls-b")]);
+  await h.drain();
+  const afterB = await h.r2.readJson(pointerKey);
+  assert.ok(afterB.timestamp > T0, "writer B never set the pointer");
+  // A resumes and finishes: its older write must not regress the pointer.
+  gate.resolve();
+  await deliveryA;
+  const afterA = await h.r2.readJson(pointerKey);
+  assert.equal(
+    afterA.timestamp,
+    afterB.timestamp,
+    "older success regressed the last-success pointer",
+  );
+  const report = await quotaReport(h);
+  assert.equal(report.last_success_ms, afterB.timestamp);
+  h.restore();
+});
+
 test("quota: standard 429 counts the attempt, records a failed event, sets no success", async () => {
   const h = makeHarness(worker, {
     clockStart: T0,
