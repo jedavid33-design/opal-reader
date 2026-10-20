@@ -1443,6 +1443,21 @@ async function writeMirrorJson(storage, key, value) {
   });
 }
 
+// Merge a bookkeeping patch onto the freshest mirror-meta object. If a
+// writer with a NEWER lock epoch has already persisted, the stale writer
+// yields entirely: its writes must never regress the successor's
+// confirmed stamps or epoch counter.
+async function persistMirrorMeta(storage, metaKey, epoch, patch) {
+  const current = (await readMirrorJson(storage, metaKey)) || {};
+  if ((Number(current.lock_epoch) || 0) > epoch) return false;
+  await writeMirrorJson(storage, metaKey, {
+    ...current,
+    ...patch,
+    lock_epoch: Math.max(epoch, Number(current.lock_epoch) || 0),
+  });
+  return true;
+}
+
 async function readMirrorKvRaw(env, jobId) {
   try {
     const raw = await env.OPALREADER_KV.get(generationStatusKey(jobId));
@@ -1470,9 +1485,10 @@ function mirrorSummaryOf(status) {
           .filter((name) => typeof name === "string" && name),
       ),
     ].sort(),
-    split_count: segments.filter(
-      (segment) => Number.isInteger(segment?.split_of),
-    ).length,
+    // An adaptive split marks the parent segment's state "split" and
+    // grows the active total as its children leave dormancy.
+    split_count: segments.filter((segment) => segment?.state === "split")
+      .length,
   };
 }
 
@@ -1567,13 +1583,22 @@ async function runMirrorAttempt(env, jobId, reason) {
   )
     return { mirrored: false, reason: "retry-floor" };
   // Read-path catch-up is bounded to one attempt per job per minute,
-  // claimed atomically below via the attempt stamp.
+  // claimed atomically below via the attempt stamp. Exception: a
+  // previous attempt that stalled while holding the lock must not block
+  // lock recovery — once its lock has expired, the floor yields to the
+  // steal path below.
   if (
     reason === "catchup" &&
     Number(meta.attempt_at) &&
     now - Number(meta.attempt_at) < MIRROR_RETRY_FLOOR_MS
-  )
-    return { mirrored: false, reason: "attempt-floor" };
+  ) {
+    const lock = await readMirrorJson(storage, lockKey);
+    if (
+      !lock ||
+      now - (Number(lock.acquired_at) || 0) < MIRROR_LOCK_TTL_MS
+    )
+      return { mirrored: false, reason: "attempt-floor" };
+  }
 
   // Acquire the per-job lock: create-if-absent, or steal an expired lock
   // with an etag-matched replace. At most two acquisition attempts.
@@ -1616,16 +1641,24 @@ async function runMirrorAttempt(env, jobId, reason) {
   try {
     // Claim the attempt inside the lock: the attempt stamp enforces the
     // per-minute floor across Worker executions, and the lock epoch is
-    // the fencing token for every write below.
-    meta.attempt_at = Date.now();
-    meta.lock_epoch = epoch;
-    await writeMirrorJson(storage, metaKey, meta);
+    // the fencing token for every write below. The claim merges onto the
+    // freshest meta — if a successor already stole the lock and
+    // persisted newer bookkeeping, this writer adopts it (and its
+    // evaluation below will find nothing to do).
+    await persistMirrorMeta(storage, metaKey, epoch, {
+      attempt_at: Date.now(),
+    });
+    const metaView = (await readMirrorJson(storage, metaKey)) || meta;
     // Evaluate the freshest status under the lock — the pre-check copy
     // above may already be stale.
     const fresh = await readMirrorJson(storage, statusKey);
     if (!fresh) return { mirrored: false, reason: "no-status" };
     const freshKvRaw = await readMirrorKvRaw(env, jobId);
-    const check = evaluateMirror(fresh, freshKvRaw, meta.confirmed || null);
+    const check = evaluateMirror(
+      fresh,
+      freshKvRaw,
+      metaView.confirmed || null,
+    );
     if (!check.needed) return { mirrored: false, reason: "current" };
     if (freshKvRaw != null) {
       let kvVersion = 0;
@@ -1650,9 +1683,10 @@ async function runMirrorAttempt(env, jobId, reason) {
         { expirationTtl: 60 * 60 * 24 * 14 },
       );
     } catch (error) {
-      meta.attempt_failed_at = Date.now();
       try {
-        await writeMirrorJson(storage, metaKey, meta);
+        await persistMirrorMeta(storage, metaKey, epoch, {
+          attempt_failed_at: Date.now(),
+        });
       } catch {}
       console.warn("Generation status KV mirror write failed", error);
       return { mirrored: false, reason: "kv-failed" };
@@ -1660,10 +1694,11 @@ async function runMirrorAttempt(env, jobId, reason) {
     // KV confirmed the write; only now may the confirmed stamps advance,
     // and only while this writer still holds the fence.
     if (await holdsLock()) {
-      meta.confirmed = mirrorSummaryOf(fresh);
-      meta.confirmed_at = Date.now();
-      meta.attempt_failed_at = null;
-      await writeMirrorJson(storage, metaKey, meta);
+      await persistMirrorMeta(storage, metaKey, epoch, {
+        confirmed: mirrorSummaryOf(fresh),
+        confirmed_at: Date.now(),
+        attempt_failed_at: null,
+      });
     }
     return { mirrored: true, reason: "ok" };
   } finally {
