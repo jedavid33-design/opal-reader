@@ -175,18 +175,33 @@ else if(inlinePending){
   // merge here, each resolved by JOB ORDER (the k-th root entry ↔ the
   // k-th staged root), never by its shifted status position, and
   // double-checked against the staged identity when keys exist.
+  // Case #4 re-review (Rowan): segIdentity is text+POV only — it has
+  // no unique segment ID — so with identical twin passages an identity
+  // match does not say WHICH twin a root belongs to, and consuming
+  // matches in chapter order would guess the earliest twin. A root
+  // therefore merges only when its occurrence is FORCED: staged
+  // segmentIndices (a root whose own repair_source_index anchor
+  // contradicts them is deferred), or the unique resolution
+  // resolveIndicesFromKeys computes from the staged keys. An
+  // ambiguous root is deferred — never guessed onto a twin.
   const isChild=o=>typeof o?.repair_path==="string"&&o.repair_path.length>0;
-  let byId=null;
-  if(!Array.isArray(i.segmentIndices)&&keys){byId=new Map();e.segments.forEach((t,u)=>{if(t==null)return;const k=segIdentity(t,e.pov),q=byId.get(k)||[];q.push(u);byId.set(k,q)})}
+  const rootEntries=(c.segments||[]).filter(o=>!isChild(o));
+  let resolved=null;
+  if(Array.isArray(i.segmentIndices)&&i.segmentIndices.length===rootEntries.length){
+    resolved=rootEntries.map((o,k)=>{
+      const anchor=Number.isInteger(o?.repair_source_index)&&o.repair_source_index>=0?o.repair_source_index:null;
+      return anchor!=null&&i.segmentIndices[k]!==anchor?null:i.segmentIndices[k];
+    });
+  }else if(keys&&keys.length===rootEntries.length&&typeof resolveIndicesFromKeys==="function"){
+    resolved=resolveIndicesFromKeys(e,keys,rootEntries);
+  }
   let rootPos=-1;
   (c.segments||[]).forEach(o=>{
     if(isChild(o))return;
     rootPos++;
     if(o?.state==="split")return;
     if(!["ready","blocked","provider_failed"].includes(o?.state)&&!o?.provider_internal)return;
-    let idx=null;
-    if(Array.isArray(i.segmentIndices))idx=i.segmentIndices[rootPos];
-    else if(byId){const q=byId.get(keys[rootPos]);idx=q?q.shift():null}
+    const idx=resolved?resolved[rootPos]:null;
     if(!Number.isInteger(idx)||idx<0||idx>=e.segments.length)return;
     if(keys&&segIdentity(e.segments[idx],e.pov)!==keys[rootPos])return;
     _ap(idx,o,rootPos);
@@ -1141,31 +1156,80 @@ async function adaptiveRepairPlan(chapterIndex){
 // seen through discovery, where the slot record was rebuilt from a
 // status alone — may lack it. Derive it here, at reconciliation time,
 // rather than abandoning those jobs' split trees:
-//   1. from the staged segmentKeys (text identities, job order): each
-//      root identity is matched against chapter segments in order;
-//      duplicate texts consume in chapter order, and the result must
-//      be strictly increasing (job order IS chapter order).
+//   1. from the staged segmentKeys (text identities, job order),
+//      anchored and disambiguated as described below.
 //   2. failing that, from the job status itself: recompute the chapter
-//      payload with qe() and match the roots' cache keys against it in
-//      order, cross-checked against repair_source_index where a root
-//      carries one (split parents keep their root's cache key, and
-//      every tree entry's repair_source_index is its root's payload
-//      segment_index, which for ordinary jobs IS the chapter index).
+//      payload with qe() and match the roots' cache keys against it,
+//      anchor-filtered the same way.
 // Any doubt (edited text, changed voices, ambiguous order) leaves the
 // record untouched: applyInlineSplits stays closed and or()'s inline
 // guard keeps merges identity-safe in the meantime.
+//
+// Case #4 re-review (Rowan): segIdentity is narration text + POV only
+// — it carries no unique segment ID — so when two chapter segments are
+// identical twins, matching identities in chapter order picks the
+// EARLIEST twin, which may be the wrong occurrence (and the split
+// tree's text-integrity check cannot tell identical passages apart).
+// Recovery therefore never chooses an occurrence by position alone. A
+// root's occurrence is used only when it is FORCED:
+//   - pinned by the root's repair_source_index: the Worker stamps
+//     every split parent with its root's payload segment_index (split
+//     parents keep their root's cache key, and every tree entry's
+//     repair_source_index is its root's payload segment_index, which
+//     for ordinary jobs IS the chapter index). That value is
+//     authoritative: a derived or stored index that disagrees with it
+//     is wrong, and a derivation that cannot be reconciled with every
+//     available anchor fails safe; or
+//   - the unique solution of the strictly-increasing assignment of all
+//     roots to their identity/cache-key matches (job order IS chapter
+//     order), computed as earliest-greedy vs latest-greedy: a root is
+//     resolved only where both assignments agree.
+// A stored mapping that contradicts an anchor is cleared when no safe
+// recovery replaces it, so nothing downstream can expand or merge
+// onto the wrong twin.
 function inlineRootEntries(status){
   return (Array.isArray(status?.segments)?status.segments:[])
     .filter(o=>!(typeof o?.repair_path==="string"&&o.repair_path.length>0));
 }
-function deriveIndicesFromKeys(ch,keys,count){
+function inlineRootAnchor(o){
+  return Number.isInteger(o?.repair_source_index)&&o.repair_source_index>=0?o.repair_source_index:null;
+}
+// One ascending candidate list per root (job order): compute the
+// component-wise earliest and latest strictly-increasing assignments.
+// A position is FORCED only where both agree; anything else comes back
+// null (ambiguous — the caller defers or refuses, never guesses).
+// Returns null when no assignment exists at all.
+function forcedIndexAssignment(sets){
+  const n=sets.length,earliest=new Array(n).fill(null),latest=new Array(n).fill(null);
+  let prev=-1;
+  for(let k=0;k<n;k++){let pick=null;for(const u of sets[k])if(u>prev){pick=u;break}if(pick==null)return null;earliest[k]=pick;prev=pick}
+  prev=Infinity;
+  for(let k=n-1;k>=0;k--){let pick=null;const q=sets[k];for(let j=q.length-1;j>=0;j--)if(q[j]<prev){pick=q[j];break}if(pick==null)return null;latest[k]=pick;prev=pick}
+  return earliest.map((u,k)=>u===latest[k]?u:null);
+}
+// Resolve each job root to its chapter index from the staged identity
+// keys: an anchored root pins its occurrence (and the staged identity
+// there must agree, else that root is unresolvable); every other root
+// resolves only where the joint assignment forces it. Unresolvable
+// roots come back null. Returns null only for malformed input.
+function resolveIndicesFromKeys(ch,keys,roots){
+  if(!Array.isArray(keys)||!Array.isArray(roots)||!roots.length||keys.length!==roots.length)return null;
+  if(!Array.isArray(ch?.segments))return null;
+  const cand=new Map();
+  ch.segments.forEach((t,u)=>{if(t==null)return;const id=segIdentity(t,ch.pov),q=cand.get(id)||[];q.push(u);cand.set(id,q)});
+  const sets=roots.map((o,k)=>{
+    const anchor=inlineRootAnchor(o);
+    if(anchor!=null)return anchor<ch.segments.length&&segIdentity(ch.segments[anchor],ch.pov)===keys[k]?[anchor]:[];
+    return (cand.get(keys[k])||[]).slice();
+  });
+  if(sets.some(q=>!q.length))return roots.map(()=>null);
+  return forcedIndexAssignment(sets)||roots.map(()=>null);
+}
+function deriveIndicesFromKeys(ch,keys,count,roots){
   if(!Array.isArray(keys)||!count||keys.length!==count)return null;
-  const byId=new Map();
-  ch.segments.forEach((t,u)=>{if(t==null)return;const k=segIdentity(t,ch.pov),q=byId.get(k)||[];q.push(u);byId.set(k,q)});
-  const out=[];
-  for(const k of keys){const q=byId.get(k);if(!q||!q.length)return null;out.push(q.shift())}
-  for(let i=1;i<out.length;i++)if(out[i]<=out[i-1])return null;
-  return out;
+  if(!Array.isArray(roots)||roots.length!==count)return null;
+  const resolved=resolveIndicesFromKeys(ch,keys,roots);
+  return resolved&&resolved.every(u=>Number.isInteger(u))?resolved:null;
 }
 async function ensureInlineMapping(e,ch,local,status){
   try{
@@ -1174,27 +1238,39 @@ async function ensureInlineMapping(e,ch,local,status){
     const roots=inlineRootEntries(status);
     if(!roots.length||!Array.isArray(ch?.segments))return;
     const existing=Array.isArray(local.segmentIndices)?local.segmentIndices:null;
+    let anchorConflict=false;
     if(existing&&existing.length===roots.length){
       const keys=Array.isArray(local.segmentKeys)?local.segmentKeys:null;
       const ok=existing.every((idx,k)=>Number.isInteger(idx)&&idx>=0&&idx<ch.segments.length
+        &&(inlineRootAnchor(roots[k])==null||idx===inlineRootAnchor(roots[k]))
         &&(!keys||keys.length!==roots.length||segIdentity(ch.segments[idx],ch.pov)===keys[k]));
       if(ok)return;
+      anchorConflict=existing.some((idx,k)=>inlineRootAnchor(roots[k])!=null&&idx!==inlineRootAnchor(roots[k]));
     }
-    const fromKeys=deriveIndicesFromKeys(ch,local.segmentKeys,roots.length);
+    const fromKeys=deriveIndicesFromKeys(ch,local.segmentKeys,roots.length,roots);
     if(fromKeys){local.segmentIndices=fromKeys;return}
-    if(typeof qe!=="function")return;
-    const payload=await qe(e),segs=Array.isArray(payload?.segments)?payload.segments:[];
-    let cursor=0;const out=[];
-    for(const root of roots){
-      let found=-1;
-      for(let j=cursor;j<segs.length;j++){
-        if(segs[j].cache_key===root.cache_key||segs[j].fingerprint===root.cache_key){found=j;break}
+    if(typeof qe==="function"){
+      const payload=await qe(e),segs=Array.isArray(payload?.segments)?payload.segments:[];
+      const sets=roots.map(root=>{
+        const anchor=inlineRootAnchor(root),values=[];
+        for(const sg of segs){
+          if(!sg||(sg.cache_key!==root.cache_key&&sg.fingerprint!==root.cache_key))continue;
+          if(anchor!=null&&sg.segment_index!==anchor)continue;
+          values.push(sg.segment_index);
+        }
+        return values;
+      });
+      if(!sets.some(q=>!q.length)){
+        const forced=forcedIndexAssignment(sets);
+        if(forced&&forced.every(u=>Number.isInteger(u))){local.segmentIndices=forced;return}
       }
-      if(found<0)return;
-      if(Number.isInteger(root.repair_source_index)&&segs[found].segment_index!==root.repair_source_index)return;
-      out.push(segs[found].segment_index);cursor=found+1;
     }
-    if(out.length===roots.length)local.segmentIndices=out;
+    // Nothing could be recovered safely. A stored mapping that
+    // contradicts a Worker anchor is worse than none at all: clear it
+    // so applyInlineSplits stays closed and or() defers, instead of
+    // expanding or merging onto the wrong twin. The job's audio stays
+    // on its server-side status either way — nothing is lost.
+    if(anchorConflict)local.segmentIndices=null;
   }catch{/* best-effort: or()'s inline guard keeps merges safe without a mapping */}
 }
 function applyInlineSplits(ch,local,status){
@@ -1234,6 +1310,12 @@ function applyInlineSplits(ch,local,status){
       ["ready","blocked","provider_failed"].includes(x.state));
     if(!leaves.length||leaves.some(x=>typeof x.speech_text!=="string"))return false;
     const chapterIndex=rootChapterIndex.get(u);
+    // The Worker's anchor is authoritative: repair_source_index IS
+    // this root's chapter index, so a mapping that sends the root
+    // anywhere else is wrong. Refuse rather than expand the wrong
+    // occurrence — the text-integrity check below cannot catch this
+    // when another segment is an identical twin of the passage.
+    if(chapterIndex!==s.repair_source_index)return false;
     const old=Number.isInteger(chapterIndex)?ch.segments[chapterIndex]:null;
     if(!old)return false;
     const joined=leaves.map(x=>plainSpeech(x.speech_text)).join("");

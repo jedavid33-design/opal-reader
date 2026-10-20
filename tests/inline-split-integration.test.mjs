@@ -406,3 +406,157 @@ test("Test D: or() never positionally maps a grown inline status through stale r
   assert.equal(ch2.segments[0].audioKey, null);
   assert.equal(ch2.segments[1].audioKey, null, "no positional guesswork without a mapping");
 });
+
+// ---------------------------------------------------------------------
+// Tests E / E2 / E3 / F — Case #4 re-review (Rowan): duplicate passage
+// identities. segIdentity is narration text + POV only, so two chapter
+// segments can be identical twins. A legacy mapping recovered from
+// identities alone cannot tell the twins apart: the earliest match is
+// a positional guess, and the split tree's text-integrity check cannot
+// catch the swap because the passages are identical. The Worker,
+// however, stamps the split root with repair_source_index — its
+// payload segment_index, i.e. the chapter index — and that anchor is
+// authoritative.
+// ---------------------------------------------------------------------
+const TWIN = `${LEFT} ${RIGHT}`;
+
+// A finished inline status for a one-root subset job whose root (the
+// payload's only segment, chapter index 1) split into LEFT/RIGHT —
+// mirroring tryInlineGenerationSplit. With `anchored: false` every
+// repair_source_index is stripped, removing the only reliable signal.
+function twinSplitStatus(payload, { anchored = true } = {}) {
+  const p = payload.segments[0];
+  const cfg = JSON.stringify({
+    provider: p.provider, voice: p.voice_id, model: p.model_id,
+    rate: 1, style: p.style_direction || "",
+  });
+  const fpL = sha256(LEFT + cfg), fpR = sha256(RIGHT + cfg);
+  const anchor = anchored ? { repair_source_index: 1 } : {};
+  return {
+    fpL, fpR,
+    status: {
+      job_id: payload.job_id, state: "ready", inline_split: true,
+      completed: 2, total: 2, generated_cost: 0.01,
+      segments: [
+        { cache_key: p.cache_key, state: "split", repair_path: "", ...anchor },
+        { cache_key: fpL, state: "ready", repair_path: "L", ...anchor, speech_text: LEFT, model: MODEL },
+        { cache_key: fpR, state: "ready", repair_path: "R", ...anchor, speech_text: RIGHT, model: MODEL },
+      ],
+    },
+  };
+}
+
+// A chapter of two identical twins plus a legacy Generate Rest record
+// (segmentKeys + fingerprints, NO segmentIndices) for a job that
+// targeted ONLY the second twin.
+async function twinWorld(stagedExtra = {}) {
+  const world = buildWorld([seg("seg-T0", TWIN), seg("seg-T1", TWIN)]);
+  const ch = world.chapter;
+  const payload = await world.qe(0, { segmentIndices: [1] });
+  assert.equal(payload.segments[0].segment_index, 1, "fixture: the subset payload targets chapter segment 1");
+  ch.generation = {
+    jobId: payload.job_id, state: "generating", completed: 0, total: 1,
+    segmentKeys: [world.segIdentity(ch.segments[1], ch.pov)],
+    segmentFingerprints: [payload.segments[0].fingerprint],
+    recordedCost: 0, error: null, rangeStart: 1, ...stagedExtra,
+  };
+  return { world, ch, payload };
+}
+
+test("Test E: a legacy subset job on the SECOND of two identical twins expands the second, anchored by repair_source_index", async () => {
+  const { world, ch, payload } = await twinWorld();
+  assert.equal("segmentIndices" in ch.generation, false, "precondition: legacy record, no mapping");
+  assert.equal(world.segIdentity(ch.segments[0], ch.pov), world.segIdentity(ch.segments[1], ch.pov),
+    "precondition: the twins' identities are indistinguishable");
+  const firstTwin = ch.segments[0];
+  const built = twinSplitStatus(payload);
+  await world.lt(0, built.status);
+  assert.equal(ch.segments.length, 3, "exactly one twin expanded into its two leaves");
+  assert.equal(ch.segments[0], firstTwin, "the FIRST twin is the same untouched object");
+  assert.equal(ch.segments[0].text, TWIN);
+  assert.equal(ch.segments[0].audioKey, null, "no audio attributed to the first twin");
+  assert.equal(ch.segments[1].id, "seg-T1", "the expansion happened on the SECOND twin (its id survives on the first leaf)");
+  assert.equal(ch.segments[1].text, LEFT);
+  assert.equal(ch.segments[1].audioKey, built.fpL, "the left leaf carries its own audio");
+  assert.equal(ch.segments[2].text, RIGHT);
+  assert.equal(ch.segments[2].audioKey, built.fpR, "the right leaf carries its own audio");
+  assert.deepEqual(ch.generation.segmentIndices, [1, 1, 2],
+    "the recovered mapping was anchored at chapter index 1, not guessed to 0");
+  assert.equal(ch.generation.inlineApplied, true);
+  const truth = world.chapterTruth(ch, [{ jobId: ch.generation.jobId, state: ch.generation.state }]);
+  assert.equal(truth.playable, 2);
+  assert.equal(truth.total, 3);
+  assert.equal(truth.complete, false, "the untouched first twin keeps the count honest");
+});
+
+test("Test E2: with repair_source_index unavailable, duplicate identities make recovery REFUSE — chapter untouched, audio kept", async () => {
+  const { world, ch, payload } = await twinWorld();
+  const [t0, t1] = ch.segments;
+  const before = JSON.stringify(ch.segments);
+  const built = twinSplitStatus(payload, { anchored: false });
+  await world.lt(0, built.status);
+  assert.equal(JSON.stringify(ch.segments), before, "chapter byte-identical: no expansion onto a guessed twin");
+  assert.equal(ch.segments[0], t0);
+  assert.equal(ch.segments[1], t1);
+  assert.equal(ch.generation.segmentIndices, undefined, "no mapping was written from an ambiguous identity");
+  assert.ok(!ch.generation.inlineApplied, "the tree was not applied");
+  assert.ok(!ch.segments.some((s) => s.audioKey), "no audio attributed to either twin");
+  const stored = ch.generation.segments.find((s) => s.repair_path === "L");
+  assert.equal(stored.cache_key, built.fpL,
+    "the finished child's audio key remains on the job's stored status — nothing was lost");
+});
+
+test("Test E3: a stored mapping that contradicts the Worker anchor is corrected to the anchor before expansion", async () => {
+  // segmentIndices [0] is what the pre-fix earliest-match derivation
+  // would have written for this job. The anchor (1) must win.
+  const { world, ch, payload } = await twinWorld({ segmentIndices: [0] });
+  const firstTwin = ch.segments[0];
+  const built = twinSplitStatus(payload);
+  await world.lt(0, built.status);
+  assert.equal(ch.segments.length, 3);
+  assert.equal(ch.segments[0], firstTwin, "the first twin stays untouched despite the stored [0] mapping");
+  assert.equal(ch.segments[0].audioKey, null);
+  assert.equal(ch.segments[1].id, "seg-T1");
+  assert.equal(ch.segments[1].audioKey, built.fpL);
+  assert.equal(ch.segments[2].audioKey, built.fpR);
+  assert.deepEqual(ch.generation.segmentIndices, [1, 1, 2], "the mapping was re-derived against the anchor");
+});
+
+test("Test F: a pending tree defers an unsplit root whose identity is ambiguous between identical twins", () => {
+  const T = "Twin passage, repeated exactly, in the same voice.";
+  const world = buildWorld([
+    seg("seg-T0", T), seg("seg-T1", T),
+    seg("seg-S", "A passage that splits under pressure, uniquely its own."),
+    seg("seg-U", "A unique closing passage with no twin anywhere."),
+  ]);
+  const ch = world.chapter;
+  const [t0, t1] = ch.segments;
+  // Legacy record (keys only) for a job whose roots, in job order,
+  // are: the twin (targeting chapter 1), the splittable passage (2),
+  // and the unique passage (3).
+  ch.generation = {
+    jobId: "job-f", state: "generating", completed: 0, total: 3,
+    segmentKeys: [0, 2, 3].map((i) => world.segIdentity(ch.segments[i], ch.pov)),
+    segmentFingerprints: ["fpT", "fpS", "fpU"], recordedCost: 0, error: null, rangeStart: 1,
+  };
+  const status = {
+    job_id: "job-f", state: "paused_quota", inline_split: true, completed: 2, total: 4,
+    segments: [
+      { cache_key: "key-T", state: "ready", model: MODEL },
+      { cache_key: "key-S", state: "split", repair_path: "", repair_source_index: 2 },
+      { cache_key: "key-SL", state: "ready", repair_path: "L", repair_source_index: 2, speech_text: "A passage that splits", model: MODEL },
+      { cache_key: "key-SR", state: "queued", repair_path: "R", repair_source_index: 2, speech_text: "under pressure, uniquely its own." },
+      { cache_key: "key-U", state: "ready", model: MODEL },
+    ],
+  };
+  world.or(ch, status, {});
+  assert.equal(ch.segments[0], t0);
+  assert.equal(ch.segments[1], t1);
+  assert.equal(ch.segments[0].audioKey, null, "the ambiguous root's audio is NOT placed on the first twin");
+  assert.equal(ch.segments[1].audioKey, null, "nor guessed onto the second twin — the root is deferred");
+  assert.equal(ch.segments[2].audioKey, null, "the split root claims none of its children's audio");
+  assert.equal(ch.segments[3].audioKey, "key-U", "the unambiguous root in the same pending status still merges");
+  assert.ok(!ch.segments.some((s) => s.audioKey === "key-T" || s.audioKey === "key-SL"),
+    "neither the ambiguous root's nor the deferred child's audio lands anywhere");
+  assert.equal(ch.segments.length, 4, "chapter structure untouched");
+});
