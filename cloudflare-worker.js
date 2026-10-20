@@ -1446,16 +1446,47 @@ async function writeMirrorJson(storage, key, value) {
 // Merge a bookkeeping patch onto the freshest mirror-meta object. If a
 // writer with a NEWER lock epoch has already persisted, the stale writer
 // yields entirely: its writes must never regress the successor's
-// confirmed stamps or epoch counter.
+// confirmed stamps or epoch counter. The write itself is a
+// compare-and-swap (etag-matched conditional put): a write computed
+// from a pre-steal read must not land after a successor's writes, so on
+// a lost race the merge is recomputed from the fresh object (whose
+// confirmed stamps the patch never overwrites) or yields to the newer
+// epoch.
 async function persistMirrorMeta(storage, metaKey, epoch, patch) {
-  const current = (await readMirrorJson(storage, metaKey)) || {};
-  if ((Number(current.lock_epoch) || 0) > epoch) return false;
-  await writeMirrorJson(storage, metaKey, {
-    ...current,
-    ...patch,
-    lock_epoch: Math.max(epoch, Number(current.lock_epoch) || 0),
-  });
-  return true;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let current = {};
+    let etag = null;
+    try {
+      const object = await storage.get(metaKey);
+      if (object) {
+        etag = object.etag || null;
+        current = object.json
+          ? await object.json()
+          : JSON.parse(await new Response(object.body).text());
+      }
+    } catch {
+      return false;
+    }
+    if ((Number(current.lock_epoch) || 0) > epoch) return false;
+    const merged = {
+      ...current,
+      ...patch,
+      lock_epoch: Math.max(epoch, Number(current.lock_epoch) || 0),
+    };
+    let result = null;
+    try {
+      result = await storage.put(metaKey, JSON.stringify(merged), {
+        onlyIf: etag
+          ? new Headers({ "If-Match": etag })
+          : new Headers({ "If-None-Match": "*" }),
+        httpMetadata: { contentType: "application/json" },
+      });
+    } catch {
+      return false;
+    }
+    if (result) return true;
+  }
+  return false;
 }
 
 async function readMirrorKvRaw(env, jobId) {
