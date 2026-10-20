@@ -963,8 +963,12 @@ test("quota: cache hit counts no attempt and makes no provider call", async () =
   h.restore();
 });
 
-test("quota: batch success counts no attempt but sets last-success; batch failure now writes a failed ledger event", async () => {
-  // Success half.
+test("quota: batch submission counts one attempt and sets last-success; batch failure now writes a failed ledger event", async () => {
+  // Success half. UPDATED by Case #4 (§3.4/§7): Batch submissions draw on
+  // the same daily quota pool as Standard calls, so a submission now
+  // writes a pre-dispatch attempt marker (route: "batch") and counts in
+  // the report's attempted-request totals. (This test previously asserted
+  // the bypass that the Oct 20 forensics proved wrong.)
   {
     const h = makeHarness(worker, { clockStart: T0 });
     const jobId = sha256Hex("quota-batch-success");
@@ -973,11 +977,14 @@ test("quota: batch success counts no attempt but sets last-success; batch failur
     ]);
     await h.drain();
     const report = await quotaReport(h);
-    assert.equal(report.used_today, 0, "Batch bypasses the request counter");
-    assert.equal(report.used_24h, 0);
+    assert.equal(report.used_today, 1, "Batch submissions count in the same attempts ledger");
+    assert.equal(report.used_24h, 1);
     assert.ok(report.last_success_ms >= T0, "Batch success still updates last-success");
     const markers = await h.r2.list({ prefix: "usage/gemini-attempts/" });
-    assert.equal(markers.objects.length, 0);
+    assert.equal(markers.objects.length, 1);
+    const marker = await h.r2.readJson(markers.objects[0].key);
+    assert.equal(marker.route, "batch");
+    assert.equal(marker.job_id, jobId);
     h.restore();
   }
   // Failure half: previously a silent ledger gap (no event at all).
@@ -1008,7 +1015,9 @@ test("quota: batch success counts no attempt but sets last-success; batch failur
       "batch failure must write a failed ledger event (gap closed)",
     );
     const report = await quotaReport(h);
-    assert.equal(report.used_today, 0);
+    // The submission itself was attempted (and counted, Case #4) even
+    // though the Batch later failed; no success was recorded.
+    assert.equal(report.used_today, 1);
     assert.equal(report.last_success_ms, null);
     h.restore();
   }
