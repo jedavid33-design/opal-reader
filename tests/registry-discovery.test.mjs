@@ -128,6 +128,42 @@ test("S2: the legacy scan runs even when the book already has a new marker", asy
   h.restore();
 });
 
+test("Rowan review: a failing registry list reports incomplete coverage, never false completeness", async () => {
+  const h = makeHarness(worker, {
+    clockStart: T0,
+    r2Hooks: {
+      onList: async ({ prefix }) => {
+        // Only the registry marker enumeration fails; the pending
+        // reconcile and the legacy status scan list other prefixes.
+        if (prefix.startsWith("generation/registry/"))
+          throw new Error("simulated R2 list failure");
+      },
+    },
+  });
+  const jobId = sha256Hex("listfail-job");
+  await postJob(h, jobId, [makeSegment("lf-0")]);
+  assert.ok(await h.r2.readJson(markerKey(BOOK, 0, jobId)),
+    "the marker exists in storage — only enumerating it fails");
+  const found = await discover(h);
+  assert.equal(found.registry_incomplete, true,
+    "the listing failure is explicitly reported as incomplete coverage");
+  assert.equal(found.truncated, true,
+    "coverage is never claimed complete when the listing failed");
+  assert.deepEqual(found.jobs, [], "no jobs can be enumerated through a failed listing");
+  h.restore();
+});
+
+test("healthy discovery reports registry_incomplete: false", async () => {
+  const h = makeHarness(worker, { clockStart: T0 });
+  const jobId = sha256Hex("listok-job");
+  await postJob(h, jobId, [makeSegment("lo-0")]);
+  const found = await discover(h);
+  assert.equal(found.registry_incomplete, false);
+  assert.equal(found.truncated, false);
+  assert.ok(found.jobs.some((j) => j.job_id === jobId));
+  h.restore();
+});
+
 test("S2: a failed marker PUT leaves a durable pending record; discovery reconciles it and never marks the scan done early", async () => {
   const control = { failRegistry: true };
   const h = makeHarness(worker, {

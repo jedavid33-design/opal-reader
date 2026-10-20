@@ -109,7 +109,7 @@ export class MockR2 {
     this.putCalls = []; // [{key}]
     this.getCounts = new Map();
     this.nowFn = nowFn;
-    this.hooks = hooks; // { onPut(key, value, options), onGet(key, occurrence) }
+    this.hooks = hooks; // { onPut(key, value, options), onGet(key, occurrence), onList({prefix, cursor, limit}) }
   }
   async get(key) {
     const n = (this.getCounts.get(key) || 0) + 1;
@@ -158,6 +158,7 @@ export class MockR2 {
     this.store.delete(key);
   }
   async list({ prefix = "", cursor, limit = 1000 } = {}) {
+    if (this.hooks.onList) await this.hooks.onList({ prefix, cursor, limit });
     const keys = [...this.store.keys()]
       .filter((k) => k.startsWith(prefix))
       .sort();

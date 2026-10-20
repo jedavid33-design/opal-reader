@@ -579,7 +579,7 @@ async function discoverBookJobs(env, bookId, chapterIndex) {
   if (!scanDone) legacyScan = await backfillJobRegistryLegacy(env, bookId);
   const prefix = `${JOB_REGISTRY_PREFIX}${bookId}/`;
   const markerKeys = [];
-  let cursor, truncated = false;
+  let cursor, truncated = false, registryIncomplete = false;
   try {
     do {
       const page = await env.OPALREADER_STORAGE.list({
@@ -598,7 +598,16 @@ async function discoverBookJobs(env, bookId, chapterIndex) {
       if (page.truncated && markerKeys.length >= 1000) truncated = true;
       cursor = page.truncated && !truncated ? page.cursor : undefined;
     } while (cursor);
-  } catch {}
+  } catch {
+    // Rowan review fix (Case #4): a failed registry enumeration must
+    // not masquerade as complete coverage. Flag the response as
+    // incomplete — and truncated, since the listing provably did not
+    // finish — so no reader mistakes a partial (or empty) job list for
+    // the whole registry. Scan-done state is untouched here: it is
+    // written only by the backfill, never on a failed enumeration.
+    registryIncomplete = true;
+    truncated = true;
+  }
   const jobs = [];
   for (const key of markerKeys) {
     const marker = await r2GetJson(env, key).catch(() => null);
@@ -633,6 +642,7 @@ async function discoverBookJobs(env, bookId, chapterIndex) {
     quota_park: geminiParkIsActive(park) ? park : null,
     jobs,
     truncated,
+    registry_incomplete: registryIncomplete,
     legacy_scan: legacyScan,
     registry_pending: pendingRemaining,
   };
