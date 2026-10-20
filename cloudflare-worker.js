@@ -1676,8 +1676,9 @@ async function runMirrorAttempt(env, jobId, reason) {
       return { mirrored: false, reason: "attempt-floor" };
   }
 
-  // Acquire the per-job lock: create-if-absent, or steal an expired lock
-  // with an etag-matched replace. At most two acquisition attempts.
+  // Acquire the per-job lock: create-if-absent, or steal an expired or
+  // released lock with an etag-matched replace. At most two acquisition
+  // attempts.
   const owner = crypto.randomUUID();
   let epoch = (Number(meta.lock_epoch) || 0) + 1;
   const putLock = (onlyIf) =>
@@ -1691,7 +1692,9 @@ async function runMirrorAttempt(env, jobId, reason) {
     const existing = await readMirrorJson(storage, lockKey);
     if (
       existing &&
-      Date.now() - (Number(existing.acquired_at) || 0) >= MIRROR_LOCK_TTL_MS
+      (existing.released === true ||
+        Date.now() - (Number(existing.acquired_at) || 0) >=
+          MIRROR_LOCK_TTL_MS)
     ) {
       const head = await storage.head(lockKey).catch(() => null);
       if (head?.etag) {
@@ -1709,9 +1712,42 @@ async function runMirrorAttempt(env, jobId, reason) {
       Number(current.epoch) === epoch
     );
   };
+  // Ownership-safe conditional release (Rowan's pre-deployment fix 1,
+  // 2026-10-19): swap the live lock for a released tombstone with an
+  // etag-matched conditional put — never a read-then-delete. If the
+  // lease expired and a successor stole the lock after this writer's
+  // ownership read, the etag no longer matches, the put fails, and the
+  // successor's lock survives; an unconditional delete could have
+  // removed it. The tombstone keeps the original owner, epoch, and
+  // acquired_at, and the acquire path treats it as immediately
+  // stealable, so releasing never delays the next writer.
   const release = async () => {
     try {
-      if (await holdsLock()) await storage.delete(lockKey);
+      const object = await storage.get(lockKey);
+      if (!object?.etag) return;
+      const current = object.json
+        ? await object.json()
+        : JSON.parse(await new Response(object.body).text());
+      if (
+        !current ||
+        current.owner !== owner ||
+        Number(current.epoch) !== epoch
+      )
+        return;
+      await storage.put(
+        lockKey,
+        JSON.stringify({
+          owner,
+          epoch,
+          acquired_at: Number(current.acquired_at) || 0,
+          released: true,
+          released_at: Date.now(),
+        }),
+        {
+          onlyIf: new Headers({ "If-Match": object.etag }),
+          httpMetadata: { contentType: "application/json" },
+        },
+      );
     } catch {}
   };
   try {
@@ -2813,7 +2849,7 @@ function logSyncFailure(request, url, error) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const origin = request.headers.get("Origin") || "";
     if (request.method === "OPTIONS")
       return new Response(null, { status: 204, headers: cors(origin, env) });
@@ -3399,10 +3435,15 @@ export default {
         // KV write coalescing: read-path lazy catch-up. If the
         // authoritative R2 status carries durable state the KV mirror
         // has not confirmed (a failed mirror, a crash between the R2
-        // save and the mirror, external KV loss), let the serialized
-        // mirror writer converge it — rate-limited to one attempt per
-        // job per minute, and never allowed to fail the read.
-        await mirrorGenerationStatus(env, jobId, "catchup");
+        // save and the mirror, external KV loss), the serialized
+        // mirror writer converges it — rate-limited to one attempt per
+        // job per minute. It runs in the background (design v2.1:
+        // status polling never waits on a KV write): scheduled on the
+        // execution context when one is available, fire-and-forget
+        // otherwise, and never allowed to fail or delay the read.
+        const catchUp = mirrorGenerationStatus(env, jobId, "catchup");
+        if (ctx?.waitUntil) ctx.waitUntil(catchUp);
+        else void catchUp;
         return json(status, 200, origin, env);
       }
       if (

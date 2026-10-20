@@ -17,6 +17,7 @@ import {
 const T0 = Date.UTC(2026, 9, 19, 18, 0, 0); // 11:00 PDT
 const statusKey = (id) => `generation/status/${id}.json`;
 const metaKey = (id) => `generation/mirror-meta/${id}.json`;
+const lockKey = (id) => `generation/mirror-lock/${id}.json`;
 const kvKey = (id) => `generation:${id}`;
 
 async function postJob(h, jobId, segments, extra = {}) {
@@ -78,6 +79,17 @@ async function deliverUntil(h, predicate, budget = 300) {
 async function spinUntil(fn, budget = 2000) {
   for (let i = 0; i < budget; i++) {
     if (fn()) return true;
+    await new Promise((r) => setImmediate(r));
+  }
+  return fn();
+}
+
+// Async-condition variant: background (waitUntil) catch-up attempts
+// complete across event-loop turns, so tests poll their effects rather
+// than flushing — a flush would also await unrelated gated work.
+async function spinUntilAsync(fn, budget = 2000) {
+  for (let i = 0; i < budget; i++) {
+    if (await fn()) return true;
     await new Promise((r) => setImmediate(r));
   }
   return fn();
@@ -280,6 +292,7 @@ test("KV quota exhaustion: generation completes on R2; mirror catches up after r
   h.clock.advance(61_000);
   const poll = await getStatus(h, jobId);
   assert.equal(poll.status, 200);
+  await h.flushBackground(); // read-path catch-up runs in the background
   assert.equal(await h.kv.get(kvKey(jobId)), JSON.stringify(status));
   const meta = await h.r2.readJson(metaKey(jobId));
   assert.equal(meta.confirmed.state, "ready");
@@ -346,12 +359,14 @@ test("catch-up safety (a): KV down + 100 polls in a minute makes at most one mir
     assert.equal(poll.status, 200, "reads keep working while KV is down");
     assert.equal(poll.body.state, "ready");
   }
+  await h.flushBackground(); // catch-up attempts run in the background
   const attempts = h.kv.putCount("generation:") - putsBefore;
   assert.equal(attempts, 1, `expected exactly 1 bounded attempt, got ${attempts}`);
   // After the floor and KV recovery, one poll restores the mirror.
   h.clock.advance(61_000);
   kvDown = false;
   await getStatus(h, jobId);
+  await h.flushBackground();
   assert.equal(await h.kv.get(kvKey(jobId)), JSON.stringify(status));
   h.restore();
 });
@@ -400,9 +415,18 @@ test("catch-up safety (b)+(c): stalled writer is fenced; successor's stamps stan
   const termStatus = await h.r2.readJson(statusKey(jobId));
   assert.equal(termStatus.state, "ready");
   // Successor B (another poll) steals the expired lock and mirrors the
-  // terminal status.
+  // terminal status — in the background, so poll for its effect (a
+  // flush would deadlock on A's still-gated attempt).
   const pollB = await getStatus(h, jobId);
   assert.equal(pollB.status, 200);
+  assert.ok(
+    await spinUntilAsync(
+      async () =>
+        (await h.r2.readJson(metaKey(jobId)))?.confirmed?.version ===
+        termStatus._statusVersion,
+    ),
+    "successor never mirrored the terminal status",
+  );
   const metaAfterB = await h.r2.readJson(metaKey(jobId));
   assert.equal(metaAfterB.confirmed.version, termStatus._statusVersion);
   assert.equal(
@@ -413,6 +437,14 @@ test("catch-up safety (b)+(c): stalled writer is fenced; successor's stamps stan
   // bookkeeping: the successor's confirmed stamps stand.
   gate.resolve();
   await pollA;
+  assert.ok(
+    await spinUntilAsync(
+      async () =>
+        (await h.kv.get(kvKey(jobId), "json"))?._statusVersion ===
+        midStatus._statusVersion,
+    ),
+    "stalled writer never landed its stale snapshot",
+  );
   const metaAfterA = await h.r2.readJson(metaKey(jobId));
   assert.equal(metaAfterA.confirmed.version, termStatus._statusVersion);
   assert.equal(
@@ -423,6 +455,7 @@ test("catch-up safety (b)+(c): stalled writer is fenced; successor's stamps stan
   // The next eligible catch-up converges KV to the newest R2 version.
   h.clock.advance(61_000);
   await getStatus(h, jobId);
+  await h.flushBackground();
   assert.equal(
     await h.kv.get(kvKey(jobId)),
     JSON.stringify(await h.r2.readJson(statusKey(jobId))),
@@ -461,10 +494,21 @@ test("catch-up safety (c): writer stalled before its fence check writes nothing 
     );
   })();
   assert.ok(await spinUntil(() => !gateArmed), "writer A never reached its claim");
-  // Successor B steals the expired lock via a status poll and mirrors.
+  // Successor B steals the expired lock via a status poll and mirrors
+  // (background catch-up: poll for its effect rather than flushing,
+  // which would deadlock on A's still-gated delivery).
   h.clock.advance(21_000);
   const pollB = await getStatus(h, jobId);
   assert.equal(pollB.status, 200);
+  assert.ok(
+    await spinUntilAsync(async () =>
+      Boolean(
+        JSON.parse((await h.kv.get(kvKey(jobId))) || "{}")?.segments?.[0]
+          ?.batch_job_name,
+      ),
+    ),
+    "successor never mirrored the op assignment",
+  );
   const kvAfterB = await h.kv.get(kvKey(jobId));
   const metaAfterB = await h.r2.readJson(metaKey(jobId));
   assert.ok(
@@ -589,6 +633,173 @@ async function usageEvents(h) {
   const page = await h.r2.list({ prefix: "usage/events/", limit: 1000 });
   return Promise.all(page.objects.map((o) => h.r2.readJson(o.key)));
 }
+
+test("catch-up safety (e): a stale writer's lock release cannot delete its successor's lock (reversed order)", async () => {
+  // Rowan's pre-deployment fix 1 (2026-10-19): lock release must be
+  // ownership-safe. Writer A parks AFTER confirming it owns the lock
+  // but BEFORE its release lands; its lease expires; successor B steals
+  // the lock and is mid-mirror, still holding, when A's release finally
+  // executes. A's release must not remove B's lock. The release step is
+  // parked whichever form it takes: an R2 delete (unconditional — the
+  // bug) or an etag-matched tombstone put (the fix).
+  let releaseGate = null;
+  let releaseArmed = false;
+  let releaseStalled = false;
+  let bGate = null;
+  let bGateArmed = false;
+  let bStalled = false;
+  const jobId = sha256Hex("catchup-release-race-job");
+  const h = makeHarness(worker, {
+    clockStart: T0,
+    kvHooks: {
+      onPut: async (key) => {
+        if (bGateArmed && key === kvKey(jobId)) {
+          bGateArmed = false;
+          bStalled = true;
+          await bGate.promise; // successor B stalls at its KV put, holding the lock
+        }
+      },
+    },
+    r2Hooks: {
+      onPut: async (key, value) => {
+        if (
+          releaseArmed &&
+          key === lockKey(jobId) &&
+          String(value).includes('"released":true')
+        ) {
+          releaseArmed = false;
+          releaseStalled = true;
+          await releaseGate.promise; // writer A stalls inside its release put
+        }
+      },
+    },
+  });
+  const realDelete = h.r2.delete.bind(h.r2);
+  h.r2.delete = async (key) => {
+    if (releaseArmed && key === lockKey(jobId)) {
+      releaseArmed = false;
+      releaseStalled = true;
+      await releaseGate.promise; // writer A stalls inside its release delete
+    }
+    return realDelete(key);
+  };
+  const sessionId = sha256Hex("catchup-release-race-session");
+  await postSession(h, sessionId, [batchJob(jobId, 0, ["rel-0", "rel-1"])]);
+  // Drive writer A's mirror attempt (first op assignment) and park it
+  // inside its lock release.
+  releaseGate = deferred();
+  releaseArmed = true;
+  const deliveryA = (async () => {
+    h.queue.pending.sort((a, b) => a.due - b.due);
+    const msg = h.queue.pending.shift();
+    await worker.queue(
+      { messages: [{ body: msg.body, attempts: 1, ack() {}, retry() {} }] },
+      h.env,
+    );
+  })();
+  assert.ok(
+    await spinUntil(() => releaseStalled),
+    "writer A never reached its lock release",
+  );
+  const lockA = await h.r2.readJson(lockKey(jobId));
+  assert.ok(lockA?.owner, "writer A's lock should still be present");
+  // A's lease expires while it is parked mid-release. A newer status
+  // lands in R2 (a critical transition the stale mirror has not seen).
+  h.clock.advance(21_000);
+  const current = await h.r2.readJson(statusKey(jobId));
+  const newer = {
+    ...current,
+    state: "paused",
+    _statusVersion: (Number(current._statusVersion) || 0) + 1,
+    updated_at: Date.now(),
+  };
+  await h.r2.put(statusKey(jobId), JSON.stringify(newer));
+  // Successor B polls: steals the expired lock and stalls at its KV
+  // put, still holding the lock.
+  bGate = deferred();
+  bGateArmed = true;
+  const pollB = getStatus(h, jobId);
+  assert.ok(
+    await spinUntil(() => bStalled),
+    "successor B never reached its KV put",
+  );
+  const lockB = await h.r2.readJson(lockKey(jobId));
+  assert.ok(
+    lockB.epoch > lockA.epoch,
+    `successor should hold a newer epoch (${lockA.epoch} -> ${lockB.epoch})`,
+  );
+  assert.notEqual(lockB.owner, lockA.owner);
+  // A's parked release finally executes. It must not touch B's lock.
+  releaseGate.resolve();
+  await deliveryA;
+  const lockAfter = await h.r2.readJson(lockKey(jobId));
+  assert.ok(lockAfter, "stale release deleted the successor's lock");
+  assert.equal(lockAfter.owner, lockB.owner, "successor's lock was replaced");
+  assert.equal(lockAfter.epoch, lockB.epoch);
+  // B finishes cleanly and the mirror converges on the newest status.
+  bGate.resolve();
+  await pollB;
+  await h.flushBackground();
+  assert.equal(
+    await h.kv.get(kvKey(jobId)),
+    JSON.stringify(await h.r2.readJson(statusKey(jobId))),
+  );
+  const meta = await h.r2.readJson(metaKey(jobId));
+  assert.equal(meta.confirmed.version, newer._statusVersion);
+  h.restore();
+});
+
+test("status polling never waits on a stalled KV catch-up write", async () => {
+  // Rowan's pre-deployment fix 2 (2026-10-19): read-path mirror
+  // catch-up is background work (design v2.1). A stalled KV put during
+  // catch-up must not delay the status response.
+  let gate = null;
+  let gateArmed = false;
+  let kvStalled = false;
+  const h = makeHarness(worker, {
+    clockStart: T0,
+    kvHooks: {
+      onPut: async (key) => {
+        if (gateArmed && key.startsWith("generation:")) {
+          gateArmed = false;
+          kvStalled = true;
+          await gate.promise; // the catch-up KV write stalls indefinitely
+        }
+      },
+    },
+  });
+  const jobId = sha256Hex("poll-promptness-job");
+  await postJob(h, jobId, [makeSegment("prompt-0")]);
+  await h.drain();
+  const status = await h.r2.readJson(statusKey(jobId));
+  assert.equal(status.state, "ready");
+  // Simulate mirror loss; the next poll owes a catch-up attempt.
+  h.kv.store.delete(kvKey(jobId));
+  h.clock.advance(61_000);
+  gate = deferred();
+  gateArmed = true;
+  let pollSettled = false;
+  const pollPromise = getStatus(h, jobId).then((res) => {
+    pollSettled = true;
+    return res;
+  });
+  assert.ok(
+    await spinUntil(() => pollSettled, 500),
+    "status poll blocked behind the stalled KV catch-up write",
+  );
+  const poll = await pollPromise;
+  assert.equal(poll.status, 200);
+  assert.equal(poll.body.state, "ready");
+  // The catch-up was still scheduled (not skipped): it is parked at
+  // the stalled KV write in the background.
+  assert.ok(await spinUntil(() => kvStalled), "catch-up was never scheduled");
+  gate.resolve();
+  await h.flushBackground();
+  assert.equal(await h.kv.get(kvKey(jobId)), JSON.stringify(status));
+  const meta = await h.r2.readJson(metaKey(jobId));
+  assert.equal(meta.confirmed.state, "ready");
+  h.restore();
+});
 
 test("quota: standard success counts one attempt and sets last-success from the ledger", async () => {
   const h = makeHarness(worker, { clockStart: T0 });

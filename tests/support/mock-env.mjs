@@ -350,6 +350,21 @@ export function makeHarness(worker, { clockStart, kvHooks, r2Hooks, fetchBehavio
   const realFetch = globalThis.fetch;
   globalThis.fetch = google.fetchImpl;
 
+  // Execution-context stand-in: captures waitUntil promises so tests
+  // can observe background work and flush it deterministically.
+  const background = [];
+  const ctx = {
+    waitUntil(promise) {
+      background.push(Promise.resolve(promise));
+    },
+  };
+  async function flushBackground() {
+    while (background.length) {
+      const batch = background.splice(0, background.length);
+      await Promise.all(batch);
+    }
+  }
+
   const request = (path, { method = "GET", body } = {}) =>
     worker.fetch(
       new Request(`https://reader.test${path}`, {
@@ -361,6 +376,7 @@ export function makeHarness(worker, { clockStart, kvHooks, r2Hooks, fetchBehavio
         body: body ? JSON.stringify(body) : undefined,
       }),
       env,
+      ctx,
     );
 
   // Deliver queued messages in due order, advancing the virtual clock to
@@ -410,6 +426,9 @@ export function makeHarness(worker, { clockStart, kvHooks, r2Hooks, fetchBehavio
     queue,
     google,
     env,
+    ctx,
+    background,
+    flushBackground,
     request,
     drain,
     deliverDue,
