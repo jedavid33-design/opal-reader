@@ -191,43 +191,68 @@ async function recordTtsUsage(env, body, details = {}) {
       JSON.stringify(event),
       { httpMetadata: { contentType: "application/json" } },
     );
+    // KV write coalescing (design v2.1): the Gemini last-generation-
+    // success pointer lives in R2 now. Previously this was a KV put on
+    // every successful book-generation segment — one of the largest
+    // daily write sources. Same gating as the old KV writer: Gemini
+    // provider calls that did not fail, for book_generation only.
+    if (
+      event.provider === "gemini" &&
+      event.provider_call &&
+      event.request_status !== "failed" &&
+      event.usage_type === "book_generation"
+    ) {
+      await env.OPALREADER_STORAGE.put(
+        geminiLastSuccessObjectKey,
+        JSON.stringify({
+          timestamp: now,
+          model: event.model,
+          provider_request_id: event.provider_request_id,
+          book_id: event.book_id,
+          chapter_index: event.chapter_index,
+          segment_index: event.segment_index,
+        }),
+        { httpMetadata: { contentType: "application/json" } },
+      );
+    }
   } catch (error) {
     console.warn("TTS usage ledger write failed", error);
   }
 }
 const geminiQuotaPrefix = "quota:gemini:";
 const geminiLastSuccessKey = "quota:gemini:last-success";
-async function recordGeminiGenerationSuccess(env, body, model, providerRequestId) {
-  if (!env.OPALREADER_KV || body?.usage_type !== "book_generation") return;
-  try {
-    const timestamp = Date.now();
-    await env.OPALREADER_KV.put(
-      geminiLastSuccessKey,
-      JSON.stringify({
-        timestamp,
-        model: model || body?.model_id || null,
-        provider_request_id: providerRequestId || null,
-        book_id: body?.book_id || null,
-        chapter_index: Number.isInteger(body?.chapter_index) ? body.chapter_index : null,
-        segment_index: Number.isInteger(body?.segment_index) ? body.segment_index : null,
-      }),
-    );
-  } catch (error) {
-    console.warn("Gemini last-success write failed", error);
-  }
-}
-async function recordGeminiQuotaAttempt(env, model) {
-  if (!env.OPALREADER_KV) return;
+// KV write coalescing (design v2.1): Gemini attempt counting and the
+// last-success pointer moved off KV entirely. Attempts are R2 ledger
+// markers under usage/gemini-attempts/; the last-success pointer is the
+// R2 object below, maintained by recordTtsUsage. The legacy KV keys are
+// only READ by geminiQuotaReport for deploy continuity — pre-patch
+// attempts wrote nothing else, and legacy keys expire within 48 hours —
+// so the union of both sources is exact, never double-counted.
+const geminiAttemptPrefix = "usage/gemini-attempts/";
+const geminiLastSuccessObjectKey = "usage/gemini-last-success.json";
+async function recordGeminiQuotaAttemptLedger(env, body, model) {
+  if (!env.OPALREADER_STORAGE) return;
   try {
     const now = Date.now();
-    const key = `${geminiQuotaPrefix}${String(now).padStart(13, "0")}:${crypto.randomUUID()}`;
-    await env.OPALREADER_KV.put(
-      key,
-      JSON.stringify({ timestamp: now, model: model || null }),
-      { expirationTtl: 60 * 60 * 48 },
+    const marker = {
+      timestamp: now,
+      model: model || body?.model_id || null,
+      usage_type: safeUsageType(body?.usage_type),
+      book_id: body?.book_id || null,
+      chapter_index: Number.isInteger(body?.chapter_index)
+        ? body.chapter_index
+        : null,
+      segment_index: Number.isInteger(body?.segment_index)
+        ? body.segment_index
+        : null,
+    };
+    await env.OPALREADER_STORAGE.put(
+      `${geminiAttemptPrefix}${String(now).padStart(13, "0")}-${crypto.randomUUID()}.json`,
+      JSON.stringify(marker),
+      { httpMetadata: { contentType: "application/json" } },
     );
   } catch (error) {
-    console.warn("Gemini quota counter write failed", error);
+    console.warn("Gemini quota attempt ledger write failed", error);
   }
 }
 function zoneOffsetMs(ts, timeZone) {
@@ -272,7 +297,7 @@ function geminiPacificDayBounds(now = Date.now()) {
 async function geminiQuotaReport(env) {
   const now = Date.now(), windowMs = 24 * 60 * 60 * 1000;
   const rollingStart = now - windowMs, day = geminiPacificDayBounds(now);
-  if (!env.OPALREADER_KV) return {
+  if (!env.OPALREADER_STORAGE) return {
     used_24h:null, used_today:null, used_calendar_day:null, tracking_available:false,
     last_request_ms:null, limit:null, window_ms:windowMs,
     window_start_ms:rollingStart, day_start_ms:day.start,
@@ -282,26 +307,69 @@ async function geminiQuotaReport(env) {
   };
   // A DST fall-back Pacific day can span 25 hours.
   const scanStart = Math.min(rollingStart, day.start);
-  let cursor, used24h=0, usedToday=0, oldest24h=null, newest=null;
-  do {
-    const page = await env.OPALREADER_KV.list({
-      prefix:geminiQuotaPrefix, cursor, limit:1000,
-    });
-    for (const item of page.keys || []) {
-      const match = /^quota:gemini:(\d{13}):/.exec(item.name||"");
-      const ts = match ? Number(match[1]) : 0;
-      if (ts < scanStart || ts > now) continue;
-      if (newest == null || ts > newest) newest=ts;
-      if (ts >= rollingStart) {
-        used24h++;
-        if(oldest24h == null || ts < oldest24h) oldest24h=ts;
-      }
-      if(ts >= day.start && ts < day.end) usedToday++;
+  let used24h=0, usedToday=0, oldest24h=null, newest=null;
+  const tally = (ts) => {
+    if (ts < scanStart || ts > now) return;
+    if (newest == null || ts > newest) newest=ts;
+    if (ts >= rollingStart) {
+      used24h++;
+      if(oldest24h == null || ts < oldest24h) oldest24h=ts;
     }
-    cursor = page.list_complete ? undefined : page.cursor;
+    if(ts >= day.start && ts < day.end) usedToday++;
+  };
+  // Attempts now live in the R2 ledger (usage/gemini-attempts/); count
+  // them by the timestamp embedded in each marker's key, exactly as the
+  // KV attempt keys were counted before.
+  let cursor;
+  do {
+    const page = await env.OPALREADER_STORAGE.list({
+      prefix:geminiAttemptPrefix, cursor, limit:1000,
+    });
+    for (const item of page.objects || []) {
+      const match = /^usage\/gemini-attempts\/(\d{13})-/.exec(item.key||"");
+      if (match) tally(Number(match[1]));
+    }
+    cursor = page.truncated ? page.cursor : undefined;
   } while(cursor);
-  let lastSuccess = null;
-  try {lastSuccess = await env.OPALREADER_KV.get(geminiLastSuccessKey, "json");} catch {}
+  // Deploy continuity: attempts recorded before this patch exist only as
+  // legacy KV keys (they expire within 48 hours). Count them too — read
+  // only, never written — so the report does not under-read across the
+  // deploy boundary. The two sources are disjoint by construction:
+  // pre-patch attempts wrote only KV keys, post-patch only R2 markers.
+  if (env.OPALREADER_KV) {
+    try {
+      let kvCursor;
+      do {
+        const page = await env.OPALREADER_KV.list({
+          prefix:geminiQuotaPrefix, cursor:kvCursor, limit:1000,
+        });
+        for (const item of page.keys || []) {
+          const match = /^quota:gemini:(\d{13}):/.exec(item.name||"");
+          if (match) tally(Number(match[1]));
+        }
+        kvCursor = page.list_complete ? undefined : page.cursor;
+      } while(kvCursor);
+    } catch {}
+  }
+  let lastSuccessMs = null;
+  try {
+    const object = await env.OPALREADER_STORAGE.get(geminiLastSuccessObjectKey);
+    if (object) {
+      const pointer = object.json
+        ? await object.json()
+        : JSON.parse(await new Response(object.body).text());
+      lastSuccessMs = Number(pointer?.timestamp) || null;
+    }
+  } catch {}
+  if (env.OPALREADER_KV) {
+    // Legacy KV pointer (pre-patch writes): take whichever is newer.
+    try {
+      const legacy = await env.OPALREADER_KV.get(geminiLastSuccessKey, "json");
+      const legacyMs = Number(legacy?.timestamp) || null;
+      if (legacyMs && (!lastSuccessMs || legacyMs > lastSuccessMs))
+        lastSuccessMs = legacyMs;
+    } catch {}
+  }
   const configured = Number(env.GEMINI_DAILY_REQUEST_LIMIT);
   return {
     used_24h:used24h, used_today:usedToday, used_calendar_day:usedToday,
@@ -309,7 +377,7 @@ async function geminiQuotaReport(env) {
     limit:Number.isFinite(configured)&&configured>0?configured:null,
     window_ms:windowMs, window_start_ms:rollingStart, day_start_ms:day.start,
     next_expiry_ms:oldest24h==null?null:oldest24h+windowMs,
-    last_success_ms:Number(lastSuccess?.timestamp)||null,
+    last_success_ms:lastSuccessMs,
     resets_at_ms:day.end, reset_timezone:"America/Los_Angeles",
     tracking_mode:"pacific_day_and_rolling_24h", approximate:true,
   };
@@ -402,17 +470,10 @@ async function usageReport(env, url) {
         : latest,
     0,
   );
-  if (lastGeminiGenerationSuccess && env.OPALREADER_KV) {
-    try {
-      const saved = await env.OPALREADER_KV.get(geminiLastSuccessKey, "json");
-      if ((Number(saved?.timestamp) || 0) < lastGeminiGenerationSuccess) {
-        await env.OPALREADER_KV.put(
-          geminiLastSuccessKey,
-          JSON.stringify({ timestamp: lastGeminiGenerationSuccess, backfilled: true }),
-        );
-      }
-    } catch {}
-  }
+  // KV write coalescing (design v2.1): the old KV backfill put for the
+  // last-success pointer is deleted. recordTtsUsage maintains the R2
+  // pointer (usage/gemini-last-success.json) at event time, so a report
+  // never needs to write anything.
   return {
     events: events.length,
     summary,
@@ -1115,7 +1176,12 @@ async function synthesizeAudio(env, provider, body) {
       const geminiStyle = (body.style_direction || "").toString().trim().slice(0, 300);
       const geminiTranscript = plainSpeechText(body.text);
       actualModel = geminiModel;
-      await recordGeminiQuotaAttempt(env, geminiModel);
+      // KV write coalescing (design v2.1): attempts are R2 ledger
+      // markers now, written at the exact point the per-attempt KV key
+      // used to be written — pre-dispatch, so failed and quota-rejected
+      // requests still count, and cache hits (early return above) still
+      // do not.
+      await recordGeminiQuotaAttemptLedger(env, body, geminiModel);
 
       if (/^gemini-3\.8-(?:flash|flash-lite)-tts$/i.test(geminiModel)) {
         // Gemini 3.8 TTS uses the Interactions API. The text field is a strict
@@ -1257,8 +1323,9 @@ async function synthesizeAudio(env, provider, body) {
         throw error;
       }
     }
-    if (provider === "gemini")
-      await recordGeminiGenerationSuccess(env, body, actualModel, providerRequestId);
+    // The Gemini last-success pointer is maintained inside
+    // recordTtsUsage from this very event (design v2.1) — the old
+    // per-success KV put is gone.
     await recordTtsUsage(env, body, {
       provider,
       provider_call: true,
@@ -1302,19 +1369,40 @@ const generationPayloadKey = (jobId) => `generation/jobs/${jobId}.json`;
 const generationStatusKey = (jobId) => `generation:${jobId}`;
 const generationStatusObjectKey = (jobId) =>
   `generation/status/${jobId}.json`;
+// KV write coalescing (design v2.1, 2026-10-19): the KV generation record
+// is a fallback mirror of the authoritative R2 status object. Mirror
+// bookkeeping lives in its own R2 objects — never inside the status
+// object — so persisting stamps can never clobber generation progress.
+const generationMirrorLockKey = (jobId) =>
+  `generation/mirror-lock/${jobId}.json`;
+const generationMirrorMetaKey = (jobId) =>
+  `generation/mirror-meta/${jobId}.json`;
+const MIRROR_LOCK_TTL_MS = 20 * 1000; // a lock older than this may be stolen
+const MIRROR_RETRY_FLOOR_MS = 60 * 1000; // one mirror attempt per job per minute
+const MIRROR_PROGRESS_SEGMENT_STEP = 25; // routine volume catch-up threshold
+const MIRROR_ROUTINE_STATES = new Set(["queued", "generating"]);
+const MIRROR_TERMINAL_STATES = new Set([
+  "ready",
+  "partial",
+  "failed",
+  "cancelled",
+]);
 
 async function saveGenerationStatus(env, status) {
+  // KV write coalescing (design v2.1): R2 is authoritative and is awaited
+  // FIRST — its failure throws, exactly as before. The KV mirror is then
+  // refreshed by the serialized mirror writer, which mirrors only
+  // critical transitions, terminal states, and volume catch-up; its
+  // failures are logged and swallowed so generation never depends on KV
+  // availability or quota.
+  status._statusVersion = (Number(status._statusVersion) || 0) + 1;
   const serialized = JSON.stringify(status);
-  await Promise.all([
-    env.OPALREADER_KV.put(generationStatusKey(status.job_id), serialized, {
-      expirationTtl: 60 * 60 * 24 * 14,
-    }),
-    env.OPALREADER_STORAGE.put(
-      generationStatusObjectKey(status.job_id),
-      serialized,
-      { httpMetadata: { contentType: "application/json" } },
-    ),
-  ]);
+  await env.OPALREADER_STORAGE.put(
+    generationStatusObjectKey(status.job_id),
+    serialized,
+    { httpMetadata: { contentType: "application/json" } },
+  );
+  await mirrorGenerationStatus(env, status.job_id, "save");
 }
 
 async function readGenerationStatus(env, jobId) {
@@ -1328,6 +1416,259 @@ async function readGenerationStatus(env, jobId) {
     return JSON.parse(await new Response(object.body).text());
   }
   return env.OPALREADER_KV.get(generationStatusKey(jobId), "json");
+}
+
+// --- KV mirror writer (design v2.1) -------------------------------------
+// Single serialized writer for the KV generation-status mirror. It takes
+// only a jobId — never a caller snapshot — so every writer evaluates and
+// writes the latest R2 status. All mirror writes (checkpoint saves and
+// read-path catch-up alike) serialize through a per-job R2 lock acquired
+// with conditional puts; confirmed stamps advance only after KV confirms
+// a write, and live in a separate mirror-meta object.
+
+async function readMirrorJson(storage, key) {
+  try {
+    const object = await storage.get(key);
+    if (!object) return null;
+    if (object.json) return await object.json();
+    return JSON.parse(await new Response(object.body).text());
+  } catch {
+    return null;
+  }
+}
+
+async function writeMirrorJson(storage, key, value) {
+  await storage.put(key, JSON.stringify(value), {
+    httpMetadata: { contentType: "application/json" },
+  });
+}
+
+async function readMirrorKvRaw(env, jobId) {
+  try {
+    const raw = await env.OPALREADER_KV.get(generationStatusKey(jobId));
+    if (raw == null) return null;
+    return typeof raw === "string" ? raw : JSON.stringify(raw);
+  } catch {
+    return null;
+  }
+}
+
+function mirrorSummaryOf(status) {
+  const segments = Array.isArray(status?.segments) ? status.segments : [];
+  return {
+    version: Number(status?._statusVersion) || 0,
+    state: String(status?.state || ""),
+    completed: Number(status?.completed) || 0,
+    total: Number(status?.total) || 0,
+    segments: segments.length,
+    continue_started: status?.continue_started === true,
+    error: Boolean(status?.error),
+    batch_names: [
+      ...new Set(
+        segments
+          .map((segment) => segment?.batch_job_name)
+          .filter((name) => typeof name === "string" && name),
+      ),
+    ].sort(),
+    split_count: segments.filter(
+      (segment) => Number.isInteger(segment?.split_of),
+    ).length,
+  };
+}
+
+function evaluateMirror(status, kvRaw, confirmed) {
+  const summary = mirrorSummaryOf(status);
+  if (kvRaw != null && kvRaw === JSON.stringify(status))
+    return { needed: false, summary };
+  let kvVersion = -1;
+  if (kvRaw != null) {
+    try {
+      kvVersion = Number(JSON.parse(kvRaw)?._statusVersion) || 0;
+    } catch {
+      kvVersion = -1;
+    }
+  }
+  if (!confirmed) return { needed: true, summary };
+  const stateJump =
+    summary.state !== confirmed.state &&
+    !(
+      MIRROR_ROUTINE_STATES.has(summary.state) &&
+      MIRROR_ROUTINE_STATES.has(confirmed.state)
+    );
+  const critical =
+    stateJump ||
+    summary.continue_started !== confirmed.continue_started ||
+    summary.error !== confirmed.error ||
+    summary.total !== confirmed.total ||
+    summary.segments !== confirmed.segments ||
+    summary.split_count !== confirmed.split_count ||
+    // A Batch op name appearing that the mirror has never confirmed is
+    // the critical "provider_request_id assigned" transition. Names
+    // being cleared as segments complete is routine and never mirrors
+    // on its own.
+    summary.batch_names.some(
+      (name) => !(confirmed.batch_names || []).includes(name),
+    );
+  if (critical) return { needed: true, summary };
+  if (
+    MIRROR_TERMINAL_STATES.has(summary.state) &&
+    summary.version !== confirmed.version
+  )
+    return { needed: true, summary };
+  if (
+    summary.completed - confirmed.completed >=
+    MIRROR_PROGRESS_SEGMENT_STEP
+  )
+    return { needed: true, summary };
+  if (kvRaw == null && MIRROR_TERMINAL_STATES.has(summary.state))
+    return { needed: true, summary };
+  // KV fell behind a version this writer previously confirmed (a failed
+  // stamp persistence, a fenced stale write, or an external delete):
+  // converge back to the confirmed state.
+  if (kvVersion >= 0 && kvVersion < (Number(confirmed.version) || 0))
+    return { needed: true, summary };
+  return { needed: false, summary };
+}
+
+async function mirrorGenerationStatus(env, jobId, reason = "save") {
+  if (!env?.OPALREADER_KV || !env?.OPALREADER_STORAGE || !validJobId(jobId))
+    return { mirrored: false, reason: "unconfigured" };
+  try {
+    return await runMirrorAttempt(env, jobId, reason);
+  } catch (error) {
+    console.warn("Generation status mirror attempt failed", error);
+    return { mirrored: false, reason: "error" };
+  }
+}
+
+async function runMirrorAttempt(env, jobId, reason) {
+  const storage = env.OPALREADER_STORAGE;
+  const statusKey = generationStatusObjectKey(jobId);
+  const metaKey = generationMirrorMetaKey(jobId);
+  const lockKey = generationMirrorLockKey(jobId);
+  const status = await readMirrorJson(storage, statusKey);
+  if (!status) return { mirrored: false, reason: "no-status" };
+  const meta = (await readMirrorJson(storage, metaKey)) || {};
+  const decision = evaluateMirror(
+    status,
+    await readMirrorKvRaw(env, jobId),
+    meta.confirmed || null,
+  );
+  if (!decision.needed) return { mirrored: false, reason: "current" };
+  const now = Date.now();
+  const terminal = MIRROR_TERMINAL_STATES.has(status.state);
+  // After a failed mirror write, non-terminal mirrors wait out the floor
+  // so a KV outage cannot turn into uncontrolled retry traffic; terminal
+  // mirrors stay eligible — they are the ones that must not be lost.
+  if (
+    !terminal &&
+    Number(meta.attempt_failed_at) &&
+    now - Number(meta.attempt_failed_at) < MIRROR_RETRY_FLOOR_MS
+  )
+    return { mirrored: false, reason: "retry-floor" };
+  // Read-path catch-up is bounded to one attempt per job per minute,
+  // claimed atomically below via the attempt stamp.
+  if (
+    reason === "catchup" &&
+    Number(meta.attempt_at) &&
+    now - Number(meta.attempt_at) < MIRROR_RETRY_FLOOR_MS
+  )
+    return { mirrored: false, reason: "attempt-floor" };
+
+  // Acquire the per-job lock: create-if-absent, or steal an expired lock
+  // with an etag-matched replace. At most two acquisition attempts.
+  const owner = crypto.randomUUID();
+  let epoch = (Number(meta.lock_epoch) || 0) + 1;
+  const putLock = (onlyIf) =>
+    storage.put(
+      lockKey,
+      JSON.stringify({ owner, acquired_at: Date.now(), epoch }),
+      { onlyIf, httpMetadata: { contentType: "application/json" } },
+    );
+  let acquired = await putLock(new Headers({ "If-None-Match": "*" }));
+  if (!acquired) {
+    const existing = await readMirrorJson(storage, lockKey);
+    if (
+      existing &&
+      Date.now() - (Number(existing.acquired_at) || 0) >= MIRROR_LOCK_TTL_MS
+    ) {
+      const head = await storage.head(lockKey).catch(() => null);
+      if (head?.etag) {
+        epoch = Math.max(epoch, (Number(existing.epoch) || 0) + 1);
+        acquired = await putLock(new Headers({ "If-Match": head.etag }));
+      }
+    }
+  }
+  if (!acquired) return { mirrored: false, reason: "lock-busy" };
+  const holdsLock = async () => {
+    const current = await readMirrorJson(storage, lockKey);
+    return (
+      current &&
+      current.owner === owner &&
+      Number(current.epoch) === epoch
+    );
+  };
+  const release = async () => {
+    try {
+      if (await holdsLock()) await storage.delete(lockKey);
+    } catch {}
+  };
+  try {
+    // Claim the attempt inside the lock: the attempt stamp enforces the
+    // per-minute floor across Worker executions, and the lock epoch is
+    // the fencing token for every write below.
+    meta.attempt_at = Date.now();
+    meta.lock_epoch = epoch;
+    await writeMirrorJson(storage, metaKey, meta);
+    // Evaluate the freshest status under the lock — the pre-check copy
+    // above may already be stale.
+    const fresh = await readMirrorJson(storage, statusKey);
+    if (!fresh) return { mirrored: false, reason: "no-status" };
+    const freshKvRaw = await readMirrorKvRaw(env, jobId);
+    const check = evaluateMirror(fresh, freshKvRaw, meta.confirmed || null);
+    if (!check.needed) return { mirrored: false, reason: "current" };
+    if (freshKvRaw != null) {
+      let kvVersion = 0;
+      try {
+        kvVersion = Number(JSON.parse(freshKvRaw)?._statusVersion) || 0;
+      } catch {
+        kvVersion = 0;
+      }
+      // Version guard (defense in depth beside the lock): never
+      // overwrite a KV record newer than the R2 status being mirrored.
+      if (kvVersion > (Number(fresh._statusVersion) || 0))
+        return { mirrored: false, reason: "kv-newer" };
+    }
+    // Fencing: re-validate ownership immediately before the KV write. A
+    // writer whose lock expired and was stolen must write nothing.
+    if (!(await holdsLock()))
+      return { mirrored: false, reason: "fenced" };
+    try {
+      await env.OPALREADER_KV.put(
+        generationStatusKey(jobId),
+        JSON.stringify(fresh),
+        { expirationTtl: 60 * 60 * 24 * 14 },
+      );
+    } catch (error) {
+      meta.attempt_failed_at = Date.now();
+      try {
+        await writeMirrorJson(storage, metaKey, meta);
+      } catch {}
+      console.warn("Generation status KV mirror write failed", error);
+      return { mirrored: false, reason: "kv-failed" };
+    }
+    // KV confirmed the write; only now may the confirmed stamps advance,
+    // and only while this writer still holds the fence.
+    if (await holdsLock()) {
+      meta.confirmed = mirrorSummaryOf(fresh);
+      meta.confirmed_at = Date.now();
+      meta.attempt_failed_at = null;
+      await writeMirrorJson(storage, metaKey, meta);
+    }
+    return { mirrored: true, reason: "ok" };
+  } finally {
+    await release();
+  }
 }
 
 async function readGenerationPayload(env, jobId) {
@@ -1633,6 +1974,25 @@ function markBatchPending(status, index, batchName) {
   };
   return {waiting:true,status,delaySeconds:Math.ceil(GEMINI_BATCH_WAIT_MS/1000)};
 }
+// Accounting gap closed (design v2.1): Batch outcomes never pass through
+// synthesizeAudio, and until now a Batch failure wrote NO usage-ledger
+// event at all — only per-segment successes did. Record failures here so
+// the R2 ledger covers every Batch provider outcome. Counters are not
+// affected (attempts are synthesize-path markers; last-success is
+// success-gated), but the ledger is no longer silently incomplete.
+async function recordBatchFailure(env, segment, model, batchName, error) {
+  await recordTtsUsage(env, segment, {
+    provider: "gemini",
+    provider_call: true,
+    request_status: "failed",
+    cache_status: "provider_call",
+    generation_mode: "batch",
+    provider_request_id: batchName || null,
+    model: model || null,
+    error: String(error?.message || error || "Gemini Batch failed.").slice(0, 320),
+  });
+}
+
 async function stepGeminiBatch(env, jobId, segment, status, index) {
   if (!env.GEMINI_API_KEY) throw Error("Gemini API key is not configured.");
   const model = String(segment.model_id || "gemini-3.8-flash-tts");
@@ -1685,6 +2045,8 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
         // forever by a submission that was never accepted.
         item.batch_submit_attempted=false;
         await saveGenerationStatus(env,status);
+        await recordBatchFailure(env, segment, model, null,
+          Error(`Gemini Batch submission rejected (HTTP ${response.status}).`));
         await throwProviderError(response,"gemini");
       }
       const accepted=await response.json();
@@ -1727,6 +2089,7 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
     if(/POLICY_BLOCK|PROHIBITED_CONTENT|BLOCKED|SAFETY/i.test(detail)){
       error.contentBlocked=true;error.blockReason="POLICY_BLOCK";error.finishReason="HTTP_400";
     }else error.providerInternal=true;
+    await recordBatchFailure(env, segment, model, name, error);
     throw error;
   }
   if(!batch?.done){
@@ -1739,7 +2102,9 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
     records=records.inlinedResponses||records.inlined_responses;
   if(!Array.isArray(records)||records.length!==1) {
     const error=Error("Gemini Batch completed without its single inline response.");
-    error.noRetry=true;error.providerInternal=true;throw error;
+    error.noRetry=true;error.providerInternal=true;
+    await recordBatchFailure(env, segment, model, name, error);
+    throw error;
   }
   const first=records[0];
   if(first?.error){
@@ -1749,6 +2114,7 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
     if(/POLICY_BLOCK|PROHIBITED_CONTENT|BLOCKED|SAFETY/i.test(detail)){
       error.contentBlocked=true;error.blockReason="POLICY_BLOCK";error.finishReason="HTTP_400";
     }else error.providerInternal=true;
+    await recordBatchFailure(env, segment, model, name, error);
     throw error;
   }
   const generated=first?.response;
@@ -1756,14 +2122,18 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
   const audio=parts.find(part=>part?.inlineData?.data&&/audio/i.test(String(part.inlineData.mimeType||"audio/wav")));
   if(!audio?.inlineData?.data){
     const error=Error("Gemini Batch returned no playable audio.");
-    error.noRetry=true;error.providerInternal=true;throw error;
+    error.noRetry=true;error.providerInternal=true;
+    await recordBatchFailure(env, segment, model, name, error);
+    throw error;
   }
   const decoded=decodeBase64(audio.inlineData.data);
   const bytes=decoded.buffer.slice(decoded.byteOffset,decoded.byteOffset+decoded.byteLength);
   const h=new Uint8Array(bytes);
   if(h.length<44||String.fromCharCode(...h.slice(0,4))!=="RIFF"){
     const error=Error("Gemini Batch returned invalid WAV data.");
-    error.noRetry=true;error.providerInternal=true;throw error;
+    error.noRetry=true;error.providerInternal=true;
+    await recordBatchFailure(env, segment, model, name, error);
+    throw error;
   }
   // The same deterministic key is used for Batch and Standard; never
   // overwrite an existing take, even if another device generated it.
@@ -1778,7 +2148,8 @@ async function stepGeminiBatch(env, jobId, segment, status, index) {
     output_price_per_million:usage.output_price_per_million*0.5,
     cost_source:"gemini_batch_usage_metadata_estimate",
   }:null;
-  await recordGeminiGenerationSuccess(env,segment,model,name);
+  // The last-success pointer is maintained inside recordTtsUsage from
+  // this event (design v2.1) — the old per-success KV put is gone.
   await recordTtsUsage(env,segment,{
     provider:"gemini",provider_call:true,request_status:"succeeded",
     cache_status:"provider_call",generation_mode:"batch",
@@ -2914,6 +3285,13 @@ export default {
             }
           }
         }
+        // KV write coalescing: read-path lazy catch-up. If the
+        // authoritative R2 status carries durable state the KV mirror
+        // has not confirmed (a failed mirror, a crash between the R2
+        // save and the mirror, external KV loss), let the serialized
+        // mirror writer converge it — rate-limited to one attempt per
+        // job per minute, and never allowed to fail the read.
+        await mirrorGenerationStatus(env, jobId, "catchup");
         return json(status, 200, origin, env);
       }
       if (
