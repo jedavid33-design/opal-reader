@@ -325,8 +325,8 @@ export function sha256Hex(text) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-export const RELEASE = "1.4.42/1.4.116";
-export const CLIENT_VERSION = "1.4.116";
+export const RELEASE = "1.4.43/1.4.117";
+export const CLIENT_VERSION = "1.4.117";
 
 export function makeSegment(seed, overrides = {}) {
   return {

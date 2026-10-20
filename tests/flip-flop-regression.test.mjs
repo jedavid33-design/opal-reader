@@ -45,7 +45,7 @@ const chapterQuotaBanner = new Function(
 )(chapterTruth, knownChapterJobs);
 
 const queueSrc = between(app, "async function queueAdaptiveRepair(", "// v1.4.79:");
-const RELEASE = "1.4.42/1.4.116";
+const RELEASE = "1.4.43/1.4.117";
 const PARKED_ID = "a".repeat(64);
 const REPAIR_ID = "b".repeat(64);
 

@@ -94,7 +94,7 @@ test("queueAdaptiveRepair adoption: no staging overwrite, ever", async () => {
     async () => { peSnapshots.push({ ...chapter.generation }); },
     () => {}, () => {},
     async () => {},
-    "1.4.42/1.4.116",
+    "1.4.43/1.4.117",
     () => true,
     () => {},
   );

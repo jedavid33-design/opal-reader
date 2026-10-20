@@ -471,5 +471,5 @@ test("client submits the saved plan in acknowledged slices, then finalizes", () 
   // No one-shot continue POST remains in the client.
   assert.ok(!app.includes('"/api/generation/continue",{'), "legacy one-shot POST removed from client");
   // Release identifiers are untouched, so saved sessions stay valid.
-  assert.match(app, /const APP_UI_VERSION="1\.4\.116"/);
+  assert.match(app, /const APP_UI_VERSION="1\.4\.117"/);
 });

@@ -92,9 +92,9 @@ const validId = (value) => /^[a-zA-Z0-9_-]{8,100}$/.test(value || "");
 const validCacheKey = (value) => /^(preview-)?[a-f0-9]{64}$/.test(value || "");
 const validJobId = (value) => /^[a-f0-9]{64}$/.test(value || "");
 const syncReady = (env) => env.OPALREADER_KV && env.OPALREADER_STORAGE;
-const APP_VERSION = "1.4.42"; // selectable Gemini Standard / Batch generation
+const APP_VERSION = "1.4.43"; // selectable Gemini Standard / Batch generation
 const SYNC_PROTOCOL_VERSION = 2; // manifest + one-book-at-a-time transfers
-const READER_GENERATION_UI_VERSION = "1.4.116";
+const READER_GENERATION_UI_VERSION = "1.4.117";
 const GENERATION_RELEASE_ID = APP_VERSION + "/" + READER_GENERATION_UI_VERSION;
 const usageEventPrefix = "usage/events/";
 const safeUsageType = (value) =>

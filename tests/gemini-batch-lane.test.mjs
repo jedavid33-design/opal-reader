@@ -85,8 +85,8 @@ test("Mode control is saved and included in new jobs only",()=>{
  assert.match(app,/id="generationLane"/);
  assert.match(app,/generation_mode:a\.geminiLane/);
  assert.match(app,/mode:a\.geminiLane/);
- assert.match(worker,/const APP_VERSION = "1\.4\.42"/);
- assert.match(worker,/const READER_GENERATION_UI_VERSION = "1\.4\.116"/);
+ assert.match(worker,/const APP_VERSION = "1\.4\.43"/);
+ assert.match(worker,/const READER_GENERATION_UI_VERSION = "1\.4\.117"/);
  assert.match(app,/const APP_UI_VERSION="1\.4\.116"/);
 });
 

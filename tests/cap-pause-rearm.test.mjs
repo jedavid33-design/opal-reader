@@ -271,7 +271,7 @@ test("queue entry performs the Worker status lookup before any submission", () =
 });
 
 test("index.html cache-busts the client for this branch", () => {
-  assert.match(indexHtml, /app-256\.js\?v=cap-pause-rearm/);
+  assert.match(indexHtml, /app-256\.js\?v=case4-truthful-status/);
 });
 
 // ---------------------------------------------------------------------
@@ -281,7 +281,7 @@ test("index.html cache-busts the client for this branch", () => {
 // deterministic job id the function computes from the plan.
 // ---------------------------------------------------------------------
 const queueSrc = extract(app, "async function queueAdaptiveRepair(", "async function runAutoSplitSmart(");
-const RELEASE = "1.4.42/1.4.116";
+const RELEASE = "1.4.43/1.4.117";
 
 function makeQueueEnv({ server = "404", monthlyCap = 0, spent = 0, plan, localGeneration, confirmAnswers } = {}) {
   const chapter = {
