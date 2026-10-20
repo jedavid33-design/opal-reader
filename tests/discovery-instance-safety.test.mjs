@@ -154,3 +154,69 @@ test("R2: a discovery response landing after a book switch is dropped whole", as
     "/api/generation/books/bookB/jobs",
   ]);
 });
+
+test("R1+R2 combined: first discovery in flight across a switch and a same-book reopen lands on the reopened instance", async () => {
+  // Rowan's combined case, exactly: (1) open A, start its FIRST
+  // discovery (no cached results exist); (2) switch to B while A's
+  // request is pending; (3) reopen A as a NEW instance within 45s;
+  // (4) resolve the original A request; (5) A must discover its
+  // remotely parked job WITHOUT waiting for an unrelated UI event.
+  // Before the fix this failed two ways at once: R1's cache was empty
+  // on a first discovery (nothing to rehydrate) and R2's instance
+  // check dropped the in-flight response whole, while the 45s
+  // throttle suppressed any refetch.
+  const PARKED = hex("e");
+  const w = makeWorld();
+  const chA1 = w.mkChapter("A · Chapter 1");
+  w.a.book = { id: "bookA", chapters: [chA1], continueSession: null };
+
+  let release = null;
+  w.setBeHandler(() => new Promise((resolve) => {
+    release = () => resolve({
+      json: async () => ({
+        quota_park: null,
+        jobs: [{
+          job_id: PARKED, chapter_index: 0, kind: "chapter",
+          state: "paused_quota", completed: 2, total: 26,
+          continue_session_id: null,
+        }],
+      }),
+    });
+  }));
+  const inFlight = w.refreshChapterJobDiscovery();
+  assert.ok(release, "A's first discovery is in flight (no cache exists yet)");
+
+  // (2) Switch to B while A's request is pending.
+  const chB = w.mkChapter("B · Chapter 1");
+  w.a.book = { id: "bookB", chapters: [chB], continueSession: null };
+
+  // (3) Reopen A as a NEW instance within the throttle window. A
+  // refresh here is throttled and there is no cache to rehydrate —
+  // only the in-flight response can save the parked job.
+  const chA2 = w.mkChapter("A · Chapter 1");
+  w.a.book = { id: "bookA", chapters: [chA2], continueSession: null };
+  await w.refreshChapterJobDiscovery();
+  assert.equal(knownChapterJobs(chA2).length, 0, "nothing has landed yet");
+  assert.equal(w.beCalls.length, 1,
+    "the reopen refresh was throttled — no second request was made");
+
+  // (4) Resolve the original A request.
+  release();
+  await inFlight;
+
+  // (5) The response applies to the CURRENT instance of book A.
+  const known = knownChapterJobs(chA2);
+  assert.ok(
+    known.some((j) => j.jobId === PARKED && j.state === "paused_quota"),
+    "the reopened instance discovers its remotely parked job from the in-flight response");
+  assert.equal(knownChapterJobs(chB).length, 0,
+    "Book B was never contaminated (R2 still holds)");
+  assert.equal(knownChapterJobs(chA1).length, 0,
+    "the abandoned first instance was not written to");
+
+  // And it stays monitored, not just discoverable.
+  w.timers.length = 0;
+  w.ct();
+  assert.ok(w.timers.some((t) => t.delay === 60000),
+    "the parked slow poll is scheduled on the reopened instance");
+});

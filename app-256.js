@@ -1034,7 +1034,7 @@ function Pr(){return`${Tt()}<div class="section-head"><h2>Chapters</h2><button c
   return{job_id:await tt(JSON.stringify({release:GENERATION_RELEASE_ID,mode:a.geminiLane,book:a.book.id,chapter:e,keys:r.map(sg=>sg.cache_key)})),...generationReleaseStamp(),generation_mode:a.geminiLane,book_id:a.book.id,book_title:a.book.title,
     chapter_index:e,chapter_number:e+1,chapter_title:c.title,segments:r};
 }
-async function lt(e,c,{replacement:r=!1}={}){const m=a.book.chapters[e],s=r?m.replacementGeneration||{}:m.generation||{},i=Number(s.recordedCost)||0,l=Number(c.generated_cost)||0,o=Math.max(0,l-i);if(c?.state==="paused_update"){m.autoSplitEnabled=false;m.autoSplitPauseReason="update";m.autoSplitStatus="Generation paused for update. Saved audio is intact; restart manually.";}if(!r&&s.scope==="background_repair"&&c.adaptive_repair){const ok=applyAdaptiveRepair(m,s,c);if(!ok&&["ready","partial"].includes(c?.state)&&!s.repairApplied){m.autoSplitEnabled=false;m.autoSplitPauseReason="error";m.autoSplitStatus="Background repair audio is saved, but passage mapping changed. Copy diagnostics before retrying.";}}// Case #4: every status merged through lt() joins the chapter's job
+async function lt(e,c,{replacement:r=!1}={}){const m=a.book.chapters[e],s=r?m.replacementGeneration||{}:m.generation||{},i=Number(s.recordedCost)||0,l=Number(c.generated_cost)||0,o=Math.max(0,l-i);if(c?.state==="paused_update"){m.autoSplitEnabled=false;m.autoSplitPauseReason="update";m.autoSplitStatus="Generation paused for update. Saved audio is intact; restart manually.";}if(c?.inline_split===true&&typeof applyInlineSplits==="function")applyInlineSplits(m,s,c);if(!r&&s.scope==="background_repair"&&c.adaptive_repair){const ok=applyAdaptiveRepair(m,s,c);if(!ok&&["ready","partial"].includes(c?.state)&&!s.repairApplied){m.autoSplitEnabled=false;m.autoSplitPauseReason="error";m.autoSplitStatus="Background repair audio is saved, but passage mapping changed. Copy diagnostics before retrying.";}}// Case #4: every status merged through lt() joins the chapter's job
 // watchlist. Guarded typeof: lt() is also exercised by extracted-code
 // harnesses that don't provide the watchlist helper — the watchlist is
 // runtime-only and rebuildable, so skipping the note there is safe.
@@ -1093,6 +1093,132 @@ async function adaptiveRepairPlan(chapterIndex){
       begin,count:forest.length});
   }
   return {nodes,roots};
+}
+function applyInlineSplits(ch,local,status){
+  // Case #4 final review (Rowan Blocker 1): an ordinary generation job
+  // now resolves POLICY_BLOCKs inline on the Worker, and its status
+  // carries the split tree (repair_path / repair_source_index /
+  // speech_text per node). When such a job finishes, expand each split
+  // chapter root into the tree's terminal leaves -- the same chapter
+  // surgery applyAdaptiveRepair performs for repair jobs -- then
+  // rebuild the local record's segment mapping aligned to the FULL
+  // status array, so the ordinary or() merge applies every leaf's
+  // result exactly (audio, blocked-for-fallback, provider failure).
+  // Integrity: the leaves' joined plain text must reproduce the
+  // original passage (whitespace-insensitive) before anything splices;
+  // on any mismatch the chapter is left untouched.
+  if(local?.inlineApplied||!["ready","partial"].includes(status?.state))return false;
+  if(status?.inline_split!==true||!Array.isArray(status.segments))return false;
+  const jobId=status.job_id||status.jobId||null;
+  if(local?.jobId&&jobId&&local.jobId!==jobId)return false;
+  const items=status.segments;
+  const isChild=s=>typeof s?.repair_path==="string"&&s.repair_path.length>0;
+  const roots=items.filter(s=>!isChild(s));
+  if(!Array.isArray(local?.segmentIndices)||local.segmentIndices.length!==roots.length)return false;
+  // Root entries in status order map through the local record's
+  // submit-time segmentIndices (roots-only alignment).
+  const rootChapterIndex=new Map();
+  { let k=0;
+    for(let u=0;u<items.length;u++){
+      if(isChild(items[u]))continue;
+      rootChapterIndex.set(u,local.segmentIndices[k++]);
+    } }
+  const edits=[];
+  for(let u=0;u<items.length;u++){
+    const s=items[u];
+    if(s?.state!=="split"||isChild(s)||!Number.isInteger(s?.repair_source_index))continue;
+    const leaves=items.filter(x=>isChild(x)&&x.repair_source_index===s.repair_source_index&&
+      ["ready","blocked","provider_failed"].includes(x.state));
+    if(!leaves.length||leaves.some(x=>typeof x.speech_text!=="string"))return false;
+    const chapterIndex=rootChapterIndex.get(u);
+    const old=Number.isInteger(chapterIndex)?ch.segments[chapterIndex]:null;
+    if(!old)return false;
+    const joined=leaves.map(x=>plainSpeech(x.speech_text)).join("");
+    const original=plainSpeech(old.speechText||old.text||"");
+    if(joined.replace(/\s+/g,"")!==original.replace(/\s+/g,""))return false;
+    const pieces=leaves.map((leaf,n)=>{
+      const seg={...old,id:n?crypto.randomUUID():old.id||crypto.randomUUID(),
+        text:plainSpeech(leaf.speech_text),speechText:leaf.speech_text,
+        blockRootId:old.blockRootId||old.id||null,
+        audioKey:null,audioStale:false,generationFingerprint:null,
+        providerRequestId:null,generatedModel:null};
+      delete seg.generationBlocked;delete seg.generationFailure;
+      delete seg.segmentGeneration;delete seg.splitExhausted;delete seg.systemVoiceFallback;
+      if(n)delete seg.sceneBreakBefore;
+      if(leaf.state==="ready"){seg.audioKey=leaf.cache_key||null;
+        seg.generationFingerprint=leaf.cache_key||null;seg.generatedModel=leaf.model||null}
+      if(leaf.state==="blocked"){seg.generationBlocked={
+        error:leaf.error||"Gemini blocked this small piece.",
+        blockReason:leaf.block_reason||"POLICY_BLOCK",finishReason:leaf.finish_reason||"HTTP_400",
+        model:leaf.model||null,jobId};seg.splitExhausted=true}
+      if(leaf.state==="provider_failed")seg.generationFailure={
+        error:leaf.error||"Gemini provider error.",kind:"provider_internal",
+        model:leaf.model||null,jobId};
+      return seg;
+    });
+    edits.push({statusIndex:u,sourceIndex:s.repair_source_index,chapterIndex,old,pieces,
+      splitCount:items.filter(x=>x.repair_source_index===s.repair_source_index&&x.state==="split").length});
+  }
+  if(!edits.length)return false;
+  // Splice descending so earlier chapter indices stay valid.
+  const shiftAt=new Map();
+  for(const x of edits.sort((p,q)=>q.chapterIndex-p.chapterIndex)){
+    if(typeof geminiRootInfo==="function"){
+      const hist=geminiRootInfo(ch,x.old);
+      if(hist)hist.splits=(Number(hist.splits)||0)+x.splitCount;
+    }
+    ch.segments.splice(x.chapterIndex,1,...x.pieces);
+    shiftAt.set(x.chapterIndex,x.pieces.length-1);
+  }
+  ch.text=ch.segments.map(s=>s.text).join("\n\n");
+  // Rebuild the local mapping aligned to the FULL status array (the
+  // convention or()'s exact-index path expects): roots shift by the
+  // expansions before them; a split parent points at its first piece
+  // (its state maps as a no-op there); each terminal leaf points at
+  // its own piece; internal split nodes point at their root's first
+  // piece. Keys are re-derived from the expanded chapter; fingerprints
+  // keep root values and take each leaf's cache key.
+  const shiftBefore=idx=>{let d=0;for(const[at,delta]of shiftAt)if(at<idx)d+=delta;return d};
+  const newIndices=new Array(items.length).fill(-1),
+        newKeys=new Array(items.length).fill(null),
+        newFingerprints=new Array(items.length).fill(null);
+  const firstPieceAt=new Map();
+  { let k=0;
+    for(let u=0;u<items.length;u++){
+      const s=items[u];
+      if(isChild(s))continue;
+      const base=local.segmentIndices[k];
+      const at=Number.isInteger(base)?base+shiftBefore(base):-1;
+      newIndices[u]=at;
+      newKeys[u]=at>=0&&ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+      newFingerprints[u]=Array.isArray(local.segmentFingerprints)?local.segmentFingerprints[k]??null:null;
+      k++;
+      if(s?.state==="split")firstPieceAt.set(s.repair_source_index,at);
+    } }
+  { const cursor=new Map();
+    for(let u=0;u<items.length;u++){
+      const s=items[u];
+      if(!isChild(s))continue;
+      if(["ready","blocked","provider_failed"].includes(s.state)){
+        const start=firstPieceAt.get(s.repair_source_index);
+        if(start==null||start<0)continue;
+        const at=start+(cursor.get(s.repair_source_index)||0);
+        cursor.set(s.repair_source_index,(cursor.get(s.repair_source_index)||0)+1);
+        newIndices[u]=at;
+        newKeys[u]=ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+        newFingerprints[u]=s.cache_key||null;
+      }else{
+        const at=firstPieceAt.get(s.repair_source_index);
+        if(at==null||at<0)continue;
+        newIndices[u]=at;
+        newKeys[u]=ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+      }
+    } }
+  local.segmentIndices=newIndices;
+  local.segmentKeys=newKeys;
+  local.segmentFingerprints=newFingerprints;
+  local.inlineApplied=true;
+  return true;
 }
 function applyAdaptiveRepair(ch,local,status){
   if(local?.repairApplied||!["ready","partial"].includes(status?.state))return false;
@@ -1819,15 +1945,30 @@ async function refreshChapterJobDiscovery(force=false){
   try{
     const res=await(await be(a.apiBase,a.accessToken,
       "/api/generation/books/"+encodeURIComponent(bookId)+"/jobs")).json();
-    if(a.book!==book)return;
+    // Case #4 final review (Blocker 3, combined R1+R2): a response
+    // applies to the CURRENT instance of the SAME book. Reopening book
+    // A as a fresh instance while A's first discovery is still in
+    // flight must not drop the response -- the reopened instance has
+    // no cache to rehydrate and the 45s throttle blocks a refetch, so
+    // dropping it would hide a remotely parked job until some
+    // unrelated UI event. A response is dropped only when a DIFFERENT
+    // book is open now, which keeps cross-book contamination
+    // impossible (the accepted R2 behavior).
+    if(a.book?.id!==bookId)return;
+    const current=a.book;
     if(res?.quota_park)a.quotaPark=res.quota_park;
     const jobs=Array.isArray(res?.jobs)?res.jobs:[];
-    discoveryCacheByBook.set(bookId,{instance:book,jobs});
+    discoveryCacheByBook.set(bookId,{instance:current,jobs});
     for(const job of jobs){
-      const ch=book.chapters[job.chapter_index];
+      const ch=current.chapters[job.chapter_index];
       if(ch)noteChapterJob(ch,job);
     }
-  }catch{/* discovery unavailable: slot-only behavior, as before */}
+  }catch{
+    // Discovery unavailable: slot-only behavior, as before -- but a
+    // failed fetch must not throttle the next refresh into silence,
+    // so clear this call's stamp and let a reopen retry promptly.
+    if(jobDiscoveryAt.get(bookId)===now)jobDiscoveryAt.delete(bookId);
+  }
 }
 function ct(){clearTimeout(a.generationPoll);const continueOwned=id=>a.book?.continueSession?.jobs?.some(j=>j.jobId===id);
 // Rowan review fix (Case #4): "active" is derived from EVERY known job
