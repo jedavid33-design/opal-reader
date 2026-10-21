@@ -60,14 +60,24 @@ const para=(ch,n)=>{ // exactly n chars of sentence-shaped filler ending "."
   let s=""; while(s.length<n)s+=unit;
   return s.slice(0,n-1)+".";
 };
-const squash=s=>s.replace(/\s+/g,"");
+// Word-token tiling: each half is tokenized separately and the token
+// lists are concatenated, so a lost space merging two words anywhere
+// fails, while the seam itself (where the splitter consumed the
+// whitespace it cut at) contributes no token and cannot false-positive.
+const wordsOf=s=>plainSpeechText(s).split(/\s+/).filter(Boolean);
 function assertTiles(original,halves){
   const plain=plainSpeechText(original);
-  assert.equal(squash(plainSpeechText(halves[0]).trim()+plainSpeechText(halves[1]).trim()),
-    squash(plain.trim()));
+  assert.deepEqual([...wordsOf(halves[0]),...wordsOf(halves[1])],wordsOf(original));
   assert.ok(plainSpeechText(halves[0]).trim().length>=140,"left half >= 140 plain chars");
   assert.ok(plainSpeechText(halves[1]).trim().length>=140,"right half >= 140 plain chars");
 }
+
+test("word-token tiling catches a merged word (lost space)",()=>{
+  const original=para("Z",200)+" "+para("Y",200);
+  const halves=splitSpeechMarkup(original,naturalBlockedSplitPoint(plainSpeechText(original)));
+  const corrupted=[halves[0],halves[1].replace(/(\w) (\w)/,"$1$2")]; // merge one word pair inside the right half
+  assert.notDeepEqual([...wordsOf(corrupted[0]),...wordsOf(corrupted[1])],wordsOf(original));
+});
 
 test("split prefers the paragraph break and children tile the parent",()=>{
   const original=para("A",200)+"\n\n"+para("B",200);

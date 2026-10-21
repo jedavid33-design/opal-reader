@@ -25,11 +25,20 @@ DATA = os.path.expanduser("~/workspace/opal-reader-p1-data")
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 
 
+UNREADABLE = []
+
+
 def load_books():
+    """Unreadable snapshot files are verification FAILURES, never silent
+    skips: they are collected in UNREADABLE and folded into the report's
+    problems, so a clean report means every file actually parsed."""
     books = []
     for name in sorted(os.listdir(os.path.join(DATA, "books"))):
-        with open(os.path.join(DATA, "books", name)) as f:
-            books.append(json.load(f))
+        try:
+            with open(os.path.join(DATA, "books", name)) as f:
+                books.append(json.load(f))
+        except Exception as e:
+            UNREADABLE.append(f"books/{name}: {type(e).__name__}")
     return books
 
 
@@ -113,11 +122,20 @@ def check_books(books):
     return rep
 
 
-def plain(s):
-    """Plain speech text: emphasis markup is not wording (the split kernel
-    itself adds a tag pair at an emphasized seam, so tag characters must
-    not count as text)."""
-    return squash(re.sub(r"</?emphasis>", "", s or "", flags=re.I))
+def words(s):
+    """Word tokens of a passage, emphasis markup stripped. Tiling compares
+    TOKEN LISTS (each child tokenized separately, then concatenated), so a
+    lost space that merges two words anywhere fails the check, while the
+    seam itself — where the splitter legitimately consumes the whitespace
+    it cut at — contributes no token and cannot false-positive."""
+    return re.sub(r"</?emphasis>", "", s or "", flags=re.I).split()
+
+
+def tokens_of(texts):
+    out = []
+    for t in texts:
+        out += words(t)
+    return out
 
 
 def tile_check(segments, label, problems, originals, compare_external=True):
@@ -156,11 +174,12 @@ def tile_check(segments, label, problems, originals, compare_external=True):
         else:
             problems.append(f"{label}: seg{i} path {p}: bad repair_parent {par!r}")
     for i, kids in children.items():
-        joined = "".join(segments[k].get("text") or "" for k in kids)
-        if plain(joined) != plain(segments[i].get("text")):
+        joined_len = sum(len(segments[k].get("text") or "") for k in kids)
+        if tokens_of([segments[k].get("text") for k in kids]) != words(
+                segments[i].get("text")):
             problems.append(
                 f"{label}: node seg{i} path {segments[i].get('repair_path')!r} "
-                f"not tiled by its children (joined {len(joined)} chars vs "
+                f"not tiled by its children (joined {joined_len} chars vs "
                 f"node {len(segments[i].get('text') or '')})")
         else:
             internal += 1
@@ -197,11 +216,11 @@ def tile_check(segments, label, problems, originals, compare_external=True):
         if original is None:
             missing += 1
             continue
-        joined = "".join(segments[k].get("text") or "" for k in leaves)
-        if plain(joined) != plain(original):
+        joined_len = sum(len(segments[k].get("text") or "") for k in leaves)
+        if tokens_of([segments[k].get("text") for k in leaves]) != words(original):
             problems.append(
                 f"{label}: source seg{src} leaves do not tile the surviving "
-                f"original (joined {len(joined)} chars vs {len(original)})")
+                f"original (joined {joined_len} chars vs {len(original)})")
         else:
             external += 1
     return internal, external, missing, superseded
@@ -219,8 +238,10 @@ def check_jobs():
             try:
                 with open(os.path.join(d, name)) as f:
                     docs.append((sub, name, json.load(f)))
-            except Exception:
-                continue
+            except Exception as e:
+                problems.append(
+                    f"snapshot file unreadable: {sub}/{name} "
+                    f"({type(e).__name__})")
     # originals: repair-free payloads keyed by (book, chapter) -> {seg_index: text}
     original_index = {}
     for sub, name, doc in docs:
@@ -271,6 +292,8 @@ def check_jobs():
 def structure():
     books = load_books()
     rep = check_books(books)
+    rep["problems"] = [f"snapshot file unreadable: {u}" for u in UNREADABLE] \
+        + rep["problems"]
     rep["jobs"] = check_jobs()
     rep["totals"] = dict(rep["totals"])
     rep["provenance"] = dict(rep["provenance"])

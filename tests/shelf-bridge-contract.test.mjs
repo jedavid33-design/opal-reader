@@ -158,3 +158,128 @@ test("overlap parser returns null for non-overlap messages",()=>{
   assert.equal(api.shelfOverlapParts(f.item,"Some other error"),null);
   assert.equal(api.shelfOverlapParts(f.item,"overlaps an existing session (nonsense)"),null);
 });
+
+test("outbox cap keeps the newest 300 items, oldest dropped first",()=>{
+  const {api}=makeShelf(async()=>{throw new Error("no fetch expected")});
+  const t0=1760000000000;
+  for(let i=0;i<305;i++) api.shelfQueue("cap_read",t0+i*120000,10);
+  const q=api.shelfOutbox();
+  assert.equal(q.length,300);
+  assert.equal(q[0].startedAt,new Date(t0+5*120000).toISOString());
+  assert.equal(q[299].startedAt,new Date(t0+304*120000).toISOString());
+});
+
+// --- Session timing (fake clock + fake timers through the shipped code) ---
+const sessionCode=[
+  between(app,"function shelfActive","function shelfNewQueueId"),
+].join("\n");
+function fakeClock(startMs){
+  let now=startMs,seq=1; const timers=new Map();
+  const arm=(fn,ms,interval)=>{const id=seq++;timers.set(id,{fn,at:now+ms,interval});return id;};
+  return { now:()=>now,
+    setTimeout:(fn,ms)=>arm(fn,ms,0), setInterval:(fn,ms)=>arm(fn,ms,ms),
+    clearTimeout:id=>timers.delete(id), clearInterval:id=>timers.delete(id),
+    advance(ms){ const end=now+ms;
+      for(;;){ let due=null;
+        for(const [id,t] of timers) if(t.at<=end&&(!due||t.at<due.at)) due={id,at:t.at,t};
+        if(!due)break;
+        now=due.at;
+        if(due.t.interval) due.t.at=now+due.t.interval; else timers.delete(due.id);
+        due.t.fn(); }
+      now=end; } };
+}
+function makeShelfTimed(fetchImpl,startMs){
+  const clock=fakeClock(startMs);
+  class FakeDate extends Date{ static now(){return clock.now();} }
+  const store=new Map();
+  const localStorage={
+    getItem:k=>store.has(k)?store.get(k):null,
+    setItem:(k,v)=>store.set(k,String(v)),
+    removeItem:k=>store.delete(k)};
+  const a={shelfApiBase:"https://shelf.test",shelfLogEnabled:true,
+    book:{id:"book-1",shelfReadId:"read-1"}};
+  const ee={_singleSegmentPreview:false};
+  const factory=new Function("localStorage","fetch","a","ee",
+    "setTimeout","clearTimeout","setInterval","clearInterval","Date",
+    "let shelfListenWallStart=0,shelfListenBookId=null,shelfListenReadId=null,shelfListenTimer=null,shelfFlushing=false;\n"+
+    sessionCode+"\n"+code+
+    "\nreturn {shelfListenStart,shelfListenPaused,shelfListenStop,shelfOutbox,shelfFlush};");
+  const api=factory(localStorage,fetchImpl,a,ee,
+    clock.setTimeout,clock.clearTimeout,clock.setInterval,clock.clearInterval,FakeDate);
+  return {api,clock,store};
+}
+const drain=async()=>{ await new Promise(r=>setImmediate(r)); await new Promise(r=>setImmediate(r)); };
+
+test("timing: 30s checkpoints queue chunks that merge into one session",()=>{
+  const {api,clock}=makeShelfTimed(async()=>{throw new Error("no fetch expected")},1760000000000);
+  api.shelfListenStart();
+  clock.advance(30000);
+  let q=api.shelfOutbox();
+  assert.equal(q.length,1); assert.equal(q[0].duration_seconds,30);
+  clock.advance(30000);
+  q=api.shelfOutbox();
+  assert.equal(q.length,1); assert.equal(q[0].duration_seconds,60);
+});
+
+test("timing: pause under 4s resumes; confirmed stop backdates to the pause",async()=>{
+  const calls=[];
+  const {api,clock}=makeShelfTimed(async(url,opts)=>{ calls.push(opts);
+    return {ok:true,status:200,json:async()=>({})}; },1760000000000);
+  const T=clock.now();
+  api.shelfListenStart();
+  clock.advance(20000);
+  api.shelfListenPaused();
+  clock.advance(3900);
+  assert.equal(api.shelfOutbox().length,0); // grace period: nothing ended yet
+  api.shelfListenStart(); // resume inside the grace period
+  clock.advance(10000); // crosses the 30s checkpoint (wall clock, pause included)
+  let q=api.shelfOutbox();
+  assert.equal(q.length,1); assert.equal(q[0].duration_seconds,30);
+  api.shelfListenPaused();
+  clock.advance(4000); // stop confirmed; remainder is 3.9s -> below the 5s floor, not queued
+  q=api.shelfOutbox();
+  assert.equal(q.length,1); assert.equal(q[0].duration_seconds,30);
+  clock.advance(90000); // flush is armed for 95s after the stop: not yet
+  assert.equal(calls.length,0);
+  clock.advance(10000); await drain();
+  assert.equal(calls.length,1);
+  assert.equal(api.shelfOutbox().length,0);
+  assert.equal(JSON.parse(calls[0].body).duration_seconds,30);
+  assert.equal(JSON.parse(calls[0].body).started_at,new Date(T).toISOString());
+});
+
+test("timing: a confirmed pause-stop counts listening only up to the pause moment",()=>{
+  const {api,clock}=makeShelfTimed(async()=>{throw new Error("no fetch expected")},1760000000000);
+  const T=clock.now();
+  api.shelfListenStart();
+  clock.advance(25000);
+  api.shelfListenPaused();
+  clock.advance(4000);
+  const q=api.shelfOutbox();
+  assert.equal(q.length,1);
+  assert.equal(q[0].duration_seconds,25); // NOT 29: the 4s grace is excluded
+  assert.equal(q[0].startedAt,new Date(T).toISOString());
+});
+
+test("timing: resume within 90s of a stop cancels the flush and continues the same session",async()=>{
+  const calls=[];
+  const {api,clock}=makeShelfTimed(async(url,opts)=>{ calls.push(opts);
+    return {ok:true,status:200,json:async()=>({})}; },1760000000000);
+  api.shelfListenStart();
+  clock.advance(20000);
+  api.shelfListenPaused();
+  clock.advance(4000); // stopped; 20s queued; flush armed for +95s
+  assert.equal(api.shelfOutbox()[0].duration_seconds,20);
+  clock.advance(80000); // 84s after the pause: inside the 90s resume window
+  api.shelfListenStart(); // cancels the pending flush, session continues
+  clock.advance(120000); // checkpoints merge into the still-queued session
+  assert.equal(calls.length,0); // the armed flush never fired
+  const q=api.shelfOutbox();
+  assert.equal(q.length,1);
+  assert.equal(q[0].duration_seconds,140); // 20 + 4x30 checkpoint chunks, merged
+  clock.advance(10000); // 10s past the last checkpoint
+  api.shelfListenStop(); await drain(); // stop queues the >=5s remainder (merged: +10) and flushes
+  assert.equal(calls.length,1);
+  assert.equal(JSON.parse(calls[0].body).duration_seconds,150);
+  assert.equal(api.shelfOutbox().length,0);
+});
