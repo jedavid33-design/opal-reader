@@ -268,6 +268,42 @@ test("sweep dry-run FAILS CLOSED: incomplete own binding, incomplete cross-book 
   }
 });
 
+test("book identity is verified: mismatched identifiers rejected — including writes aimed past a tombstone (review follow-up)", async () => {
+  const h = makeHarness();
+  const a = new SyncClient(h.coord, "dev-A");
+  await a.pushBook("bk1", BOOK("bk1"));
+  await a.pushBook("bk2", BOOK("bk2"));
+  // Content: entityKey and bookId disagree — fenced against the
+  // wrong book if believed; rejected instead, nothing written.
+  const c1 = await a.push([{ family: "content", entityKey: "bk1", bookId: "bk2", baseRevision: 1, op: "upsert", payload: { title: "forged" } }]);
+  assert.equal(c1.outcomes[0].status, "rejected");
+  assert.equal(c1.outcomes[0].reason, "identity_mismatch");
+  assert.equal(h.coord.syncSnapshot({ family: "content" }).entities.find(e => e.entityKey === "bk1").data.title, "Book bk1");
+  // Bindings: a key naming bk1's occurrence under bk2's ownership:
+  const b1 = await a.push([{ family: "bindings", entityKey: "bk1:s1", bookId: "bk2", baseRevision: 0, op: "upsert", payload: { cacheKey: "k" } }]);
+  assert.equal(b1.outcomes[0].reason, "identity_mismatch");
+  // Bindings for a book that does not exist, and for an occurrence
+  // the book does not own:
+  const b2 = await a.push([{ family: "bindings", entityKey: "ghost:s1", bookId: "ghost", baseRevision: 0, op: "upsert", payload: { cacheKey: "k" } }]);
+  assert.equal(b2.outcomes[0].reason, "unknown_book");
+  const b3 = await a.push([{ family: "bindings", entityKey: "bk1:sX", bookId: "bk1", baseRevision: 0, op: "upsert", payload: { cacheKey: "k" } }]);
+  assert.equal(b3.outcomes[0].reason, "unknown_occurrence");
+  assert.equal(h.coord.syncSnapshot({ family: "bindings" }).entities.length, 0);
+  // The previously-deleted-book case: tombstone bk1, then aim a
+  // content write at bk1's key under live bk2's name — the exact
+  // resurrection path the identity check exists to close.
+  await a.deleteBook("bk1");
+  const revBefore = h.coord.syncSnapshot({ family: "content" }).entities.find(e => e.entityKey === "bk1").revision;
+  const forge = await a.push([{ family: "content", entityKey: "bk1", bookId: "bk2", baseRevision: 0, op: "upsert", payload: BOOK("bk1") }]);
+  assert.equal(forge.outcomes[0].reason, "identity_mismatch");
+  const bk1After = h.coord.syncSnapshot({ family: "content" }).entities.find(e => e.entityKey === "bk1");
+  assert.equal(bk1After.tombstone, true);
+  assert.equal(bk1After.revision, revBefore); // untouched
+  const forgeB = await a.push([{ family: "bindings", entityKey: "bk1:s1", bookId: "bk2", baseRevision: 0, op: "upsert", payload: { cacheKey: "k" } }]);
+  assert.equal(forgeB.outcomes[0].reason, "identity_mismatch");
+  assert.equal(h.coord.syncSnapshot({ family: "bindings" }).entities.length, 0);
+});
+
 test("group fences: duplicate entity targets and mixed delete+update groups are rejected whole (re-review blocker)", async () => {
   const h = makeHarness();
   const a = new SyncClient(h.coord, "dev-A");

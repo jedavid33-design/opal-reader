@@ -1879,6 +1879,27 @@ export class GenerationCoordinator {
       return { ok: true };
     }
     const bookId = ch.bookId || (family === "content" ? entityKey : null);
+    // Book identity, verified BEFORE any fence or CAS (P4 follow-up):
+    // a change whose identifiers disagree would otherwise be fenced
+    // and grouped against the WRONG book — including writing past a
+    // tombstone under a live book's name. Content: the entity key IS
+    // the book id. Bindings: the key must be "<bookId>:<occurrence>"
+    // for a book that exists, and the occurrence must be one of the
+    // book's own — ownership is proven, never assumed.
+    if (family === "content" && bookId !== entityKey)
+      return hard({ entityKey, status: "rejected", reason: "identity_mismatch", bookId });
+    if (family === "bindings") {
+      if (!bookId || !entityKey.startsWith(`${bookId}:`))
+        return hard({ entityKey, status: "rejected", reason: "identity_mismatch", bookId });
+      const bookEnt = this._syncEntity("content", bookId);
+      if (!bookEnt)
+        return hard({ entityKey, status: "rejected", reason: "unknown_book", bookId });
+      if (!bookEnt.deleted) {
+        const occIds = (JSON.parse(bookEnt.data_json || "{}").occurrenceIds) || [];
+        if (!occIds.includes(entityKey.slice(bookId.length + 1)))
+          return hard({ entityKey, status: "rejected", reason: "unknown_occurrence", bookId });
+      }
+    }
     // The delete fence: no family accepts a write against a
     // tombstoned book (Rowan invariant 3) — not content, not
     // bindings, and position events fence separately below.
