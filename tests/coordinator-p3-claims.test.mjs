@@ -124,12 +124,59 @@ test("resolveBatchNeverAccepted: explicit evidence closes the map, voids the gra
   const r = h.coord.resolveBatchNeverAccepted({ jobId: "job-1", occurrenceId: "o1", evidence: "provider ops audit #4471: no such submission" });
   assert.equal(r.ok, true);
   assert.equal(h.coord.workView("job-1").batchMaps[0].state, "closed");
+  assert.ok(h.coord.workView("job-1").batchMaps[0].superseded_at); // generation retired, audited
+  assert.ok(h.coord.workView("job-1").intents[0].superseded_at);
+  assert.match(h.coord.workView("job-1").intents[0].superseded_reason, /batch_never_accepted/);
   assert.equal(h.rows("grants")[0].state, "voided");
-  assert.equal(h.coord.claimView(g.grantId).state, "closed"); // void closed the claim too
+  // The CLAIM is not rewritten (P3 review fix 1): the dispatch WAS
+  // accepted — only the batch submission resolved as never-accepted.
+  assert.equal(h.coord.claimView(g.grantId).state, "claimed");
+  assert.equal(h.coord.probeVerdict(g.grantId).verdict, "accepted");
   assert.equal(h.coord.jobView("job-1").occurrences[0].state, "pending");
   assert.equal(h.coord.quotaView().attemptsToday, 0); // reservation released exactly once
   assert.equal(h.rows("schedule").filter(x => x.kind === "retry_grant" && x.state === "pending").length, 1);
   // And a lookup MISS can never do this: adoption is the only exit
   // from ambiguous besides explicit evidenced resolution — there is
   // no API for 'not found, therefore never accepted'.
+});
+
+test("void attempt on a CLAIMED dispatch (not_accepted verdict vs a live claim): the claim is never rewritten (review fix 1)", async () => {
+  const h = makeHarness();
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  const g = await h.coord.requestGrant("job-1");
+  // The queue message reached the consumer — it claims and acquires
+  // spend intent — while the dispatch ACK was lost. The attempted
+  // handoff goes uncertain at lease expiry (never voided outright):
+  await h.coord.drainOutbox(() => { throw new Error("ack lost"); });
+  assert.equal(h.coord.claimGrant({ grantId: g.grantId, consumerId: "exec-A" }).status, "claimed");
+  assert.equal(h.coord.acquireSpendIntent({ grantId: g.grantId, jobId: "job-1", occurrenceId: "o1", consumerId: "exec-A" }).acquired, true);
+  const lease = h.rows("schedule").find(r => r.kind === "lease" && r.state === "pending");
+  h.setNow(lease.due_at + 1000);
+  await h.coord.alarm();
+  assert.equal(h.rows("grants")[0].state, "handoff_uncertain");
+  // Now the dangerous verdict: the queue's terminal record says
+  // NOT_ACCEPTED — contradicting the consumer's live claim — and the
+  // handoff check voids the dispatch. (In production the probe reads
+  // the claim ledger and cannot disagree; this stubs the adversarial
+  // case to prove the void itself is claim-safe.)
+  h.env.probeQueue = () => "not_accepted";
+  h.advance(31000);
+  await h.coord.alarm();
+  assert.equal(h.rows("grants")[0].state, "voided");
+  // No false terminal negative: acceptance survives the void, and the
+  // probe still reads ACCEPTED for a dispatch that was truly claimed.
+  assert.equal(h.coord.claimView(g.grantId).state, "claimed");
+  assert.equal(h.coord.probeVerdict(g.grantId).verdict, "accepted");
+  // The re-advance grants fresh work and the same consumer claims it —
+  // but the occurrence's generation-1 intent still stands, so the new
+  // dispatch cannot re-spend (in-flight work is honored, not doubled):
+  h.advance(31000);
+  await h.coord.alarm();
+  const grants = h.rows("grants");
+  assert.equal(grants.length, 2);
+  const g2 = grants[1].grant_id;
+  assert.equal(h.coord.claimGrant({ grantId: g2, consumerId: "exec-A" }).status, "claimed");
+  const again = h.coord.acquireSpendIntent({ grantId: g2, jobId: "job-1", occurrenceId: "o1", consumerId: "exec-A" });
+  assert.equal(again.acquired, false);
+  assert.equal(again.intent.generation, 1);
 });

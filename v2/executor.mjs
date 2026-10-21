@@ -153,7 +153,12 @@ export function createExecutor({ coordinator, providers, cache, consumerId, work
   async function runBatch(grantId, jobId, occ) {
     const existing = coordinator.workView(jobId).batchMaps
       .find(m => m.occurrence_id === occ.occurrenceId);
-    if (existing) {
+    // A SUPERSEDED map (a generation closed by an evidenced
+    // never-accepted resolution) is history, not a fence: fall
+    // through to a fresh intent + fence at the next generation. The
+    // original permit is never reused — the coordinator mints a new
+    // one, audited, only because the old generation was superseded.
+    if (existing && !existing.superseded_at) {
       if (existing.state === "submitted") return pollBatch(grantId, jobId, occ, existing.provider_name);
       if (existing.state === "ambiguous") return { ambiguous: true, state: "submitting_ambiguous" };
       if (existing.state === "rejected" || existing.state === "closed")

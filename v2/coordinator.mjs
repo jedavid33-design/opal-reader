@@ -151,18 +151,25 @@ CREATE TABLE IF NOT EXISTS spend_intents (
   job_id TEXT NOT NULL, occurrence_id TEXT NOT NULL, grant_id TEXT,
   consumer_id TEXT NOT NULL, acquired_at INTEGER NOT NULL,
   outcome TEXT, outcome_detail TEXT,
-  PRIMARY KEY (job_id, occurrence_id));
+  generation INTEGER NOT NULL DEFAULT 1,
+  superseded_at INTEGER, superseded_reason TEXT,
+  PRIMARY KEY (job_id, occurrence_id, generation));
 -- P3: the coordinator-owned durable Batch mapping (contract 2).
 -- fenced (pre-POST) -> submitted | ambiguous | rejected;
 -- ambiguous -> submitted (lookup adoption) | closed (explicit
 -- resolution with evidence only). display_name is a lookup hint.
 -- Occurrence-keyed for the same reason as the fence: a re-granted
 -- occurrence polls its EXISTING batch, never a second submission.
+-- Generation-versioned like the fence (P3 review fix): a terminal
+-- never-accepted resolution SUPERSEDES the closed generation, and
+-- only a superseded generation may be succeeded by a fresh,
+-- explicitly audited attempt — the original permit is never reused.
 CREATE TABLE IF NOT EXISTS batch_maps (
   job_id TEXT NOT NULL, occurrence_id TEXT NOT NULL, grant_id TEXT,
   display_name TEXT NOT NULL, provider_name TEXT,
   state TEXT NOT NULL, detail TEXT, updated_at INTEGER NOT NULL,
-  PRIMARY KEY (job_id, occurrence_id));
+  generation INTEGER NOT NULL DEFAULT 1, superseded_at INTEGER,
+  PRIMARY KEY (job_id, occurrence_id, generation));
 `;
 
 function dayKeyPT(nowMs) {
@@ -656,10 +663,14 @@ export class GenerationCoordinator {
   _voidDispatch(payload, reason) {
     const jobState = reason;
     const grantId = payload.grantId;
-    // P3: a voided dispatch's acceptance closes with it — a late
-    // consumer must read 'closed', never a stale 'claimed'.
-    this.sql.exec(`UPDATE claims SET state = 'closed', closed_reason = ?, updated_at = ?
-      WHERE grant_id = ? AND state = 'claimed'`, `grant_voided:${reason}`, this._now(), grantId);
+    // P3 review fix (Rowan): a void NEVER rewrites the acceptance
+    // ledger. There is no claimed -> closed transition: a claimed
+    // dispatch was accepted — possibly with spend in flight — and
+    // marking it closed would make probeVerdict swear a terminal
+    // "never accepted" that may be false. A NEVER-claimed grant needs
+    // no row here either: claimGrant maps a voided grant to a
+    // 'closed' ANSWER at claim time, which is the only way a closed
+    // row is ever written for it.
     const ops = this._all(
       `SELECT * FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
       `op:${grantId}:%`);
@@ -1486,21 +1497,35 @@ export class GenerationCoordinator {
   // and must be reconciled by evidence, never re-spent. Because the
   // fence follows the occurrence, a deferred occurrence re-granted
   // under a fresh grant meets the same fence — no second spend.
+  _latestIntent(jobId, occurrenceId) {
+    return this._one(
+      `SELECT * FROM spend_intents WHERE job_id = ? AND occurrence_id = ?
+       ORDER BY generation DESC LIMIT 1`, jobId, occurrenceId);
+  }
+
+  _latestBatchMap(jobId, occurrenceId) {
+    return this._one(
+      `SELECT * FROM batch_maps WHERE job_id = ? AND occurrence_id = ?
+       ORDER BY generation DESC LIMIT 1`, jobId, occurrenceId);
+  }
+
   acquireSpendIntent({ grantId, jobId, occurrenceId, consumerId }) {
     return this._tx(() => {
-      const existing = this._one(
-        `SELECT * FROM spend_intents WHERE job_id = ? AND occurrence_id = ?`,
-        jobId, occurrenceId);
-      if (existing) return { acquired: false, intent: existing };
+      const latest = this._latestIntent(jobId, occurrenceId);
+      // A live (non-superseded) intent is the spend boundary: final.
+      if (latest && !latest.superseded_at) return { acquired: false, intent: latest };
       const claim = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
       if (!claim || claim.state !== "claimed") return { acquired: false, reason: "not_claimed" };
       if (claim.consumer_id !== consumerId) return { acquired: false, reason: "claimed_by_other" };
       const t = this._now();
-      this.sql.exec(`INSERT INTO spend_intents (job_id, occurrence_id, grant_id, consumer_id, acquired_at)
-        VALUES (?, ?, ?, ?, ?)`, jobId, occurrenceId, grantId, consumerId, t);
+      const generation = latest ? latest.generation + 1 : 1;
+      this.sql.exec(`INSERT INTO spend_intents (job_id, occurrence_id, grant_id, consumer_id, acquired_at, generation)
+        VALUES (?, ?, ?, ?, ?, ?)`, jobId, occurrenceId, grantId, consumerId, t, generation);
+      if (latest) this._logTransition("grant", grantId, "spend_intent_acquired",
+        "superseded", "acquired", null, { occurrenceId, generation });
       return { acquired: true,
                intent: { job_id: jobId, occurrence_id: occurrenceId, grant_id: grantId,
-                         consumer_id: consumerId, acquired_at: t, outcome: null } };
+                         consumer_id: consumerId, acquired_at: t, outcome: null, generation } };
     });
   }
 
@@ -1510,14 +1535,12 @@ export class GenerationCoordinator {
   // outcome is recorded by NOT calling this: the intent stays open.
   noteSpendOutcome({ jobId, occurrenceId, outcome, detail }) {
     return this._tx(() => {
-      const cur = this._one(
-        `SELECT * FROM spend_intents WHERE job_id = ? AND occurrence_id = ?`,
-        jobId, occurrenceId);
-      if (!cur) return { noted: false, reason: "no_intent" };
+      const cur = this._latestIntent(jobId, occurrenceId);
+      if (!cur || cur.superseded_at) return { noted: false, reason: "no_intent" };
       if (cur.outcome) return { noted: false, reason: "already_noted", outcome: cur.outcome };
       this.sql.exec(`UPDATE spend_intents SET outcome = ?, outcome_detail = ?
-        WHERE job_id = ? AND occurrence_id = ?`,
-        outcome, detail ? String(detail).slice(0, 320) : null, jobId, occurrenceId);
+        WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
+        outcome, detail ? String(detail).slice(0, 320) : null, jobId, occurrenceId, cur.generation);
       return { noted: true };
     });
   }
@@ -1528,36 +1551,32 @@ export class GenerationCoordinator {
   // and occurrence-keyed: re-grants poll the existing mapping.
   fenceBatchSubmit({ grantId, jobId, occurrenceId, displayName, consumerId }) {
     return this._tx(() => {
-      const existing = this._one(
-        `SELECT * FROM batch_maps WHERE job_id = ? AND occurrence_id = ?`,
-        jobId, occurrenceId);
-      if (existing) return { fenced: false, map: existing };
-      const intent = this._one(
-        `SELECT * FROM spend_intents WHERE job_id = ? AND occurrence_id = ?`,
-        jobId, occurrenceId);
-      if (!intent) return { fenced: false, reason: "no_spend_intent" };
+      const existing = this._latestBatchMap(jobId, occurrenceId);
+      if (existing && !existing.superseded_at) return { fenced: false, map: existing };
+      const intent = this._latestIntent(jobId, occurrenceId);
+      if (!intent || intent.superseded_at) return { fenced: false, reason: "no_spend_intent" };
       if (intent.consumer_id !== consumerId) return { fenced: false, reason: "claimed_by_other" };
       const t = this._now();
-      this.sql.exec(`INSERT INTO batch_maps (job_id, occurrence_id, grant_id, display_name, provider_name, state, detail, updated_at)
-        VALUES (?, ?, ?, ?, NULL, 'fenced', NULL, ?)`, jobId, occurrenceId, grantId, displayName, t);
+      const generation = intent.generation;
+      this.sql.exec(`INSERT INTO batch_maps (job_id, occurrence_id, grant_id, display_name, provider_name, state, detail, updated_at, generation)
+        VALUES (?, ?, ?, ?, NULL, 'fenced', NULL, ?, ?)`, jobId, occurrenceId, grantId, displayName, t, generation);
       return { fenced: true,
                map: { job_id: jobId, occurrence_id: occurrenceId, grant_id: grantId,
-                      display_name: displayName, provider_name: null, state: "fenced" } };
+                      display_name: displayName, provider_name: null, state: "fenced", generation } };
     });
   }
 
   _batchTransition(jobId, occurrenceId, fromStates, toState, fields, cause) {
     return this._tx(() => {
-      const cur = this._one(
-        `SELECT * FROM batch_maps WHERE job_id = ? AND occurrence_id = ?`,
-        jobId, occurrenceId);
+      const cur = this._latestBatchMap(jobId, occurrenceId);
       if (!cur) return { ok: false, reason: "no_map" };
+      if (cur.superseded_at) return { ok: false, reason: "superseded", map: cur };
       if (!fromStates.includes(cur.state)) return { ok: false, reason: `state_${cur.state}`, map: cur };
       const sets = ["state = ?", "updated_at = ?"];
       const vals = [toState, this._now()];
       for (const [k, v] of Object.entries(fields || {})) { sets.push(`${k} = ?`); vals.push(v); }
-      vals.push(jobId, occurrenceId);
-      this.sql.exec(`UPDATE batch_maps SET ${sets.join(", ")} WHERE job_id = ? AND occurrence_id = ?`, ...vals);
+      vals.push(jobId, occurrenceId, cur.generation);
+      this.sql.exec(`UPDATE batch_maps SET ${sets.join(", ")} WHERE job_id = ? AND occurrence_id = ? AND generation = ?`, ...vals);
       this._logTransition("grant", cur.grant_id, cause, cur.state, toState, null,
         { occurrenceId, displayName: cur.display_name });
       return { ok: true, map: { ...cur, state: toState, ...(fields || {}) } };
@@ -1596,18 +1615,47 @@ export class GenerationCoordinator {
   // occurrence already returned to pending via a partial report is
   // simply re-granted by the same retry path.
   resolveBatchNeverAccepted({ jobId, occurrenceId, evidence }) {
-    const cur = this._one(
-      `SELECT * FROM batch_maps WHERE job_id = ? AND occurrence_id = ?`, jobId, occurrenceId);
-    const r = this._batchTransition(jobId, occurrenceId, ["ambiguous"], "closed",
-      { detail: `never_accepted: ${String(evidence || "").slice(0, 240)}` }, "batch_never_accepted");
-    if (!r.ok) return r;
-    const grantId = cur.grant_id;
-    const grant = grantId ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, grantId) : null;
-    if (grant && (grant.state === "issued" || grant.state === "delivered" || grant.state === "handoff_uncertain")) {
-      this._tx(() => this._voidDispatch({ grantId, jobId }, "batch_never_accepted"));
-    }
-    this._scheduleReAdvance(jobId);
-    return { ...r, voided: !!grant };
+    const ev = String(evidence || "").slice(0, 240);
+    const done = this._tx(() => {
+      const cur = this._latestBatchMap(jobId, occurrenceId);
+      if (!cur) return { ok: false, reason: "no_map" };
+      if (cur.superseded_at) return { ok: false, reason: "superseded", map: cur };
+      if (cur.state !== "ambiguous") return { ok: false, reason: `state_${cur.state}`, map: cur };
+      const t = this._now();
+      // Close this generation AND supersede it, atomically: the map
+      // and its spend intent are retired together, with the evidence
+      // as the audit record. Only a superseded generation may be
+      // succeeded — the next claim acquires a FRESH intent at
+      // generation+1 (the original permit is never reused).
+      this.sql.exec(`UPDATE batch_maps SET state = 'closed', superseded_at = ?,
+          detail = ?, updated_at = ?
+        WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
+        t, `never_accepted: ${ev}`, t, jobId, occurrenceId, cur.generation);
+      const intent = this._latestIntent(jobId, occurrenceId);
+      if (intent && !intent.superseded_at) {
+        this.sql.exec(`UPDATE spend_intents SET superseded_at = ?, superseded_reason = ?
+          WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
+          t, `batch_never_accepted: ${ev}`, jobId, occurrenceId, intent.generation);
+      }
+      this._logTransition("grant", cur.grant_id, "batch_never_accepted",
+        "ambiguous", "closed", null,
+        { occurrenceId, generation: cur.generation, evidence: ev });
+      this._logTransition("grant", cur.grant_id, "spend_intent_superseded",
+        "acquired", "superseded", null,
+        { occurrenceId, generation: cur.generation, evidence: ev });
+      // Void the fencing dispatch if it is still open (releasing its
+      // reservation), then the standard re-advance takes over. The
+      // CLAIM on that grant is untouched — acceptance happened; only
+      // the batch submission is resolved as never-accepted.
+      const grant = cur.grant_id
+        ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, cur.grant_id) : null;
+      if (grant && (grant.state === "issued" || grant.state === "delivered" || grant.state === "handoff_uncertain")) {
+        this._voidDispatch({ grantId: cur.grant_id, jobId }, "batch_never_accepted");
+      }
+      return { ok: true, voided: !!grant, generation: cur.generation, map: { ...cur, state: "closed", superseded_at: t } };
+    });
+    if (done.ok) this._scheduleReAdvance(jobId);
+    return done;
   }
 
   claimView(grantId) {
@@ -1615,9 +1663,19 @@ export class GenerationCoordinator {
   }
 
   workView(jobId) {
+    // Latest generation per occurrence — the current attempt's rows.
+    // (Full history stays in the tables + transitions for audit.)
     return {
-      intents: this._all(`SELECT * FROM spend_intents WHERE job_id = ? ORDER BY occurrence_id`, jobId),
-      batchMaps: this._all(`SELECT * FROM batch_maps WHERE job_id = ? ORDER BY occurrence_id`, jobId),
+      intents: this._all(
+        `SELECT * FROM spend_intents WHERE job_id = ? AND generation =
+           (SELECT MAX(generation) FROM spend_intents s2
+             WHERE s2.job_id = spend_intents.job_id AND s2.occurrence_id = spend_intents.occurrence_id)
+         ORDER BY occurrence_id`, jobId),
+      batchMaps: this._all(
+        `SELECT * FROM batch_maps WHERE job_id = ? AND generation =
+           (SELECT MAX(generation) FROM batch_maps b2
+             WHERE b2.job_id = batch_maps.job_id AND b2.occurrence_id = batch_maps.occurrence_id)
+         ORDER BY occurrence_id`, jobId),
     };
   }
 

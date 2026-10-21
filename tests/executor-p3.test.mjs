@@ -196,6 +196,45 @@ test("the re-grant trap: a deferred batch occurrence meets its SAME map under a 
   assert.equal(h.coord.jobView("job-1").state, "complete");
 });
 
+test("after an evidenced never-accepted resolution, the re-grant is REALLY processed: audited generation-2 attempt completes the job (review fix 2)", async () => {
+  const { h, providers, exec } = world({ "job-1/o1": BATCH });
+  providers.behavior.submit = (o, displayName) => {
+    providers.batches.set("batches/fake-lost", { displayName, polls: 0 });
+    throw new Error("response lost");
+  };
+  const { msg } = await dispatch(h, "job-1", "c1", [occ("o1", { revisionKey: FP_BATCH })]);
+  const r1 = await exec.handleMessage(msg);
+  assert.equal(r1.occurrences.o1.ambiguous, true);
+  assert.equal(providers.calls.submitBatch, 1);
+  // Authoritative evidence arrives; a human/coordinator resolution
+  // retires generation 1 — claim untouched, intent+map superseded:
+  const res = h.coord.resolveBatchNeverAccepted({ jobId: "job-1", occurrenceId: "o1", evidence: "provider ops audit #4471" });
+  assert.equal(res.ok, true);
+  // Alarms only from here: the re-advance grants fresh work…
+  h.advance(31000);
+  await h.coord.alarm();
+  let msg2 = null;
+  await h.coord.drainOutbox(p => { msg2 = p; });
+  assert.ok(msg2 && msg2.grantId !== msg.grantId);
+  // …and the executor ACTUALLY processes it: a fresh intent (gen 2)
+  // and a second — audited — submission, then poll to completion.
+  providers.behavior.submit = null;
+  const r2 = await exec.handleMessage(msg2);
+  assert.equal(r2.occurrences.o1.pending, true);
+  assert.equal(providers.calls.submitBatch, 2); // exactly the one audited retry
+  const intents = h.rows("spend_intents").sort((a, b) => a.generation - b.generation);
+  assert.equal(intents.length, 2);
+  assert.ok(intents[0].superseded_at);
+  assert.match(intents[0].superseded_reason, /batch_never_accepted/);
+  assert.equal(intents[1].generation, 2);
+  assert.equal(intents[1].superseded_at, null);
+  assert.ok(h.rows("transitions").some(t => t.cause === "spend_intent_superseded"));
+  const r3 = await exec.handleMessage(msg2); // poll -> done
+  assert.equal(r3.occurrences.o1.reported, "success");
+  assert.equal(providers.calls.submitBatch, 2); // never a third
+  assert.equal(h.coord.jobView("job-1").state, "complete");
+});
+
 test("cache verification failure is reported as failure, never as playable audio", async () => {
   const { h, providers, exec } = world({ "job-1/o1": STD });
   providers.behavior.synth = () => ({ audio: "AUDIO:o1", format: "mp3", durationSec: 100000 }); // absurd duration
