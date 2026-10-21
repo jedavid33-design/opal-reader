@@ -109,27 +109,36 @@ export function createClientStore({ deviceId, storage, transport }) {
         }
         return true;
       };
-      // Authoritative voice data: the payload's own book copy, else the
-      // SAVED book. If a bookId is named but no book is on this device,
-      // the gate FETCHES (a content sync) before deciding — and if the
-      // book still cannot be verified (offline, or absent), it FAILS
-      // CLOSED: an unverifiable book may not generate.
-      let book = payload?.book ?? null;
-      if (!book && payload?.bookId) {
+      // Authoritative voice data is checked as a UNION of every
+      // representation: the payload's inline book copy AND — whenever a
+      // bookId is named — the SAVED book, so a stale or incomplete
+      // inline copy can never launder a voice the saved book carries.
+      // A named book that is not on this device is FETCHED first; if it
+      // still cannot be verified (offline, or absent), the gate FAILS
+      // CLOSED. And a job with no book reference and no voice data of
+      // its own has nothing verifiable at all: it may not enqueue.
+      const inlineBook = payload?.book ?? null;
+      let savedBook = null;
+      if (payload?.bookId) {
         const read = async () => (await load()).caches.content?.entities?.[payload.bookId]?.payload ?? null;
-        book = await read();
-        if (!book) {
+        savedBook = await read();
+        if (!savedBook) {
           try { await syncFamily('content'); } catch { /* offline: the read below decides */ }
-          book = await read();
+          savedBook = await read();
         }
-        if (!book) {
+        if (!savedBook) {
           const err = new Error(`book_voice_data_unavailable: ${payload.bookId}`);
           err.code = 'book_voice_data_unavailable';
           throw err;
         }
       }
-      const povLists = [book?.povs, payload?.povs];
-      const defaultProviders = [book?.defaultVoice?.provider, payload?.defaultVoice?.provider];
+      if (!payload?.bookId && !inlineBook && !Array.isArray(payload?.povs)) {
+        const err = new Error('book_voice_data_unavailable: no book reference or voice data');
+        err.code = 'book_voice_data_unavailable';
+        throw err;
+      }
+      const povLists = [inlineBook?.povs, savedBook?.povs, payload?.povs];
+      const defaultProviders = [inlineBook?.defaultVoice?.provider, savedBook?.defaultVoice?.provider, payload?.defaultVoice?.provider];
       for (const list of povLists) {
         for (const pov of Array.isArray(list) ? list : []) {
           const provider = pov?.voice?.provider;

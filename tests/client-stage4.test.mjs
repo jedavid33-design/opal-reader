@@ -77,7 +77,7 @@ test("stage4 removals: azure/fish generation intents are rejected locally before
   await assert.rejects(() => a.store.intent("SubmitJob", { provider: "fish", bookId: "bk" }), /provider_not_carried_over/);
   let st = await a.store.outboxState();
   assert.equal(st.pending.length, 0); // nothing persisted for the rejected providers
-  await a.store.intent("SubmitJob", { provider: "gemini", bookId: "bk", book: { povs: [{ id: "p1", name: "G", voice: { provider: "gemini", voice_id: "Aoede" } }] } });
+  await a.store.intent("SubmitJob", { provider: "gemini", book: { povs: [{ id: "p1", name: "G", voice: { provider: "gemini", voice_id: "Aoede" } }] } });
   st = await a.store.outboxState();
   assert.equal(st.pending.length, 1);
 });
@@ -108,12 +108,12 @@ test("stage4 review gate: an UNMAPPED removed-provider voice cannot submit new g
   const a = w.device("devA");
   const bookBefore = structuredClone(BOOK);
   // The job names a KEPT provider — the old provider-level guard alone would wave it through:
-  await assert.rejects(() => a.store.intent("SubmitJob", { provider: "gemini", bookId: "bk", book: BOOK }), /unmapped_removed_provider_voice/);
+  await assert.rejects(() => a.store.intent("SubmitJob", { provider: "gemini", book: BOOK }), /unmapped_removed_provider_voice/);
   let st = await a.store.outboxState();
   assert.equal(st.pending.length, 0); // rejected before persistence
   // With an explicit mapping for both removed-provider POVs, the same job is accepted:
   const id = await a.store.intent("SubmitJob", {
-    provider: "gemini", bookId: "bk", book: BOOK,
+    provider: "gemini", book: BOOK,
     voiceMapping: { "pov-a": { provider: "gemini", voice_id: "Aoede" }, "pov-f": { provider: "openai", voice_id: "alloy" } },
   });
   assert.ok(id);
@@ -122,7 +122,7 @@ test("stage4 review gate: an UNMAPPED removed-provider voice cannot submit new g
   assert.deepEqual(BOOK, bookBefore); // the mapping is a job directive — the book was never rewritten
   // A partial mapping still blocks (the unmapped fish voice remains):
   await assert.rejects(() => a.store.intent("SubmitJob", {
-    provider: "gemini", bookId: "bk", book: BOOK,
+    provider: "gemini", book: BOOK,
     voiceMapping: { "pov-a": { provider: "gemini", voice_id: "Aoede" } },
   }), /unmapped_removed_provider_voice/);
 });
@@ -174,6 +174,34 @@ test("stage4 review gate 3: missing cache — the gate FETCHES the book; unverif
   await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk", voiceMapping: { "pov-a": { provider: "gemini" }, "pov-f": { provider: "openai", voice_id: "alloy" } } }), /unsupported_voice_mapping/);
   const st = await a.store.outboxState();
   assert.equal(st.pending.length, 1); // only the clean fetched book ever persisted
+});
+
+test("stage4 review gate 4: inline vs saved representations are BOTH checked; a job with no verifiable book data may not enqueue", async () => {
+  const w = makeWorld();
+  const seed = new SyncClient(w.coord, "seed");
+  await seed.pushBook("bk", BOOK); // saved truth: azure + fish POVs
+  const a = w.device("devA");
+  await a.funnel.syncNow();
+  // A STALE inline copy claiming pov-a is a gemini voice cannot launder the saved azure voice:
+  const staleCopy = structuredClone(BOOK);
+  staleCopy.povs.find((p) => p.id === "pov-a").voice.provider = "gemini";
+  staleCopy.povs.find((p) => p.id === "pov-f").voice.provider = "gemini";
+  await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk", book: staleCopy }), /unmapped_removed_provider_voice/);
+  // The other direction too: an inline copy carrying a fish voice the saved book does NOT have also blocks:
+  const extraCopy = structuredClone(BOOK);
+  extraCopy.povs = [{ id: "pov-g", name: "Gemma", voice: { provider: "gemini", voice_id: "Aoede" } }, { id: "pov-x", name: "Extra", voice: { provider: "fish", voice_id: "f-9" } }];
+  const cleanSaved = { title: "CleanSaved", occurrenceIds: ["c1"], chapters: [{ id: "ch1", segments: [{ occurrenceId: "c1", text: "x" }] }], povs: [{ id: "pov-g", name: "Gemma", voice: { provider: "gemini", voice_id: "Aoede" } }] };
+  await seed.pushBook("bk3", cleanSaved);
+  await a.funnel.syncNow();
+  await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk3", book: extraCopy }), /unmapped_removed_provider_voice/);
+  // No bookId, no book, no voice data: nothing verifiable — may not enqueue:
+  await assert.rejects(() => a.store.intent("SubmitJob", { provider: "gemini" }), /book_voice_data_unavailable/);
+  await assert.rejects(() => a.store.intent("RepairJob", {}), /book_voice_data_unavailable/);
+  // An explicit (even empty) voice list IS verifiable data and enqueues:
+  const id = await a.store.intent("SubmitJob", { povs: [] });
+  assert.ok(id);
+  const st = await a.store.outboxState();
+  assert.equal(st.pending.length, 1);
 });
 
 test("stage4 voice mapping: removed-provider POVs are flagged for a decision; the book is never rewritten", async () => {
