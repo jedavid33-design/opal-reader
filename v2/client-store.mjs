@@ -129,7 +129,7 @@ export function createClientStore({ deviceId, storage, transport }) {
     const s = await load();
     return {
       pending: s.outbox.filter((e) => e.status !== 'acked').map((e) => ({ command_id: e.command_id, type: e.type, status: e.status })),
-      outcomes: s.outbox.filter((e) => e.status === 'acked').map((e) => ({ command_id: e.command_id, type: e.type, outcome: e.receipt?.outcome ?? null, receipt: e.receipt })),
+      outcomes: s.outbox.filter((e) => e.status === 'acked').map((e) => ({ command_id: e.command_id, type: e.type, payload: e.payload, outcome: e.receipt?.outcome ?? null, receipt: e.receipt })),
     };
   }
 

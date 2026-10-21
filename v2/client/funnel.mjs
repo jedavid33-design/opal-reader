@@ -28,9 +28,16 @@ export function createFunnel({ store }) {
   // "genuinely new"; basing a stale save on it would bypass the conflict
   // check entirely, which is exactly the v1 loss mode in new clothes).
   const knownRevisions = new Map(); // bookId -> revision
+  // Parked edits: when a save comes back conflicted/rejected, the user's
+  // unsent local edit is PARKED — never silently discarded (Rowan Stage-1
+  // follow-up caution). Refreshing the working copy from the server does
+  // not touch parked edits; only an explicit resolveParked (retry on top
+  // of the current revision, or discard) clears one.
+  const parkedEdits = new Map(); // bookId -> { payload, baseRevision, currentRevision, status }
 
   function setWorking(bookId, payload) { working.set(bookId, structuredClone(payload)); }
   function getWorking(bookId) { const w = working.get(bookId); return w ? structuredClone(w) : null; }
+  function parkedEdit(bookId) { const p = parkedEdits.get(bookId); return p ? structuredClone(p) : null; }
 
   // The pe() replacement: persist the working copy of one book as intents.
   // Returns { skipped } when nothing changed, otherwise the command id;
@@ -57,17 +64,51 @@ export function createFunnel({ store }) {
     return { commandId };
   }
 
-  // Flush pending intents, fold receipt revisions into the ledger, and
-  // return the per-command outcomes (receipts).
+  // Flush pending intents, fold receipt revisions into the ledger, park
+  // any conflicted/rejected edits, and return the outcomes (receipts).
+  let settledThrough = 0; // outcomes already folded/parked — settle is incremental, never a replay
   async function settle() {
     await store.flushOutbox();
     const st = await store.outboxState();
-    for (const o of st.outcomes) {
+    const fresh = st.outcomes.slice(settledThrough);
+    settledThrough = st.outcomes.length;
+    for (const o of fresh) {
       for (const eo of o.receipt?.outcomes ?? []) {
         if (eo.status === "applied" && eo.entityKey && typeof eo.revision === "number") knownRevisions.set(eo.entityKey, eo.revision);
+        if ((eo.status === "conflict" || eo.status === "rejected_tombstoned" || eo.status === "rejected_stale") && eo.entityKey) {
+          // The edit that was sent lives in the persisted command payload —
+          // park THAT (it survives restarts; the volatile working copy may not).
+          const sent = (o.payload?.changes ?? []).find((c) => c.entityKey === eo.entityKey)?.payload ?? (working.has(eo.entityKey) ? working.get(eo.entityKey) : null);
+          if (sent) parkedEdits.set(eo.entityKey, {
+            payload: structuredClone(sent),
+            baseRevision: knownRevisions.get(eo.entityKey) ?? 0,
+            currentRevision: eo.currentRevision ?? null,
+            status: eo.status,
+          });
+        }
       }
     }
     return st;
+  }
+
+  // Resolve a parked edit explicitly. 'retry' re-applies the user's edit
+  // on top of the CURRENT server revision (their content wins, knowingly,
+  // as a new revision); 'discard' drops it. Either way the choice is the
+  // user's — the funnel never resolves a park on its own.
+  async function resolveParked(bookId, how) {
+    const p = parkedEdits.get(bookId);
+    if (!p) return { resolved: false, reason: "no_parked_edit" };
+    if (how === "discard") { parkedEdits.delete(bookId); return { resolved: true, how }; }
+    if (how === "retry") {
+      const cached = await store.cachedEntity("content", bookId);
+      if (!cached) return { resolved: false, reason: "book_gone" }; // tombstoned: retry has nothing to rebase onto
+      knownRevisions.set(bookId, cached.revision);
+      working.set(bookId, structuredClone(p.payload));
+      parkedEdits.delete(bookId);
+      const r = await saveBook(bookId);
+      return { resolved: true, how, ...r };
+    }
+    return { resolved: false, reason: "unknown_resolution" };
   }
 
   // Pull every entity family (position converges via the journal +
@@ -87,5 +128,5 @@ export function createFunnel({ store }) {
     return getWorking(bookId);
   }
 
-  return { setWorking, getWorking, saveBook, deleteBook, settle, syncNow, refreshWorking };
+  return { setWorking, getWorking, parkedEdit, resolveParked, saveBook, deleteBook, settle, syncNow, refreshWorking };
 }

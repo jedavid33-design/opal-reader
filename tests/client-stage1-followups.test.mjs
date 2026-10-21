@@ -72,4 +72,44 @@ test("FU3: restart recovery — a pending command survives, flushes to a surface
   assert.equal(converged.title, "B v2");
   const snap = w.coord.syncSnapshot({ family: "content" });
   assert.equal(snap.entities.find((e) => e.entityKey === "bk").data.title, "B v2"); // B's content was never touched
+  // Rowan's caution: the conflict must NOT silently discard A's unsent edit.
+  // It was recovered from the persisted command payload and parked:
+  const parked = a2.funnel.parkedEdit("bk");
+  assert.equal(parked.payload.title, "A offline edit");
+  assert.equal(parked.status, "conflict");
+  assert.equal(parked.currentRevision, 2);
+  // Refreshing/converging did not clear the park. The user resolves it
+  // explicitly — retry re-applies their edit knowingly as rev 3:
+  const rr = await a2.funnel.resolveParked("bk", "retry");
+  assert.equal(rr.resolved, true);
+  await a2.funnel.settle();
+  assert.equal(a2.funnel.parkedEdit("bk"), null);
+  const snap2 = w.coord.syncSnapshot({ family: "content" });
+  const bkNow = snap2.entities.find((e) => e.entityKey === "bk");
+  assert.equal(bkNow.data.title, "A offline edit");
+  assert.equal(bkNow.revision, 3);
+});
+
+test("FU3b: a parked edit can be discarded — explicitly, by the user's choice only", async () => {
+  const w = makeWorld();
+  const storageA = w.mkStorage();
+  const a = createAssembledClient({ deviceId: "devA", storage: storageA, transport: w.transport });
+  const b = createAssembledClient({ deviceId: "devB", storage: w.mkStorage(), transport: w.transport });
+  a.funnel.setWorking("bk", BOOK("v1"));
+  await a.funnel.saveBook("bk");
+  await a.funnel.settle();
+  await b.funnel.syncNow();
+  await b.funnel.refreshWorking("bk");
+  b.funnel.setWorking("bk", BOOK("B v2"));
+  await b.funnel.saveBook("bk");
+  await b.funnel.settle();
+  a.funnel.setWorking("bk", BOOK("A edit"));
+  await a.funnel.saveBook("bk"); // A's cache/ledger still at rev 1
+  await a.funnel.settle();
+  assert.equal(a.funnel.parkedEdit("bk").payload.title, "A edit");
+  const rd = await a.funnel.resolveParked("bk", "discard");
+  assert.equal(rd.resolved, true);
+  assert.equal(a.funnel.parkedEdit("bk"), null);
+  const snap = w.coord.syncSnapshot({ family: "content" });
+  assert.equal(snap.entities.find((e) => e.entityKey === "bk").data.title, "B v2"); // discard changed nothing server-side
 });
