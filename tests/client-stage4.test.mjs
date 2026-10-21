@@ -19,17 +19,18 @@ function makeWorld() {
     return { get: async (k) => (map.has(k) ? structuredClone(map.get(k)) : undefined), set: async (k, v) => { map.set(k, structuredClone(v)); }, del: async (k) => { map.delete(k); } };
   };
   const byteWorld = new Set();
+  let pullDown = false;
   const transport = {
     sendCommand: async ({ command_id, type, payload }) => coord.handleCommand({ command_id, type, payload }),
-    pullChanges: async (family, sinceSeq, limit) => coord.pullChanges({ family, sinceSeq, limit }),
-    snapshot: async (family) => coord.syncSnapshot({ family }),
+    pullChanges: async (family, sinceSeq, limit) => { if (pullDown) throw new Error("offline"); return coord.pullChanges({ family, sinceSeq, limit }); },
+    snapshot: async (family) => { if (pullDown) throw new Error("offline"); return coord.syncSnapshot({ family }); },
     pushPosition: async () => { throw new Error("unused"); },
     positionView: async (bookId) => coord.positionView(bookId),
     quotaView: async () => coord.quotaView(),
     byteCheck: async (key) => byteWorld.has(key),
   };
   const device = (deviceId) => createAssembledClient({ deviceId, storage: mkStorage(), transport });
-  return { coord, byteWorld, device };
+  return { coord, byteWorld, device, setPullDown: (v) => { pullDown = v; } };
 }
 
 const BOOK = {
@@ -76,7 +77,7 @@ test("stage4 removals: azure/fish generation intents are rejected locally before
   await assert.rejects(() => a.store.intent("SubmitJob", { provider: "fish", bookId: "bk" }), /provider_not_carried_over/);
   let st = await a.store.outboxState();
   assert.equal(st.pending.length, 0); // nothing persisted for the rejected providers
-  await a.store.intent("SubmitJob", { provider: "gemini", bookId: "bk" });
+  await a.store.intent("SubmitJob", { provider: "gemini", bookId: "bk", book: { povs: [{ id: "p1", name: "G", voice: { provider: "gemini", voice_id: "Aoede" } }] } });
   st = await a.store.outboxState();
   assert.equal(st.pending.length, 1);
 });
@@ -146,6 +147,33 @@ test("stage4 review gate 2: a bare { bookId } request is checked against the SAV
   assert.ok(id2);
   const st = await a.store.outboxState();
   assert.equal(st.pending.length, 2); // only the two mapped jobs were ever persisted
+});
+
+test("stage4 review gate 3: missing cache — the gate FETCHES the book; unverifiable (offline/absent) FAILS CLOSED; mappings must name supported providers", async () => {
+  const w = makeWorld();
+  const seed = new SyncClient(w.coord, "seed");
+  await seed.pushBook("bk", BOOK); // azure + fish POVs — on the server, NOT on this device
+  await seed.pushBook("clean", { title: "Clean", occurrenceIds: ["c1"], chapters: [{ id: "ch1", segments: [{ occurrenceId: "c1", text: "x" }] }], povs: [{ id: "p1", name: "G", voice: { provider: "gemini", voice_id: "Aoede" } }] });
+  const a = w.device("devA"); // never synced: cache is empty
+  // Fetch-then-check: the gate pulls the book itself and finds the azure/fish voices:
+  await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk" }), /unmapped_removed_provider_voice/);
+  // Fetch-then-pass: a clean book fetched the same way generates fine (the gate is not just "reject when uncached"):
+  const okId = await a.store.intent("SubmitJob", { bookId: "clean" });
+  assert.ok(okId);
+  // Offline + missing cache: FAIL CLOSED with the distinct error — never a wave-through:
+  const b = w.device("devB");
+  w.setPullDown(true);
+  await assert.rejects(() => b.store.intent("SubmitJob", { bookId: "bk" }), /book_voice_data_unavailable/);
+  await assert.rejects(() => b.store.intent("RepairJob", { bookId: "bk" }), /book_voice_data_unavailable/);
+  w.setPullDown(false);
+  // Absent book (not offline — it simply does not exist): also fail-closed:
+  await assert.rejects(() => b.store.intent("SubmitJob", { bookId: "ghost" }), /book_voice_data_unavailable/);
+  // Mapping validation: a "mapping" to a removed or unknown provider clears NOTHING:
+  await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk", voiceMapping: { "pov-a": { provider: "fish", voice_id: "x" }, "pov-f": { provider: "openai", voice_id: "alloy" } } }), /unsupported_voice_mapping/);
+  await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk", voiceMapping: { "pov-a": { provider: "banana", voice_id: "x" }, "pov-f": { provider: "openai", voice_id: "alloy" } } }), /unsupported_voice_mapping/);
+  await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk", voiceMapping: { "pov-a": { provider: "gemini" }, "pov-f": { provider: "openai", voice_id: "alloy" } } }), /unsupported_voice_mapping/);
+  const st = await a.store.outboxState();
+  assert.equal(st.pending.length, 1); // only the clean fetched book ever persisted
 });
 
 test("stage4 voice mapping: removed-provider POVs are flagged for a decision; the book is never rewritten", async () => {

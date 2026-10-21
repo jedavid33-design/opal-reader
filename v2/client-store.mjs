@@ -84,26 +84,56 @@ export function createClientStore({ deviceId, storage, transport }) {
     // Generation gate (Stage 4 review): a job whose BOOK carries an
     // unmapped removed-provider voice is rejected before persistence —
     // the voice-mapping flag is an enforcement, not a warning. The guard
-    // does NOT trust caller-supplied voice data alone: it checks the
-    // union of what the payload carries and the SAVED book in this
-    // device's content cache (a bare { bookId } request is fully
-    // checked), covering POV voices and the default voice, for both
-    // SubmitJob and RepairJob. A mapping is a job-level directive
-    // (payload.voiceMapping[povId] / .defaultVoice); the book itself is
-    // never rewritten by it.
+    // does NOT trust caller-supplied voice data alone: voice data comes
+    // from the payload's book copy or the SAVED book in this device's
+    // content cache (a bare { bookId } request is fully checked),
+    // covering POV voices and the default voice, for both SubmitJob and
+    // RepairJob. A named book that is not on this device is FETCHED
+    // first; if it still cannot be verified, the gate FAILS CLOSED.
+    // Mappings must select a supported replacement provider + voice.
+    // A mapping is a job-level directive (payload.voiceMapping[povId] /
+    // .defaultVoice); the book itself is never rewritten by it.
     if (type === 'SubmitJob' || type === 'RepairJob') {
       const mapping = payload?.voiceMapping ?? {};
-      const povLists = [payload?.book?.povs, payload?.povs];
-      const defaultProviders = [payload?.book?.defaultVoice?.provider, payload?.defaultVoice?.provider];
-      if (payload?.bookId) {
-        const s = await load();
-        const saved = s.caches.content?.entities?.[payload.bookId]?.payload;
-        if (saved) { povLists.push(saved.povs); defaultProviders.push(saved.defaultVoice?.provider); }
+      const SUPPORTED_MAPPING_PROVIDERS = ['gemini', 'openai'];
+      // A mapping clears a voice only by SELECTING a supported replacement:
+      // a provider + a concrete voice. Anything else (a removed provider,
+      // an unknown one, a missing voice) is itself an error, never a pass.
+      const mappingClears = (key) => {
+        const m = mapping[key];
+        if (!m) return false;
+        if (!SUPPORTED_MAPPING_PROVIDERS.includes(m.provider) || typeof m.voice_id !== 'string' || !m.voice_id) {
+          const err = new Error(`unsupported_voice_mapping: ${key} -> ${m.provider ?? '?'}`);
+          err.code = 'unsupported_voice_mapping';
+          throw err;
+        }
+        return true;
+      };
+      // Authoritative voice data: the payload's own book copy, else the
+      // SAVED book. If a bookId is named but no book is on this device,
+      // the gate FETCHES (a content sync) before deciding — and if the
+      // book still cannot be verified (offline, or absent), it FAILS
+      // CLOSED: an unverifiable book may not generate.
+      let book = payload?.book ?? null;
+      if (!book && payload?.bookId) {
+        const read = async () => (await load()).caches.content?.entities?.[payload.bookId]?.payload ?? null;
+        book = await read();
+        if (!book) {
+          try { await syncFamily('content'); } catch { /* offline: the read below decides */ }
+          book = await read();
+        }
+        if (!book) {
+          const err = new Error(`book_voice_data_unavailable: ${payload.bookId}`);
+          err.code = 'book_voice_data_unavailable';
+          throw err;
+        }
       }
+      const povLists = [book?.povs, payload?.povs];
+      const defaultProviders = [book?.defaultVoice?.provider, payload?.defaultVoice?.provider];
       for (const list of povLists) {
         for (const pov of Array.isArray(list) ? list : []) {
           const provider = pov?.voice?.provider;
-          if (provider && REMOVED_PROVIDERS.has(provider) && !mapping[pov.id]) {
+          if (provider && REMOVED_PROVIDERS.has(provider) && !mappingClears(pov.id)) {
             const err = new Error(`unmapped_removed_provider_voice: ${pov.name ?? pov.id ?? '?'} (${provider})`);
             err.code = 'unmapped_removed_provider_voice';
             throw err;
@@ -111,7 +141,7 @@ export function createClientStore({ deviceId, storage, transport }) {
         }
       }
       for (const dp of defaultProviders) {
-        if (dp && REMOVED_PROVIDERS.has(dp) && !mapping.defaultVoice) {
+        if (dp && REMOVED_PROVIDERS.has(dp) && !mappingClears('defaultVoice')) {
           const err = new Error(`unmapped_removed_provider_voice: (default voice) (${dp})`);
           err.code = 'unmapped_removed_provider_voice';
           throw err;
