@@ -140,13 +140,13 @@ test("resolveBatchNeverAccepted: explicit evidence closes the map, voids the gra
   // no API for 'not found, therefore never accepted'.
 });
 
-test("void attempt on a CLAIMED dispatch (not_accepted verdict vs a live claim): the claim is never rewritten (review fix 1)", async () => {
-  const h = makeHarness();
+test("CLAIM FENCE: a contradictory not_accepted verdict against a claimed, spend-fenced, in-flight grant voids NOTHING (round 2)", async () => {
+  const h = makeHarness({ probe: makeProbe(OBJECTS) });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
   const g = await h.coord.requestGrant("job-1");
   // The queue message reached the consumer — it claims and acquires
-  // spend intent — while the dispatch ACK was lost. The attempted
-  // handoff goes uncertain at lease expiry (never voided outright):
+  // spend intent (work in flight) — while the dispatch ACK was lost.
+  // The attempted handoff goes uncertain at lease expiry:
   await h.coord.drainOutbox(() => { throw new Error("ack lost"); });
   assert.equal(h.coord.claimGrant({ grantId: g.grantId, consumerId: "exec-A" }).status, "claimed");
   assert.equal(h.coord.acquireSpendIntent({ grantId: g.grantId, jobId: "job-1", occurrenceId: "o1", consumerId: "exec-A" }).acquired, true);
@@ -154,29 +154,29 @@ test("void attempt on a CLAIMED dispatch (not_accepted verdict vs a live claim):
   h.setNow(lease.due_at + 1000);
   await h.coord.alarm();
   assert.equal(h.rows("grants")[0].state, "handoff_uncertain");
-  // Now the dangerous verdict: the queue's terminal record says
-  // NOT_ACCEPTED — contradicting the consumer's live claim — and the
-  // handoff check voids the dispatch. (In production the probe reads
-  // the claim ledger and cannot disagree; this stubs the adversarial
-  // case to prove the void itself is claim-safe.)
+  // The dangerous verdict: the queue's terminal record says
+  // NOT_ACCEPTED, contradicting the live claim. (In production the
+  // probe reads the claim ledger and cannot disagree; this stubs the
+  // adversarial case to prove the coordinator enforces its own
+  // invariant instead of trusting the adapter.)
   h.env.probeQueue = () => "not_accepted";
   h.advance(31000);
   await h.coord.alarm();
-  assert.equal(h.rows("grants")[0].state, "voided");
-  // No false terminal negative: acceptance survives the void, and the
-  // probe still reads ACCEPTED for a dispatch that was truly claimed.
+  // The fence held: NO void, NO quota release, NO fresh grant. The
+  // handoff reconciled as ACCEPTED on the claim's evidence.
+  assert.equal(h.rows("grants").length, 1);
+  assert.equal(h.rows("grants")[0].state, "issued");
+  assert.equal(h.coord.quotaView().attemptsToday, 1); // reservation intact
+  assert.equal(h.rows("ledger_ops").filter(r => r.kind === "attempt_release").length, 0);
+  assert.ok(h.rows("transitions").some(t => t.cause === "handoff_verdict_contradicts_claim"));
   assert.equal(h.coord.claimView(g.grantId).state, "claimed");
   assert.equal(h.coord.probeVerdict(g.grantId).verdict, "accepted");
-  // The re-advance grants fresh work and the same consumer claims it —
-  // but the occurrence's generation-1 intent still stands, so the new
-  // dispatch cannot re-spend (in-flight work is honored, not doubled):
-  h.advance(31000);
-  await h.coord.alarm();
-  const grants = h.rows("grants");
-  assert.equal(grants.length, 2);
-  const g2 = grants[1].grant_id;
-  assert.equal(h.coord.claimGrant({ grantId: g2, consumerId: "exec-A" }).status, "claimed");
-  const again = h.coord.acquireSpendIntent({ grantId: g2, jobId: "job-1", occurrenceId: "o1", consumerId: "exec-A" });
-  assert.equal(again.acquired, false);
-  assert.equal(again.intent.generation, 1);
+  assert.equal(h.coord.jobView("job-1").occurrences[0].state, "granted"); // still the live consumer's work
+  // And the in-flight consumer's LATE SUCCESS report is adopted —
+  // the outcome the void would have orphaned:
+  const rep = await h.coord.handleReport({ grantId: g.grantId, jobRevision: h.coord.jobView("job-1").revision, results: SUCCESS });
+  assert.equal(rep.ok, true);
+  assert.equal(rep.ready, 1);
+  assert.equal(h.coord.jobView("job-1").state, "complete");
+  assert.equal(h.coord.claimView(g.grantId).state, "completed");
 });

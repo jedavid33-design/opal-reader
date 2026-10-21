@@ -660,7 +660,7 @@ export class GenerationCoordinator {
   // delivery_window_expired / revision_stale). Every path through here
   // shares one property: the dispatch provably never left, so its
   // reservations are released and its occurrences return to pending.
-  _voidDispatch(payload, reason) {
+  _voidDispatch(payload, reason, opts = {}) {
     const jobState = reason;
     const grantId = payload.grantId;
     // P3 review fix (Rowan): a void NEVER rewrites the acceptance
@@ -671,6 +671,22 @@ export class GenerationCoordinator {
     // no row here either: claimGrant maps a voided grant to a
     // 'closed' ANSWER at claim time, which is the only way a closed
     // row is ever written for it.
+    // P3 round 2 (Rowan): the void itself is fenced the same way —
+    // a CLAIMED grant is not voided at all (its reservations are not
+    // released and its work is not re-granted out from under a live
+    // consumer), unless the caller explicitly owns that semantics:
+    // the evidenced Batch never-accepted resolution, whose claim is
+    // preserved and whose re-attempt is generation-fenced. The
+    // handoff path never passes this flag — it resolves claimed
+    // grants as accepted instead (claim fence, handoff_check).
+    if (!opts.claimedOk) {
+      const claim = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
+      if (claim && claim.state === "claimed") {
+        this._logTransition("grant", grantId, "void_refused_claimed",
+          null, null, null, { reason, claimedBy: claim.consumer_id });
+        return false;
+      }
+    }
     const ops = this._all(
       `SELECT * FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
       `op:${grantId}:%`);
@@ -1336,9 +1352,39 @@ export class GenerationCoordinator {
             this._logTransition("grant", grant.grant_id, "handoff_resolved",
               "handoff_uncertain", "issued", null, { via: "queue_probe" });
           } else if (verdict === "not_accepted") {
-            this._voidDispatch(
-              { grantId: grant.grant_id, jobId: grant.job_id }, "handoff_proven_unaccepted");
-            this._scheduleReAdvance(grant.job_id);
+            // THE CLAIM FENCE (P3 round 2, Rowan): before a terminal
+            // handoff void/release/re-grant, atomically verify there
+            // is NO claimed acceptance for this grant. A claim is
+            // stronger evidence than the queue's verdict — a consumer
+            // holds the work and may be executing against a spend
+            // intent. If a claim exists, the verdict is contradictory/
+            // stale: preserve the grant AND its quota accounting, log
+            // the contradiction, and reconcile the handoff as ACCEPTED
+            // on the claim's own evidence. The execution lease runs
+            // from here; an unreported execution ages into
+            // outcome-unknown through the normal lease path — never
+            // into a void, a false release, and an orphaned report.
+            const claim = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grant.grant_id);
+            if (claim && claim.state === "claimed") {
+              const t = this._now();
+              this._logTransition("grant", grant.grant_id, "handoff_verdict_contradicts_claim",
+                "handoff_uncertain", "handoff_uncertain", null,
+                { claimedBy: claim.consumer_id, claimedAt: claim.claimed_at });
+              this.sql.exec(`UPDATE outbox SET sent_at = ? WHERE id = ? AND sent_at IS NULL`,
+                claim.claimed_at || t, grant.grant_id);
+              this.sql.exec(`UPDATE grants SET state = 'issued', lease_expires_at = ? WHERE grant_id = ?`,
+                t + LEASE_MS, grant.grant_id);
+              this.sql.exec(
+                `UPDATE schedule SET state = 'void' WHERE kind = 'lease' AND ref = ? AND state = 'pending'`,
+                grant.grant_id);
+              this._schedule(t + LEASE_MS, "lease", grant.grant_id, { anchored: "claim_precedence" });
+              this._logTransition("grant", grant.grant_id, "handoff_resolved",
+                "handoff_uncertain", "issued", null, { via: "claim_precedence" });
+            } else {
+              this._voidDispatch(
+                { grantId: grant.grant_id, jobId: grant.job_id }, "handoff_proven_unaccepted");
+              this._scheduleReAdvance(grant.job_id);
+            }
           } else {
             const tries = (payload.tries || 0) + 1;
             if (tries <= 5) {
@@ -1650,7 +1696,11 @@ export class GenerationCoordinator {
       const grant = cur.grant_id
         ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, cur.grant_id) : null;
       if (grant && (grant.state === "issued" || grant.state === "delivered" || grant.state === "handoff_uncertain")) {
-        this._voidDispatch({ grantId: cur.grant_id, jobId }, "batch_never_accepted");
+        // claimedOk: this caller owns the claimed case — its
+        // evidence is about the PROVIDER submission (not the queue
+        // handoff), the claim row is preserved untouched, and the
+        // re-attempt is generation-fenced (P3 round-2 fence scope).
+        this._voidDispatch({ grantId: cur.grant_id, jobId }, "batch_never_accepted", { claimedOk: true });
       }
       return { ok: true, voided: !!grant, generation: cur.generation, map: { ...cur, state: "closed", superseded_at: t } };
     });
