@@ -183,6 +183,12 @@ CREATE TABLE IF NOT EXISTS sync_changes (
   family TEXT NOT NULL, seq INTEGER NOT NULL, entity_key TEXT NOT NULL,
   book_id TEXT, revision INTEGER NOT NULL, op TEXT NOT NULL,
   payload_json TEXT, PRIMARY KEY (family, seq));
+-- The sequence authority is INDEPENDENT of the retained rows
+-- (P4 review blocker 1): truncating history can never reset the
+-- counter, and the floor records how far retention has advanced.
+CREATE TABLE IF NOT EXISTS sync_family_state (
+  family TEXT PRIMARY KEY, tip INTEGER NOT NULL DEFAULT 0,
+  floor INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS sync_entities (
   family TEXT NOT NULL, entity_key TEXT NOT NULL, book_id TEXT,
   revision INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0,
@@ -1784,22 +1790,43 @@ export class GenerationCoordinator {
   // append-only event journal folded deterministically in receipt
   // order; revisioned tombstones; money read-only from the ledger.
 
-  _syncTip(family) {
-    return this._one(`SELECT COALESCE(MAX(seq), 0) AS m FROM sync_changes WHERE family = ?`, family).m;
+  _familyState(family) {
+    let st = this._one(`SELECT * FROM sync_family_state WHERE family = ?`, family);
+    if (!st) {
+      // Lazy init from whatever history exists (pre-P4-fix data).
+      const mx = this._one(`SELECT COALESCE(MAX(seq), 0) AS tip, MIN(seq) AS fl FROM sync_changes WHERE family = ?`, family);
+      st = { family, tip: mx.tip, floor: mx.fl === null ? 1 : mx.fl };
+      this.sql.exec(`INSERT INTO sync_family_state (family, tip, floor) VALUES (?, ?, ?)`,
+        family, st.tip, st.floor);
+    }
+    return st;
   }
 
-  _syncFloor(family) {
-    const r = this._one(`SELECT MIN(seq) AS m FROM sync_changes WHERE family = ?`, family);
-    return r.m === null ? 1 : r.m;
-  }
+  _syncTip(family) { return this._familyState(family).tip; }
+
+  _syncFloor(family) { return this._familyState(family).floor; }
 
   _appendChange(family, entityKey, bookId, revision, op, payload) {
-    const seq = this._syncTip(family) + 1;
+    const st = this._familyState(family);
+    const seq = st.tip + 1;
+    this.sql.exec(`UPDATE sync_family_state SET tip = ? WHERE family = ?`, seq, family);
     this.sql.exec(`INSERT INTO sync_changes (family, seq, entity_key, book_id, revision, op, payload_json)
       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       family, seq, entityKey, bookId, revision, op,
       payload === undefined ? null : JSON.stringify(payload));
     return seq;
+  }
+
+  // The ONLY sanctioned history truncation: rows below beforeSeq go,
+  // the floor advances to meet them, the tip NEVER moves. A cursor
+  // below the new floor hears resyncRequired; a cursor at/above it
+  // still receives every later change — no silent misses, ever.
+  _pruneSyncHistory(family, beforeSeq) {
+    const st = this._familyState(family);
+    const floor = Math.max(st.floor, Math.min(beforeSeq, st.tip + 1));
+    this.sql.exec(`DELETE FROM sync_changes WHERE family = ? AND seq < ?`, family, floor);
+    this.sql.exec(`UPDATE sync_family_state SET floor = ? WHERE family = ?`, floor, family);
+    return { family, floor, tip: st.tip };
   }
 
   _syncEntity(family, entityKey) {
@@ -1833,42 +1860,98 @@ export class GenerationCoordinator {
       family, entityKey, baseRevision).slice(0, 20);
   }
 
-  // One pushed change (content/bindings/settings). Outcomes are
-  // per-entity and never throw: a conflicted book neither aborts nor
-  // contaminates its siblings in the batch (abort isolation).
-  _applySyncChange(ch) {
+  // Pushes validate and apply PER BOOK (P4 review: the contract's
+  // atomicity unit is the book, not the entity). Within a book group
+  // every change is validated first; if any fails, NONE of that
+  // book's changes commit — the failing change carries its real
+  // outcome and its siblings carry 'aborted_book_conflict'. Other
+  // books in the same batch are unaffected (abort isolation).
+  _validateSyncChange(ch) {
     const { family, entityKey } = ch || {};
+    const hard = outcome => ({ ok: false, outcome });
     if (!SYNC_FAMILIES.includes(family) || family === "position" || !entityKey)
-      return { entityKey: entityKey || null, status: "invalid" };
+      return hard({ entityKey: entityKey || null, status: "invalid" });
     if (family === "settings") {
-      if (entityKey !== "settings") return { entityKey, status: "invalid" };
+      if (entityKey !== "settings") return hard({ entityKey, status: "invalid" });
+      const curRev = this._settings().revision;
+      if (ch.baseRevision !== curRev)
+        return hard({ entityKey, status: "conflict", currentRevision: curRev });
+      return { ok: true };
+    }
+    const bookId = ch.bookId || (family === "content" ? entityKey : null);
+    // The delete fence: no family accepts a write against a
+    // tombstoned book (Rowan invariant 3) — not content, not
+    // bindings, and position events fence separately below.
+    if (this._bookTombstoned(bookId)) {
+      if (ch.op === "delete" && family === "content") {
+        const cur = this._syncEntity("content", bookId);
+        return { ok: true, precomputed: { entityKey, status: "applied",
+          revision: cur.revision, alreadyTombstoned: true } };
+      }
+      return hard({ entityKey, status: "rejected_tombstoned", bookId });
+    }
+    if (ch.op === "delete") {
+      if (family !== "content") return hard({ entityKey, status: "invalid" });
+      const cur = this._syncEntity("content", bookId);
+      const curRev = cur ? cur.revision : 0;
+      if (ch.baseRevision !== undefined && ch.baseRevision !== curRev)
+        return hard({ entityKey, status: "conflict", currentRevision: curRev,
+                      window: this._conflictWindow("content", bookId, ch.baseRevision ?? 0) });
+      return { ok: true };
+    }
+    const cur = this._syncEntity(family, entityKey);
+    const curRev = cur ? cur.revision : 0;
+    if (ch.baseRevision !== curRev)
+      return hard({ entityKey, status: "conflict", currentRevision: curRev,
+                    window: this._conflictWindow(family, entityKey, ch.baseRevision ?? 0) });
+    return { ok: true };
+  }
+
+  _applyValidatedSyncChange(ch) {
+    const { family, entityKey } = ch;
+    if (family === "settings") {
       const r = this._setSettings({ baseRevision: ch.baseRevision, data: ch.payload || {} }, null);
       return r.outcome === "applied"
         ? { entityKey, status: "applied", revision: r.revision }
         : { entityKey, status: "conflict", currentRevision: r.revision };
     }
     const bookId = ch.bookId || (family === "content" ? entityKey : null);
-    // The delete fence: no family accepts a write against a
-    // tombstoned book (Rowan invariant 3) — not content, not
-    // bindings, and position events fence separately below.
-    if (this._bookTombstoned(bookId))
-      return { entityKey, status: "rejected_tombstoned", bookId };
     if (ch.op === "delete") {
-      if (family !== "content") return { entityKey, status: "invalid" };
-      return { entityKey, ...this._tombstoneBook(bookId, ch.baseRevision) };
+      const r = this._tombstoneBook(bookId, ch.baseRevision);
+      return { entityKey, status: r.status, revision: r.revision,
+               ...(r.alreadyTombstoned ? { alreadyTombstoned: true } : {}),
+               ...(r.currentRevision !== undefined ? { currentRevision: r.currentRevision } : {}) };
     }
-    const cur = this._syncEntity(family, entityKey);
-    const curRev = cur ? cur.revision : 0;
-    if (ch.baseRevision !== curRev)
-      return { entityKey, status: "conflict", currentRevision: curRev,
-               window: this._conflictWindow(family, entityKey, ch.baseRevision ?? 0) };
     const revision = this._upsertSyncEntity(family, entityKey, bookId, ch.payload ?? null);
     return { entityKey, status: "applied", revision };
   }
 
   _syncPush(p, commandId) {
     const changes = Array.isArray(p.changes) ? p.changes : [];
-    const outcomes = changes.map(ch => this._applySyncChange(ch));
+    const groups = new Map();
+    changes.forEach((ch, i) => {
+      const key = !ch || ch.family === "settings" ? "§settings"
+        : (ch.bookId || ch.entityKey || `§${i}`);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(i);
+    });
+    const outcomes = new Array(changes.length);
+    for (const idxs of groups.values()) {
+      const vals = idxs.map(i => this._validateSyncChange(changes[i]));
+      if (vals.every(v => v.ok)) {
+        idxs.forEach((ci, k) => {
+          outcomes[ci] = vals[k].precomputed
+            || this._applyValidatedSyncChange(changes[ci]);
+        });
+      } else {
+        idxs.forEach((ci, k) => {
+          outcomes[ci] = vals[k].ok
+            ? { entityKey: changes[ci].entityKey, status: "aborted_book_conflict",
+                bookId: changes[ci].bookId || null }
+            : vals[k].outcome;
+        });
+      }
+    }
     return { outcome: "applied", deviceId: p.deviceId || null, outcomes };
   }
 
@@ -2040,33 +2123,50 @@ export class GenerationCoordinator {
   }
 
   // Phase-two sweep, DRY RUN ONLY (P4 scope): proves references and
-  // reports a manifest; deletes nothing, and reads conservatively —
-  // anything it cannot prove unreferenced stays off the manifest.
+  // reports a manifest; deletes nothing. FAILS CLOSED (P4 review
+  // blocker 2): any unproven reference — a live job, an incomplete
+  // binding of this book, OR an incomplete binding anywhere else
+  // (which could be hiding a reference to a candidate object) —
+  // empties the manifest entirely and names the blockers. A partial
+  // manifest is never emitted.
   sweepDryRun(bookId) {
     const content = this._syncEntity("content", bookId);
     if (!content || !content.deleted) return { error: "not_tombstoned", bookId };
+    const blockers = [];
     const liveJobs = this._one(
       `SELECT COUNT(*) AS n FROM jobs WHERE book_id = ? AND state NOT IN ('complete', 'cancelled', 'failed')`,
       bookId).n;
+    if (liveJobs > 0) blockers.push(`live_jobs:${liveJobs}`);
     const bindings = this._all(
       `SELECT * FROM sync_entities WHERE family = 'bindings' AND book_id = ?`, bookId);
-    const otherKeys = new Set(this._all(
-      `SELECT data_json FROM sync_entities WHERE family = 'bindings' AND (book_id IS NULL OR book_id != ?)`, bookId)
-      .map(r => { try { return JSON.parse(r.data_json || "{}").cacheKey; } catch { return undefined; } }));
+    const keyOf = json => { try { return JSON.parse(json || "{}").cacheKey || null; } catch { return null; } };
+    const ownKeys = new Map();
+    for (const b of bindings) {
+      const key = keyOf(b.data_json);
+      if (!key) blockers.push(`incomplete_own_binding:${b.entity_key}`);
+      else ownKeys.set(b.entity_key, key);
+    }
+    const otherKeys = new Set();
+    for (const r of this._all(
+      `SELECT entity_key, data_json FROM sync_entities WHERE family = 'bindings' AND (book_id IS NULL OR book_id != ?)`, bookId)) {
+      const key = keyOf(r.data_json);
+      if (!key) blockers.push(`incomplete_cross_book_binding:${r.entity_key}`);
+      else otherKeys.add(key);
+    }
+    if (blockers.length > 0)
+      return { bookId, tombstoned: true, dryRun: true, deletedAnything: false,
+               liveJobs, conservative: true, blockedBy: blockers,
+               sharedKept: [], wouldRemove: [],
+               note: "fail closed: references unproven — manifest withheld in full" };
     const wouldRemove = [{ family: "content", entityKey: bookId }];
     const sharedKept = [];
-    let incomplete = liveJobs > 0;
-    for (const b of bindings) {
-      let key; try { key = JSON.parse(b.data_json || "{}").cacheKey; } catch { key = undefined; }
-      if (!key) { incomplete = true; continue; } // unprovable — left off the manifest
+    for (const [entityKey, key] of ownKeys) {
       if (otherKeys.has(key)) { sharedKept.push(key); continue; }
-      wouldRemove.push({ family: "bindings", entityKey: b.entity_key, cacheKey: key });
+      wouldRemove.push({ family: "bindings", entityKey, cacheKey: key });
     }
     return { bookId, tombstoned: true, dryRun: true, deletedAnything: false,
-             liveJobs, sharedKept, wouldRemove, conservative: incomplete,
-             note: incomplete
-               ? "references unproven (live jobs or incomplete binding data) — manifest is partial by design"
-               : "all references proven inside one read; manifest complete" };
+             liveJobs, sharedKept, wouldRemove, conservative: false, blockedBy: [],
+             note: "all references proven inside one read; manifest complete" };
   }
 
 }

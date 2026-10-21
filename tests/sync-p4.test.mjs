@@ -44,20 +44,36 @@ test("cursor: mismatched family / impossible watermarks are rejected; truncation
   assert.equal(bad.error, "invalid_cursor");
   const ahead = h.coord.pullChanges({ family: "content", cursor: { family: "content", seq: 0, watermark: 99 } });
   assert.equal(ahead.error, "invalid_cursor");
-  // Simulate history truncation: drop the only change row.
-  h.coord.sql.exec(`DELETE FROM sync_changes WHERE family = 'content'`);
-  h.coord.sql.exec(`INSERT INTO sync_changes (family, seq, entity_key, book_id, revision, op, payload_json)
-    VALUES ('content', 5, 'bkX', 'bkX', 1, 'upsert', '{}')`);
-  const r = h.coord.pullChanges({ family: "content", sinceSeq: 0 });
-  assert.equal(r.resyncRequired, true);
-  assert.equal(r.floorSeq, 5);
-  // The client path converges through the snapshot instead: the
-  // entity mirror still holds bk1 (only the change history was
-  // truncated), and the snapshot carries it.
+});
+
+test("sequence authority survives FULL history truncation (review blocker 1): tip persists, no silent misses", async () => {
+  const h = makeHarness();
+  const a = new SyncClient(h.coord, "dev-A");
+  await a.pushBook("bk1", BOOK("bk1"));
+  await a.pushBook("bk2", BOOK("bk2"));
+  await a.pushBook("bk3", BOOK("bk3")); // content seqs 1..3, tip 3
+  // Truncate ALL retained history through the sanctioned prune path:
+  const pruned = h.coord._pruneSyncHistory("content", 4);
+  assert.deepEqual({ floor: pruned.floor, tip: pruned.tip }, { floor: 4, tip: 3 });
+  assert.equal(h.coord._all(`SELECT * FROM sync_changes WHERE family = 'content'`).length, 0);
+  // A device below the floor hears resync — never silence:
+  const stale = h.coord.pullChanges({ family: "content", sinceSeq: 2 });
+  assert.equal(stale.resyncRequired, true);
+  assert.equal(stale.floorSeq, 4);
+  // The next write continues the sequence — it does NOT restart at 1:
+  await a.pushBook("bk4", BOOK("bk4"));
+  const rows = h.coord._all(`SELECT * FROM sync_changes WHERE family = 'content'`);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].seq, 4);
+  // A device whose cursor sat exactly at the old tip receives it:
+  const atTip = h.coord.pullChanges({ family: "content", sinceSeq: 3 });
+  assert.equal(atTip.resyncRequired, undefined);
+  assert.deepEqual(atTip.changes.map(c => c.entityKey), ["bk4"]);
+  // And a fresh device converges through the snapshot (entities intact):
   const b = new SyncClient(h.coord, "dev-B");
   const res = await b.pull("content");
   assert.equal(res.resynced, true);
-  assert.equal(b.mirror.content.get("bk1").title, "Book bk1");
+  assert.equal(b.mirror.content.size, 4);
 });
 
 // ---------- receipts: idempotent across lost ACKs; abort isolation ----------
@@ -191,29 +207,85 @@ test("tombstones: deletion syncs, post-tombstone writes are rejected in EVERY fa
   assert.equal(snap.entities.find(e => e.entityKey === "bk1").tombstone, true);
 });
 
-test("sweep dry-run: proves references, keeps shared audio, deletes NOTHING, conservative on incomplete data", async () => {
-  const h = makeHarness();
+async function sweepFixture(h, { incompleteOwn = false, incompleteCross = false } = {}) {
   const a = new SyncClient(h.coord, "dev-A");
   await a.pushBook("bk1", BOOK("bk1"));
   await a.pushBook("bk2", BOOK("bk2"));
-  await a.push([
+  const rows = [
     { family: "bindings", entityKey: "bk1:s1", bookId: "bk1", baseRevision: 0, op: "upsert", payload: { cacheKey: "shared-key" } },
     { family: "bindings", entityKey: "bk1:s2", bookId: "bk1", baseRevision: 0, op: "upsert", payload: { cacheKey: "bk1-only" } },
     { family: "bindings", entityKey: "bk2:s1", bookId: "bk2", baseRevision: 0, op: "upsert", payload: { cacheKey: "shared-key" } },
-    { family: "bindings", entityKey: "bk1:s3", bookId: "bk1", baseRevision: 0, op: "upsert", payload: {} }, // incomplete
-  ]);
+  ];
+  if (incompleteOwn) rows.push({ family: "bindings", entityKey: "bk1:s3", bookId: "bk1", baseRevision: 0, op: "upsert", payload: {} });
+  if (incompleteCross) rows.push({ family: "bindings", entityKey: "bk2:s2", bookId: "bk2", baseRevision: 0, op: "upsert", payload: {} });
+  await a.push(rows);
   await a.deleteBook("bk1");
+  return a;
+}
+
+test("sweep dry-run (clean): proves references, keeps shared audio, complete manifest, deletes NOTHING", async () => {
+  const h = makeHarness();
+  await sweepFixture(h);
   const before = h.coord.syncSnapshot({ family: "bindings" }).entities.length;
   const r = h.coord.sweepDryRun("bk1");
   assert.equal(r.dryRun, true);
   assert.equal(r.deletedAnything, false);
+  assert.equal(r.conservative, false);
   assert.deepEqual(r.sharedKept, ["shared-key"]); // referenced by bk2 — kept
-  assert.equal(r.conservative, true);              // incomplete binding present
-  assert.ok(!r.wouldRemove.some(x => x.cacheKey === "shared-key"));
-  assert.ok(!r.wouldRemove.some(x => x.entityKey === "bk1:s3")); // unprovable — off the manifest
   assert.ok(r.wouldRemove.some(x => x.cacheKey === "bk1-only"));
+  assert.ok(!r.wouldRemove.some(x => x.cacheKey === "shared-key"));
   assert.equal(h.coord.syncSnapshot({ family: "bindings" }).entities.length, before); // nothing deleted
   assert.equal(h.coord.sweepDryRun("bk2").error, "not_tombstoned");
+});
+
+test("sweep dry-run FAILS CLOSED: incomplete own binding, incomplete cross-book binding, or a live job each withhold the whole manifest (review blocker 2)", async () => {
+  { // incomplete binding in the book itself
+    const h = makeHarness();
+    await sweepFixture(h, { incompleteOwn: true });
+    const r = h.coord.sweepDryRun("bk1");
+    assert.equal(r.conservative, true);
+    assert.deepEqual(r.wouldRemove, []);
+    assert.ok(r.blockedBy.some(b => b.startsWith("incomplete_own_binding")));
+  }
+  { // incomplete binding in ANOTHER book could hide a reference — blocks too
+    const h = makeHarness();
+    await sweepFixture(h, { incompleteCross: true });
+    const r = h.coord.sweepDryRun("bk1");
+    assert.equal(r.conservative, true);
+    assert.deepEqual(r.wouldRemove, []);
+    assert.ok(r.blockedBy.some(b => b.startsWith("incomplete_cross_book_binding")));
+  }
+  { // a live (non-terminal) job naming the book blocks removal outright
+    const h = makeHarness();
+    await sweepFixture(h);
+    await h.coord.handleCommand({ command_id: "job-live-1", type: "SubmitJob",
+      payload: { jobId: "job-bk1", bookId: "bk1", chapterIndex: 0,
+        occurrences: [{ occurrenceId: "s1", chapterIndex: 0, revisionKey: "rk1" }] } });
+    const r = h.coord.sweepDryRun("bk1");
+    assert.equal(r.conservative, true);
+    assert.deepEqual(r.wouldRemove, []);
+    assert.ok(r.blockedBy.some(b => b.startsWith("live_jobs")));
+  }
+});
+
+test("pushes are atomic PER BOOK: one conflict in a book commits NONE of that book, other books succeed (review concern)", async () => {
+  const h = makeHarness();
+  const a = new SyncClient(h.coord, "dev-A");
+  await a.pushBook("bk1", BOOK("bk1")); // bk1 content at revision 1
+  const r = await a.push([
+    { family: "content", entityKey: "bk1", bookId: "bk1", baseRevision: 1, op: "upsert", payload: { ...BOOK("bk1"), title: "bk1 edited" } },
+    { family: "bindings", entityKey: "bk1:s1", bookId: "bk1", baseRevision: 99, op: "upsert", payload: { cacheKey: "k" } }, // conflict
+    { family: "content", entityKey: "bk2", bookId: "bk2", baseRevision: 0, op: "upsert", payload: BOOK("bk2") },
+  ]);
+  const by = Object.fromEntries(r.outcomes.map(o => [o.entityKey, o]));
+  assert.equal(by["bk1:s1"].status, "conflict");
+  assert.equal(by["bk1"].status, "aborted_book_conflict"); // valid, but the book aborted
+  assert.equal(by["bk2"].status, "applied");               // other books unaffected
+  const snap = h.coord.syncSnapshot({ family: "content" });
+  const bk1 = snap.entities.find(e => e.entityKey === "bk1");
+  assert.equal(bk1.revision, 1);                            // nothing of bk1 committed
+  assert.equal(bk1.data.title, "Book bk1");
+  assert.equal(h.coord.syncSnapshot({ family: "bindings" }).entities.length, 0);
 });
 
 // ---------- money boundary ----------
