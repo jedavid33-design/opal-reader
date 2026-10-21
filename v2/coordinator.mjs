@@ -35,7 +35,8 @@ export const JOB_TRANSITIONS = {
                      park: "paused_quota", pause: "paused_user", cancel: "cancelled", unknown: "outcome_unknown" },
   paused_quota:    { resume_probe: "generating", cancel: "cancelled", supersede: "superseded" },
   paused_user:     { resume: "queued", cancel: "cancelled", supersede: "superseded" },
-  outcome_unknown: { resolve: "queued", cancel: "cancelled", supersede: "superseded" },
+  outcome_unknown: { resolve: "queued", report_complete: "complete", report_partial: "partial",
+                     report_failed: "failed", cancel: "cancelled", supersede: "superseded" },
   complete:        { supersede: "superseded" },
   partial:         { resume: "queued", cancel: "cancelled", supersede: "superseded" },
   failed:          { supersede: "superseded" },
@@ -246,6 +247,7 @@ export class GenerationCoordinator {
         result.outcome, JSON.stringify(result), cmd.command_id);
       return result;
     });
+    await this._armAlarmIfEarlier(); // the command may have scheduled earlier work
     return { command_id: cmd.command_id, ...outcome };
   }
 
@@ -316,8 +318,12 @@ export class GenerationCoordinator {
       return { outcome: "applied", state: "generating", grantId: g.grantId, probe: true };
     }
     const r = this.applyJobEvent(p.jobId, "resume", "RequestResume", { commandId });
-    return r.ok ? { outcome: "applied", state: r.state, revision: r.revision }
-                : { outcome: "rejected", reason: r.reason };
+    if (!r.ok) return { outcome: "rejected", reason: r.reason };
+    // Work may have settled while the job was paused (in-flight reports):
+    // land the job in its true state immediately, not at the next report.
+    this._deriveJobCompletion(p.jobId, "RequestResume");
+    const after = this._one(`SELECT * FROM jobs WHERE job_id = ?`, p.jobId);
+    return { outcome: "applied", state: after.state, revision: after.revision };
   }
 
   _requestSynthesis(p, commandId) {
@@ -328,6 +334,20 @@ export class GenerationCoordinator {
         `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
         p.occurrenceId, p.revisionKey);
       if (b) return { outcome: "applied", answer: "cached", cacheKey: b.cache_key };
+      // One in-flight operation per (occurrence, revision), whoever asked
+      // (P2 review round 2, gap 1): two devices requesting the same audio
+      // before either recording exists share the operation — the second
+      // request joins it instead of paying for a duplicate synthesis.
+      const dupe = this._one(
+        `SELECT j.job_id AS jobId, o.state AS occState
+           FROM occurrences o JOIN jobs j ON j.job_id = o.job_id
+          WHERE o.occurrence_id = ? AND o.revision_key = ?
+            AND j.state NOT IN ('complete', 'failed', 'cancelled', 'superseded')
+          ORDER BY j.created_at DESC LIMIT 1`, p.occurrenceId, p.revisionKey);
+      if (dupe && dupe.occState === "outcome_unknown")
+        return { outcome: "rejected", reason: "outcome_unknown", jobId: dupe.jobId };
+      if (dupe && (dupe.occState === "pending" || dupe.occState === "granted"))
+        return { outcome: "applied", answer: "in_progress", jobId: dupe.jobId };
     }
     const jobId = `synth:${commandId}`;
     const sub = this._submitJob({
@@ -412,8 +432,10 @@ export class GenerationCoordinator {
   // Executor entry point (called by the command API / plan advancer).
   async requestGrant(jobId, opts = {}) {
     await this.wake();
-    return this._issueGrant(jobId, { jobEvent: "grant",
+    const g = this._issueGrant(jobId, { jobEvent: "grant",
       cause: opts.cause || "requestGrant", probe: !!opts.probe });
+    await this._armAlarmIfEarlier(); // the new lease may be the earliest work
+    return g;
   }
 
   // Deliver unsent grants (interruption seam ii: a grant committed but
@@ -427,8 +449,24 @@ export class GenerationCoordinator {
     const rows = this._all(`SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY created_at`);
     let sent = 0;
     for (const row of rows) {
+      const payload = JSON.parse(row.payload_json);
+      // Stop means STOP (P2 review round 2, gap 2): a dispatch queued
+      // before a pause/cancel/park/freeze must not produce provider work.
+      // Frozen: everything waits, nothing is voided. Paused/cancelled/
+      // parked/superseded job: the dispatch is VOIDED — it provably never
+      // left (this row is unsent), so its occurrences return to pending
+      // and a later resume grants them fresh. Work already delivered is
+      // in flight and settles by report; this gate governs only what has
+      // not been sent yet.
+      if (this._frozen()) continue;
+      const job = payload.jobId
+        ? this._one(`SELECT * FROM jobs WHERE job_id = ?`, payload.jobId) : null;
+      if (job && ["paused_user", "paused_quota", "cancelled", "superseded"].includes(job.state)) {
+        this._tx(() => this._voidDispatch(payload, job.state));
+        continue;
+      }
       try {
-        await send(JSON.parse(row.payload_json));
+        await send(payload);
       } catch {
         continue; // unacknowledged: stays unsent, retried by a later drain
       }
@@ -436,6 +474,29 @@ export class GenerationCoordinator {
       sent++;
     }
     return sent;
+  }
+
+  _voidDispatch(payload, jobState) {
+    const grantId = payload.grantId;
+    const ops = this._all(
+      `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
+      `op:${grantId}:%`);
+    for (const op of ops) {
+      const oid = JSON.parse(op.detail_json || "{}").occurrenceId;
+      if (!oid) continue;
+      const o = this._one(
+        `SELECT * FROM occurrences WHERE job_id = ? AND occurrence_id = ?`, payload.jobId, oid);
+      if (o && o.state === "granted")
+        this.applyOccEvent(payload.jobId, oid, "defer", "dispatch_voided",
+          { grantId, jobState });
+    }
+    this.sql.exec(`UPDATE grants SET state = 'voided' WHERE grant_id = ?`, grantId);
+    this.sql.exec(
+      `UPDATE schedule SET state = 'void' WHERE kind = 'lease' AND ref = ? AND state = 'pending'`,
+      grantId);
+    this.sql.exec(`DELETE FROM outbox WHERE id = ?`, grantId);
+    this._logTransition("grant", grantId, "dispatch_voided", "issued", "voided", null,
+      { jobId: payload.jobId, jobState });
   }
 
   // Dispatch-time annotation: the executor records the provider request
@@ -460,7 +521,7 @@ export class GenerationCoordinator {
   async handleReport(report) {
     if (!report || !report.grantId) return { ok: false, reason: "grant_required" };
     await this.wake();
-    return this._tx(() => {
+    const result = this._tx(() => {
       const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, report.grantId);
       if (!grant) return { ok: false, reason: "grant_not_found" };
       if (grant.state === "reported")
@@ -540,23 +601,8 @@ export class GenerationCoordinator {
       }
       this.sql.exec(`UPDATE grants SET state = 'reported', report_json = ? WHERE grant_id = ?`,
         JSON.stringify(report), grant.grant_id);
-      // Job-level completion derivation for this grant's job.
-      const counts = this._one(
-        `SELECT
-           SUM(state = 'ready') AS ready,
-           SUM(state = 'blocked_policy') AS blocked,
-           SUM(state = 'failed') AS failed,
-           SUM(state IN ('pending','granted')) AS open,
-           SUM(state = 'outcome_unknown') AS unknown,
-           COUNT(*) AS total
-         FROM occurrences WHERE job_id = ?`, grant.job_id);
-      if (counts.unknown > 0) this.applyJobEvent(grant.job_id, "unknown", "report", { grantId: grant.grant_id });
-      else if (counts.open === 0 && counts.ready === counts.total)
-        this.applyJobEvent(grant.job_id, "report_complete", "report", { grantId: grant.grant_id });
-      else if (counts.open === 0 && counts.ready > 0)
-        this.applyJobEvent(grant.job_id, "report_partial", "report", { grantId: grant.grant_id });
-      else if (counts.open === 0 && counts.ready === 0 && (counts.blocked > 0 || counts.failed > 0))
-        this.applyJobEvent(grant.job_id, "report_failed", "report", { grantId: grant.grant_id });
+      // Job-level completion derivation for this grant's job (shared).
+      this._deriveJobCompletion(grant.job_id, "report");
       // A successful probe is the evidence that the provider day reset:
       // it releases the account-wide park (F5; never a clock does this, B6).
       if (grant.grant_id.endsWith(":probe") && ready > 0) {
@@ -591,6 +637,8 @@ export class GenerationCoordinator {
       }
       return { ok: true, ready, blocked, failed };
     });
+    await this._armAlarmIfEarlier(); // a retry/lease from this report may be earliest
+    return result;
   }
 
   // ---- audio bindings + conflict validation (Rowan criterion 2) -----------
@@ -614,15 +662,18 @@ export class GenerationCoordinator {
       return { bound: false, reason: "object_missing" };
     const fmt = probe.sniff ? probe.sniff(cacheKey) : null;
     if (!fmt) return conflict(revisionKey, null, "format_invalid");
-    // Byte-level verification (P2 review finding 3): metadata agreement
-    // is not content agreement. When the caller states the bytes it
-    // produced (the executor's report) or the cache index recorded the
-    // bytes at an earlier bind, the object under the key must hash to
-    // exactly those bytes — two different recordings with matching
-    // labels must not pass for each other.
+    // Byte-level verification (P2 review finding 3 + round 2 gap 3):
+    // metadata agreement is not content agreement, and for NEW
+    // recordings a verified digest is MANDATORY — a missing hash no
+    // longer passes. Verified means the object's bytes hash to a digest
+    // stated independently of the object: the caller's stated hash (a
+    // provided-but-wrong hash is a positive mismatch, never bypassed by
+    // another source), or the digest recorded when the object entered
+    // the cache (the storage layer's write-time record, or this
+    // coordinator's own index from an earlier bind). Legacy revisions
+    // keep their documented uncertainty: exempt from the requirement,
+    // still protected if a recorded digest exists and changes.
     const actualSha = probe.hash ? probe.hash(cacheKey) : null;
-    if (expectedSha256 && actualSha !== expectedSha256)
-      return conflict(expectedSha256, actualSha, "content_hash_mismatch");
     const existing = this._one(
       `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
       occurrenceId, revisionKey);
@@ -630,21 +681,29 @@ export class GenerationCoordinator {
       return { bound: true, idempotent: true, cacheKey };
     if (existing && existing.cache_key !== cacheKey)
       return conflict(revisionKey, existing.cache_key, "binding_conflict_existing");
+    const idx = this._one(`SELECT * FROM cache_index WHERE cache_key = ?`, cacheKey);
+    const isLegacy = typeof revisionKey === "string" && revisionKey.startsWith("legacy:");
+    const recordedSha = (idx && idx.sha256) ||
+      (probe.recordedSha256 ? probe.recordedSha256(cacheKey) : null);
+    if (expectedSha256) {
+      if (actualSha !== expectedSha256)
+        return conflict(expectedSha256, actualSha, "content_hash_mismatch");
+    } else if (!isLegacy) {
+      if (!recordedSha || actualSha !== recordedSha)
+        return conflict(recordedSha, actualSha,
+          recordedSha ? "content_hash_mismatch" : "digest_unverified");
+    } else if (recordedSha && actualSha && recordedSha !== actualSha) {
+      return conflict(recordedSha, actualSha, "content_hash_mismatch");
+    }
     // The survivor's recorded identity: the coordinator's own cache index
     // (written on every bind it has ever made) wins; the storage probe's
     // record is the fallback for objects that predate the coordinator.
-    const idx = this._one(`SELECT * FROM cache_index WHERE cache_key = ?`, cacheKey);
     const recorded = (idx && idx.identity) ||
       (probe.recordedIdentity ? probe.recordedIdentity(cacheKey) : null);
-    const isLegacy = typeof revisionKey === "string" && revisionKey.startsWith("legacy:");
     if (recorded && !isLegacy && recorded !== revisionKey)
       return conflict(revisionKey, recorded, "identity_mismatch");
     if (isLegacy && revisionKey !== `legacy:${cacheKey}`)
       return conflict(revisionKey, recorded, "legacy_anchor_mismatch");
-    // If an earlier bind recorded this key's bytes, the bytes must not
-    // have changed under the key since (silent replacement detection).
-    if (idx && idx.sha256 && actualSha && idx.sha256 !== actualSha)
-      return conflict(idx.sha256, actualSha, "content_hash_mismatch");
     this.sql.exec(
       `INSERT INTO bindings (occurrence_id, revision_key, cache_key, provenance, bound_at)
        VALUES (?, ?, ?, ?, ?)`, occurrenceId, revisionKey, cacheKey, provenance, this._now());
@@ -712,18 +771,37 @@ export class GenerationCoordinator {
     return r;
   }
 
-  _maybeResolveJob(jobId) {
+  // The single job-completion derivation, shared by report application,
+  // reconciliation, and resume (P2 review round 2, gap 4): whenever an
+  // occurrence set settles, the job lands in its TRUE state — including
+  // 'complete' when a reconciliation made every occurrence ready.
+  _deriveJobCompletion(jobId, cause) {
     const counts = this._one(
-      `SELECT SUM(state = 'outcome_unknown') AS unknown, SUM(state IN ('pending','granted')) AS open,
-              SUM(state = 'ready') AS ready, COUNT(*) AS total
+      `SELECT
+         SUM(state = 'ready') AS ready,
+         SUM(state = 'blocked_policy') AS blocked,
+         SUM(state = 'failed') AS failed,
+         SUM(state IN ('pending','granted')) AS open,
+         SUM(state = 'outcome_unknown') AS unknown,
+         COUNT(*) AS total
        FROM occurrences WHERE job_id = ?`, jobId);
-    const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
-    if (job && job.state === "outcome_unknown" && counts.unknown === 0) {
-      if (counts.open > 0) this.applyJobEvent(jobId, "resolve", "reconcile", {});
-      else if (counts.ready === counts.total) this.applyJobEvent(jobId, "resolve", "reconcile", {});
-      else this.applyJobEvent(jobId, "resolve", "reconcile", {});
+    if (counts.unknown > 0) return this.applyJobEvent(jobId, "unknown", cause, {});
+    if (counts.open > 0) {
+      const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
+      if (job && job.state === "outcome_unknown")
+        return this.applyJobEvent(jobId, "resolve", cause, {});
+      return { ok: true, state: job ? job.state : null };
     }
+    if (counts.ready === counts.total)
+      return this.applyJobEvent(jobId, "report_complete", cause, {});
+    if (counts.ready > 0)
+      return this.applyJobEvent(jobId, "report_partial", cause, {});
+    if (counts.blocked > 0 || counts.failed > 0)
+      return this.applyJobEvent(jobId, "report_failed", cause, {});
+    return { ok: true };
   }
+
+  _maybeResolveJob(jobId) { return this._deriveJobCompletion(jobId, "reconcile"); }
 
   // ---- settings aggregate ----------------------------------------------------
   _settings() {
@@ -772,15 +850,23 @@ export class GenerationCoordinator {
   // Recovery never requires a client — any wake (command, report, alarm)
   // re-establishes the chain, and the chain itself is self-perpetuating.
   async wake() {
+    const wd = this._one(
+      `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending' AND kind = 'watchdog'`);
+    if (!wd || wd.n === 0) this._schedule(this._now() + WATCHDOG_PERIOD_MS, "watchdog", null, {});
+    await this._armAlarmIfEarlier();
+  }
+
+  // Arm the alarm at the earliest pending work if it is sooner than the
+  // currently armed time (or nothing is armed) — newly scheduled earlier
+  // work must ADVANCE the alarm, not wait for it (P2 review round 2,
+  // gap 5). Entry points call this after their writes commit.
+  async _armAlarmIfEarlier() {
     const armed = await this.state.storage.getAlarm();
-    const pending = this._one(
-      `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
-    if (armed === null || armed === undefined || !pending || pending.n === 0) {
-      const wd = this._one(
-        `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending' AND kind = 'watchdog'`);
-      if (!wd || wd.n === 0) this._schedule(this._now() + WATCHDOG_PERIOD_MS, "watchdog", null, {});
-      await this._armAlarm();
-    }
+    const next = this._one(
+      `SELECT MIN(due_at) AS due FROM schedule WHERE state = 'pending'`);
+    const due = next && next.due !== null ? next.due : this._now() + WATCHDOG_PERIOD_MS;
+    if (armed === null || armed === undefined || due < armed)
+      await this.state.storage.setAlarm(due);
   }
 
   async alarm() {
@@ -833,22 +919,28 @@ export class GenerationCoordinator {
       case "lease": {
         // Lease expiry (interruption seam iii): occurrences still granted
         // under this grant become outcome_unknown — NEVER re-dispatched.
+        // Recovery then attempts SAFE reconciliation immediately, with
+        // no device involved (gap 4): adopt from the cache if the audio
+        // provably landed, or record the spend from the provider record.
+        // Whatever cannot be proven stays outcome_unknown for Julie.
         const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
-        if (!grant || grant.state === "reported") break;
+        if (!grant || grant.state === "reported" || grant.state === "voided") break;
         const occs = this._all(
           `SELECT * FROM occurrences WHERE job_id = ? AND state = 'granted'`, grant.job_id);
         const grantOps = this._all(
           `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
           `op:${grant.grant_id}:%`);
         const grantedIds = new Set(grantOps.map(r => JSON.parse(r.detail_json || "{}").occurrenceId));
-        let any = false;
+        const newlyUnknown = [];
         for (const o of occs) {
           if (!grantedIds.has(o.occurrence_id)) continue;
           const r = this.applyOccEvent(grant.job_id, o.occurrence_id, "lease_expired",
             "lease_expiry", { grantId: grant.grant_id });
-          if (r.ok) any = true;
+          if (r.ok) newlyUnknown.push(o.occurrence_id);
         }
-        if (any) this.applyJobEvent(grant.job_id, "unknown", "lease_expiry", { grantId: grant.grant_id });
+        if (newlyUnknown.length > 0)
+          this.applyJobEvent(grant.job_id, "unknown", "lease_expiry", { grantId: grant.grant_id });
+        for (const oid of newlyUnknown) this.reconcileUnknown(grant.job_id, oid);
         break;
       }
       case "retry_grant": {

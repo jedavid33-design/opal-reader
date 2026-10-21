@@ -91,8 +91,8 @@ test("generic 429 is weather: backoff + retry, never a park (B5)", async () => {
 });
 
 test("probe resume: one occurrence, success releases the park, no clock restart (B6)", async () => {
-  const objects = new Map([["key-o1", { format: "wav", identity: "fp-o1" }],
-                           ["key-o2", { format: "wav", identity: "fp-o2" }]]);
+  const objects = new Map([["key-o1", { format: "wav", identity: "fp-o1", sha: "aaaa" }],
+                           ["key-o2", { format: "wav", identity: "fp-o2", sha: "bbbb" }]]);
   const h = makeHarness({ probe: makeProbe(objects) });
   await submit(h.coord, "c1", "job-1", [occ("o1"), occ("o2")]);
   const g = await h.coord.requestGrant("job-1");
@@ -123,7 +123,7 @@ test("probe resume: one occurrence, success releases the park, no clock restart 
 });
 
 test("stale reports are rejected for state; replays are harmless", async () => {
-  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1" }]]);
+  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1", sha: "aaaa" }]]);
   const h = makeHarness({ probe: makeProbe(objects) });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
   const g = await h.coord.requestGrant("job-1");
@@ -143,9 +143,9 @@ test("stale reports are rejected for state; replays are harmless", async () => {
 });
 
 test("repair chains: follow-on is created AND granted server-side, then completes (B7 + finding 5)", async () => {
-  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1" }],
-                           ["key-o2", { format: "mp3", identity: "fp-o2" }],
-                           ["key-o3", { format: "mp3", identity: "fp-o3" }]]);
+  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1", sha: "a1" }],
+                           ["key-o2", { format: "mp3", identity: "fp-o2", sha: "a2" }],
+                           ["key-o3", { format: "mp3", identity: "fp-o3", sha: "a3" }]]);
   const h = makeHarness({ probe: makeProbe(objects) });
   await h.coord.handleCommand({ command_id: "r1", type: "RequestRepair",
     payload: { jobId: "repair-1", bookId: "book-1", chapterIndex: 2, lane: "standard",

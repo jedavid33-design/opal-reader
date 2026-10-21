@@ -7,7 +7,7 @@ import { makeHarness, makeProbe } from "./helpers/do-harness.mjs";
 const bind = (h, payload) => h.coord.validateAndBind(payload);
 
 test("clean bind: identity matches the recorded cache identity", () => {
-  const h = makeHarness({ probe: makeProbe(new Map([["k1", { format: "mp3", identity: "fp-a" }]])) });
+  const h = makeHarness({ probe: makeProbe(new Map([["k1", { format: "mp3", identity: "fp-a", sha: "aaaa" }]])) });
   const v = bind(h, { occurrenceId: "o1", revisionKey: "fp-a", cacheKey: "k1" });
   assert.equal(v.bound, true);
   assert.equal(h.rows("bindings").length, 1);
@@ -15,7 +15,7 @@ test("clean bind: identity matches the recorded cache identity", () => {
 });
 
 test("first write binds and records the identity for future checks", () => {
-  const h = makeHarness({ probe: makeProbe(new Map([["k1", { format: "wav", identity: null }]])) });
+  const h = makeHarness({ probe: makeProbe(new Map([["k1", { format: "wav", identity: null, sha: "aaaa" }]])) });
   const v = bind(h, { occurrenceId: "o1", revisionKey: "fp-new", cacheKey: "k1" });
   assert.equal(v.bound, true);
   assert.equal(h.rows("cache_index")[0].identity, "fp-new");
@@ -27,8 +27,8 @@ test("first write binds and records the identity for future checks", () => {
 
 test("identity mismatch: no bind, conflict visible, correct key still binds after", () => {
   const h = makeHarness({ probe: makeProbe(new Map([
-    ["k1", { format: "mp3", identity: "fp-real" }],
-    ["k2", { format: "mp3", identity: "fp-want" }],
+    ["k1", { format: "mp3", identity: "fp-real", sha: "a1" }],
+    ["k2", { format: "mp3", identity: "fp-want", sha: "a2" }],
   ])) });
   const v = bind(h, { occurrenceId: "o1", revisionKey: "fp-want", cacheKey: "k1" });
   assert.equal(v.bound, false);
@@ -69,8 +69,8 @@ test("legacy anchoring: a legacy revision binds only its own verified artifact (
 
 test("an existing binding for the occurrence is never silently replaced", () => {
   const h = makeHarness({ probe: makeProbe(new Map([
-    ["k1", { format: "mp3", identity: "fp-a" }],
-    ["k2", { format: "mp3", identity: "fp-a" }],
+    ["k1", { format: "mp3", identity: "fp-a", sha: "a1" }],
+    ["k2", { format: "mp3", identity: "fp-a", sha: "a2" }],
   ])) });
   assert.equal(bind(h, { occurrenceId: "o1", revisionKey: "fp-a", cacheKey: "k1" }).bound, true);
   const again = bind(h, { occurrenceId: "o1", revisionKey: "fp-a", cacheKey: "k1" });
@@ -103,9 +103,22 @@ test("byte verification: a stated expected hash must match the actual bytes", ()
   assert.equal(ok.bound, true);
 });
 
+test("gap 3: a new recording with NO verifiable digest does not bind; legacy may", () => {
+  const h = makeHarness({ probe: makeProbe(new Map([
+    ["k1", { format: "mp3", identity: "fp-a" }], // no sha recorded anywhere
+    ["k2", { format: "mp3", identity: null }],
+  ])) });
+  const v = bind(h, { occurrenceId: "o1", revisionKey: "fp-a", cacheKey: "k1" });
+  assert.equal(v.bound, false);
+  assert.equal(v.reason, "digest_unverified");
+  assert.equal(h.rows("bindings").length, 0);
+  const legacy = bind(h, { occurrenceId: "o2", revisionKey: "legacy:k2", cacheKey: "k2" });
+  assert.equal(legacy.bound, true); // documented uncertainty is preserved for legacy
+});
+
 test("AdoptAudio command: applied when valid, recorded rejection on conflict", async () => {
   const h = makeHarness({ probe: makeProbe(new Map([
-    ["k1", { format: "mp3", identity: "fp-real" }],
+    ["k1", { format: "mp3", identity: "fp-real", sha: "a1" }],
   ])) });
   const bad = await h.coord.handleCommand({ command_id: "a1", type: "AdoptAudio",
     payload: { occurrenceId: "o1", revisionKey: "fp-want", cacheKey: "k1" } });

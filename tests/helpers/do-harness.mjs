@@ -86,6 +86,11 @@ export function makeProbe(objects = new Map(), keyFor = null) {
     sniff: k => (objects.has(k) ? objects.get(k).format : null),
     recordedIdentity: k => (objects.has(k) ? objects.get(k).identity ?? null : null),
     hash: k => (objects.has(k) ? objects.get(k).sha ?? null : null),
+    // The digest the cache recorded when the object was written. Defaults
+    // to the object's sha (an honest cache); a test can pin recordedSha
+    // to model a write-time record that current bytes no longer match.
+    recordedSha256: k => (objects.has(k)
+      ? (objects.get(k).recordedSha ?? objects.get(k).sha ?? null) : null),
     keyFor: keyFor || (() => null),
     _objects: objects,
   };

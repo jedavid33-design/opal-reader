@@ -29,31 +29,32 @@ test("seam iii: executor dies after dispatch -> lease expiry -> outcome_unknown,
   await h.coord.alarm();
   const view = h.coord.jobView("job-1");
   assert.equal(view.state, "outcome_unknown");
-  assert.deepEqual(view.occurrences.map(o => o.state), ["outcome_unknown", "outcome_unknown"]);
+  // o1's provider request was recorded at dispatch, so the automatic
+  // reconciliation pass records it spent-without-audio on the spot;
+  // o2 has no proof either way and stays outcome_unknown.
+  assert.deepEqual(view.occurrences.map(o => o.state), ["failed", "outcome_unknown"]);
   // critically: nothing new was dispatched for them
   assert.equal(h.rows("outbox").length, 1);
   assert.equal(h.rows("grants").length, 1);
 });
 
-test("seam iii-a: reconciliation adopts audio that did land in the cache", async () => {
-  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1" }]]);
+test("seam iii-a + gap 4: lease expiry auto-adopts cached audio and the JOB completes", async () => {
+  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1", sha: "aaaa" }]]);
   const probe = makeProbe(objects, o => (o.occurrence_id === "o1" ? "key-o1" : null));
   const h = makeHarness({ probe });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
   const g = await h.coord.requestGrant("job-1");
   const lease = h.rows("schedule").find(r => r.kind === "lease");
   h.setNow(lease.due_at + 1000);
-  await h.coord.alarm();
-  assert.equal(h.coord.jobView("job-1").occurrences[0].state, "outcome_unknown");
-  const r = h.coord.reconcileUnknown("job-1", "o1");
-  assert.deepEqual([r.ok, r.exit], [true, "adopted"]);
+  await h.coord.alarm(); // no device, no manual reconcile call
   const view = h.coord.jobView("job-1");
   assert.equal(view.occurrences[0].state, "ready");
   assert.equal(view.occurrences[0].cache_key, "key-o1");
+  assert.equal(view.state, "complete"); // gap 4: the job itself lands truthfully
   assert.equal(h.rows("bindings").length, 1);
 });
 
-test("seam iii-b: reconciliation records spent-without-audio from the provider request id", async () => {
+test("seam iii-b: automatic reconciliation records spent-without-audio from the provider id", async () => {
   const h = makeHarness({ probe: makeProbe(new Map(), () => null) });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
   const g = await h.coord.requestGrant("job-1");
@@ -61,10 +62,11 @@ test("seam iii-b: reconciliation records spent-without-audio from the provider r
   const lease = h.rows("schedule").find(r => r.kind === "lease");
   h.setNow(lease.due_at + 1000);
   await h.coord.alarm();
-  const r = h.coord.reconcileUnknown("job-1", "o1");
-  assert.deepEqual([r.ok, r.exit], [true, "spent_without_audio"]);
   const o = h.coord.jobView("job-1").occurrences[0];
   assert.equal(o.state, "failed");
+  const row = h.rows("occurrences")[0];
+  assert.match(row.detail_json, /spent_without_audio/);
+  assert.equal(h.coord.jobView("job-1").state, "failed");
 });
 
 test("seam iii-c: no cache, no provider record -> stays unknown until Julie authorizes", async () => {
@@ -107,7 +109,7 @@ test("seam iv + finding 1: unvalidated success -> outcome_unknown (never stuck),
   assert.ok(log, "the binding rejection is on the transition log");
   // the guaranteed recovery path: the audio lands late (the executor was
   // just slow), reconciliation adopts it, the job completes.
-  objects.set("ghost-key", { format: "mp3", identity: "fp-o1" });
+  objects.set("ghost-key", { format: "mp3", identity: "fp-o1", sha: "aaaa" });
   const r = h.coord.reconcileUnknown("job-1", "o1");
   assert.deepEqual([r.ok, r.exit], [true, "adopted"]);
   view = h.coord.jobView("job-1");
@@ -116,7 +118,7 @@ test("seam iv + finding 1: unvalidated success -> outcome_unknown (never stuck),
 });
 
 test("seam v: a crash mid-report rolls the whole report back; re-report applies cleanly", async () => {
-  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1" }]]);
+  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1", sha: "aaaa" }]]);
   const probe = makeProbe(objects);
   const h = makeHarness({ probe });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
@@ -133,6 +135,55 @@ test("seam v: a crash mid-report rolls the whole report back; re-report applies 
   probe.sniff = realSniff;
   assert.equal((await h.coord.handleReport(report)).ok, true);
   assert.equal(h.coord.jobView("job-1").state, "complete");
+});
+
+test("gap 2: pause/cancel void a queued dispatch before it can spend; freeze only holds it", async () => {
+  const h = makeHarness();
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  const g = await h.coord.requestGrant("job-1"); // outbox row exists, never drained
+  await h.coord.handleCommand({ command_id: "c2", type: "RequestPause", payload: { jobId: "job-1" } });
+  assert.equal(await h.coord.drainOutbox(x => h.sentGrants.push(x)), 0);
+  assert.equal(h.sentGrants.length, 0); // the provider never hears about it
+  assert.equal(h.rows("grants").find(x => x.grant_id === g.grantId).state, "voided");
+  assert.equal(h.rows("outbox").length, 0);
+  assert.equal(h.coord.jobView("job-1").occurrences[0].state, "pending"); // returned, not orphaned
+  // resume + a fresh grant delivers normally
+  await h.coord.handleCommand({ command_id: "c3", type: "RequestResume", payload: { jobId: "job-1" } });
+  const g2 = await h.coord.requestGrant("job-1");
+  assert.equal(g2.ok, true);
+  assert.notEqual(g2.grantId, g.grantId);
+  assert.equal(await h.coord.drainOutbox(x => h.sentGrants.push(x)), 1);
+
+  const h2 = makeHarness();
+  await submit(h2.coord, "c1", "job-1", [occ("o1")]);
+  await h2.coord.requestGrant("job-1");
+  await h2.coord.handleCommand({ command_id: "c2", type: "RequestCancel", payload: { jobId: "job-1" } });
+  assert.equal(await h2.coord.drainOutbox(x => h2.sentGrants.push(x)), 0);
+  assert.equal(h2.rows("grants")[0].state, "voided");
+
+  const h3 = makeHarness();
+  await submit(h3.coord, "c1", "job-1", [occ("o1")]);
+  await h3.coord.requestGrant("job-1");
+  await h3.coord.handleCommand({ command_id: "fz", type: "FreezeDirective", payload: { freeze: true } });
+  assert.equal(await h3.coord.drainOutbox(x => h3.sentGrants.push(x)), 0);
+  assert.equal(h3.rows("outbox").length, 1); // held, NOT voided
+  assert.equal(h3.rows("grants")[0].state, "issued");
+  await h3.coord.handleCommand({ command_id: "fz2", type: "FreezeDirective", payload: { freeze: false } });
+  assert.equal(await h3.coord.drainOutbox(x => h3.sentGrants.push(x)), 1);
+});
+
+test("gap 5: scheduling a 30s retry advances an alarm that was 10 minutes out", async () => {
+  const h = makeHarness({ probe: makeProbe(new Map()) });
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  const g = await h.coord.requestGrant("job-1");
+  const armedBefore = h.alarmAt();
+  assert.ok(armedBefore > h.now() + 30000, "alarm starts out beyond the retry horizon");
+  await h.coord.handleReport({ grantId: g.grantId, jobRevision: 2,
+    results: [{ occurrenceId: "o1", outcome: "rate_limited" }] });
+  const retry = h.rows("schedule").find(r => r.kind === "retry_grant");
+  assert.ok(retry);
+  assert.equal(h.alarmAt(), retry.due_at); // advanced to the earlier work
+  assert.ok(h.alarmAt() < armedBefore);
 });
 
 test("finding 2: unacknowledged deliveries are never marked sent", async () => {

@@ -99,8 +99,31 @@ test("settings: versioned updates, stale base revision conflicts", async () => {
   assert.equal(h.coord.settingsView().monthlyCap, 25); // merged, not replaced
 });
 
+test("gap 1: two devices requesting the same audio share one in-flight operation", async () => {
+  const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1", sha: "aaaa" }]]);
+  const h = makeHarness({ probe: makeProbe(objects) });
+  const first = await h.coord.handleCommand({ command_id: "phone-1", type: "RequestSynthesis",
+    payload: { occurrenceId: "o1", revisionKey: "fp-o1", estMicroCents: 500 } });
+  assert.equal(first.answer, "granted");
+  const second = await h.coord.handleCommand({ command_id: "ipad-1", type: "RequestSynthesis",
+    payload: { occurrenceId: "o1", revisionKey: "fp-o1", estMicroCents: 500 } });
+  assert.equal(second.outcome, "applied");
+  assert.equal(second.answer, "in_progress");
+  assert.equal(second.jobId, first.jobId); // the SAME operation
+  assert.equal(h.rows("jobs").length, 1);
+  assert.equal(h.rows("grants").length, 1);
+  assert.equal(h.rows("ledger_ops").filter(r => r.kind === "attempt").length, 1); // paid once
+  // once it lands, a third request is the cached answer
+  const grant = h.rows("grants")[0];
+  await h.coord.handleReport({ grantId: grant.grant_id,
+    results: [{ occurrenceId: "o1", outcome: "success", revisionKey: "fp-o1", cacheKey: "key-o1" }] });
+  const third = await h.coord.handleCommand({ command_id: "phone-2", type: "RequestSynthesis",
+    payload: { occurrenceId: "o1", revisionKey: "fp-o1" } });
+  assert.equal(third.answer, "cached");
+});
+
 test("RequestSynthesis: cached answer first, otherwise a gated grant", async () => {
-  const objects = new Map([["key-a", { format: "mp3", identity: "fp-o1" }]]);
+  const objects = new Map([["key-a", { format: "mp3", identity: "fp-o1", sha: "aaaa" }]]);
   const h = makeHarness({ probe: makeProbe(objects) });
   const adopt = await h.coord.handleCommand({ command_id: "a1", type: "AdoptAudio",
     payload: { occurrenceId: "o1", revisionKey: "fp-o1", cacheKey: "key-a" } });
