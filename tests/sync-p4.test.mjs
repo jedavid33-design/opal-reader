@@ -268,6 +268,46 @@ test("sweep dry-run FAILS CLOSED: incomplete own binding, incomplete cross-book 
   }
 });
 
+test("group fences: duplicate entity targets and mixed delete+update groups are rejected whole (re-review blocker)", async () => {
+  const h = makeHarness();
+  const a = new SyncClient(h.coord, "dev-A");
+  await a.pushBook("bk1", BOOK("bk1")); // bk1 at revision 1
+  // (a) Two writes to the SAME entity in one group: both would have
+  // validated against revision 1 — the group is rejected instead.
+  const dup = await a.push([
+    { family: "content", entityKey: "bk1", bookId: "bk1", baseRevision: 1, op: "upsert", payload: { ...BOOK("bk1"), title: "first" } },
+    { family: "content", entityKey: "bk1", bookId: "bk1", baseRevision: 1, op: "upsert", payload: { ...BOOK("bk1"), title: "second" } },
+    { family: "content", entityKey: "bk2", bookId: "bk2", baseRevision: 0, op: "upsert", payload: BOOK("bk2") },
+  ]);
+  const dupBy = Object.fromEntries(dup.outcomes.map(o => [o.entityKey + o.status, o]));
+  assert.equal(dup.outcomes[0].status, "rejected");
+  assert.equal(dup.outcomes[0].reason, "duplicate_entity_in_group");
+  assert.equal(dup.outcomes[1].status, "rejected");
+  assert.equal(dup.outcomes[2].status, "applied"); // other book unaffected
+  let snap = h.coord.syncSnapshot({ family: "content" });
+  assert.equal(snap.entities.find(e => e.entityKey === "bk1").revision, 1); // neither write landed
+  assert.equal(snap.entities.find(e => e.entityKey === "bk1").data.title, "Book bk1");
+  // (b) Delete mixed with a binding update for the same book: the
+  // update could land AFTER the tombstone — rejected whole, and
+  // crucially the delete does NOT happen either.
+  const mixed = await a.push([
+    { family: "content", entityKey: "bk1", bookId: "bk1", baseRevision: 1, op: "delete" },
+    { family: "bindings", entityKey: "bk1:s1", bookId: "bk1", baseRevision: 0, op: "upsert", payload: { cacheKey: "k" } },
+  ]);
+  assert.equal(mixed.outcomes[0].status, "rejected");
+  assert.equal(mixed.outcomes[0].reason, "mixed_delete_group");
+  assert.equal(mixed.outcomes[1].status, "rejected");
+  snap = h.coord.syncSnapshot({ family: "content" });
+  assert.equal(snap.entities.find(e => e.entityKey === "bk1").tombstone, false); // not deleted
+  assert.equal(h.coord.syncSnapshot({ family: "bindings" }).entities.length, 0); // no post-tombstone write
+  // (c) A LONE delete still works fine:
+  const lone = await a.push([
+    { family: "content", entityKey: "bk1", bookId: "bk1", baseRevision: 1, op: "delete" },
+  ]);
+  assert.equal(lone.outcomes[0].status, "applied");
+  assert.equal(h.coord.syncSnapshot({ family: "content" }).entities.find(e => e.entityKey === "bk1").tombstone, true);
+});
+
 test("pushes are atomic PER BOOK: one conflict in a book commits NONE of that book, other books succeed (review concern)", async () => {
   const h = makeHarness();
   const a = new SyncClient(h.coord, "dev-A");

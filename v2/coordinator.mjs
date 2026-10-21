@@ -1937,6 +1937,33 @@ export class GenerationCoordinator {
     });
     const outcomes = new Array(changes.length);
     for (const idxs of groups.values()) {
+      // Group-shape fences (P4 re-review): within one book group, a
+      // duplicate entity target or a delete mixed with other writes
+      // has no sound sequential reading — both writes would validate
+      // against the same pre-state, and an update could land after
+      // the group's own tombstone. Such groups are rejected whole:
+      // the offending changes carry the reason, siblings abort.
+      const seen = new Map();
+      let groupViolation = null;
+      const dupIdx = new Set();
+      for (const i of idxs) {
+        const key = `${changes[i].family}:${changes[i].entityKey}`;
+        if (seen.has(key)) { dupIdx.add(i); dupIdx.add(seen.get(key)); }
+        else seen.set(key, i);
+      }
+      if (dupIdx.size > 0) groupViolation = "duplicate_entity_in_group";
+      const hasDelete = idxs.some(i => changes[i].op === "delete");
+      if (hasDelete && idxs.length > 1) groupViolation = "mixed_delete_group";
+      if (groupViolation) {
+        for (const i of idxs) {
+          outcomes[i] = (groupViolation === "mixed_delete_group" || dupIdx.has(i))
+            ? { entityKey: changes[i].entityKey, status: "rejected", reason: groupViolation,
+                bookId: changes[i].bookId || null }
+            : { entityKey: changes[i].entityKey, status: "aborted_book_conflict",
+                bookId: changes[i].bookId || null };
+        }
+        continue;
+      }
       const vals = idxs.map(i => this._validateSyncChange(changes[i]));
       if (vals.every(v => v.ok)) {
         idxs.forEach((ci, k) => {
