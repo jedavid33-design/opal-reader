@@ -437,6 +437,14 @@ export class GenerationCoordinator {
         // An illegal transition rolls the whole grant back.
         const jr = this.applyJobEvent(jobId, jobEvent, cause, { grantId });
         if (!jr.ok) throw new Rollback(jr.reason);
+        // Delivery-fence baseline (round 4): the grant is valid for the
+        // job AS ISSUED, including this grant's own transition. Record
+        // the post-transition revision on the grant; any LATER job event
+        // (pause, cancel, supersede, a newer operation) advances the
+        // job's revision past it and fences the dispatch at drain time.
+        const after = this._one(`SELECT revision FROM jobs WHERE job_id = ?`, jobId);
+        this.sql.exec(`UPDATE grants SET revision = ? WHERE grant_id = ?`,
+          after.revision, grantId);
       }
       return { ok: true, grantId, count: targets.length };
       });
@@ -482,12 +490,51 @@ export class GenerationCoordinator {
         this._tx(() => this._voidDispatch(payload, job.state));
         continue;
       }
+      // Delivery fence (round 4, Rowan blocker 1): a dispatch may leave
+      // ONLY while its grant is live — state 'issued', issued against the
+      // job's CURRENT revision, and inside its delivery window. Anything
+      // else is provably unsent work and must never be handed to the
+      // provider late: expired/revision-stale grants are voided with
+      // their reservations released (the work re-grants fresh); rows
+      // belonging to settled grants are debris and are cleared without
+      // touching accounting (their spend already settled by report).
+      if (payload.grantId) {
+        const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, payload.grantId);
+        if (!grant || grant.state !== "issued") {
+          this.sql.exec(`DELETE FROM outbox WHERE id = ?`, row.id);
+          this._logTransition("grant", payload.grantId, "dispatch_debris_cleared",
+            grant ? grant.state : null, grant ? grant.state : null, null,
+            { jobId: payload.jobId });
+          continue;
+        }
+        if (job && grant.revision !== job.revision) {
+          this._tx(() => this._voidDispatch(payload, "revision_stale"));
+          continue;
+        }
+        if (this._now() > grant.lease_expires_at) {
+          this._tx(() => this._voidDispatch(payload, "delivery_window_expired"));
+          continue;
+        }
+      }
       try {
         await send(payload);
       } catch {
         continue; // unacknowledged: stays unsent, retried by a later drain
       }
       this.sql.exec(`UPDATE outbox SET sent_at = ? WHERE id = ?`, this._now(), row.id);
+      if (payload.grantId) {
+        // The execution lease runs from ACKNOWLEDGED HANDOFF, not from
+        // grant creation (round 4): time spent waiting for delivery —
+        // a broken queue, a backlog — consumes none of it. Supersede
+        // the creation-anchored lease row with a handoff-anchored one.
+        const t = this._now();
+        this.sql.exec(`UPDATE grants SET lease_expires_at = ? WHERE grant_id = ?`,
+          t + LEASE_MS, payload.grantId);
+        this.sql.exec(
+          `UPDATE schedule SET state = 'void' WHERE kind = 'lease' AND ref = ? AND state = 'pending'`,
+          payload.grantId);
+        this._schedule(t + LEASE_MS, "lease", payload.grantId, { anchored: "handoff" });
+      }
       sent++;
     }
     return sent;
@@ -512,7 +559,14 @@ export class GenerationCoordinator {
         WHERE month_key = ? AND kind IN ('attempt', 'attempt_release')`, month).s;
   }
 
-  _voidDispatch(payload, jobState) {
+  // `reason` records WHY the dispatch is being voided: a job state
+  // (paused_user / paused_quota / cancelled / superseded) or a round-4
+  // delivery-fence cause (lease_expired_undelivered /
+  // delivery_window_expired / revision_stale). Every path through here
+  // shares one property: the dispatch provably never left, so its
+  // reservations are released and its occurrences return to pending.
+  _voidDispatch(payload, reason) {
+    const jobState = reason;
     const grantId = payload.grantId;
     const ops = this._all(
       `SELECT * FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
@@ -528,7 +582,8 @@ export class GenerationCoordinator {
            VALUES (?, ?, ?, ?, 'attempt_release', ?, ?)`,
           relKey, this._now(), op.day_key, op.month_key, -op.est_micro_cents,
           JSON.stringify({ jobId: payload.jobId, occurrenceId: d.occurrenceId || null,
-                           grantId, released: "dispatch_voided", jobState }));
+                           grantId, released: "dispatch_voided", jobState,
+                           voidReason: reason }));
       }
       const oid = JSON.parse(op.detail_json || "{}").occurrenceId;
       if (!oid) continue;
@@ -544,7 +599,7 @@ export class GenerationCoordinator {
       grantId);
     this.sql.exec(`DELETE FROM outbox WHERE id = ?`, grantId);
     this._logTransition("grant", grantId, "dispatch_voided", "issued", "voided", null,
-      { jobId: payload.jobId, jobState });
+      { jobId: payload.jobId, jobState, voidReason: reason });
   }
 
   // Dispatch-time annotation: the executor records the provider request
@@ -807,14 +862,31 @@ export class GenerationCoordinator {
           if (r.ok) { this._maybeResolveJob(jobId); return { ok: true, exit: "adopted", cacheKey: candidate }; }
         }
       }
-      // (b) a CONFIRMED provider outcome is in the ledger -> spent,
-      // visible. A dispatch record (providerRequestId) alone is only an
-      // attempt: it never proves the provider completed or charged the
-      // request, so without a confirmed outcome the occurrence stays
-      // outcome_unknown below — visible, and never auto-replayed.
-      const spend = this._one(
-        `SELECT * FROM ledger_ops WHERE kind = 'attempt' AND detail_json LIKE ?`,
-        `%"occurrenceId":"${occurrenceId}"%`);
+      // (b) a CONFIRMED provider outcome recorded against the EXACT
+      // grant that made this occurrence unknown -> spent, visible.
+      // Evidence is never borrowed (round 4, Rowan blocker 2): the
+      // source grant is read from THIS occurrence's own latest
+      // transition into outcome_unknown (both entry paths — lease
+      // expiry and unvalidated report — record their grantId), the
+      // grant must belong to THIS job, and the attempt row is fetched
+      // by its exact op key. No pattern matching over other jobs' or
+      // other grants' ledger rows. A dispatch record (providerRequestId)
+      // alone is only an attempt: it never proves the provider
+      // completed or charged the request, so without a confirmed
+      // outcome the occurrence stays outcome_unknown below — visible,
+      // and never auto-replayed.
+      const entry = this._one(
+        `SELECT detail_json FROM transitions
+          WHERE aggregate = 'occurrence' AND aggregate_id = ? AND to_state = 'outcome_unknown'
+          ORDER BY id DESC LIMIT 1`, `${jobId}/${occurrenceId}`);
+      const sourceGrantId = entry
+        ? (JSON.parse(entry.detail_json || "{}").grantId || null) : null;
+      const sourceGrant = sourceGrantId
+        ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, sourceGrantId) : null;
+      const spend = (sourceGrant && sourceGrant.job_id === jobId)
+        ? this._one(`SELECT * FROM ledger_ops WHERE op_key = ?`,
+            `op:${sourceGrantId}:${occurrenceId}`)
+        : null;
       if (spend) {
         const d = JSON.parse(spend.detail_json || "{}");
         if (d.providerRequestId &&
@@ -1004,6 +1076,42 @@ export class GenerationCoordinator {
         // Whatever cannot be proven stays outcome_unknown for Julie.
         const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
         if (!grant || grant.state === "reported" || grant.state === "voided") break;
+        // Pre-delivery expiry (round 4, Rowan blocker 1): provider
+        // uncertainty may be inferred ONLY for work provably handed
+        // off. Delivery is proven by the outbox row's sent_at — the
+        // acknowledged handoff. A grant whose dispatch never left has
+        // NO unknown outcome to record: void the dispatch, release its
+        // reservations, and return its occurrences to pending so the
+        // work can be granted fresh. No phantom outcome_unknown, ever.
+        const outRow = this._one(`SELECT * FROM outbox WHERE id = ?`, grant.grant_id);
+        if (!outRow || !outRow.sent_at) {
+          if (this._frozen()) {
+            // A freeze holds EVERYTHING, including this decision:
+            // re-check shortly after thaw instead of voiding mid-freeze.
+            // The deferral TOLLS the delivery window — the grant's
+            // lease_expires_at moves with the rescheduled row, so a
+            // dispatch delivered right after thaw is still in-window
+            // for the drain-time fence.
+            const tolled = this._now() + 60000;
+            this.sql.exec(`UPDATE grants SET lease_expires_at = ? WHERE grant_id = ?`,
+              tolled, grant.grant_id);
+            this._schedule(tolled, "lease", grant.grant_id, { deferred: "frozen" });
+            break;
+          }
+          if (outRow) {
+            this._tx(() => this._voidDispatch(
+              { grantId: grant.grant_id, jobId: grant.job_id },
+              "lease_expired_undelivered"));
+          } else {
+            // No outbox row at all: nothing was ever deliverable, so
+            // nothing was sent — retire the grant outright.
+            this.sql.exec(`UPDATE grants SET state = 'voided' WHERE grant_id = ?`,
+              grant.grant_id);
+            this._logTransition("grant", grant.grant_id, "lease_expired_undelivered",
+              grant.state, "voided", null, { jobId: grant.job_id, outbox: "absent" });
+          }
+          break;
+        }
         const occs = this._all(
           `SELECT * FROM occurrences WHERE job_id = ? AND state = 'granted'`, grant.job_id);
         const grantOps = this._all(

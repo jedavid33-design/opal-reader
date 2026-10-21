@@ -45,7 +45,11 @@ test("seam iii-a + gap 4: lease expiry auto-adopts cached audio and the JOB comp
   const h = makeHarness({ probe });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
   const g = await h.coord.requestGrant("job-1");
-  const lease = h.rows("schedule").find(r => r.kind === "lease");
+  // Round 4 premise: this models an executor that died AFTER dispatch —
+  // so the dispatch must actually happen. (An UNDELIVERED grant expiring
+  // is the phantom-unknown case, covered by the round-4 tests.)
+  await h.coord.drainOutbox(x => h.sentGrants.push(x));
+  const lease = h.rows("schedule").find(r => r.kind === "lease" && r.state === "pending");
   h.setNow(lease.due_at + 1000);
   await h.coord.alarm(); // no device, no manual reconcile call
   const view = h.coord.jobView("job-1");
@@ -59,6 +63,7 @@ test("seam iii-b: automatic reconciliation records spent-without-audio from a CO
   const h = makeHarness({ probe: makeProbe(new Map(), () => null) });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
   const g = await h.coord.requestGrant("job-1");
+  await h.coord.drainOutbox(x => h.sentGrants.push(x)); // dispatched, then the executor dies (round 4 premise)
   h.coord.noteProviderRequest(g.grantId, "o1", "provider-req-77");
   // Genuine provider evidence: a request-status lookup confirms the
   // request failed with no audio produced (round 3, fix 3).
@@ -78,7 +83,8 @@ test("seam iii-c: no cache, no provider record -> stays unknown until Julie auth
   const h = makeHarness({ probe: makeProbe(new Map(), () => null) });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
   await h.coord.requestGrant("job-1");
-  const lease = h.rows("schedule").find(r => r.kind === "lease");
+  await h.coord.drainOutbox(x => h.sentGrants.push(x)); // dispatched, then silence (round 4 premise)
+  const lease = h.rows("schedule").find(r => r.kind === "lease" && r.state === "pending");
   h.setNow(lease.due_at + 1000);
   await h.coord.alarm();
   const r = h.coord.reconcileUnknown("job-1", "o1");

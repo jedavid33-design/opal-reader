@@ -151,6 +151,9 @@ test("repair chains: follow-on is created AND granted server-side, then complete
     payload: { jobId: "repair-1", bookId: "book-1", chapterIndex: 2, lane: "standard",
                occurrences: [occ("o1")], data: { estMicroCents: 1000 } } });
   const g = await h.coord.requestGrant("repair-1");
+  // Dispatch precedes the report (round 4): a report settles a DELIVERED
+  // grant — an unsent row for a reported grant is debris, never sent.
+  assert.equal(await h.coord.drainOutbox(x => h.sentGrants.push(x)), 1);
   const rep = await h.coord.handleReport({ grantId: g.grantId, jobRevision: 2,
     results: [{ occurrenceId: "o1", outcome: "success", revisionKey: "fp-o1", cacheKey: "key-o1" }],
     detail: { followOn: { occurrences: [occ("o2"), occ("o3")] } } });
@@ -165,7 +168,7 @@ test("repair chains: follow-on is created AND granted server-side, then complete
   assert.deepEqual(follow.occurrences.map(o => o.state), ["granted", "granted"]);
   const followGrant = h.rows("grants").find(x => x.job_id === "repair-1:follow:1");
   assert.ok(followGrant);
-  assert.equal(await h.coord.drainOutbox(x => h.sentGrants.push(x)), 2); // parent + follow-on
+  assert.equal(await h.coord.drainOutbox(x => h.sentGrants.push(x)), 1); // the follow-on's dispatch
   const rep2 = await h.coord.handleReport({ grantId: followGrant.grant_id,
     results: [
       { occurrenceId: "o2", outcome: "success", revisionKey: "fp-o2", cacheKey: "key-o2" },
