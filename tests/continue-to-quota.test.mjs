@@ -12,7 +12,7 @@ test("Gemini 429 pauses permanently until a manual action; late deliveries canno
   const code=between(w,"async function processGenerationJobLocked(","async function activateNextContinueJob(");
   let state={job_id:"a".repeat(64),state:"queued",completed:0,total:1,
     segments:[{cache_key:"b".repeat(64),state:"queued"}]};
-  let calls=0;
+  let calls=0,park=null;
   const deps={
     readGenerationStatus:async()=>JSON.parse(JSON.stringify(state)),
     saveGenerationStatus:async(_,v)=>{state=JSON.parse(JSON.stringify(v))},
@@ -22,6 +22,19 @@ test("Gemini 429 pauses permanently until a manual action; late deliveries canno
       calls++;const e=new Error("Quota exceeded");e.quotaExceeded=true;throw e;
     },
     gemini429Cooldown:()=>({scope:"daily",retryAt:Date.now()+500000,delaySeconds:500}),
+    matchesGenerationRelease:v=>v?.generation_release==="1.4.43/1.4.117"&&
+      v?.client_version==="1.4.117",
+    pauseGenerationForUpdate:async(_,s)=>{state={...s,state:"paused_update",
+      next_retry_at:null};return state},
+    readGeminiQuotaPark:async()=>park,
+    recordGeminiQuotaPark:async(_,c)=>{if(!park||
+      Number(c?.parked_until)>Number(park.parked_until))park=c;return park},
+    geminiParkIsActive:(p,now=Date.now())=>!!p&&Number(p.parked_until)>now,
+    parkUntilLabel:p=>{try{return new Intl.DateTimeFormat("en-US",{
+      timeZone:"America/Los_Angeles",hour:"numeric",minute:"2-digit",
+      timeZoneName:"short"}).format(new Date(Number(p?.parked_until)||0))}
+      catch{return ""}},
+    geminiBatchMode:(pl,seg)=>pl?.generation_mode==="batch"&&seg?.provider==="gemini",
     extractGeminiQuotaDiagnostics:()=>({http_status:429}),
     addGenerationTrace:()=>{},generationDelaySeconds:()=>0,
     legacyOvernightQuota:()=>false,
@@ -31,7 +44,8 @@ test("Gemini 429 pauses permanently until a manual action; late deliveries canno
   };
   const names=Object.keys(deps),fn=new Function(...names,code+"\nreturn processGenerationJobLocked;")(
     ...names.map(n=>deps[n]));
-  const p={segments:[{provider:"gemini",text:"Test",voice_id:"Puck",
+  const p={generation_release:"1.4.43/1.4.117",client_version:"1.4.117",
+    segments:[{provider:"gemini",text:"Test",voice_id:"Puck",
     cache_key:"b".repeat(64),model_id:"gemini-3.8-flash-tts"}]};
   const response=await fn({},state.job_id,p,0,1);
   assert.equal(response.next,-1);
@@ -44,7 +58,7 @@ test("Gemini 429 pauses permanently until a manual action; late deliveries canno
 });
 test("Continue stage is sequential and idempotent; manual resume enqueues exactly once",async()=>{
   const code=between(w,"async function activateNextContinueJob(","async function processGenerationJob(");
-  const statuses=new Map(),messages=[];
+  const statuses=new Map(),messages=[],payloads=new Map();
   const deps={
     validJobId:x=>/^[a-f0-9]{64}$/.test(x),
     validId:x=>/^[A-Za-z0-9_-]{8,100}$/.test(x),
@@ -54,7 +68,16 @@ test("Continue stage is sequential and idempotent; manual resume enqueues exactl
     acquireProcessingLease:async()=>true,releaseProcessingLease:async()=>{},
     readGenerationStatus:async(_,id)=>statuses.get(id)||null,
     saveGenerationStatus:async(_,s)=>statuses.set(s.job_id,JSON.parse(JSON.stringify(s))),
-    readGenerationPayload:async()=>null,
+    GENERATION_RELEASE_ID:"1.4.43/1.4.117",
+    matchesGenerationRelease:v=>v?.generation_release==="1.4.43/1.4.117"&&
+      v?.client_version==="1.4.117",
+    pauseGenerationForUpdate:async(_,s)=>{const u={...s,state:"paused_update",
+      next_retry_at:null};statuses.set(u.job_id,JSON.parse(JSON.stringify(u)));return u},
+    readGeminiQuotaPark:async()=>null,
+    geminiParkIsActive:(p,now=Date.now())=>!!p&&Number(p.parked_until)>now,
+    recordJobRegistryMarker:async()=>{},
+    readGenerationPayload:async(_,id)=>{const raw=payloads.get(
+      "generation/jobs/"+id+".json");return raw?JSON.parse(raw):null},
     generationPayloadKey:id=>"generation/jobs/"+id+".json",
     nextGenerationSegmentIndex:arr=>arr.findIndex(x=>x.state==="queued"),
     finishGenerationState:s=>{s.state="ready"},
@@ -63,10 +86,13 @@ test("Continue stage is sequential and idempotent; manual resume enqueues exactl
   const names=Object.keys(deps),helpers=new Function(...names,
     code+"\nreturn {stageContinueSession,activateNextContinueJob,resumeQuotaJob};")(
       ...names.map(n=>deps[n]));
-  const env={OPALREADER_STORAGE:{put:async()=>{}},
+  const env={OPALREADER_STORAGE:{put:async(k,v)=>payloads.set(k,v),
+      get:async k=>payloads.has(k)?{json:async()=>JSON.parse(payloads.get(k)),
+        text:async()=>payloads.get(k)}:null},
     OPALREADER_GENERATION:{send:async msg=>messages.push(msg)}};
   const ids=["a".repeat(64),"b".repeat(64)],session="c".repeat(64),book="book12345";
   const job=i=>({job_id:ids[i],book_id:book,chapter_index:i+22,
+    generation_release:"1.4.43/1.4.117",client_version:"1.4.117",
     segments:[{provider:"gemini",voice_id:"Puck",text:"Words",
       cache_key:String(i+1).repeat(64)}]});
   const plan={session_id:session,book_id:book,jobs:[job(0),job(1)]};
@@ -119,7 +145,7 @@ test("Temporary Gemini minute-rate 429 backs off but does not require morning ta
   const code=between(w,"async function processGenerationJobLocked(","async function activateNextContinueJob(");
   let state={job_id:"a".repeat(64),state:"queued",completed:0,total:1,
     segments:[{cache_key:"b".repeat(64),state:"queued"}]};
-  let calls=0;
+  let calls=0,park=null;
   const deps={
     readGenerationStatus:async()=>JSON.parse(JSON.stringify(state)),
     saveGenerationStatus:async(_,v)=>{state=JSON.parse(JSON.stringify(v))},
@@ -128,6 +154,19 @@ test("Temporary Gemini minute-rate 429 backs off but does not require morning ta
     synthesizeAudio:async()=>{calls++;const e=new Error("per minute rate limit");
       e.quotaExceeded=true;throw e},
     gemini429Cooldown:()=>({scope:"temporary",retryAt:Date.now()+90000,delaySeconds:90}),
+    matchesGenerationRelease:v=>v?.generation_release==="1.4.43/1.4.117"&&
+      v?.client_version==="1.4.117",
+    pauseGenerationForUpdate:async(_,s)=>{state={...s,state:"paused_update",
+      next_retry_at:null};return state},
+    readGeminiQuotaPark:async()=>park,
+    recordGeminiQuotaPark:async(_,c)=>{if(!park||
+      Number(c?.parked_until)>Number(park.parked_until))park=c;return park},
+    geminiParkIsActive:(p,now=Date.now())=>!!p&&Number(p.parked_until)>now,
+    parkUntilLabel:p=>{try{return new Intl.DateTimeFormat("en-US",{
+      timeZone:"America/Los_Angeles",hour:"numeric",minute:"2-digit",
+      timeZoneName:"short"}).format(new Date(Number(p?.parked_until)||0))}
+      catch{return ""}},
+    geminiBatchMode:(pl,seg)=>pl?.generation_mode==="batch"&&seg?.provider==="gemini",
     extractGeminiQuotaDiagnostics:()=>({http_status:429}),
     addGenerationTrace:()=>{},generationDelaySeconds:()=>0,
     legacyOvernightQuota:()=>false,
@@ -137,7 +176,8 @@ test("Temporary Gemini minute-rate 429 backs off but does not require morning ta
   };
   const names=Object.keys(deps),fn=new Function(...names,code+"\nreturn processGenerationJobLocked;")(
     ...names.map(n=>deps[n]));
-  const response=await fn({},state.job_id,{segments:[{provider:"gemini",text:"T",
+  const response=await fn({},state.job_id,{generation_release:"1.4.43/1.4.117",
+    client_version:"1.4.117",segments:[{provider:"gemini",text:"T",
     voice_id:"Puck",cache_key:"b".repeat(64)}]},0,1);
   assert.equal(response.next,0);
   assert.equal(response.delaySeconds,90);

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 
 const index=readFileSync(new URL("../index.html",import.meta.url),"utf8");
-const asset=index.match(/src="\.\/(app-\d+\.js)"/)?.[1];
+const asset=index.match(/src="\.\/(app-\d+\.js)(?:\?[^"]*)?"/)?.[1];
 assert.ok(asset,"Reader's app script should be referenced in index");
 const source=readFileSync(new URL("../"+asset,import.meta.url),"utf8");
 function between(start,end){

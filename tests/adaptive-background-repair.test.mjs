@@ -32,7 +32,7 @@ test("dormant repair branches never synthesize until parent blocks",()=>{
 test("durable Worker queue finishes a nested blocked passage without browser callbacks",async()=>{
   let saved={job_id:"b".repeat(64),state:"queued",total:2,completed:0,
     segments:tree.map(p=>({cache_key:p.cache_key,state:p.repair_parent<0?"queued":"dormant"}))};
-  const calls=[];
+  const calls=[];let park=null;
   const deps={
     readGenerationStatus:async()=>JSON.parse(JSON.stringify(saved)),
     saveGenerationStatus:async(_env,status)=>{saved=JSON.parse(JSON.stringify(status))},
@@ -44,6 +44,15 @@ test("durable Worker queue finishes a nested blocked passage without browser cal
       return {cache:"MISS",model:p.model_id,calculated_cost:0.0002};
     },
     recordTtsUsage:async()=>{},addGenerationTrace:()=>{},
+    GENERATION_RELEASE_ID:"1.4.43/1.4.117",READER_GENERATION_UI_VERSION:"1.4.117",
+    readGeminiQuotaPark:async()=>park,
+    recordGeminiQuotaPark:async(_,c)=>{if(!park||
+      Number(c?.parked_until)>Number(park.parked_until))park=c;return park},
+    geminiParkIsActive:(p,now=Date.now())=>!!p&&Number(p.parked_until)>now,
+    parkUntilLabel:p=>{try{return new Intl.DateTimeFormat("en-US",{
+      timeZone:"America/Los_Angeles",hour:"numeric",minute:"2-digit",
+      timeZoneName:"short"}).format(new Date(Number(p?.parked_until)||0))}
+      catch{return ""}},
     extractGeminiQuotaDiagnostics:()=>({http_status:429}),
     // Queue simulation: independently test the actual shared pacing below.
     acquireProcessingLease:async()=>true,releaseProcessingLease:async()=>{},
@@ -55,7 +64,8 @@ test("durable Worker queue finishes a nested blocked passage without browser cal
     saved.next_retry_at=0; // simulate the actual delayed Cloudflare Queue delivery
     const next=saved.segments.findIndex(x=>x.state==="queued");
     if(next<0)break;
-    await process({OPALREADER_STORAGE:{put:async()=>{}}},saved.job_id,{adaptive_repair:true,segments:tree,
+    await process({OPALREADER_STORAGE:{put:async()=>{}}},saved.job_id,{adaptive_repair:true,
+      generation_release:"1.4.43/1.4.117",client_version:"1.4.117",segments:tree,
       book_id:"book_12345678",chapter_index:0},next,1);
   }
   assert.deepEqual(calls,["L","LL","LR","R"]);

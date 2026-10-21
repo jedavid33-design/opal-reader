@@ -49,7 +49,7 @@ test("New Worker only accepts its paired frontend generation release",()=>{
  assert.equal(f.matchesGenerationRelease({}),false);
  assert.equal(f.parkGenerationForUpdate({state:"ready"}).state,"ready");
 });
-test("Adaptive processing always prioritizes newly activated split pieces",()=>{
+test("Adaptive processing always prioritizes newly activated split pieces",async()=>{
  const helper=between(worker,"function validateAdaptiveRepairPayload(",
    "async function activateNextContinueJob(");
  let s={job_id:"a".repeat(64),state:"queued",completed:0,total:2,
@@ -83,7 +83,9 @@ test("Adaptive processing always prioritizes newly activated split pieces",()=>{
      }
      return {cache:"MISS",model:node.model_id,calculated_cost:0};
    },
-   addGenerationTrace:()=>{},recordTtsUsage:async()=>{}
+   addGenerationTrace:()=>{},recordTtsUsage:async()=>{},
+   readGeminiQuotaPark:async()=>null,recordGeminiQuotaPark:async()=>null,
+   geminiParkIsActive:(park,now=Date.now())=>!!park&&Number(park.parked_until)>now
  };
  const names=Object.keys(deps);
  const core=new Function(...names,helper+
