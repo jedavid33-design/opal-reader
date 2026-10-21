@@ -274,6 +274,56 @@ test("bytes: a binding revision change invalidates prior confirmations; a missin
   assert.equal((await s.chapterDisplay("bk", "ch1")).label, "Uncertain");
 });
 
+// ---------- follow-up races (Rowan P5 follow-up) ----------
+
+test("race: overlapping flushOutbox calls dispatch each pending command exactly once", async () => {
+  const w = makeWorld();
+  let sends = 0;
+  const slowTransport = { ...w.transport, sendCommand: async (cmd) => { sends += 1; await new Promise((r) => setTimeout(r, 25)); return w.transport.sendCommand(cmd); } };
+  const s = createClientStore({ deviceId: "devA", storage: w.storage, transport: slowTransport });
+  await s.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 44 } });
+  const [r1, r2] = await Promise.all([s.flushOutbox(), s.flushOutbox()]);
+  assert.equal(sends, 1); // the second caller joined the in-flight flush
+  assert.equal(r1.pending, 0);
+  assert.equal(r2.pending, 0);
+  assert.equal(w.coord.quotaView().monthlyCap, 44);
+});
+
+test("race: a binding change DURING byte verification discards the confirmation", async () => {
+  const w = makeWorld();
+  await seedBook(w.coord);
+  let hijack = true;
+  const transport = { ...w.transport, byteCheck: async (key) => {
+    if (hijack && key === "k1") {
+      hijack = false;
+      const seed = new SyncClient(w.coord, "seed7");
+      await seed.push([{ family: "bindings", entityKey: "bk:o1", bookId: "bk", baseRevision: 1, op: "upsert", payload: { cacheKey: "k1", outcome: "ready" } }]);
+      await store.syncFamily("bindings"); // the new revision lands mid-check
+    }
+    return w.byteWorld.has(key);
+  } };
+  const store = createClientStore({ deviceId: "devA", storage: w.storage, transport });
+  await store.syncFamily("content");
+  await store.syncFamily("bindings");
+  w.byteWorld.add("k1"); w.byteWorld.add("k2");
+  assert.equal(await store.verifyBindingBytes("bk", "o1"), false); // checked rev 1, binding moved to rev 2: discarded
+  assert.equal(await store.verifyBindingBytes("bk", "o2"), true);
+  assert.equal((await store.chapterDisplay("bk", "ch1")).label, "Uncertain");
+  assert.equal(await store.verifyBindingBytes("bk", "o1"), true); // fresh verify against rev 2 records
+  assert.equal((await store.chapterDisplay("bk", "ch1")).label, "Complete");
+});
+
+test("stable device id: a second device id over the same storage cannot write", async () => {
+  const w = makeWorld();
+  const a = w.store("devA");
+  await a.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 40 } });
+  const b = w.store("devB");
+  await assert.rejects(() => b.intent("SetSettings", { baseRevision: 1, data: { monthlyCap: 41 } }), /device_id_mismatch/);
+  await assert.rejects(() => b.notePosition("bk", { kind: "seek", occurrenceId: "o1", offsetSec: 0 }), /device_id_mismatch/);
+  const st = await a.outboxState();
+  assert.equal(st.pending.length, 1); // only devA's intent exists
+});
+
 // ---------- money: revisioned read with as-of/stale (F8) ----------
 
 test("money: Settings view carries its as-of revisions; a failed refresh marks stale and keeps the last view", async () => {

@@ -29,8 +29,10 @@
 const REMOVED_PROVIDERS = new Set(['azure', 'fish']); // not carried over; existing audio still plays
 const STATE_KEY = 'cs:state:v1';
 const locks = new WeakMap(); // storage object -> promise chain (serializes all instances sharing it)
+const flushLocks = new WeakMap(); // storage object -> in-flight flush promise (module-level: shared across instances)
 
 const emptyState = () => ({
+  deviceId: null,               // bound on first write: one stable device id per persistent storage
   commandCounter: 0,
   journalCounters: {},          // bookId -> last localSeq allocated
   outbox: [],                   // {command_id, type, payload, status, receipt}
@@ -53,6 +55,12 @@ export function createClientStore({ deviceId, storage, transport }) {
     const prev = locks.get(storage) ?? Promise.resolve();
     const run = prev.then(async () => {
       const s = await load();
+      if (s.deviceId === null || s.deviceId === undefined) s.deviceId = deviceId;
+      else if (s.deviceId !== deviceId) {
+        const err = new Error(`device_id_mismatch: storage belongs to ${s.deviceId}, not ${deviceId}`);
+        err.code = 'device_id_mismatch';
+        throw err;
+      }
       const r = await fn(s);
       await storage.set(STATE_KEY, s);
       return r;
@@ -81,7 +89,20 @@ export function createClientStore({ deviceId, storage, transport }) {
     });
   }
 
-  async function flushOutbox() {
+  // Flush singularity (P5 follow-up race 1): concurrent flushOutbox callers
+  // join the ONE in-flight flush for this storage instead of dispatching the
+  // same pending command twice. Server idempotency is the second line of
+  // defense, not the mechanism.
+  function flushOutbox() {
+    const existing = flushLocks.get(storage);
+    if (existing) return existing;
+    const run = flushOutboxOnce();
+    flushLocks.set(storage, run);
+    run.finally(() => { if (flushLocks.get(storage) === run) flushLocks.delete(storage); });
+    return run;
+  }
+
+  async function flushOutboxOnce() {
     let sent = 0;
     for (;;) {
       const next = await mutate((s) => {
@@ -218,8 +239,16 @@ export function createClientStore({ deviceId, storage, transport }) {
     const { cacheKey } = rec.payload;
     if (s.bytes[cacheKey]?.bindingRevision === rec.revision) return true;
     const ok = await transport.byteCheck(cacheKey);
-    if (ok) await mutate((s2) => { s2.bytes[cacheKey] = { bindingRevision: rec.revision }; });
-    return ok;
+    if (!ok) return false;
+    // Race 2 (P5 follow-up): the binding may have changed DURING the async
+    // byte check. Re-read it; record the confirmation only if the revision
+    // and key are exactly what was checked — otherwise discard and let a
+    // later verify run against the new binding.
+    const s2 = await load();
+    const now = s2.caches.bindings?.entities[`${bookId}:${occurrenceId}`];
+    if (!now || now.revision !== rec.revision || now.payload?.cacheKey !== cacheKey) return false;
+    await mutate((s3) => { s3.bytes[cacheKey] = { bindingRevision: rec.revision }; });
+    return true;
   }
 
   async function bytesConfirmedFor(rec) {
