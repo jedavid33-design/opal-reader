@@ -102,6 +102,30 @@ test("stage4 legacy playback: bindings from EVERY former provider resolve and co
   assert.equal(m2.label, "Complete"); // elevenlabs + speechify too
 });
 
+test("stage4 review gate: an UNMAPPED removed-provider voice cannot submit new generation — the flag enforces, not warns", async () => {
+  const w = makeWorld();
+  const a = w.device("devA");
+  const bookBefore = structuredClone(BOOK);
+  // The job names a KEPT provider — the old provider-level guard alone would wave it through:
+  await assert.rejects(() => a.store.intent("SubmitJob", { provider: "gemini", bookId: "bk", book: BOOK }), /unmapped_removed_provider_voice/);
+  let st = await a.store.outboxState();
+  assert.equal(st.pending.length, 0); // rejected before persistence
+  // With an explicit mapping for both removed-provider POVs, the same job is accepted:
+  const id = await a.store.intent("SubmitJob", {
+    provider: "gemini", bookId: "bk", book: BOOK,
+    voiceMapping: { "pov-a": { provider: "gemini", voice_id: "Aoede" }, "pov-f": { provider: "openai", voice_id: "alloy" } },
+  });
+  assert.ok(id);
+  st = await a.store.outboxState();
+  assert.equal(st.pending.length, 1);
+  assert.deepEqual(BOOK, bookBefore); // the mapping is a job directive — the book was never rewritten
+  // A partial mapping still blocks (the unmapped fish voice remains):
+  await assert.rejects(() => a.store.intent("SubmitJob", {
+    provider: "gemini", bookId: "bk", book: BOOK,
+    voiceMapping: { "pov-a": { provider: "gemini", voice_id: "Aoede" } },
+  }), /unmapped_removed_provider_voice/);
+});
+
 test("stage4 voice mapping: removed-provider POVs are flagged for a decision; the book is never rewritten", async () => {
   const w = makeWorld();
   const a = w.device("devA");

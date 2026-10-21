@@ -81,6 +81,23 @@ export function createClientStore({ deviceId, storage, transport }) {
       err.code = 'provider_not_carried_over';
       throw err;
     }
+    // Generation gate (Stage 4 review): a job whose BOOK carries an
+    // unmapped removed-provider voice is rejected before persistence —
+    // the voice-mapping flag is an enforcement, not a warning. A mapping
+    // is a job-level directive (payload.voiceMapping[povId]); the book
+    // itself is never rewritten by it.
+    if (type === 'SubmitJob' || type === 'RepairJob') {
+      const povs = payload?.book?.povs ?? payload?.povs ?? [];
+      const mapping = payload?.voiceMapping ?? {};
+      for (const pov of Array.isArray(povs) ? povs : []) {
+        const provider = pov?.voice?.provider;
+        if (provider && REMOVED_PROVIDERS.has(provider) && !mapping[pov.id]) {
+          const err = new Error(`unmapped_removed_provider_voice: ${pov.name ?? pov.id ?? '?'} (${provider})`);
+          err.code = 'unmapped_removed_provider_voice';
+          throw err;
+        }
+      }
+    }
     return mutate((s) => {
       s.commandCounter += 1;
       const commandId = `${deviceId}-cmd-${s.commandCounter}`;
