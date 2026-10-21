@@ -460,12 +460,15 @@ export class GenerationCoordinator {
   // one bounded retry_grant. Park/cap/quota are re-checked by the
   // grant gate itself when the retry fires; a refusal ends the chain
   // (the park/resume machinery owns what happens next), so this can
-  // never spin. Paused/cancelled jobs and freezes get nothing here —
-  // resume and thaw own their own continuations.
+  // never spin. The retry row is scheduled even while frozen — the
+  // retry_grant handler itself defers under a freeze — so exactly one
+  // durable deferred retry survives any freeze/thaw (round 6, race 2)
+  // instead of being silently dropped here. Paused/cancelled jobs get
+  // nothing: resume owns their continuation.
   _scheduleReAdvance(jobId) {
     if (!jobId) return;
     const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
-    if (!job || job.state !== "generating" || this._frozen()) return;
+    if (!job || job.state !== "generating") return;
     const existing = this._one(
       `SELECT COUNT(*) AS n FROM schedule WHERE kind = 'retry_grant' AND ref = ? AND state = 'pending'`,
       jobId);
@@ -1238,15 +1241,43 @@ export class GenerationCoordinator {
         // accepted" proves the message never landed, so the round-4
         // safe void finally applies; "unknown" (or no probe wired)
         // keeps the uncertainty visible and backs off, bounded.
-        const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
-        if (!grant || grant.state !== "handoff_uncertain") break;
+        // P3 CONTRACT for the real queue probe: "not_accepted" must be
+        // TERMINAL proof — the queue guarantees this grantId can never
+        // be accepted after the verdict (its acceptance ledger is
+        // final for the grant), never merely "not seen yet" while a
+        // send may still be in flight. Anything short of terminal is
+        // "unknown".
+        const before = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
+        if (!before || before.state !== "handoff_uncertain") break;
+        if (this._frozen()) {
+          // A freeze holds this decision too (round 6, race 2): the
+          // verdict — and any void it would trigger — waits for thaw,
+          // so the re-advance that follows a void is scheduled in the
+          // open, never dropped into a freeze and lost.
+          this._schedule(this._now() + 60000, "handoff_check", row.ref, payload);
+          break;
+        }
         let verdict = "unknown";
         if (typeof this.env.probeQueue === "function") {
-          try { verdict = await this.env.probeQueue(grant.grant_id); }
+          try { verdict = await this.env.probeQueue(row.ref); }
           catch { verdict = "unknown"; }
         }
-        if (verdict === "accepted") {
-          this._tx(() => {
+        // The verdict is evidence about the past; it may act ONLY on
+        // the CURRENT state, re-read inside one transaction after the
+        // await (round 6, race 1): a report or a late ACK can settle
+        // the grant while the probe is in flight. A stale verdict is
+        // logged and changes nothing — it can neither resurrect a
+        // reported grant to 'issued' nor void a delivered one.
+        this._tx(() => {
+          const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
+          const outRow = this._one(`SELECT * FROM outbox WHERE id = ?`, row.ref);
+          if (!grant || grant.state !== "handoff_uncertain" || !outRow || outRow.sent_at) {
+            this._logTransition("grant", row.ref, "handoff_verdict_stale",
+              grant ? grant.state : null, grant ? grant.state : null, null,
+              { verdict, jobId: grant ? grant.job_id : null });
+            return;
+          }
+          if (verdict === "accepted") {
             const t = this._now();
             this.sql.exec(`UPDATE outbox SET sent_at = ? WHERE id = ? AND sent_at IS NULL`,
               t, grant.grant_id);
@@ -1258,22 +1289,22 @@ export class GenerationCoordinator {
             this._schedule(t + LEASE_MS, "lease", grant.grant_id, { anchored: "handoff_confirmed" });
             this._logTransition("grant", grant.grant_id, "handoff_resolved",
               "handoff_uncertain", "issued", null, { via: "queue_probe" });
-          });
-        } else if (verdict === "not_accepted") {
-          this._tx(() => this._voidDispatch(
-            { grantId: grant.grant_id, jobId: grant.job_id }, "handoff_proven_unaccepted"));
-          this._scheduleReAdvance(grant.job_id);
-        } else {
-          const tries = (payload.tries || 0) + 1;
-          if (tries <= 5) {
-            this._schedule(this._now() + 30000 * 2 ** (tries - 1),
-              "handoff_check", grant.grant_id, { tries });
+          } else if (verdict === "not_accepted") {
+            this._voidDispatch(
+              { grantId: grant.grant_id, jobId: grant.job_id }, "handoff_proven_unaccepted");
+            this._scheduleReAdvance(grant.job_id);
           } else {
-            this._logTransition("grant", grant.grant_id, "handoff_unresolved",
-              "handoff_uncertain", "handoff_uncertain", null,
-              { tries, note: "queue probe could not settle acceptance; uncertainty stays visible" });
+            const tries = (payload.tries || 0) + 1;
+            if (tries <= 5) {
+              this._schedule(this._now() + 30000 * 2 ** (tries - 1),
+                "handoff_check", grant.grant_id, { tries });
+            } else {
+              this._logTransition("grant", grant.grant_id, "handoff_unresolved",
+                "handoff_uncertain", "handoff_uncertain", null,
+                { tries, note: "queue probe could not settle acceptance; uncertainty stays visible" });
+            }
           }
-        }
+        });
         break;
       }
       default: break; // plan_step kinds are interpreted by their owners
