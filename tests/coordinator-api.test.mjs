@@ -54,13 +54,18 @@ test("API round trip: command receipt and job view agree with the coordinator", 
 
 test("F7 derivation: all seven chapter states from one function", () => {
   assert.equal(deriveChapterState(["ready", "ready"], ["complete"]), "Complete");
+  // Finding 4 regression: a stale generating/paused job must NOT override
+  // a completely recorded chapter.
+  assert.equal(deriveChapterState(["ready", "ready"], ["generating"]), "Complete");
+  assert.equal(deriveChapterState(["ready", "ready"], ["paused_quota"]), "Complete");
+  assert.equal(deriveChapterState(["ready"], ["generating"]), "Complete");
   assert.equal(deriveChapterState(["ready", "pending"], []), "Partial");
-  assert.equal(deriveChapterState(["ready"], ["generating"]), "Generating");
+  assert.equal(deriveChapterState(["ready", "pending"], ["generating"]), "Generating");
   assert.equal(deriveChapterState(["pending"], ["queued"]), "Generating");
   assert.equal(deriveChapterState(["ready", "pending"], ["paused_quota"]), "Quota Paused");
   assert.equal(deriveChapterState(["blocked_policy"], []), "Blocked");
   assert.equal(deriveChapterState(["blocked_policy", "ready"], []), "Partial");
   assert.equal(deriveChapterState(["pending"], ["failed"]), "Failed");
   assert.equal(deriveChapterState(["outcome_unknown"], ["generating"]), "Outcome Unknown");
-  assert.equal(deriveChapterState(["ready"], ["outcome_unknown"]), "Outcome Unknown");
+  assert.equal(deriveChapterState(["ready", "pending"], ["outcome_unknown"]), "Outcome Unknown");
 });

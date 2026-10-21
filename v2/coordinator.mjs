@@ -48,12 +48,14 @@ export const OCC_STATES = [
 ];
 export const OCC_EVENTS = [
   "grant", "report_success", "report_blocked", "report_failed", "defer",
-  "lease_expired", "reconcile_adopt", "reconcile_spent", "resolve_resynthesize",
+  "lease_expired", "report_unvalidated",
+  "reconcile_adopt", "reconcile_spent", "resolve_resynthesize",
 ];
 export const OCC_TRANSITIONS = {
   pending:         { grant: "granted" },
   granted:         { report_success: "ready", report_blocked: "blocked_policy",
                      report_failed: "failed", defer: "pending",
+                     report_unvalidated: "outcome_unknown",
                      lease_expired: "outcome_unknown" },
   ready:           {},
   blocked_policy:  {},
@@ -113,7 +115,7 @@ CREATE TABLE IF NOT EXISTS bindings (
   cache_key TEXT NOT NULL, provenance TEXT, bound_at INTEGER NOT NULL,
   PRIMARY KEY (occurrence_id, revision_key));
 CREATE TABLE IF NOT EXISTS cache_index (
-  cache_key TEXT PRIMARY KEY, identity TEXT, format TEXT, recorded_at INTEGER NOT NULL);
+  cache_key TEXT PRIMARY KEY, identity TEXT, format TEXT, sha256 TEXT, recorded_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS binding_conflicts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,
   occurrence_id TEXT, cache_key TEXT, expected TEXT, found TEXT, reason TEXT);
@@ -218,7 +220,7 @@ export class GenerationCoordinator {
   // Acceptance and application commit in ONE transaction: a receipt the
   // client holds always names a durable outcome, and a re-sent command_id
   // returns the original outcome without re-applying anything.
-  handleCommand(cmd) {
+  async handleCommand(cmd) {
     if (!cmd || typeof cmd.command_id !== "string" || !cmd.command_id)
       return { ok: false, reason: "command_id_required" };
     if (!COMMAND_TYPES.includes(cmd.type))
@@ -229,7 +231,7 @@ export class GenerationCoordinator {
                ...(existing.outcome_json ? JSON.parse(existing.outcome_json) : {}),
                replayed: true };
     }
-    this.wake();
+    await this.wake();
     const outcome = this._tx(() => {
       this.sql.exec(
         `INSERT INTO commands (command_id, type, payload_json, received_at, outcome)
@@ -408,19 +410,28 @@ export class GenerationCoordinator {
   }
 
   // Executor entry point (called by the command API / plan advancer).
-  requestGrant(jobId, opts = {}) {
+  async requestGrant(jobId, opts = {}) {
+    await this.wake();
     return this._issueGrant(jobId, { jobEvent: "grant",
       cause: opts.cause || "requestGrant", probe: !!opts.probe });
   }
 
   // Deliver unsent grants (interruption seam ii: a grant committed but
   // never sent is delivered on the next wake, keyed by grant_id so the
-  // send is idempotent).
-  drainOutbox(send) {
+  // send is idempotent). Delivery is ACKNOWLEDGED (P2 review finding 2):
+  // the send function is awaited, and a row is marked sent only after it
+  // resolves. A throw or rejection leaves the row unsent for the next
+  // drain; a missing handler delivers nothing and marks nothing.
+  async drainOutbox(send) {
+    if (typeof send !== "function") return 0;
     const rows = this._all(`SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY created_at`);
     let sent = 0;
     for (const row of rows) {
-      send(JSON.parse(row.payload_json));
+      try {
+        await send(JSON.parse(row.payload_json));
+      } catch {
+        continue; // unacknowledged: stays unsent, retried by a later drain
+      }
       this.sql.exec(`UPDATE outbox SET sent_at = ? WHERE id = ?`, this._now(), row.id);
       sent++;
     }
@@ -446,8 +457,9 @@ export class GenerationCoordinator {
   // Applied transactionally against the grant. A report citing a stale
   // job revision is rejected for state purposes; its audio is still
   // adoptable through bindings (content-addressed audio is never wasted).
-  handleReport(report) {
+  async handleReport(report) {
     if (!report || !report.grantId) return { ok: false, reason: "grant_required" };
+    await this.wake();
     return this._tx(() => {
       const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, report.grantId);
       if (!grant) return { ok: false, reason: "grant_not_found" };
@@ -466,18 +478,22 @@ export class GenerationCoordinator {
           const v = this.validateAndBind({
             occurrenceId: res.occurrenceId, revisionKey: res.revisionKey,
             cacheKey: res.cacheKey, provenance: "grant:" + grant.grant_id,
-            jobId: grant.job_id });
+            jobId: grant.job_id, expectedSha256: res.sha256 || null });
           if (v.bound) {
             this.sql.exec(`UPDATE occurrences SET cache_key = ? WHERE job_id = ? AND occurrence_id = ?`,
               res.cacheKey, grant.job_id, res.occurrenceId);
             this.applyOccEvent(grant.job_id, res.occurrenceId, "report_success", "report", { grantId: grant.grant_id });
             ready++;
           } else {
-            // Audio exists (or not) but could not be validated: NEVER mark
-            // ready on an unvalidated binding. The occurrence stays
-            // granted; its lease path will surface it as outcome_unknown.
-            this._logTransition("occurrence", `${grant.job_id}/${res.occurrenceId}`, "report",
-              "granted", "granted", null, { binding_rejected: v.reason, cacheKey: res.cacheKey });
+            // The executor claimed success but the audio cannot be
+            // validated: the dispatch's outcome is genuinely UNPROVEN
+            // (§1.2 rule 4). It enters outcome_unknown — whose exits are
+            // all reconciliation paths — never ready, and never parked in
+            // 'granted' behind a reported grant (P2 review finding 1:
+            // the lease handler skips reported grants, so a granted limbo
+            // here would be a forever-stuck occurrence).
+            this.applyOccEvent(grant.job_id, res.occurrenceId, "report_unvalidated", "report",
+              { grantId: grant.grant_id, binding_rejected: v.reason, cacheKey: res.cacheKey });
           }
         } else if (res.outcome === "policy_block") {
           this.applyOccEvent(grant.job_id, res.occurrenceId, "report_blocked", "report",
@@ -529,6 +545,7 @@ export class GenerationCoordinator {
         `SELECT
            SUM(state = 'ready') AS ready,
            SUM(state = 'blocked_policy') AS blocked,
+           SUM(state = 'failed') AS failed,
            SUM(state IN ('pending','granted')) AS open,
            SUM(state = 'outcome_unknown') AS unknown,
            COUNT(*) AS total
@@ -562,9 +579,15 @@ export class GenerationCoordinator {
           lane: jobRow.lane, occurrences: followOn.occurrences,
           data: { ...(JSON.parse(jobRow.data_json || "{}")), chainParent: grant.job_id },
         }, "repair_chain", "repair");
-        if (sub.outcome === "applied")
+        if (sub.outcome === "applied") {
           this._logTransition("job", followId, "repair_chain", null, "queued", 1,
             { parent: grant.job_id });
+          // The chain ADVANCES, not just queues (P2 review finding 5): the
+          // follow-on is granted in the same transaction. A refusal
+          // (park/cap/quota) leaves it queued for the plan advancer —
+          // the report itself is unaffected either way.
+          this._issueGrant(followId, { jobEvent: "grant", cause: "repair_chain" });
+        }
       }
       return { ok: true, ready, blocked, failed };
     });
@@ -577,7 +600,8 @@ export class GenerationCoordinator {
   // visible (binding_conflicts) and unbound.
   // `probe` is injected (env.probe in production = the R2/cache layer;
   // a stub in tests): { exists(cacheKey), sniff(cacheKey), recordedIdentity(cacheKey) }
-  validateAndBind({ occurrenceId, revisionKey, cacheKey, provenance = null, jobId = null }) {
+  validateAndBind({ occurrenceId, revisionKey, cacheKey, provenance = null, jobId = null,
+                    expectedSha256 = null }) {
     const probe = this.env.probe;
     const conflict = (expected, found, reason) => {
       this.sql.exec(
@@ -590,6 +614,15 @@ export class GenerationCoordinator {
       return { bound: false, reason: "object_missing" };
     const fmt = probe.sniff ? probe.sniff(cacheKey) : null;
     if (!fmt) return conflict(revisionKey, null, "format_invalid");
+    // Byte-level verification (P2 review finding 3): metadata agreement
+    // is not content agreement. When the caller states the bytes it
+    // produced (the executor's report) or the cache index recorded the
+    // bytes at an earlier bind, the object under the key must hash to
+    // exactly those bytes — two different recordings with matching
+    // labels must not pass for each other.
+    const actualSha = probe.hash ? probe.hash(cacheKey) : null;
+    if (expectedSha256 && actualSha !== expectedSha256)
+      return conflict(expectedSha256, actualSha, "content_hash_mismatch");
     const existing = this._one(
       `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
       occurrenceId, revisionKey);
@@ -608,14 +641,19 @@ export class GenerationCoordinator {
       return conflict(revisionKey, recorded, "identity_mismatch");
     if (isLegacy && revisionKey !== `legacy:${cacheKey}`)
       return conflict(revisionKey, recorded, "legacy_anchor_mismatch");
+    // If an earlier bind recorded this key's bytes, the bytes must not
+    // have changed under the key since (silent replacement detection).
+    if (idx && idx.sha256 && actualSha && idx.sha256 !== actualSha)
+      return conflict(idx.sha256, actualSha, "content_hash_mismatch");
     this.sql.exec(
       `INSERT INTO bindings (occurrence_id, revision_key, cache_key, provenance, bound_at)
        VALUES (?, ?, ?, ?, ?)`, occurrenceId, revisionKey, cacheKey, provenance, this._now());
     this.sql.exec(
-      `INSERT INTO cache_index (cache_key, identity, format, recorded_at) VALUES (?, ?, ?, ?)
+      `INSERT INTO cache_index (cache_key, identity, format, sha256, recorded_at) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(cache_key) DO UPDATE SET identity = COALESCE(cache_index.identity, excluded.identity),
-         format = excluded.format, recorded_at = excluded.recorded_at`,
-      cacheKey, isLegacy ? null : revisionKey, fmt, this._now());
+         format = excluded.format, sha256 = COALESCE(cache_index.sha256, excluded.sha256),
+         recorded_at = excluded.recorded_at`,
+      cacheKey, isLegacy ? null : revisionKey, fmt, actualSha, this._now());
     return { bound: true, cacheKey };
   }
 
@@ -718,26 +756,30 @@ export class GenerationCoordinator {
       dueAt, kind, ref, JSON.stringify(payload || {}));
   }
 
-  _armAlarm() {
+  // Cloudflare's alarm API is asynchronous: getAlarm() and setAlarm()
+  // return Promises. These MUST be awaited — treating a Promise as the
+  // armed timestamp would read as "armed" forever and silently kill the
+  // chain (P2 review finding 5).
+  async _armAlarm() {
     const next = this._one(
       `SELECT MIN(due_at) AS due FROM schedule WHERE state = 'pending'`);
     const due = next && next.due !== null ? next.due : this._now() + WATCHDOG_PERIOD_MS;
-    this.state.storage.setAlarm(due);
+    await this.state.storage.setAlarm(due);
   }
 
   // Called on every coordinator wake: if the chain is unarmed (alarm
   // consumed and handler died, retries exhausted, fresh start), re-arm it.
   // Recovery never requires a client — any wake (command, report, alarm)
   // re-establishes the chain, and the chain itself is self-perpetuating.
-  wake() {
-    const armed = this.state.storage.getAlarm();
+  async wake() {
+    const armed = await this.state.storage.getAlarm();
     const pending = this._one(
       `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
     if (armed === null || armed === undefined || !pending || pending.n === 0) {
       const wd = this._one(
         `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending' AND kind = 'watchdog'`);
       if (!wd || wd.n === 0) this._schedule(this._now() + WATCHDOG_PERIOD_MS, "watchdog", null, {});
-      this._armAlarm();
+      await this._armAlarm();
     }
   }
 
@@ -748,7 +790,7 @@ export class GenerationCoordinator {
         `SELECT * FROM schedule WHERE state = 'pending' AND due_at <= ? ORDER BY due_at`, now);
       for (const row of due) {
         try {
-          this._processScheduleRow(row);
+          await this._processScheduleRow(row);
           this.sql.exec(`UPDATE schedule SET state = 'done' WHERE id = ?`, row.id);
         } catch (e) {
           // A poison row backs off and eventually parks as a VISIBLE dead
@@ -772,17 +814,20 @@ export class GenerationCoordinator {
       const wd = this._one(
         `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending' AND kind = 'watchdog'`);
       if (!wd || wd.n === 0) this._schedule(this._now() + WATCHDOG_PERIOD_MS, "watchdog", null, {});
-      this._armAlarm();
+      await this._armAlarm();
     }
   }
 
-  _processScheduleRow(row) {
+  async _processScheduleRow(row) {
     const payload = JSON.parse(row.payload_json || "{}");
     if (this.env.scheduleHook) this.env.scheduleHook(row, payload); // fault-injection seam (tests)
     switch (row.kind) {
       case "watchdog": {
         // Re-assert the chain + deliver any grants whose send was lost.
-        this.drainOutbox(this.env.sendGrant || (() => {}));
+        // A missing delivery handler is NOT a delivery: the outbox rows
+        // stay unsent and visible rather than being marked sent.
+        if (typeof this.env.sendGrant === "function")
+          await this.drainOutbox(this.env.sendGrant);
         break;
       }
       case "lease": {
@@ -809,7 +854,7 @@ export class GenerationCoordinator {
       case "retry_grant": {
         // Bounded-backoff continuation after generic 429s / plan steps.
         const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, row.ref);
-        if (job && job.state === "generating") this.requestGrant(row.ref, { cause: "retry_grant" });
+        if (job && job.state === "generating") await this.requestGrant(row.ref, { cause: "retry_grant" });
         break;
       }
       default: break; // plan_step kinds are interpreted by their owners
@@ -867,6 +912,10 @@ export class GenerationCoordinator {
 export function deriveChapterState(occurrenceStates, coveringJobStates) {
   const occ = occurrenceStates || [];
   const jobs = coveringJobStates || [];
+  // Completeness is a fact about the audio, not about job bookkeeping:
+  // a fully recorded chapter is Complete even if a stale covering job
+  // still claims to be generating or parked (P2 review finding 4).
+  if (occ.length > 0 && occ.every(s => s === "ready")) return "Complete";
   if (occ.includes("outcome_unknown") || jobs.includes("outcome_unknown")) return "Outcome Unknown";
   if (jobs.some(s => s === "generating" || s === "queued")) return "Generating";
   if (jobs.includes("paused_quota")) return "Quota Paused";

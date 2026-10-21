@@ -82,11 +82,32 @@ test("an existing binding for the occurrence is never silently replaced", () => 
   assert.equal(h.rows("bindings")[0].cache_key, "k1");
 });
 
-test("AdoptAudio command: applied when valid, recorded rejection on conflict", () => {
+test("byte verification: bytes changed under a key after a bind are caught (finding 3)", () => {
+  const objects = new Map([["k1", { format: "mp3", identity: "fp-a", sha: "aaaa" }]]);
+  const h = makeHarness({ probe: makeProbe(objects) });
+  assert.equal(bind(h, { occurrenceId: "o1", revisionKey: "fp-a", cacheKey: "k1" }).bound, true);
+  assert.equal(h.rows("cache_index")[0].sha256, "aaaa"); // bytes recorded at bind
+  objects.set("k1", { format: "mp3", identity: "fp-a", sha: "cccc" }); // same labels, different bytes
+  const v = bind(h, { occurrenceId: "o2", revisionKey: "fp-a", cacheKey: "k1" });
+  assert.equal(v.bound, false);
+  assert.equal(v.reason, "content_hash_mismatch");
+  assert.equal(h.rows("bindings").length, 1); // only the original bind stands
+});
+
+test("byte verification: a stated expected hash must match the actual bytes", () => {
+  const h = makeHarness({ probe: makeProbe(new Map([["k1", { format: "wav", identity: "fp-a", sha: "aaaa" }]])) });
+  const bad = bind(h, { occurrenceId: "o1", revisionKey: "fp-a", cacheKey: "k1", expectedSha256: "zzzz" });
+  assert.equal(bad.bound, false);
+  assert.equal(bad.reason, "content_hash_mismatch");
+  const ok = bind(h, { occurrenceId: "o1", revisionKey: "fp-a", cacheKey: "k1", expectedSha256: "aaaa" });
+  assert.equal(ok.bound, true);
+});
+
+test("AdoptAudio command: applied when valid, recorded rejection on conflict", async () => {
   const h = makeHarness({ probe: makeProbe(new Map([
     ["k1", { format: "mp3", identity: "fp-real" }],
   ])) });
-  const bad = h.coord.handleCommand({ command_id: "a1", type: "AdoptAudio",
+  const bad = await h.coord.handleCommand({ command_id: "a1", type: "AdoptAudio",
     payload: { occurrenceId: "o1", revisionKey: "fp-want", cacheKey: "k1" } });
   assert.equal(bad.outcome, "rejected");
   assert.equal(bad.reason, "identity_mismatch");

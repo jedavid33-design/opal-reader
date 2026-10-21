@@ -43,12 +43,12 @@ export function createApi(env) {
       if (request.method === "POST" && path === "/v2/commands") {
         const cmd = await request.json();
         const coord = new GenerationCoordinator(coordinatorState, env);
-        return json(200, coord.handleCommand(cmd));
+        return json(200, await coord.handleCommand(cmd));
       }
       if (request.method === "POST" && path === "/v2/reports") {
         const report = await request.json();
         const coord = new GenerationCoordinator(coordinatorState, env);
-        return json(200, coord.handleReport(report));
+        return json(200, await coord.handleReport(report));
       }
       if (request.method === "GET") {
         const ro = readOnlyCoordinator(coordinatorState, env);

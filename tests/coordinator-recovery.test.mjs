@@ -4,24 +4,24 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { makeHarness, makeProbe, occ, submit } from "./helpers/do-harness.mjs";
 
-test("seam ii: a grant committed but never sent is delivered after a crash, exactly once", () => {
+test("seam ii: a grant committed but never sent is delivered after a crash, exactly once", async () => {
   const h = makeHarness();
-  submit(h.coord, "c1", "job-1", [occ("o1")]);
-  const g = h.coord.requestGrant("job-1");
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  const g = await h.coord.requestGrant("job-1");
   assert.equal(g.ok, true);
   // crash before drainOutbox: the send never happened.
   const coord2 = h.crash();
-  coord2.wake();
-  assert.equal(coord2.drainOutbox(x => h.sentGrants.push(x)), 1);
+  await coord2.wake();
+  assert.equal(await coord2.drainOutbox(x => h.sentGrants.push(x)), 1);
   assert.equal(h.sentGrants[0].grantId, g.grantId);
-  assert.equal(coord2.drainOutbox(x => h.sentGrants.push(x)), 0); // not twice
+  assert.equal(await coord2.drainOutbox(x => h.sentGrants.push(x)), 0); // not twice
 });
 
 test("seam iii: executor dies after dispatch -> lease expiry -> outcome_unknown, never re-dispatched", async () => {
   const h = makeHarness({ probe: makeProbe(new Map()) });
-  submit(h.coord, "c1", "job-1", [occ("o1"), occ("o2")]);
-  const g = h.coord.requestGrant("job-1");
-  h.coord.drainOutbox(x => h.sentGrants.push(x));
+  await submit(h.coord, "c1", "job-1", [occ("o1"), occ("o2")]);
+  const g = await h.coord.requestGrant("job-1");
+  await h.coord.drainOutbox(x => h.sentGrants.push(x));
   h.coord.noteProviderRequest(g.grantId, "o1", "provider-req-1");
   // no report ever arrives; the lease (15 min) expires under the alarm.
   const lease = h.rows("schedule").find(r => r.kind === "lease");
@@ -39,8 +39,8 @@ test("seam iii-a: reconciliation adopts audio that did land in the cache", async
   const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1" }]]);
   const probe = makeProbe(objects, o => (o.occurrence_id === "o1" ? "key-o1" : null));
   const h = makeHarness({ probe });
-  submit(h.coord, "c1", "job-1", [occ("o1")]);
-  const g = h.coord.requestGrant("job-1");
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  const g = await h.coord.requestGrant("job-1");
   const lease = h.rows("schedule").find(r => r.kind === "lease");
   h.setNow(lease.due_at + 1000);
   await h.coord.alarm();
@@ -55,8 +55,8 @@ test("seam iii-a: reconciliation adopts audio that did land in the cache", async
 
 test("seam iii-b: reconciliation records spent-without-audio from the provider request id", async () => {
   const h = makeHarness({ probe: makeProbe(new Map(), () => null) });
-  submit(h.coord, "c1", "job-1", [occ("o1")]);
-  const g = h.coord.requestGrant("job-1");
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  const g = await h.coord.requestGrant("job-1");
   h.coord.noteProviderRequest(g.grantId, "o1", "provider-req-77");
   const lease = h.rows("schedule").find(r => r.kind === "lease");
   h.setNow(lease.due_at + 1000);
@@ -69,8 +69,8 @@ test("seam iii-b: reconciliation records spent-without-audio from the provider r
 
 test("seam iii-c: no cache, no provider record -> stays unknown until Julie authorizes", async () => {
   const h = makeHarness({ probe: makeProbe(new Map(), () => null) });
-  submit(h.coord, "c1", "job-1", [occ("o1")]);
-  h.coord.requestGrant("job-1");
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  await h.coord.requestGrant("job-1");
   const lease = h.rows("schedule").find(r => r.kind === "lease");
   h.setNow(lease.due_at + 1000);
   await h.coord.alarm();
@@ -78,53 +78,98 @@ test("seam iii-c: no cache, no provider record -> stays unknown until Julie auth
   assert.equal(r.exit, "still_unknown");
   assert.equal(h.coord.jobView("job-1").state, "outcome_unknown");
   // a fresh grant is NOT a legal way out on its own
-  assert.equal(h.coord.requestGrant("job-1").ok, false);
+  assert.equal((await h.coord.requestGrant("job-1")).ok, false);
   // Julie's explicit command is
-  const res = h.coord.handleCommand({ command_id: "fix-1", type: "ResolveOutcomeUnknown",
+  const res = await h.coord.handleCommand({ command_id: "fix-1", type: "ResolveOutcomeUnknown",
     payload: { jobId: "job-1", occurrenceId: "o1" } });
   assert.equal(res.outcome, "applied");
   assert.equal(h.coord.jobView("job-1").occurrences[0].state, "pending");
   assert.equal(h.coord.jobView("job-1").state, "queued");
-  assert.equal(h.coord.requestGrant("job-1").ok, true); // new operation, new grant identity
+  assert.equal((await h.coord.requestGrant("job-1")).ok, true); // new operation, new grant identity
 });
 
-test("seam iv: a success report whose audio never landed does NOT mark the occurrence ready", () => {
-  const h = makeHarness({ probe: makeProbe(new Map()) }); // probe: nothing exists
-  submit(h.coord, "c1", "job-1", [occ("o1")]);
-  const g = h.coord.requestGrant("job-1");
-  const rep = h.coord.handleReport({ grantId: g.grantId, jobRevision: 2,
+test("seam iv + finding 1: unvalidated success -> outcome_unknown (never stuck), reconciliation recovers it", async () => {
+  const objects = new Map();
+  const probe = makeProbe(objects, o => (o.occurrence_id === "o1" ? "ghost-key" : null));
+  const h = makeHarness({ probe }); // probe: nothing exists yet
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  const g = await h.coord.requestGrant("job-1");
+  const rep = await h.coord.handleReport({ grantId: g.grantId, jobRevision: 2,
     results: [{ occurrenceId: "o1", outcome: "success", revisionKey: "fp-o1", cacheKey: "ghost-key" }] });
   assert.equal(rep.ok, true);
-  const o = h.coord.jobView("job-1").occurrences[0];
-  assert.equal(o.state, "granted"); // unvalidated -> not ready, lease path still owns it
+  // NOT ready, NOT stuck in granted behind the reported grant: the claim
+  // is unproven, so the occurrence is outcome_unknown and the job follows.
   assert.equal(h.rows("bindings").length, 0);
+  let view = h.coord.jobView("job-1");
+  assert.equal(view.occurrences[0].state, "outcome_unknown");
+  assert.equal(view.state, "outcome_unknown");
   const log = h.rows("transitions").find(t => t.detail_json && t.detail_json.includes("object_missing"));
   assert.ok(log, "the binding rejection is on the transition log");
+  // the guaranteed recovery path: the audio lands late (the executor was
+  // just slow), reconciliation adopts it, the job completes.
+  objects.set("ghost-key", { format: "mp3", identity: "fp-o1" });
+  const r = h.coord.reconcileUnknown("job-1", "o1");
+  assert.deepEqual([r.ok, r.exit], [true, "adopted"]);
+  view = h.coord.jobView("job-1");
+  assert.equal(view.occurrences[0].state, "ready");
+  assert.equal(view.occurrences[0].cache_key, "ghost-key");
 });
 
-test("seam v: a crash mid-report rolls the whole report back; re-report applies cleanly", () => {
+test("seam v: a crash mid-report rolls the whole report back; re-report applies cleanly", async () => {
   const objects = new Map([["key-o1", { format: "mp3", identity: "fp-o1" }]]);
   const probe = makeProbe(objects);
   const h = makeHarness({ probe });
-  submit(h.coord, "c1", "job-1", [occ("o1")]);
-  const g = h.coord.requestGrant("job-1");
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  const g = await h.coord.requestGrant("job-1");
   const report = { grantId: g.grantId, jobRevision: 2,
     results: [{ occurrenceId: "o1", outcome: "success", revisionKey: "fp-o1", cacheKey: "key-o1" }] };
   const realSniff = probe.sniff;
   probe.sniff = () => { throw new Error("storage exploded"); };
-  assert.throws(() => h.coord.handleReport(report), /storage exploded/);
+  await assert.rejects(h.coord.handleReport(report), /storage exploded/);
   // nothing half-applied
   assert.equal(h.rows("grants")[0].state, "issued");
   assert.equal(h.coord.jobView("job-1").occurrences[0].state, "granted");
   assert.equal(h.rows("bindings").length, 0);
   probe.sniff = realSniff;
-  assert.equal(h.coord.handleReport(report).ok, true);
+  assert.equal((await h.coord.handleReport(report)).ok, true);
   assert.equal(h.coord.jobView("job-1").state, "complete");
+});
+
+test("finding 2: unacknowledged deliveries are never marked sent", async () => {
+  const h = makeHarness();
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  await h.coord.requestGrant("job-1");
+  // a synchronously throwing handler: nothing is marked sent
+  assert.equal(await h.coord.drainOutbox(() => { throw new Error("queue down"); }), 0);
+  assert.equal(h.rows("outbox")[0].sent_at, null);
+  // an asynchronously rejecting handler: same
+  assert.equal(await h.coord.drainOutbox(async () => { throw new Error("queue down async"); }), 0);
+  assert.equal(h.rows("outbox")[0].sent_at, null);
+  // a missing handler: not a success either
+  assert.equal(await h.coord.drainOutbox(undefined), 0);
+  assert.equal(h.rows("outbox")[0].sent_at, null);
+  // and when delivery finally works, exactly that drain marks it
+  assert.equal(await h.coord.drainOutbox(x => h.sentGrants.push(x)), 1);
+  assert.ok(h.rows("outbox")[0].sent_at !== null);
+});
+
+test("finding 2/5: the watchdog drain with no delivery handler leaves grants visibly unsent", async () => {
+  const h = makeHarness();
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  await h.coord.requestGrant("job-1");
+  h.env.sendGrant = undefined; // no delivery path configured
+  await h.coord.wake();
+  const wd = h.rows("schedule").filter(r => r.kind === "watchdog" && r.state === "pending");
+  assert.ok(wd.length >= 1);
+  h.setNow(wd[0].due_at + 1);
+  await h.fireAlarm();
+  assert.equal(h.rows("outbox")[0].sent_at, null); // still unsent, not faked
+  assert.ok(h.alarmAt() !== null); // and the chain itself is healthy
 });
 
 test("autonomous recovery: a poison schedule row backs off, dies visibly, and never kills the chain", async () => {
   const h = makeHarness();
-  h.coord.wake();
+  await h.coord.wake();
   assert.ok(h.alarmAt() !== null, "watchdog armed from a cold wake");
   // a row whose processing always throws
   h.db.prepare(`INSERT INTO schedule (due_at, kind, ref, payload_json) VALUES (?, 'lease', 'grant:ghost', '{}')`)
@@ -144,13 +189,13 @@ test("autonomous recovery: a poison schedule row backs off, dies visibly, and ne
   assert.ok(vis, "the dead row is surfaced, not silently dropped");
   // and the chain still processes honest work afterwards
   h.env.scheduleHook = null;
-  submit(h.coord, "c1", "job-1", [occ("o1")]);
-  assert.equal(h.coord.requestGrant("job-1").ok, true);
+  await submit(h.coord, "c1", "job-1", [occ("o1")]);
+  assert.equal((await h.coord.requestGrant("job-1")).ok, true);
 });
 
 test("autonomous recovery: alarm handler throwing wholesale still re-arms (finally)", async () => {
   const h = makeHarness();
-  h.coord.wake();
+  await h.coord.wake();
   const realProcess = h.coord._processScheduleRow.bind(h.coord);
   let calls = 0;
   h.coord._processScheduleRow = row => {

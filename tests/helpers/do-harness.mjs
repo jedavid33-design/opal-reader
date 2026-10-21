@@ -37,9 +37,11 @@ export function makeHarness({ probe = null, startMs = 1760000000000 } = {}) {
       try { const r = fn(); db.exec("COMMIT"); return r; }
       catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
     },
-    setAlarm(ms) { alarmAt = ms; },
-    getAlarm() { return alarmAt; },
-    deleteAlarm() { alarmAt = null; },
+    // Cloudflare's alarm API is async — these return Promises on purpose,
+    // so the coordinator can never pass by treating them synchronously.
+    async setAlarm(ms) { alarmAt = ms; },
+    async getAlarm() { return alarmAt; },
+    async deleteAlarm() { alarmAt = null; },
   };
   const env = {
     now: () => now,
@@ -77,12 +79,13 @@ export function makeHarness({ probe = null, startMs = 1760000000000 } = {}) {
   };
 }
 
-// A cache/R2 probe stub. `objects`: Map cacheKey -> { format, identity }.
+// A cache/R2 probe stub. `objects`: Map cacheKey -> { format, identity, sha }.
 export function makeProbe(objects = new Map(), keyFor = null) {
   return {
     exists: k => objects.has(k),
     sniff: k => (objects.has(k) ? objects.get(k).format : null),
     recordedIdentity: k => (objects.has(k) ? objects.get(k).identity ?? null : null),
+    hash: k => (objects.has(k) ? objects.get(k).sha ?? null : null),
     keyFor: keyFor || (() => null),
     _objects: objects,
   };
@@ -91,7 +94,7 @@ export function makeProbe(objects = new Map(), keyFor = null) {
 export const occ = (id, extra = {}) => ({
   occurrenceId: id, revisionKey: "fp-" + id, estMicroCents: 1000, ...extra,
 });
-export function submit(coord, commandId, jobId, occurrences, extra = {}) {
+export async function submit(coord, commandId, jobId, occurrences, extra = {}) {
   return coord.handleCommand({
     command_id: commandId, type: "SubmitJob",
     payload: { jobId, bookId: "book-1", chapterIndex: 0, lane: "standard",
