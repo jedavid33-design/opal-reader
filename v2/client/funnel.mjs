@@ -33,10 +33,16 @@ function deepEqual(a, b) {
   return ka.every((k, i) => k === kb[i] && deepEqual(a[k], b[k]));
 }
 
+// Durable-write chains are keyed by STORAGE, not by funnel instance: two
+// funnel instances over one storage (e.g. a composition rebuilt without a
+// restart of the underlying store) serialize against each other, exactly
+// like the store's own per-storage mutex. A per-instance chain would let
+// two live funnels interleave load-mutate-set and lose each other's parks.
+const funnelChains = new Map();
+
 export function createFunnel({ store, storage }) {
   if (!store || !storage) throw new Error("store and storage required");
   const working = new Map(); // volatile edit buffers
-  let chain = Promise.resolve(); // serialize this funnel's durable writes
 
   const emptyRecord = () => ({ settledThrough: 0, knownRevisions: {}, parks: {} });
   async function load() {
@@ -44,13 +50,14 @@ export function createFunnel({ store, storage }) {
     return r === undefined || r === null ? emptyRecord() : r;
   }
   function mutate(fn) {
-    const run = chain.then(async () => {
+    const prev = funnelChains.get(storage) ?? Promise.resolve();
+    const run = prev.then(async () => {
       const rec = await load();
       const out = await fn(rec);
       await storage.set(FUNNEL_KEY, rec);
       return out;
     });
-    chain = run.catch(() => {});
+    funnelChains.set(storage, run.catch(() => {}));
     return run;
   }
 
@@ -98,9 +105,22 @@ export function createFunnel({ store, storage }) {
         for (const eo of o.receipt?.outcomes ?? []) {
           if (eo.status === "applied" && eo.entityKey && typeof eo.revision === "number") rec.knownRevisions[eo.entityKey] = eo.revision;
           const park = eo.entityKey ? rec.parks[eo.entityKey] : null;
+          if (park && eo.status === "applied") {
+            const appliedPayload = (o.payload?.changes ?? []).find((c) => c.entityKey === eo.entityKey)?.payload;
+            // The parked edit IS what just landed — whether the fold can
+            // prove it by the retry's command id or only by payload
+            // identity (the restart-during-setup case, where the durable
+            // 'retry' marking never got written). Either way the park's
+            // purpose is fulfilled; anything else stays parked.
+            if ((park.resolution?.how === "retry" && park.resolution.commandId === o.command_id) ||
+                (appliedPayload !== undefined && deepEqual(appliedPayload, park.payload))) {
+              delete rec.parks[eo.entityKey];
+              continue;
+            }
+          }
           if (park?.resolution?.how === "retry" && park.resolution.commandId === o.command_id) {
-            if (eo.status === "applied") delete rec.parks[eo.entityKey]; // successful replacement receipt: the ONLY way a retry clears
-            else { park.resolution = null; park.status = eo.status; park.currentRevision = eo.currentRevision ?? park.currentRevision; } // failed retry: payload preserved
+            // The retry's own command came back non-applied: payload preserved.
+            park.resolution = null; park.status = eo.status; park.currentRevision = eo.currentRevision ?? park.currentRevision;
             continue;
           }
           if ((eo.status === "conflict" || eo.status === "rejected_tombstoned" || eo.status === "rejected_stale") && eo.entityKey) {
@@ -135,12 +155,23 @@ export function createFunnel({ store, storage }) {
       let cached = await store.cachedEntity("content", bookId);
       if (!cached) { await store.syncFamily("content"); cached = await store.cachedEntity("content", bookId); }
       if (!cached) return { resolved: false, reason: "book_gone" };
-      await mutate((r) => { r.knownRevisions[bookId] = cached.revision; });
+      // Mark the setup DURABLY before the command exists: a restart
+      // anywhere after this write leaves a park that knows a retry was
+      // begun. If the restart lands before the command-id marking below,
+      // settle still clears the park — by payload identity — when the
+      // replacement's applied outcome folds (see settle).
+      await mutate((r) => {
+        r.knownRevisions[bookId] = cached.revision;
+        if (r.parks[bookId]) r.parks[bookId].resolution = { how: "retry-setup" };
+      });
       working.set(bookId, structuredClone(p.payload));
       const r = await saveBook(bookId);
-      if (r.skipped) return { resolved: false, reason: r.reason };
+      if (r.skipped) {
+        await mutate((r2) => { if (r2.parks[bookId]?.resolution?.how === "retry-setup") r2.parks[bookId].resolution = null; });
+        return { resolved: false, reason: r.reason };
+      }
       await mutate((rec2) => {
-        if (rec2.parks[bookId]) rec2.parks[bookId].resolution = { how: "retry", commandId: r.commandId };
+        if (rec2.parks[bookId]?.resolution?.how === "retry-setup") rec2.parks[bookId].resolution = { how: "retry", commandId: r.commandId };
       });
       return { resolved: true, how, ...r };
     }

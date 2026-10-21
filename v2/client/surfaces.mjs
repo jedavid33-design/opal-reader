@@ -54,19 +54,30 @@ export function createSurfaces({ store, transport }) {
     return { data: ent ? ent.payload : null, revision: ent ? ent.revision : 0 };
   }
 
+  // Success is claimed ONLY from the matching command's own applied
+  // receipt. Every other terminal or non-terminal state is reported as
+  // itself: still-pending (no receipt yet — the command is durable in the
+  // outbox and will flush later), outcome-unknown (the coordinator could
+  // not prove what happened — never dressed as success or failure), a
+  // settings conflict, or a plain rejection with its reason.
   async function updateSettings(data) {
     const ent = await store.cachedEntity("settings", "settings");
     const commandId = await store.intent("SetSettings", { baseRevision: ent ? ent.revision : 0, data });
     await store.flushOutbox();
     const st = await store.outboxState();
+    if (st.pending.some((p) => p.command_id === commandId)) return { applied: false, pending: true, conflict: false, commandId };
     const o = st.outcomes.find((x) => x.command_id === commandId);
-    if (!o) return { applied: false, conflict: false, reason: "no_receipt" };
-    if (o.receipt?.reason === "settings_conflict" || o.outcome === "rejected") {
+    if (!o) return { applied: false, pending: true, conflict: false, commandId }; // no receipt recorded yet
+    if (o.outcome === "outcome_unknown" || o.receipt?.outcome === "outcome_unknown") return { applied: false, unknown: true, conflict: false, commandId };
+    if (o.outcome === "applied") {
       const now = await settingsModel();
-      return { applied: false, conflict: true, reason: o.receipt?.reason ?? o.outcome, currentRevision: now.revision, currentData: now.data };
+      return { applied: true, conflict: false, revision: now.revision, data: now.data };
     }
-    const now = await settingsModel();
-    return { applied: true, conflict: false, revision: now.revision, data: now.data };
+    if (o.receipt?.reason === "settings_conflict") {
+      const now = await settingsModel();
+      return { applied: false, conflict: true, reason: "settings_conflict", currentRevision: now.revision, currentData: now.data };
+    }
+    return { applied: false, conflict: false, reason: o.receipt?.reason ?? o.outcome ?? "rejected", commandId };
   }
 
   async function quotaModel() {
