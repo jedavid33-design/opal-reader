@@ -29,10 +29,11 @@ test("seam iii: executor dies after dispatch -> lease expiry -> outcome_unknown,
   await h.coord.alarm();
   const view = h.coord.jobView("job-1");
   assert.equal(view.state, "outcome_unknown");
-  // o1's provider request was recorded at dispatch, so the automatic
-  // reconciliation pass records it spent-without-audio on the spot;
-  // o2 has no proof either way and stays outcome_unknown.
-  assert.deepEqual(view.occurrences.map(o => o.state), ["failed", "outcome_unknown"]);
+  // Round 3 fix 3: o1's provider request ID was recorded at dispatch,
+  // but a dispatch record is NOT proof the provider completed or
+  // charged it — so the automatic reconciliation pass leaves BOTH
+  // occurrences outcome_unknown (visible, never auto-replayed).
+  assert.deepEqual(view.occurrences.map(o => o.state), ["outcome_unknown", "outcome_unknown"]);
   // critically: nothing new was dispatched for them
   assert.equal(h.rows("outbox").length, 1);
   assert.equal(h.rows("grants").length, 1);
@@ -54,11 +55,15 @@ test("seam iii-a + gap 4: lease expiry auto-adopts cached audio and the JOB comp
   assert.equal(h.rows("bindings").length, 1);
 });
 
-test("seam iii-b: automatic reconciliation records spent-without-audio from the provider id", async () => {
+test("seam iii-b: automatic reconciliation records spent-without-audio from a CONFIRMED provider outcome", async () => {
   const h = makeHarness({ probe: makeProbe(new Map(), () => null) });
   await submit(h.coord, "c1", "job-1", [occ("o1")]);
   const g = await h.coord.requestGrant("job-1");
   h.coord.noteProviderRequest(g.grantId, "o1", "provider-req-77");
+  // Genuine provider evidence: a request-status lookup confirms the
+  // request failed with no audio produced (round 3, fix 3).
+  h.coord.noteProviderOutcome(g.grantId, "o1", "failed",
+    { source: "provider_status_lookup", providerStatus: "failed" });
   const lease = h.rows("schedule").find(r => r.kind === "lease");
   h.setNow(lease.due_at + 1000);
   await h.coord.alarm();

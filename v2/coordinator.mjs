@@ -30,11 +30,22 @@ export const JOB_EVENTS = [
 // The transition table. Anything (state, event) NOT listed here is an
 // explicit rejection — there is no implicit or default transition.
 export const JOB_TRANSITIONS = {
-  queued:          { grant: "generating", pause: "paused_user", cancel: "cancelled", supersede: "superseded" },
+  // queued / paused_user also accept the SETTLE events (report_complete,
+  // report_partial, report_failed, unknown): work dispatched before a
+  // pause — or before a resume landed the job back in queued — can
+  // finish in flight, and the shared completion derivation must be able
+  // to land the job in its TRUE state through this single applier
+  // (round 3, fix 4). A pause stops NEW dispatches; it cannot un-finish
+  // work that already completed.
+  queued:          { grant: "generating", pause: "paused_user", cancel: "cancelled", supersede: "superseded",
+                     report_complete: "complete", report_partial: "partial", report_failed: "failed",
+                     unknown: "outcome_unknown" },
   generating:      { grant: "generating", report_complete: "complete", report_partial: "partial", report_failed: "failed",
                      park: "paused_quota", pause: "paused_user", cancel: "cancelled", unknown: "outcome_unknown" },
   paused_quota:    { resume_probe: "generating", cancel: "cancelled", supersede: "superseded" },
-  paused_user:     { resume: "queued", cancel: "cancelled", supersede: "superseded" },
+  paused_user:     { resume: "queued", cancel: "cancelled", supersede: "superseded",
+                     report_complete: "complete", report_partial: "partial", report_failed: "failed",
+                     unknown: "outcome_unknown" },
   outcome_unknown: { resolve: "queued", report_complete: "complete", report_partial: "partial",
                      report_failed: "failed", cancel: "cancelled", supersede: "superseded" },
   complete:        { supersede: "superseded" },
@@ -317,10 +328,19 @@ export class GenerationCoordinator {
       if (!g.ok) return { outcome: "rejected", reason: g.reason };
       return { outcome: "applied", state: "generating", grantId: g.grantId, probe: true };
     }
+    // Work may have settled while the job was paused (in-flight reports
+    // landing on a delivered grant): settle FIRST, through the same
+    // derivation. If the job is already complete, the resume is
+    // satisfied — there is nothing to re-queue and nothing new to
+    // dispatch (round 3, fix 4).
+    this._deriveJobCompletion(p.jobId, "RequestResume");
+    const settled = this._one(`SELECT * FROM jobs WHERE job_id = ?`, p.jobId);
+    if (settled.state === "complete")
+      return { outcome: "applied", state: "complete", revision: settled.revision };
     const r = this.applyJobEvent(p.jobId, "resume", "RequestResume", { commandId });
     if (!r.ok) return { outcome: "rejected", reason: r.reason };
-    // Work may have settled while the job was paused (in-flight reports):
-    // land the job in its true state immediately, not at the next report.
+    // ...and derive again after the resume lands (e.g. the job was
+    // re-queued with every occurrence already settled by a reconcile).
     this._deriveJobCompletion(p.jobId, "RequestResume");
     const after = this._one(`SELECT * FROM jobs WHERE job_id = ?`, p.jobId);
     return { outcome: "applied", state: after.state, revision: after.revision };
@@ -378,14 +398,11 @@ export class GenerationCoordinator {
       if (park && !bypassPark) return { ok: false, reason: "quota_parked" };
       const now = this._now();
       const day = dayKeyPT(now), month = monthKey(now);
-      const attempts = this._one(
-        `SELECT COUNT(*) AS n FROM ledger_ops WHERE day_key = ? AND kind = 'attempt'`, day).n;
+      const attempts = this._attemptsOn(day);
       if (attempts >= DAILY_QUOTA_LIMIT) return { ok: false, reason: "quota_estimate_exhausted" };
       const settings = this._settings();
       const capMicro = Math.round((settings.monthlyCap ?? 50) * 100 * 10000);
-      const spent = this._one(
-        `SELECT COALESCE(SUM(est_micro_cents), 0) AS s FROM ledger_ops WHERE month_key = ? AND kind = 'attempt'`,
-        month).s;
+      const spent = this._spendIn(month);
       const pending = this._all(
         `SELECT * FROM occurrences WHERE job_id = ? AND state = 'pending' ORDER BY occurrence_id`, jobId);
       const targets = probe ? pending.slice(0, 1) : pending;
@@ -476,12 +493,43 @@ export class GenerationCoordinator {
     return sent;
   }
 
+  // Net ledger accounting (round 3, fix 1): an 'attempt' row is a
+  // RESERVATION made at grant time, not proof of spend. A dispatch that
+  // is voided before it is ever sent never contacted the provider, so
+  // its reservation is explicitly RELEASED — a compensating
+  // 'attempt_release' row (negative estimate, same day/month keys) that
+  // preserves the audit trail while removing the charge from every
+  // quota/cap count. Attempts that were actually sent keep counting.
+  _attemptsOn(day) {
+    return this._one(
+      `SELECT (SELECT COUNT(*) FROM ledger_ops WHERE day_key = ? AND kind = 'attempt')
+            - (SELECT COUNT(*) FROM ledger_ops WHERE day_key = ? AND kind = 'attempt_release')
+         AS n`, day, day).n;
+  }
+  _spendIn(month) {
+    return this._one(
+      `SELECT COALESCE(SUM(est_micro_cents), 0) AS s FROM ledger_ops
+        WHERE month_key = ? AND kind IN ('attempt', 'attempt_release')`, month).s;
+  }
+
   _voidDispatch(payload, jobState) {
     const grantId = payload.grantId;
     const ops = this._all(
-      `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
+      `SELECT * FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
       `op:${grantId}:%`);
     for (const op of ops) {
+      // Release this attempt's reservation exactly once: the provider
+      // was never contacted for it, so it must not consume quota or cap.
+      const relKey = `rel:${op.op_key}`;
+      if (!this._one(`SELECT op_key FROM ledger_ops WHERE op_key = ?`, relKey)) {
+        const d = JSON.parse(op.detail_json || "{}");
+        this.sql.exec(
+          `INSERT INTO ledger_ops (op_key, at, day_key, month_key, kind, est_micro_cents, detail_json)
+           VALUES (?, ?, ?, ?, 'attempt_release', ?, ?)`,
+          relKey, this._now(), op.day_key, op.month_key, -op.est_micro_cents,
+          JSON.stringify({ jobId: payload.jobId, occurrenceId: d.occurrenceId || null,
+                           grantId, released: "dispatch_voided", jobState }));
+      }
       const oid = JSON.parse(op.detail_json || "{}").occurrenceId;
       if (!oid) continue;
       const o = this._one(
@@ -500,15 +548,34 @@ export class GenerationCoordinator {
   }
 
   // Dispatch-time annotation: the executor records the provider request
-  // identity into the ledger the moment it dispatches. This is what makes
-  // reconciliation exit (b) possible after a crash — without it, a spent
-  // request whose audio never landed would be indistinguishable from one
-  // never sent.
+  // identity into the ledger the moment it dispatches. A request ID is
+  // evidence the request was ATTEMPTED — it is NOT proof the provider
+  // completed or charged it (round 3, fix 3), so on its own it never
+  // justifies calling the occurrence spent.
   noteProviderRequest(grantId, occurrenceId, providerRequestId) {
     const opKey = `op:${grantId}:${occurrenceId}`;
     const row = this._one(`SELECT * FROM ledger_ops WHERE op_key = ?`, opKey);
     if (!row) return { ok: false, reason: "op_not_found" };
     const detail = { ...(JSON.parse(row.detail_json || "{}")), providerRequestId };
+    this.sql.exec(`UPDATE ledger_ops SET detail_json = ? WHERE op_key = ?`,
+      JSON.stringify(detail), opKey);
+    return { ok: true };
+  }
+
+  // Provider-OUTCOME annotation: the executor records a CONFIRMED
+  // terminal provider outcome (with its evidence) when the provider's
+  // own record settles what happened to a dispatched request — e.g. a
+  // request-status lookup showing the request failed or completed
+  // without producing audio. Only a confirmed outcome recorded here can
+  // support reconciliation's spent-without-audio exit.
+  noteProviderOutcome(grantId, occurrenceId, outcome, evidence = null) {
+    if (!["failed", "spent_without_audio"].includes(outcome))
+      return { ok: false, reason: "unknown_provider_outcome" };
+    const opKey = `op:${grantId}:${occurrenceId}`;
+    const row = this._one(`SELECT * FROM ledger_ops WHERE op_key = ?`, opKey);
+    if (!row) return { ok: false, reason: "op_not_found" };
+    const detail = { ...(JSON.parse(row.detail_json || "{}")),
+                     providerOutcome: outcome, providerEvidence: evidence };
     this.sql.exec(`UPDATE ledger_ops SET detail_json = ? WHERE op_key = ?`,
       JSON.stringify(detail), opKey);
     return { ok: true };
@@ -662,18 +729,32 @@ export class GenerationCoordinator {
       return { bound: false, reason: "object_missing" };
     const fmt = probe.sniff ? probe.sniff(cacheKey) : null;
     if (!fmt) return conflict(revisionKey, null, "format_invalid");
-    // Byte-level verification (P2 review finding 3 + round 2 gap 3):
-    // metadata agreement is not content agreement, and for NEW
-    // recordings a verified digest is MANDATORY — a missing hash no
-    // longer passes. Verified means the object's bytes hash to a digest
-    // stated independently of the object: the caller's stated hash (a
-    // provided-but-wrong hash is a positive mismatch, never bypassed by
-    // another source), or the digest recorded when the object entered
-    // the cache (the storage layer's write-time record, or this
-    // coordinator's own index from an earlier bind). Legacy revisions
-    // keep their documented uncertainty: exempt from the requirement,
-    // still protected if a recorded digest exists and changes.
+    // Byte-level verification (P2 review finding 3 + round 2 gap 3 +
+    // round 3 fix 2): metadata agreement is not content agreement, and
+    // for NEW recordings a verified digest is MANDATORY — a missing
+    // hash no longer passes. EVERY available authoritative digest must
+    // agree with the bytes actually present: the coordinator's own
+    // cache index (anchored at an earlier bind), the storage layer's
+    // write-time record, AND any caller-stated expected hash. A stated
+    // hash that matches the current bytes does NOT excuse a prior
+    // anchored digest that disagrees — bytes silently swapped under an
+    // old key are a conflict, never a fresh success — and the
+    // existing-binding idempotent return runs only AFTER these checks,
+    // never instead of them. Legacy revisions keep their documented
+    // uncertainty about identity provenance, but a KNOWN digest is never
+    // ignored for them either.
     const actualSha = probe.hash ? probe.hash(cacheKey) : null;
+    const idx = this._one(`SELECT * FROM cache_index WHERE cache_key = ?`, cacheKey);
+    const isLegacy = typeof revisionKey === "string" && revisionKey.startsWith("legacy:");
+    const idxSha = (idx && idx.sha256) || null;
+    const writeSha = probe.recordedSha256 ? probe.recordedSha256(cacheKey) : null;
+    if (idxSha && writeSha && idxSha !== writeSha)
+      return conflict(idxSha, writeSha, "content_hash_mismatch");
+    const recordedSha = idxSha || writeSha;
+    for (const stated of [recordedSha, expectedSha256]) {
+      if (stated && actualSha !== stated)
+        return conflict(stated, actualSha, "content_hash_mismatch");
+    }
     const existing = this._one(
       `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
       occurrenceId, revisionKey);
@@ -681,20 +762,8 @@ export class GenerationCoordinator {
       return { bound: true, idempotent: true, cacheKey };
     if (existing && existing.cache_key !== cacheKey)
       return conflict(revisionKey, existing.cache_key, "binding_conflict_existing");
-    const idx = this._one(`SELECT * FROM cache_index WHERE cache_key = ?`, cacheKey);
-    const isLegacy = typeof revisionKey === "string" && revisionKey.startsWith("legacy:");
-    const recordedSha = (idx && idx.sha256) ||
-      (probe.recordedSha256 ? probe.recordedSha256(cacheKey) : null);
-    if (expectedSha256) {
-      if (actualSha !== expectedSha256)
-        return conflict(expectedSha256, actualSha, "content_hash_mismatch");
-    } else if (!isLegacy) {
-      if (!recordedSha || actualSha !== recordedSha)
-        return conflict(recordedSha, actualSha,
-          recordedSha ? "content_hash_mismatch" : "digest_unverified");
-    } else if (recordedSha && actualSha && recordedSha !== actualSha) {
-      return conflict(recordedSha, actualSha, "content_hash_mismatch");
-    }
+    if (!expectedSha256 && !isLegacy && !recordedSha)
+      return conflict(null, actualSha, "digest_unverified");
     // The survivor's recorded identity: the coordinator's own cache index
     // (written on every bind it has ever made) wins; the storage probe's
     // record is the fallback for objects that predate the coordinator.
@@ -738,15 +807,24 @@ export class GenerationCoordinator {
           if (r.ok) { this._maybeResolveJob(jobId); return { ok: true, exit: "adopted", cacheKey: candidate }; }
         }
       }
-      // (b) the provider request identity is in the ledger -> spent, visible.
+      // (b) a CONFIRMED provider outcome is in the ledger -> spent,
+      // visible. A dispatch record (providerRequestId) alone is only an
+      // attempt: it never proves the provider completed or charged the
+      // request, so without a confirmed outcome the occurrence stays
+      // outcome_unknown below — visible, and never auto-replayed.
       const spend = this._one(
         `SELECT * FROM ledger_ops WHERE kind = 'attempt' AND detail_json LIKE ?`,
         `%"occurrenceId":"${occurrenceId}"%`);
-      if (spend && JSON.parse(spend.detail_json || "{}").providerRequestId) {
-        const r = this.applyOccEvent(jobId, occurrenceId, "reconcile_spent", "reconcile",
-          { providerRequestId: JSON.parse(spend.detail_json).providerRequestId,
-            spent_without_audio: true, visible_to_user: true });
-        if (r.ok) { this._maybeResolveJob(jobId); return { ok: true, exit: "spent_without_audio" }; }
+      if (spend) {
+        const d = JSON.parse(spend.detail_json || "{}");
+        if (d.providerRequestId &&
+            (d.providerOutcome === "failed" || d.providerOutcome === "spent_without_audio")) {
+          const r = this.applyOccEvent(jobId, occurrenceId, "reconcile_spent", "reconcile",
+            { providerRequestId: d.providerRequestId, providerOutcome: d.providerOutcome,
+              providerEvidence: d.providerEvidence ?? null,
+              spent_without_audio: true, visible_to_user: true });
+          if (r.ok) { this._maybeResolveJob(jobId); return { ok: true, exit: "spent_without_audio" }; }
+        }
       }
       // (c) neither -> stays outcome_unknown, surfaced to Julie (F7).
       return { ok: true, exit: "still_unknown" };
@@ -921,7 +999,8 @@ export class GenerationCoordinator {
         // under this grant become outcome_unknown — NEVER re-dispatched.
         // Recovery then attempts SAFE reconciliation immediately, with
         // no device involved (gap 4): adopt from the cache if the audio
-        // provably landed, or record the spend from the provider record.
+        // provably landed, or record the spend ONLY on a confirmed
+        // provider outcome (a dispatch record alone proves nothing).
         // Whatever cannot be proven stays outcome_unknown for Julie.
         const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
         if (!grant || grant.state === "reported" || grant.state === "voided") break;
@@ -976,11 +1055,8 @@ export class GenerationCoordinator {
   quotaView() {
     const now = this._now();
     const day = dayKeyPT(now), month = monthKey(now);
-    const attemptsToday = this._one(
-      `SELECT COUNT(*) AS n FROM ledger_ops WHERE day_key = ? AND kind = 'attempt'`, day).n;
-    const spentMonth = this._one(
-      `SELECT COALESCE(SUM(est_micro_cents), 0) AS s FROM ledger_ops WHERE month_key = ? AND kind = 'attempt'`,
-      month).s;
+    const attemptsToday = this._attemptsOn(day);
+    const spentMonth = this._spendIn(month);
     const park = this._one(
       `SELECT * FROM quota_parks WHERE released_at IS NULL ORDER BY id DESC LIMIT 1`);
     return { dayKey: day, attemptsToday, dailyLimit: DAILY_QUOTA_LIMIT,
