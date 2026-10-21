@@ -80,7 +80,12 @@ export const COMMAND_TYPES = [
   "SubmitJob", "RequestRepair", "RequestPause", "RequestResume",
   "RequestCancel", "RequestSynthesis", "AdoptAudio",
   "ResolveOutcomeUnknown", "SetSettings", "FreezeDirective",
+  "SyncPush", "PushPositionEvents", "DeleteBook",
 ];
+
+// P4 sync families. Position rides the same change machinery; money
+// is NOT a family — it is never client-writable (coordinator ledger).
+export const SYNC_FAMILIES = ["content", "bindings", "position", "settings"];
 
 const WATCHDOG_PERIOD_MS = 10 * 60 * 1000;
 const LEASE_MS = 15 * 60 * 1000;
@@ -170,6 +175,28 @@ CREATE TABLE IF NOT EXISTS batch_maps (
   state TEXT NOT NULL, detail TEXT, updated_at INTEGER NOT NULL,
   generation INTEGER NOT NULL DEFAULT 1, superseded_at INTEGER,
   PRIMARY KEY (job_id, occurrence_id, generation));
+-- P4 sync substrate (Case #6 contracts): an append-only per-family
+-- change history written in the SAME transaction as every mutation,
+-- the current-entity mirror it reconstructs, the position journal,
+-- and the folded canonical position per book.
+CREATE TABLE IF NOT EXISTS sync_changes (
+  family TEXT NOT NULL, seq INTEGER NOT NULL, entity_key TEXT NOT NULL,
+  book_id TEXT, revision INTEGER NOT NULL, op TEXT NOT NULL,
+  payload_json TEXT, PRIMARY KEY (family, seq));
+CREATE TABLE IF NOT EXISTS sync_entities (
+  family TEXT NOT NULL, entity_key TEXT NOT NULL, book_id TEXT,
+  revision INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0,
+  data_json TEXT, PRIMARY KEY (family, entity_key));
+CREATE TABLE IF NOT EXISTS position_events (
+  book_id TEXT NOT NULL, event_id TEXT NOT NULL, receipt_seq INTEGER NOT NULL,
+  device_id TEXT NOT NULL, local_seq INTEGER NOT NULL, kind TEXT NOT NULL,
+  occurrence_id TEXT, offset_sec REAL, base_seq INTEGER NOT NULL,
+  superseded INTEGER NOT NULL DEFAULT 0, payload_json TEXT NOT NULL,
+  PRIMARY KEY (book_id, event_id));
+CREATE TABLE IF NOT EXISTS position_state (
+  book_id TEXT PRIMARY KEY, occurrence_id TEXT, occ_index INTEGER,
+  offset_sec REAL, playing INTEGER NOT NULL DEFAULT 0,
+  tip INTEGER NOT NULL DEFAULT 0, superseded_count INTEGER NOT NULL DEFAULT 0);
 `;
 
 function dayKeyPT(nowMs) {
@@ -320,6 +347,9 @@ export class GenerationCoordinator {
       }
       case "ResolveOutcomeUnknown": return this._resolveUnknown(p, commandId);
       case "SetSettings": return this._setSettings(p, commandId);
+      case "SyncPush": return this._syncPush(p, commandId);
+      case "PushPositionEvents": return this._pushPositionEvents(p, commandId);
+      case "DeleteBook": return this._deleteBook(p, commandId);
       case "FreezeDirective": {
         this.sql.exec(`INSERT INTO meta (key, value) VALUES ('frozen', ?)
                        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -1104,6 +1134,16 @@ export class GenerationCoordinator {
       revision, JSON.stringify(data));
     this._logTransition("settings", "settings", "SetSettings",
       null, null, revision, { commandId });
+    // P4: settings is a sync family — every applied update lands in
+    // the change history + entity mirror in this same transaction,
+    // so devices pull settings as deltas and converge detectably.
+    this._appendChange("settings", "settings", null, revision, "upsert", data);
+    this.sql.exec(
+      `INSERT INTO sync_entities (family, entity_key, book_id, revision, deleted, data_json)
+       VALUES ('settings', 'settings', NULL, ?, 0, ?)
+       ON CONFLICT(family, entity_key) DO UPDATE SET revision = excluded.revision,
+         deleted = 0, data_json = excluded.data_json`,
+      revision, JSON.stringify(data));
     return { outcome: "applied", revision, data };
   }
 
@@ -1435,10 +1475,16 @@ export class GenerationCoordinator {
     const spentMonth = this._spendIn(month);
     const park = this._one(
       `SELECT * FROM quota_parks WHERE released_at IS NULL ORDER BY id DESC LIMIT 1`);
+    const ledgerSeq = this._one(`SELECT COALESCE(MAX(rowid), 0) AS m FROM ledger_ops`).m;
     return { dayKey: day, attemptsToday, dailyLimit: DAILY_QUOTA_LIMIT,
              basis: "Reader estimate (server attempt ledger)",
              monthKey: month, spentMicroCents: spentMonth,
              monthlyCap: this._settings().monthlyCap,
+             // P4 money surface: revisioned reads so two devices can
+             // detect divergence and converge. A cached copy of this
+             // view is display data only — grants re-read the ledger
+             // inside their transaction; a cache never authorizes.
+             ledgerSeq, settingsRevision: this._settings().revision,
              parked: park ? { parkedAt: park.parked_at,
                               evidence: JSON.parse(park.evidence_json || "{}") } : null };
   }
@@ -1727,6 +1773,300 @@ export class GenerationCoordinator {
              WHERE b2.job_id = batch_maps.job_id AND b2.occurrence_id = batch_maps.occurrence_id)
          ORDER BY occurrence_id`, jobId),
     };
+  }
+
+  // ============ P4: sync v2 + money authority (Case #6) ============
+  // The protocol contracts (addendum, issue #11): per-family
+  // append-only change history written in the mutation's own
+  // transaction; pinned-watermark paginated pulls; durable per-book
+  // receipts (the P2 command log IS the receipt store — a lost ACK
+  // re-reads the same receipt, never re-applies); position as an
+  // append-only event journal folded deterministically in receipt
+  // order; revisioned tombstones; money read-only from the ledger.
+
+  _syncTip(family) {
+    return this._one(`SELECT COALESCE(MAX(seq), 0) AS m FROM sync_changes WHERE family = ?`, family).m;
+  }
+
+  _syncFloor(family) {
+    const r = this._one(`SELECT MIN(seq) AS m FROM sync_changes WHERE family = ?`, family);
+    return r.m === null ? 1 : r.m;
+  }
+
+  _appendChange(family, entityKey, bookId, revision, op, payload) {
+    const seq = this._syncTip(family) + 1;
+    this.sql.exec(`INSERT INTO sync_changes (family, seq, entity_key, book_id, revision, op, payload_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      family, seq, entityKey, bookId, revision, op,
+      payload === undefined ? null : JSON.stringify(payload));
+    return seq;
+  }
+
+  _syncEntity(family, entityKey) {
+    return this._one(`SELECT * FROM sync_entities WHERE family = ? AND entity_key = ?`,
+      family, entityKey);
+  }
+
+  _bookTombstoned(bookId) {
+    if (!bookId) return false;
+    const e = this._syncEntity("content", bookId);
+    return !!(e && e.deleted);
+  }
+
+  _upsertSyncEntity(family, entityKey, bookId, data) {
+    const cur = this._syncEntity(family, entityKey);
+    const revision = (cur ? cur.revision : 0) + 1;
+    this.sql.exec(
+      `INSERT INTO sync_entities (family, entity_key, book_id, revision, deleted, data_json)
+       VALUES (?, ?, ?, ?, 0, ?)
+       ON CONFLICT(family, entity_key) DO UPDATE SET revision = excluded.revision,
+         deleted = 0, data_json = excluded.data_json`,
+      family, entityKey, bookId, revision, JSON.stringify(data));
+    this._appendChange(family, entityKey, bookId, revision, "upsert", data);
+    return revision;
+  }
+
+  _conflictWindow(family, entityKey, baseRevision) {
+    return this._all(
+      `SELECT seq, revision, op FROM sync_changes
+       WHERE family = ? AND entity_key = ? AND revision > ? ORDER BY seq`,
+      family, entityKey, baseRevision).slice(0, 20);
+  }
+
+  // One pushed change (content/bindings/settings). Outcomes are
+  // per-entity and never throw: a conflicted book neither aborts nor
+  // contaminates its siblings in the batch (abort isolation).
+  _applySyncChange(ch) {
+    const { family, entityKey } = ch || {};
+    if (!SYNC_FAMILIES.includes(family) || family === "position" || !entityKey)
+      return { entityKey: entityKey || null, status: "invalid" };
+    if (family === "settings") {
+      if (entityKey !== "settings") return { entityKey, status: "invalid" };
+      const r = this._setSettings({ baseRevision: ch.baseRevision, data: ch.payload || {} }, null);
+      return r.outcome === "applied"
+        ? { entityKey, status: "applied", revision: r.revision }
+        : { entityKey, status: "conflict", currentRevision: r.revision };
+    }
+    const bookId = ch.bookId || (family === "content" ? entityKey : null);
+    // The delete fence: no family accepts a write against a
+    // tombstoned book (Rowan invariant 3) — not content, not
+    // bindings, and position events fence separately below.
+    if (this._bookTombstoned(bookId))
+      return { entityKey, status: "rejected_tombstoned", bookId };
+    if (ch.op === "delete") {
+      if (family !== "content") return { entityKey, status: "invalid" };
+      return { entityKey, ...this._tombstoneBook(bookId, ch.baseRevision) };
+    }
+    const cur = this._syncEntity(family, entityKey);
+    const curRev = cur ? cur.revision : 0;
+    if (ch.baseRevision !== curRev)
+      return { entityKey, status: "conflict", currentRevision: curRev,
+               window: this._conflictWindow(family, entityKey, ch.baseRevision ?? 0) };
+    const revision = this._upsertSyncEntity(family, entityKey, bookId, ch.payload ?? null);
+    return { entityKey, status: "applied", revision };
+  }
+
+  _syncPush(p, commandId) {
+    const changes = Array.isArray(p.changes) ? p.changes : [];
+    const outcomes = changes.map(ch => this._applySyncChange(ch));
+    return { outcome: "applied", deviceId: p.deviceId || null, outcomes };
+  }
+
+  _tombstoneBook(bookId, baseRevision) {
+    const cur = this._syncEntity("content", bookId);
+    if (cur && cur.deleted)
+      return { status: "applied", revision: cur.revision, alreadyTombstoned: true };
+    const curRev = cur ? cur.revision : 0;
+    if (baseRevision !== undefined && baseRevision !== curRev)
+      return { status: "conflict", currentRevision: curRev,
+               window: this._conflictWindow("content", bookId, baseRevision ?? 0) };
+    const revision = curRev + 1;
+    this.sql.exec(
+      `INSERT INTO sync_entities (family, entity_key, book_id, revision, deleted, data_json)
+       VALUES ('content', ?, ?, ?, 1, NULL)
+       ON CONFLICT(family, entity_key) DO UPDATE SET revision = excluded.revision,
+         deleted = 1, data_json = NULL`,
+      bookId, bookId, revision);
+    this._appendChange("content", bookId, bookId, revision, "tombstone", { bookId });
+    this._logTransition("book", bookId, "DeleteBook", null, "tombstoned", revision, {});
+    return { status: "applied", revision };
+  }
+
+  _deleteBook(p, commandId) {
+    if (!p.bookId) return { outcome: "rejected", reason: "book_required" };
+    const r = this._tombstoneBook(p.bookId, p.baseRevision);
+    return r.status === "applied"
+      ? { outcome: "applied", bookId: p.bookId, revision: r.revision, alreadyTombstoned: !!r.alreadyTombstoned }
+      : { outcome: "rejected", reason: "conflict", bookId: p.bookId, currentRevision: r.currentRevision };
+  }
+
+  // Position events: append-only journal, deterministic fold.
+  // Event identity is (bookId, eventId) WITH payload equivalence:
+  // the same id carrying a different payload is a conflict, never
+  // a silent replay (Rowan invariant 2).
+  _pushPositionEvents(p, commandId) {
+    const bookId = p.bookId;
+    const events = Array.isArray(p.events) ? p.events : [];
+    if (this._bookTombstoned(bookId))
+      return { outcome: "applied", bookId,
+               outcomes: events.map(ev => ({ eventId: ev.eventId, status: "rejected", reason: "tombstoned" })) };
+    const content = this._syncEntity("content", bookId);
+    if (!content || content.deleted)
+      return { outcome: "rejected", reason: "unknown_book", bookId };
+    const occIds = (JSON.parse(content.data_json || "{}").occurrenceIds) || [];
+    const outcomes = events.map(ev => this._appendPositionEvent(bookId, occIds, ev));
+    return { outcome: "applied", bookId, outcomes };
+  }
+
+  _appendPositionEvent(bookId, occIds, ev) {
+    const canonical = JSON.stringify({
+      deviceId: ev.deviceId, localSeq: ev.localSeq, kind: ev.kind,
+      occurrenceId: ev.occurrenceId, offsetSec: ev.offsetSec, baseSeq: ev.baseSeq });
+    const prior = this._one(
+      `SELECT * FROM position_events WHERE book_id = ? AND event_id = ?`, bookId, ev.eventId);
+    if (prior) {
+      return prior.payload_json === canonical
+        ? { eventId: ev.eventId, status: "replay", receiptSeq: prior.receipt_seq, superseded: !!prior.superseded }
+        : { eventId: ev.eventId, status: "conflict", reason: "event_id_payload_mismatch" };
+    }
+    const st = this._one(`SELECT * FROM position_state WHERE book_id = ?`, bookId)
+      || { occurrence_id: null, occ_index: null, offset_sec: null, playing: 0, tip: 0, superseded_count: 0 };
+    if (typeof ev.baseSeq !== "number" || ev.baseSeq > st.tip)
+      return { eventId: ev.eventId, status: "rejected", reason: "base_ahead" };
+    const idx = occIds.indexOf(ev.occurrenceId);
+    if (idx < 0) return { eventId: ev.eventId, status: "rejected", reason: "unknown_occurrence" };
+    if (typeof ev.offsetSec !== "number" || !(ev.offsetSec >= 0))
+      return { eventId: ev.eventId, status: "rejected", reason: "invalid_offset" };
+    if (!["play", "pause", "seek", "checkpoint"].includes(ev.kind))
+      return { eventId: ev.eventId, status: "rejected", reason: "invalid_kind" };
+    // Staleness is causal, never clock-based: an event created
+    // against an older journal tip is stale. A stale event that
+    // would move canonical position BACKWARD is recorded but
+    // superseded; stale-forward and fresh events fold normally
+    // (a deliberate re-read on a synced device is fresh, so it
+    // always applies).
+    const stale = ev.baseSeq < st.tip;
+    const backward = st.occ_index !== null &&
+      (idx < st.occ_index || (idx === st.occ_index && ev.offsetSec < st.offset_sec));
+    const superseded = stale && backward;
+    const receiptSeq = st.tip + 1;
+    this.sql.exec(`INSERT INTO position_events (book_id, event_id, receipt_seq, device_id, local_seq,
+        kind, occurrence_id, offset_sec, base_seq, superseded, payload_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      bookId, ev.eventId, receiptSeq, ev.deviceId, ev.localSeq, ev.kind,
+      ev.occurrenceId, ev.offsetSec, ev.baseSeq, superseded ? 1 : 0, canonical);
+    let { occurrence_id, occ_index, offset_sec, playing, superseded_count } = st;
+    if (!superseded) {
+      occurrence_id = ev.occurrenceId; occ_index = idx; offset_sec = ev.offsetSec;
+      if (ev.kind === "play") playing = 1;
+      if (ev.kind === "pause") playing = 0;
+    } else superseded_count += 1;
+    this.sql.exec(
+      `INSERT INTO position_state (book_id, occurrence_id, occ_index, offset_sec, playing, tip, superseded_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(book_id) DO UPDATE SET occurrence_id = excluded.occurrence_id,
+         occ_index = excluded.occ_index, offset_sec = excluded.offset_sec,
+         playing = excluded.playing, tip = excluded.tip, superseded_count = excluded.superseded_count`,
+      bookId, occurrence_id, occ_index, offset_sec, playing, receiptSeq, superseded_count);
+    this._appendChange("position", bookId, bookId, receiptSeq, "event",
+      { ...ev, receiptSeq, superseded });
+    return { eventId: ev.eventId, status: "accepted", receiptSeq, superseded };
+  }
+
+  positionView(bookId) {
+    const st = this._one(`SELECT * FROM position_state WHERE book_id = ?`, bookId);
+    if (!st) return { bookId, canonical: null, asOfReceiptSeq: 0, supersededCount: 0, journalGaps: [] };
+    const byDevice = new Map();
+    for (const r of this._all(
+      `SELECT device_id, local_seq FROM position_events WHERE book_id = ? ORDER BY device_id, local_seq`, bookId)) {
+      if (!byDevice.has(r.device_id)) byDevice.set(r.device_id, []);
+      byDevice.get(r.device_id).push(r.local_seq);
+    }
+    const journalGaps = [];
+    for (const [deviceId, seqs] of byDevice) {
+      const present = new Set(seqs);
+      const missing = [];
+      for (let s = Math.min(...seqs); s <= Math.max(...seqs); s++)
+        if (!present.has(s)) missing.push(s);
+      if (missing.length) journalGaps.push({ deviceId, missing });
+    }
+    return { bookId,
+             canonical: { occurrenceId: st.occurrence_id, offsetSec: st.offset_sec, playing: !!st.playing },
+             asOfReceiptSeq: st.tip, supersededCount: st.superseded_count, journalGaps };
+  }
+
+  // Pull: pinned-watermark snapshot window. sinceSeq is EXCLUSIVE;
+  // resync triggers only when the cursor fell below the retained
+  // floor (sinceSeq < floor - 1) — sinceSeq = 0 against a history
+  // starting at 1 is the normal first pull, never a resync.
+  pullChanges({ family, sinceSeq = 0, limit = 200, cursor } = {}) {
+    if (!SYNC_FAMILIES.includes(family)) return { error: "unknown_family", family };
+    let wm;
+    if (cursor !== undefined && cursor !== null) {
+      if (cursor.family !== family) return { error: "invalid_cursor", reason: "family_mismatch" };
+      sinceSeq = cursor.seq; wm = cursor.watermark;
+      if (typeof wm !== "number" || wm < sinceSeq) return { error: "invalid_cursor", reason: "watermark_behind_cursor" };
+      if (wm > this._syncTip(family)) return { error: "invalid_cursor", reason: "watermark_ahead_of_tip" };
+    }
+    const floor = this._syncFloor(family);
+    if (sinceSeq < floor - 1) return { resyncRequired: true, family, floorSeq: floor };
+    if (wm === undefined) wm = this._syncTip(family);
+    const rows = this._all(
+      `SELECT * FROM sync_changes WHERE family = ? AND seq > ? AND seq <= ? ORDER BY seq LIMIT ?`,
+      family, sinceSeq, wm, Math.max(1, Math.min(limit, 500)));
+    const nextSeq = rows.length ? rows[rows.length - 1].seq : sinceSeq;
+    return { family, changes: rows.map(r => ({
+               seq: r.seq, entityKey: r.entity_key, bookId: r.book_id,
+               revision: r.revision, op: r.op,
+               payload: r.payload_json ? JSON.parse(r.payload_json) : null })),
+             nextSeq, highWatermark: wm, hasMore: nextSeq < wm,
+             cursor: { family, seq: nextSeq, watermark: wm } };
+  }
+
+  syncSnapshot({ family } = {}) {
+    if (!SYNC_FAMILIES.includes(family)) return { error: "unknown_family", family };
+    const watermark = this._syncTip(family);
+    if (family === "position") {
+      const books = this._all(`SELECT book_id FROM position_state ORDER BY book_id`)
+        .map(r => this.positionView(r.book_id));
+      return { family, watermark, positions: books };
+    }
+    const entities = this._all(
+      `SELECT * FROM sync_entities WHERE family = ? ORDER BY entity_key`, family)
+      .map(e => ({ entityKey: e.entity_key, bookId: e.book_id, revision: e.revision,
+                   tombstone: !!e.deleted,
+                   data: e.data_json ? JSON.parse(e.data_json) : null }));
+    return { family, watermark, entities };
+  }
+
+  // Phase-two sweep, DRY RUN ONLY (P4 scope): proves references and
+  // reports a manifest; deletes nothing, and reads conservatively —
+  // anything it cannot prove unreferenced stays off the manifest.
+  sweepDryRun(bookId) {
+    const content = this._syncEntity("content", bookId);
+    if (!content || !content.deleted) return { error: "not_tombstoned", bookId };
+    const liveJobs = this._one(
+      `SELECT COUNT(*) AS n FROM jobs WHERE book_id = ? AND state NOT IN ('complete', 'cancelled', 'failed')`,
+      bookId).n;
+    const bindings = this._all(
+      `SELECT * FROM sync_entities WHERE family = 'bindings' AND book_id = ?`, bookId);
+    const otherKeys = new Set(this._all(
+      `SELECT data_json FROM sync_entities WHERE family = 'bindings' AND (book_id IS NULL OR book_id != ?)`, bookId)
+      .map(r => { try { return JSON.parse(r.data_json || "{}").cacheKey; } catch { return undefined; } }));
+    const wouldRemove = [{ family: "content", entityKey: bookId }];
+    const sharedKept = [];
+    let incomplete = liveJobs > 0;
+    for (const b of bindings) {
+      let key; try { key = JSON.parse(b.data_json || "{}").cacheKey; } catch { key = undefined; }
+      if (!key) { incomplete = true; continue; } // unprovable — left off the manifest
+      if (otherKeys.has(key)) { sharedKept.push(key); continue; }
+      wouldRemove.push({ family: "bindings", entityKey: b.entity_key, cacheKey: key });
+    }
+    return { bookId, tombstoned: true, dryRun: true, deletedAnything: false,
+             liveJobs, sharedKept, wouldRemove, conservative: incomplete,
+             note: incomplete
+               ? "references unproven (live jobs or incomplete binding data) — manifest is partial by design"
+               : "all references proven inside one read; manifest complete" };
   }
 
 }
