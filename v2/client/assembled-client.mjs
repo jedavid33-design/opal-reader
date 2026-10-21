@@ -19,6 +19,7 @@
 import { createClientStore } from "../client-store.mjs";
 import { createFunnel } from "./funnel.mjs";
 import { chapterModel, surfaceModel, SURFACES } from "./projection.mjs";
+import { createSurfaces } from "./surfaces.mjs";
 
 export function createAssembledClient({ deviceId, storage, transport }) {
   const store = createClientStore({ deviceId, storage, transport });
@@ -28,5 +29,6 @@ export function createAssembledClient({ deviceId, storage, transport }) {
     chapterModel: (bookId, chapterId) => chapterModel(store, bookId, chapterId),
     surfaceModel: (surface, bookId, chapterId) => surfaceModel(store, surface, bookId, chapterId),
   };
-  return { store, funnel, projection };
+  const surfaces = createSurfaces({ store, transport });
+  return { store, funnel, projection, surfaces };
 }
