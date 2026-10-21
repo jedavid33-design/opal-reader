@@ -107,13 +107,14 @@ export function createFunnel({ store, storage }) {
           const park = eo.entityKey ? rec.parks[eo.entityKey] : null;
           if (park && eo.status === "applied") {
             const appliedPayload = (o.payload?.changes ?? []).find((c) => c.entityKey === eo.entityKey)?.payload;
-            // The parked edit IS what just landed — whether the fold can
-            // prove it by the retry's command id or only by payload
-            // identity (the restart-during-setup case, where the durable
-            // 'retry' marking never got written). Either way the park's
-            // purpose is fulfilled; anything else stays parked.
+            // The parked edit IS what just landed, in one of the two ways
+            // the USER set in motion: the retry's own command id, or — the
+            // restart-during-setup case — payload identity for a park the
+            // user had already marked 'retry-setup'. A park with NO
+            // resolution is an undecided user decision: an unrelated
+            // applied save with identical bytes must NOT dismiss it.
             if ((park.resolution?.how === "retry" && park.resolution.commandId === o.command_id) ||
-                (appliedPayload !== undefined && deepEqual(appliedPayload, park.payload))) {
+                (park.resolution?.how === "retry-setup" && appliedPayload !== undefined && deepEqual(appliedPayload, park.payload))) {
               delete rec.parks[eo.entityKey];
               continue;
             }

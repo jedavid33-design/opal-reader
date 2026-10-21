@@ -122,6 +122,28 @@ test("review (2b): restart during retry setup BEFORE any command was issued — 
   assert.equal(await a2.funnel.parkedEdit("bk"), null);
 });
 
+test("review (regression): an UNRESOLVED park survives an unrelated applied save with an identical payload — only an explicit retry/discard resolves it", async () => {
+  const w = makeWorld();
+  const shared = w.mkStorage();
+  const { a } = await parkOn(shared, w, "bk");
+  const park = await a.funnel.parkedEdit("bk");
+  assert.equal(park.resolution, null); // undecided
+  // A separate, ordinary save — NOT resolveParked — lands the same bytes:
+  await a.funnel.syncNow();
+  await a.funnel.refreshWorking("bk"); // working := B's v2; the park is untouched
+  a.funnel.setWorking("bk", park.payload);
+  const sv = await a.funnel.saveBook("bk"); // bases on the current revision -> applies
+  assert.equal(sv.skipped, false);
+  await a.funnel.settle();
+  const snap = w.coord.syncSnapshot({ family: "content" });
+  assert.equal(snap.entities.find((e) => e.entityKey === "bk").data.title, "A edit"); // the bytes DID land...
+  const still = await a.funnel.parkedEdit("bk");
+  assert.ok(still !== null); // ...but the decision was never the user's to lose silently
+  assert.equal(still.payload.title, "A edit");
+  await a.funnel.resolveParked("bk", "discard"); // explicit resolution still works
+  assert.equal(await a.funnel.parkedEdit("bk"), null);
+});
+
 test("review (3a): settings PENDING — a failed send reports pending (not success, not conflict); the durable command lands after healing", async () => {
   const w = makeWorld();
   const a = w.device("devA");
