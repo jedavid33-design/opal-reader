@@ -126,6 +126,28 @@ test("stage4 review gate: an UNMAPPED removed-provider voice cannot submit new g
   }), /unmapped_removed_provider_voice/);
 });
 
+test("stage4 review gate 2: a bare { bookId } request is checked against the SAVED book — POVs, default voice, SubmitJob and RepairJob", async () => {
+  const w = makeWorld();
+  const seed = new SyncClient(w.coord, "seed");
+  await seed.pushBook("bk", BOOK); // azure + fish POVs, openai default
+  await seed.pushBook("bk2", { ...BOOK, title: "DefaultVoiced", povs: [{ id: "p1", name: "G", voice: { provider: "gemini", voice_id: "Aoede" } }], defaultVoice: { provider: "azure", voice_id: "en-US-Jenny" } });
+  const a = w.device("devA");
+  await a.funnel.syncNow(); // both books now SAVED in this device's cache
+  // bookId-only, SubmitJob: the saved book's azure/fish POVs block it:
+  await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk" }), /unmapped_removed_provider_voice/);
+  // bookId-only, RepairJob: same enforcement:
+  await assert.rejects(() => a.store.intent("RepairJob", { bookId: "bk" }), /unmapped_removed_provider_voice/);
+  // bookId-only with full mappings: accepted:
+  const id = await a.store.intent("SubmitJob", { bookId: "bk", voiceMapping: { "pov-a": { provider: "gemini", voice_id: "Aoede" }, "pov-f": { provider: "openai", voice_id: "alloy" } } });
+  assert.ok(id);
+  // defaultVoice coverage: bk2's POVs are clean but its DEFAULT voice is azure:
+  await assert.rejects(() => a.store.intent("SubmitJob", { bookId: "bk2" }), /unmapped_removed_provider_voice: \(default voice\) \(azure\)/);
+  const id2 = await a.store.intent("SubmitJob", { bookId: "bk2", voiceMapping: { defaultVoice: { provider: "gemini", voice_id: "Aoede" } } });
+  assert.ok(id2);
+  const st = await a.store.outboxState();
+  assert.equal(st.pending.length, 2); // only the two mapped jobs were ever persisted
+});
+
 test("stage4 voice mapping: removed-provider POVs are flagged for a decision; the book is never rewritten", async () => {
   const w = makeWorld();
   const a = w.device("devA");
