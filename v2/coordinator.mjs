@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS grants (
   report_json TEXT);
 CREATE TABLE IF NOT EXISTS outbox (
   id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload_json TEXT NOT NULL,
-  created_at INTEGER NOT NULL, sent_at INTEGER);
+  created_at INTEGER NOT NULL, sent_at INTEGER, send_attempted_at INTEGER);
 CREATE TABLE IF NOT EXISTS ledger_ops (
   op_key TEXT PRIMARY KEY, at INTEGER NOT NULL, day_key TEXT NOT NULL,
   month_key TEXT NOT NULL, kind TEXT NOT NULL,
@@ -454,6 +454,25 @@ export class GenerationCoordinator {
     }
   }
 
+  // After a SAFE void (the dispatch provably never left and its
+  // occurrences returned to pending), a generating job must advance
+  // again WITHOUT a device (round 5, Rowan qualification B): enqueue
+  // one bounded retry_grant. Park/cap/quota are re-checked by the
+  // grant gate itself when the retry fires; a refusal ends the chain
+  // (the park/resume machinery owns what happens next), so this can
+  // never spin. Paused/cancelled jobs and freezes get nothing here —
+  // resume and thaw own their own continuations.
+  _scheduleReAdvance(jobId) {
+    if (!jobId) return;
+    const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
+    if (!job || job.state !== "generating" || this._frozen()) return;
+    const existing = this._one(
+      `SELECT COUNT(*) AS n FROM schedule WHERE kind = 'retry_grant' AND ref = ? AND state = 'pending'`,
+      jobId);
+    if (existing && existing.n > 0) return;
+    this._schedule(this._now() + 30000, "retry_grant", jobId, { cause: "void_re_advance" });
+  }
+
   // Executor entry point (called by the command API / plan advancer).
   async requestGrant(jobId, opts = {}) {
     await this.wake();
@@ -467,8 +486,11 @@ export class GenerationCoordinator {
   // never sent is delivered on the next wake, keyed by grant_id so the
   // send is idempotent). Delivery is ACKNOWLEDGED (P2 review finding 2):
   // the send function is awaited, and a row is marked sent only after it
-  // resolves. A throw or rejection leaves the row unsent for the next
-  // drain; a missing handler delivers nothing and marks nothing.
+  // resolves. A missing handler delivers nothing and marks nothing.
+  // Round 5 sharpens the failure side: intent is recorded BEFORE
+  // invocation, so a throw, rejection, or crash after invocation leaves
+  // the row ATTEMPTED-UNCERTAIN — never re-invoked by a drain, never
+  // voided as unsent; handoff reconciliation owns it from there.
   async drainOutbox(send) {
     if (typeof send !== "function") return 0;
     const rows = this._all(`SELECT * FROM outbox WHERE sent_at IS NULL ORDER BY created_at`);
@@ -486,6 +508,24 @@ export class GenerationCoordinator {
       if (this._frozen()) continue;
       const job = payload.jobId
         ? this._one(`SELECT * FROM jobs WHERE job_id = ?`, payload.jobId) : null;
+      const grant = payload.grantId
+        ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, payload.grantId) : null;
+      // Rows belonging to settled grants are debris (round 4): cleared
+      // without touching accounting — their spend settled by report.
+      if (payload.grantId && (!grant || grant.state === "reported" || grant.state === "voided")) {
+        this.sql.exec(`DELETE FROM outbox WHERE id = ?`, row.id);
+        this._logTransition("grant", payload.grantId, "dispatch_debris_cleared",
+          grant ? grant.state : null, grant ? grant.state : null, null,
+          { jobId: payload.jobId });
+        continue;
+      }
+      // Handoff state machine (round 5, Rowan qualification A): a row is
+      // NEVER INVOKED (send_attempted_at null — provably unsent), ACKED
+      // (sent_at set), or ATTEMPTED-UNCERTAIN (invoked, no ACK recorded:
+      // the queue may or may not hold the message). Attempted rows are
+      // owned by handoff reconciliation — a drain NEVER re-invokes one,
+      // because a blind retry is exactly the duplicate-spend risk.
+      if (row.send_attempted_at) continue;
       if (job && ["paused_user", "paused_quota", "cancelled", "superseded"].includes(job.state)) {
         this._tx(() => this._voidDispatch(payload, job.state));
         continue;
@@ -495,34 +535,50 @@ export class GenerationCoordinator {
       // job's CURRENT revision, and inside its delivery window. Anything
       // else is provably unsent work and must never be handed to the
       // provider late: expired/revision-stale grants are voided with
-      // their reservations released (the work re-grants fresh); rows
-      // belonging to settled grants are debris and are cleared without
-      // touching accounting (their spend already settled by report).
+      // their reservations released (the work re-grants fresh).
       if (payload.grantId) {
-        const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, payload.grantId);
-        if (!grant || grant.state !== "issued") {
-          this.sql.exec(`DELETE FROM outbox WHERE id = ?`, row.id);
-          this._logTransition("grant", payload.grantId, "dispatch_debris_cleared",
-            grant ? grant.state : null, grant ? grant.state : null, null,
-            { jobId: payload.jobId });
-          continue;
-        }
         if (job && grant.revision !== job.revision) {
           this._tx(() => this._voidDispatch(payload, "revision_stale"));
           continue;
         }
         if (this._now() > grant.lease_expires_at) {
           this._tx(() => this._voidDispatch(payload, "delivery_window_expired"));
+          this._scheduleReAdvance(payload.jobId);
           continue;
         }
       }
+      // Durable intent BEFORE invocation (round 5): from this write on,
+      // the handoff is ATTEMPTED. If the process dies, the ACK is lost,
+      // or send rejects, the row can never again be mistaken for
+      // never-invoked — it reconciles as uncertain instead of voiding.
+      this.sql.exec(`UPDATE outbox SET send_attempted_at = ? WHERE id = ? AND send_attempted_at IS NULL`,
+        this._now(), row.id);
       try {
         await send(payload);
       } catch {
-        continue; // unacknowledged: stays unsent, retried by a later drain
+        continue; // ACK uncertain: reconciliation owns this row now
+      }
+      // The ACK arrived. Settle against the grant's CURRENT state: a
+      // grant voided or reported while the send was in flight is never
+      // reactivated by a late continuation (round 5) — the stray message
+      // is governed by the executor's dedupe-by-grantId contract, and
+      // the event is logged visibly rather than silently re-arming.
+      const settled = payload.grantId
+        ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, payload.grantId) : null;
+      if (payload.grantId && settled &&
+          settled.state !== "issued" && settled.state !== "handoff_uncertain") {
+        this._logTransition("grant", payload.grantId, "handoff_acked_after_settle",
+          settled.state, settled.state, null, { jobId: payload.jobId });
+        this.sql.exec(`DELETE FROM outbox WHERE id = ?`, row.id);
+        continue;
       }
       this.sql.exec(`UPDATE outbox SET sent_at = ? WHERE id = ?`, this._now(), row.id);
       if (payload.grantId) {
+        if (settled && settled.state === "handoff_uncertain") {
+          this.sql.exec(`UPDATE grants SET state = 'issued' WHERE grant_id = ?`, payload.grantId);
+          this._logTransition("grant", payload.grantId, "handoff_resolved",
+            "handoff_uncertain", "issued", null, { via: "late_ack" });
+        }
         // The execution lease runs from ACKNOWLEDGED HANDOFF, not from
         // grant creation (round 4): time spent waiting for delivery —
         // a broken queue, a backlog — consumes none of it. Supersede
@@ -648,6 +704,15 @@ export class GenerationCoordinator {
       if (!grant) return { ok: false, reason: "grant_not_found" };
       if (grant.state === "reported")
         return { ok: true, replayed: true };
+      if (grant.state === "handoff_uncertain") {
+        // A report IS handoff proof (round 5): the executor could only
+        // report on a dispatch it received. Resolve the uncertainty
+        // before applying results; the grant closes as reported below.
+        this.sql.exec(`UPDATE outbox SET sent_at = ? WHERE id = ? AND sent_at IS NULL`,
+          this._now(), grant.grant_id);
+        this._logTransition("grant", grant.grant_id, "handoff_resolved",
+          "handoff_uncertain", "issued", null, { via: "executor_report" });
+      }
       const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, grant.job_id);
       if (!job) return { ok: false, reason: "job_not_found" };
       if (report.jobRevision !== undefined && report.jobRevision !== job.revision) {
@@ -1098,10 +1163,31 @@ export class GenerationCoordinator {
             this._schedule(tolled, "lease", grant.grant_id, { deferred: "frozen" });
             break;
           }
+          if (outRow && outRow.send_attempted_at) {
+            // ATTEMPTED, ACK UNCERTAIN (round 5, Rowan qualification A):
+            // the send was invoked but no ACK was recorded — the queue
+            // may already hold this message. "Not ACKed" is NOT "never
+            // left": nothing is voided, no reservation is released, no
+            // re-grant is possible (the occurrences stay granted), and
+            // the uncertainty is a VISIBLE grant state, resolved only
+            // by the queue-acceptance probe (handoff_check) or by the
+            // executor's report — never by assumption.
+            if (grant.state !== "handoff_uncertain") {
+              this.sql.exec(`UPDATE grants SET state = 'handoff_uncertain' WHERE grant_id = ?`,
+                grant.grant_id);
+              this._logTransition("grant", grant.grant_id, "handoff_uncertain",
+                grant.state, "handoff_uncertain", null, { jobId: grant.job_id });
+              this._schedule(this._now() + 30000, "handoff_check", grant.grant_id, { tries: 0 });
+            }
+            break;
+          }
           if (outRow) {
+            // NEVER INVOKED: provably unsent — the round-4 safe void,
+            // and the job re-advances on its own (round 5, B).
             this._tx(() => this._voidDispatch(
               { grantId: grant.grant_id, jobId: grant.job_id },
               "lease_expired_undelivered"));
+            this._scheduleReAdvance(grant.job_id);
           } else {
             // No outbox row at all: nothing was ever deliverable, so
             // nothing was sent — retire the grant outright.
@@ -1131,9 +1217,63 @@ export class GenerationCoordinator {
         break;
       }
       case "retry_grant": {
-        // Bounded-backoff continuation after generic 429s / plan steps.
+        // Bounded-backoff continuation after generic 429s / plan steps /
+        // safe voids (round 5, B). A freeze defers it like everything
+        // else; a refusal by the grant gate (park, cap, quota, nothing
+        // pending) ends the chain — no self-rescheduling, no spin.
         const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, row.ref);
+        if (job && this._frozen()) {
+          this._schedule(this._now() + 60000, "retry_grant", row.ref,
+            { ...payload, deferred: "frozen" });
+          break;
+        }
         if (job && job.state === "generating") await this.requestGrant(row.ref, { cause: "retry_grant" });
+        break;
+      }
+      case "handoff_check": {
+        // Queue-acceptance reconciliation (round 5, A): the ONLY
+        // arbiter of an attempted-but-unacknowledged handoff is the
+        // queue's own record for this grantId. "accepted" completes
+        // the handoff (lease anchors to the confirmation); "not_
+        // accepted" proves the message never landed, so the round-4
+        // safe void finally applies; "unknown" (or no probe wired)
+        // keeps the uncertainty visible and backs off, bounded.
+        const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
+        if (!grant || grant.state !== "handoff_uncertain") break;
+        let verdict = "unknown";
+        if (typeof this.env.probeQueue === "function") {
+          try { verdict = await this.env.probeQueue(grant.grant_id); }
+          catch { verdict = "unknown"; }
+        }
+        if (verdict === "accepted") {
+          this._tx(() => {
+            const t = this._now();
+            this.sql.exec(`UPDATE outbox SET sent_at = ? WHERE id = ? AND sent_at IS NULL`,
+              t, grant.grant_id);
+            this.sql.exec(`UPDATE grants SET state = 'issued', lease_expires_at = ? WHERE grant_id = ?`,
+              t + LEASE_MS, grant.grant_id);
+            this.sql.exec(
+              `UPDATE schedule SET state = 'void' WHERE kind = 'lease' AND ref = ? AND state = 'pending'`,
+              grant.grant_id);
+            this._schedule(t + LEASE_MS, "lease", grant.grant_id, { anchored: "handoff_confirmed" });
+            this._logTransition("grant", grant.grant_id, "handoff_resolved",
+              "handoff_uncertain", "issued", null, { via: "queue_probe" });
+          });
+        } else if (verdict === "not_accepted") {
+          this._tx(() => this._voidDispatch(
+            { grantId: grant.grant_id, jobId: grant.job_id }, "handoff_proven_unaccepted"));
+          this._scheduleReAdvance(grant.job_id);
+        } else {
+          const tries = (payload.tries || 0) + 1;
+          if (tries <= 5) {
+            this._schedule(this._now() + 30000 * 2 ** (tries - 1),
+              "handoff_check", grant.grant_id, { tries });
+          } else {
+            this._logTransition("grant", grant.grant_id, "handoff_unresolved",
+              "handoff_uncertain", "handoff_uncertain", null,
+              { tries, note: "queue probe could not settle acceptance; uncertainty stays visible" });
+          }
+        }
         break;
       }
       default: break; // plan_step kinds are interpreted by their owners
@@ -1155,9 +1295,14 @@ export class GenerationCoordinator {
     const occs = this._all(
       `SELECT occurrence_id, revision_key, state, cache_key FROM occurrences WHERE job_id = ? ORDER BY occurrence_id`,
       jobId);
+    // Grant states ride along so a handoff_uncertain grant (round 5) is
+    // VISIBLE on the same surface as the job it belongs to — uncertainty
+    // that no read model shows is uncertainty that gets forgotten.
+    const grants = this._all(
+      `SELECT grant_id, state, revision FROM grants WHERE job_id = ? ORDER BY created_at`, jobId);
     return { jobId: job.job_id, kind: job.kind, bookId: job.book_id,
              chapterIndex: job.chapter_index, lane: job.lane, state: job.state,
-             revision: job.revision, occurrences: occs };
+             revision: job.revision, occurrences: occs, grants };
   }
 
   quotaView() {

@@ -204,15 +204,38 @@ test("finding 2: unacknowledged deliveries are never marked sent", async () => {
   // a synchronously throwing handler: nothing is marked sent
   assert.equal(await h.coord.drainOutbox(() => { throw new Error("queue down"); }), 0);
   assert.equal(h.rows("outbox")[0].sent_at, null);
-  // an asynchronously rejecting handler: same
+  // Round 5 (Rowan qualification A): the invocation DID happen, so the
+  // handoff is now ATTEMPTED-UNCERTAIN — intent is durable, and no later
+  // drain may blindly re-invoke it (that retry is the duplicate risk).
+  assert.ok(h.rows("outbox")[0].send_attempted_at !== null);
   assert.equal(await h.coord.drainOutbox(async () => { throw new Error("queue down async"); }), 0);
   assert.equal(h.rows("outbox")[0].sent_at, null);
-  // a missing handler: not a success either
+  assert.equal(await h.coord.drainOutbox(x => h.sentGrants.push(x)), 0); // still not re-invoked
+  assert.equal(h.sentGrants.length, 0);
+  // a missing handler on a NEVER-INVOKED row: not a success either, and
+  // no intent is recorded (nothing was invoked).
+  await submit(h.coord, "c2", "job-2", [occ("o1")]);
+  await h.coord.requestGrant("job-2");
   assert.equal(await h.coord.drainOutbox(undefined), 0);
-  assert.equal(h.rows("outbox")[0].sent_at, null);
-  // and when delivery finally works, exactly that drain marks it
-  assert.equal(await h.coord.drainOutbox(x => h.sentGrants.push(x)), 1);
-  assert.ok(h.rows("outbox")[0].sent_at !== null);
+  const row2 = h.rows("outbox").find(r => r.id.includes("job-2"));
+  assert.equal(row2.sent_at, null);
+  assert.equal(row2.send_attempted_at, null);
+  // The attempted row's only exits are reconciliation verdicts. The
+  // queue authoritatively reports it never accepted the message, so
+  // the dispatch safely voids, the job re-advances on its own (round
+  // 5, B), and the fresh grant's delivery marks exactly that row sent.
+  h.env.probeQueue = () => "not_accepted";
+  const lease = h.rows("schedule").find(r => r.kind === "lease" && r.state === "pending");
+  h.setNow(lease.due_at + 1000);
+  await h.coord.alarm(); // lease expiry -> handoff_uncertain (not voided)
+  assert.equal(h.rows("grants").find(g => g.job_id === "job-1").state, "handoff_uncertain");
+  h.advance(31000); await h.coord.alarm(); // handoff_check: not_accepted -> void + re-advance
+  h.advance(31000); await h.coord.alarm(); // retry_grant: fresh grant issued server-side
+  h.advance(10 * 60000); await h.coord.alarm(); // watchdog drains the fresh grant
+  // (job-2's never-invoked row delivers in the same drain — it was only
+  // ever waiting for a handler. Exactly ONE delivery belongs to job-1.)
+  assert.equal(h.sentGrants.filter(p => p.jobId === "job-1").length, 1);
+  assert.equal(h.coord.jobView("job-1").occurrences[0].state, "granted");
 });
 
 test("finding 2/5: the watchdog drain with no delivery handler leaves grants visibly unsent", async () => {
