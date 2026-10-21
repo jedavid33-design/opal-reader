@@ -10,204 +10,249 @@
 // where certainty has not been earned (Rowan P5 check 1: a binding's metadata
 // is not confirmed audio bytes; offline or unverified never reads "Complete").
 //
-// Storage and transport are injected. Storage is a durable async KV
-// (get/set/del); everything the store must survive a restart with — outbox
-// intents + idempotency keys, journal counters + unacked events, cache
-// cursors — is persisted BEFORE any network dispatch (Rowan's invariant).
-// Transport speaks the frozen P4 surface: sendCommand / pullChanges /
-// snapshot / pushPosition / quotaView / byteCheck.
+// DURABILITY MODEL (P5 review fix 1): all durable state lives in ONE storage
+// record, and every mutation is load → mutate → a single atomic set of that
+// record, serialized per storage object by a shared promise-chain mutex.
+// Id allocation (command ids, journal localSeqs) happens INSIDE the same
+// write as the record it names — a crash keeps both or neither, so an id
+// can never be reissued to a different intent or event, even across
+// simultaneous store instances over the same storage. (In production the
+// single record maps to one IndexedDB transaction; the injected storage
+// contract is: set of one key is atomic.)
+//
+// BYTE VERIFICATION (P5 review fix 2): a byte confirmation is recorded
+// against (cacheKey, bindingRevision). If the binding's revision advances
+// or its cache key changes, prior confirmations no longer apply and the
+// chapter falls back to Uncertain until re-verified; a playback/diagnostics
+// report of missing bytes invalidates the confirmation immediately.
 
-const REMOVED_PROVIDERS = new Set(['azure', 'fish']); // not carried over (F-removals); existing audio still plays
+const REMOVED_PROVIDERS = new Set(['azure', 'fish']); // not carried over; existing audio still plays
+const STATE_KEY = 'cs:state:v1';
+const locks = new WeakMap(); // storage object -> promise chain (serializes all instances sharing it)
+
+const emptyState = () => ({
+  commandCounter: 0,
+  journalCounters: {},          // bookId -> last localSeq allocated
+  outbox: [],                   // {command_id, type, payload, status, receipt}
+  journals: {},                 // bookId -> [event...]
+  caches: {},                   // family -> {floor, tip, cursor, entities: {key: {payload, revision}}, tombstones}
+  bytes: {},                    // cacheKey -> {bindingRevision}
+  money: { view: null, asOfLedgerSeq: null, asOfSettingsRevision: null, stale: true },
+});
 
 export function createClientStore({ deviceId, storage, transport }) {
   if (!deviceId || !storage || !transport) throw new Error('deviceId, storage, transport required');
-  const K = {
-    meta: 'cs:meta',
-    outbox: 'cs:outbox',
-    bytes: 'cs:bytes',
-    money: 'cs:money',
-    cache: (f) => `cs:cache:${f}`,
-    journal: (b) => `cs:journal:${b}`,
-  };
-  const get = async (k, dflt) => { const v = await storage.get(k); return v === undefined || v === null ? dflt : v; };
-  const set = (k, v) => storage.set(k, v);
 
-  async function meta() { return get(K.meta, { commandCounter: 0, journalCounters: {} }); }
+  async function load() {
+    const s = await storage.get(STATE_KEY);
+    return s === undefined || s === null ? emptyState() : s;
+  }
+  // Serialize mutations per storage object: fn receives the state, mutates
+  // it, and the whole state is written back in ONE atomic set.
+  function mutate(fn) {
+    const prev = locks.get(storage) ?? Promise.resolve();
+    const run = prev.then(async () => {
+      const s = await load();
+      const r = await fn(s);
+      await storage.set(STATE_KEY, s);
+      return r;
+    });
+    locks.set(storage, run.catch(() => {}));
+    return run;
+  }
+  const familyCache = (s, family) => (s.caches[family] ??= { floor: 0, tip: 0, cursor: 0, entities: {}, tombstones: {} });
 
   // ------------------------------------------------------------- outbox
-  // Intent-only writes: screens express intents; the store persists the
-  // intent AND its idempotency key (the command id) before any dispatch.
-  // A lost ACK never mints a new command — the same id is replayed and the
-  // coordinator returns the original receipt (P2 command log).
+  // Intent-only writes: the intent AND its idempotency key (the command id)
+  // are allocated and persisted in the same atomic write, before any
+  // dispatch. A lost ACK never mints a new command — the same id replays
+  // and the coordinator returns the original receipt (P2 command log).
   async function intent(type, payload = {}) {
     if (payload && typeof payload.provider === 'string' && REMOVED_PROVIDERS.has(payload.provider)) {
-      // Rejected locally, before persistence or dispatch: generation on a
-      // removed provider is not carried over. (Playback is unaffected —
-      // resolvePlayback below never consults this set.)
       const err = new Error(`provider_not_carried_over: ${payload.provider}`);
       err.code = 'provider_not_carried_over';
       throw err;
     }
-    const m = await meta();
-    m.commandCounter += 1;
-    const commandId = `${deviceId}-cmd-${m.commandCounter}`;
-    const outbox = await get(K.outbox, []);
-    outbox.push({ command_id: commandId, type, payload, status: 'queued', receipt: null });
-    await set(K.meta, m);
-    await set(K.outbox, outbox); // durable BEFORE dispatch — flush is a separate step
-    return commandId;
+    return mutate((s) => {
+      s.commandCounter += 1;
+      const commandId = `${deviceId}-cmd-${s.commandCounter}`;
+      s.outbox.push({ command_id: commandId, type, payload, status: 'queued', receipt: null });
+      return commandId;
+    });
   }
 
   async function flushOutbox() {
-    const outbox = await get(K.outbox, []);
     let sent = 0;
-    for (const entry of outbox) {
-      if (entry.status === 'acked') continue;
-      try {
-        const receipt = await transport.sendCommand({ command_id: entry.command_id, type: entry.type, payload: entry.payload, actor: deviceId });
-        entry.status = 'acked';
-        entry.receipt = receipt;
-        sent += 1;
-        await set(K.outbox, outbox);
-      } catch {
-        entry.status = 'sent_unacked'; // ACK unknown: replay the SAME id later, never a new one
-        await set(K.outbox, outbox);
-        break; // head-of-line, like the Shelf outbox
-      }
+    for (;;) {
+      const next = await mutate((s) => {
+        const e = s.outbox.find((x) => x.status !== 'acked');
+        return e ? { command_id: e.command_id, type: e.type, payload: e.payload } : null;
+      });
+      if (!next) break;
+      let receipt = null, failed = false;
+      try { receipt = await transport.sendCommand({ ...next, actor: deviceId }); } catch { failed = true; }
+      await mutate((s) => {
+        const e = s.outbox.find((x) => x.command_id === next.command_id);
+        if (e) { e.status = failed ? 'sent_unacked' : 'acked'; if (!failed) e.receipt = receipt; }
+      });
+      if (failed) break; // head-of-line, like the Shelf outbox
+      sent += 1;
     }
-    return { sent, pending: outbox.filter((e) => e.status !== 'acked').length };
+    const s = await load();
+    return { sent, pending: s.outbox.filter((e) => e.status !== 'acked').length };
   }
 
-  // Non-applied outcomes (conflicts, rejections) are surfaced, never dressed
-  // as completion.
+  // Non-applied outcomes (conflicts, rejections) are surfaced, never
+  // dressed as completion.
   async function outboxState() {
-    const outbox = await get(K.outbox, []);
+    const s = await load();
     return {
-      pending: outbox.filter((e) => e.status !== 'acked').map((e) => ({ command_id: e.command_id, type: e.type, status: e.status })),
-      outcomes: outbox.filter((e) => e.status === 'acked').map((e) => ({ command_id: e.command_id, type: e.type, outcome: e.receipt?.outcome ?? null, receipt: e.receipt })),
+      pending: s.outbox.filter((e) => e.status !== 'acked').map((e) => ({ command_id: e.command_id, type: e.type, status: e.status })),
+      outcomes: s.outbox.filter((e) => e.status === 'acked').map((e) => ({ command_id: e.command_id, type: e.type, outcome: e.receipt?.outcome ?? null, receipt: e.receipt })),
     };
   }
 
   // ------------------------------------------------------------- cache (P4)
-  async function familyCache(family) { return get(K.cache(family), { floor: 0, tip: 0, cursor: 0, entities: {}, tombstones: {} }); }
-
-  // Apply one pull page atomically: the WHOLE page is validated (pinned
-  // watermark, family, contiguity from the cursor) before anything mutates,
-  // and the cursor advances only with the page — a torn or stale page leaves
-  // the cache byte-identical and can never override newer data.
+  // Apply one pull page atomically: the WHOLE page is validated (contiguity
+  // from the cursor, inside the pinned watermark) before anything mutates,
+  // and the mutation itself is the store's single atomic write — a torn or
+  // stale page leaves the cache byte-identical.
   async function applyPullPage(family, page) {
-    const cache = await familyCache(family);
     if (page.family !== family) return { applied: false, reason: 'family_mismatch' };
     if (page.resyncRequired) {
       const snap = await transport.snapshot(family);
-      const fresh = { floor: 0, tip: snap.watermark, cursor: snap.watermark, entities: {}, tombstones: {} };
-      for (const e of snap.entities ?? []) {
-        if (e.tombstone) fresh.tombstones[e.bookId] = e.revision;
-        else fresh.entities[e.entityKey] = e.data;
+      return mutate((s) => {
+        const fresh = { floor: 0, tip: snap.watermark, cursor: snap.watermark, entities: {}, tombstones: {} };
+        for (const e of snap.entities ?? []) {
+          if (e.tombstone) fresh.tombstones[e.bookId] = e.revision;
+          else fresh.entities[e.entityKey] = { payload: e.data, revision: e.revision };
+        }
+        s.caches[family] = fresh;
+        return { applied: true, resync: true, cursor: fresh.cursor };
+      });
+    }
+    return mutate((s) => {
+      const cache = familyCache(s, family);
+      const changes = [...(page.changes ?? [])].sort((a, b) => a.seq - b.seq);
+      let expect = cache.cursor + 1;
+      for (const c of changes) {
+        if (c.seq !== expect || c.seq > page.highWatermark) return { applied: false, reason: 'non_contiguous_page' };
+        expect += 1;
       }
-      await set(K.cache(family), fresh);
-      return { applied: true, resync: true, cursor: fresh.cursor };
-    }
-    // Validate the WHOLE page before mutating: changes contiguous from the
-    // cursor, all inside the pinned watermark window.
-    const changes = [...(page.changes ?? [])].sort((a, b) => a.seq - b.seq);
-    let expect = cache.cursor + 1;
-    for (const c of changes) {
-      if (c.seq !== expect || c.seq > page.highWatermark) return { applied: false, reason: 'non_contiguous_page' };
-      expect += 1;
-    }
-    if (page.nextSeq !== (changes.length ? changes[changes.length - 1].seq : cache.cursor)) return { applied: false, reason: 'next_seq_mismatch' };
-    for (const c of changes) {
-      if (c.op === 'delete' || c.op === 'tombstone') { delete cache.entities[c.entityKey]; cache.tombstones[c.bookId] = c.revision; }
-      else cache.entities[c.entityKey] = c.payload;
-    }
-    cache.cursor = page.nextSeq;
-    cache.tip = Math.max(cache.tip, page.highWatermark);
-    await set(K.cache(family), cache);
-    return { applied: true, cursor: cache.cursor };
+      if (page.nextSeq !== (changes.length ? changes[changes.length - 1].seq : cache.cursor)) return { applied: false, reason: 'next_seq_mismatch' };
+      for (const c of changes) {
+        if (c.op === 'delete' || c.op === 'tombstone') { delete cache.entities[c.entityKey]; cache.tombstones[c.bookId] = c.revision; }
+        else cache.entities[c.entityKey] = { payload: c.payload, revision: c.revision };
+      }
+      cache.cursor = page.nextSeq;
+      cache.tip = Math.max(cache.tip, page.highWatermark);
+      return { applied: true, cursor: cache.cursor };
+    });
   }
 
   async function syncFamily(family, limit = 100) {
-    const cache = await familyCache(family);
-    const page = await transport.pullChanges(family, cache.cursor, limit);
+    const s = await load();
+    const cursor = s.caches[family]?.cursor ?? 0;
+    const page = await transport.pullChanges(family, cursor, limit);
     return applyPullPage(family, page);
   }
 
   async function cacheState(family) {
-    const c = await familyCache(family);
+    const s = await load();
+    const c = s.caches[family] ?? { floor: 0, tip: 0, cursor: 0, entities: {}, tombstones: {} };
     return { floor: c.floor, tip: c.tip, cursor: c.cursor, entities: Object.keys(c.entities).length, tombstones: Object.keys(c.tombstones).length };
   }
 
-  async function cachedEntity(family, key) { return (await familyCache(family)).entities[key] ?? null; }
+  async function cachedEntity(family, key) {
+    const s = await load();
+    return s.caches[family]?.entities[key] ?? null; // {payload, revision} | null
+  }
 
   // ------------------------------------------------- position journal (P4)
-  // Events are appended locally with a stable per-book device sequence that
-  // persists across restarts; they are pushed as events and reconciled from
-  // the coordinator's receipts — the client never folds its own resume truth.
+  // Events are appended with a stable per-book device sequence allocated in
+  // the same atomic write as the append (survives restart; cannot collide
+  // with a simultaneous instance). They are pushed as events and reconciled
+  // from the coordinator's receipts — the client never folds its own truth.
   async function notePosition(bookId, evt) {
-    const m = await meta();
-    const localSeq = (m.journalCounters[bookId] ?? 0) + 1;
-    m.journalCounters[bookId] = localSeq;
-    const event = { eventId: `${deviceId}:${localSeq}`, deviceId, localSeq, bookId, ...evt };
-    const journal = await get(K.journal(bookId), []);
-    journal.push({ ...event, receiptSeq: null, superseded: false });
-    await set(K.meta, m);
-    await set(K.journal(bookId), journal); // durable before any push attempt
-    return event;
+    return mutate((s) => {
+      const localSeq = (s.journalCounters[bookId] ?? 0) + 1;
+      s.journalCounters[bookId] = localSeq;
+      const event = { eventId: `${deviceId}:${localSeq}`, deviceId, localSeq, bookId, ...evt };
+      (s.journals[bookId] ??= []).push({ ...event, receiptSeq: null, superseded: false, rejected: null });
+      return event;
+    });
   }
 
   async function flushJournal(bookId, knownTip) {
-    const journal = await get(K.journal(bookId), []);
-    const pendingEvts = journal.filter((e) => e.receiptSeq === null && !e.rejected);
+    const s0 = await load();
+    const pendingEvts = (s0.journals[bookId] ?? []).filter((e) => e.receiptSeq === null && !e.rejected);
     if (!pendingEvts.length) return { pushed: 0 };
     const res = await transport.pushPosition(bookId, pendingEvts.map(({ receiptSeq, superseded, rejected, ...e }) => ({ ...e, baseSeq: knownTip })), knownTip);
-    const byId = new Map((res.receipts ?? []).map((r) => [r.eventId, r]));
-    const rejById = new Map((res.rejected ?? []).map((r) => [r.eventId, r]));
-    for (const e of journal) {
-      const r = byId.get(e.eventId);
-      if (r) { e.receiptSeq = r.receiptSeq; e.superseded = !!r.superseded; }
-      const rej = rejById.get(e.eventId);
-      if (rej) e.rejected = rej.reason; // terminal for this event; surfaced, never silently retried
-    }
-    await set(K.journal(bookId), journal);
+    await mutate((s) => {
+      const byId = new Map((res.receipts ?? []).map((r) => [r.eventId, r]));
+      const rejById = new Map((res.rejected ?? []).map((r) => [r.eventId, r]));
+      for (const e of s.journals[bookId] ?? []) {
+        const r = byId.get(e.eventId);
+        if (r) { e.receiptSeq = r.receiptSeq; e.superseded = !!r.superseded; }
+        const rej = rejById.get(e.eventId);
+        if (rej) e.rejected = rej.reason; // terminal for this event; surfaced, never silently retried
+      }
+    });
     return { pushed: (res.receipts ?? []).length, rejected: (res.rejected ?? []).length, tip: res.tip, gaps: res.journalGaps };
   }
 
   async function journalState(bookId) {
-    const journal = await get(K.journal(bookId), []);
+    const s = await load();
+    const journal = s.journals[bookId] ?? [];
     return { total: journal.length, unacked: journal.filter((e) => e.receiptSeq === null && !e.rejected).length, superseded: journal.filter((e) => e.superseded).map((e) => e.eventId), rejected: journal.filter((e) => e.rejected).map((e) => ({ eventId: e.eventId, reason: e.rejected })) };
   }
 
   // --------------------------------------- bytes: metadata is not the audio
-  async function confirmBytes(cacheKey) { const b = await get(K.bytes, {}); b[cacheKey] = true; await set(K.bytes, b); }
-  async function bytesConfirmed(cacheKey) { return !!(await get(K.bytes, {}))[cacheKey]; }
-
-  // When online, ask the transport to verify a binding's bytes and record the
-  // confirmation. Offline or unverified → no confirmation is recorded, and
-  // chapterDisplay below says so.
-  async function verifyBindingBytes(binding) {
-    if (await bytesConfirmed(binding.cacheKey)) return true;
-    const ok = await transport.byteCheck(binding.cacheKey);
-    if (ok) await confirmBytes(binding.cacheKey);
+  // Confirmations are version-aware: recorded against the binding's
+  // revision. A binding update (new revision or key) or a missing-bytes
+  // report invalidates them (P5 review fix 2).
+  async function verifyBindingBytes(bookId, occurrenceId) {
+    const s = await load();
+    const rec = s.caches.bindings?.entities[`${bookId}:${occurrenceId}`];
+    if (!rec?.payload?.cacheKey) return false;
+    const { cacheKey } = rec.payload;
+    if (s.bytes[cacheKey]?.bindingRevision === rec.revision) return true;
+    const ok = await transport.byteCheck(cacheKey);
+    if (ok) await mutate((s2) => { s2.bytes[cacheKey] = { bindingRevision: rec.revision }; });
     return ok;
   }
 
+  async function bytesConfirmedFor(rec) {
+    if (!rec?.payload?.cacheKey) return false;
+    const s = await load();
+    return s.bytes[rec.payload.cacheKey]?.bindingRevision === rec.revision;
+  }
+
+  // Playback/diagnostics: the audio was NOT there. Invalidate immediately —
+  // the chapter must stop claiming certainty until bytes are re-verified.
+  // Playback itself writes nothing else; this is a diagnostics report about
+  // the client's own confirmations, not a record edit (inventory D).
+  async function reportBytesMissing(cacheKey) {
+    await mutate((s) => { delete s.bytes[cacheKey]; });
+  }
+
   // Chapter display state from cached read models ONLY (inventory A/D).
-  // 'Complete' requires: a binding for every occurrence AND confirmed bytes
-  // for every binding. Bindings without confirmed bytes → 'Uncertain',
-  // never a false completion (Rowan check 1).
+  // 'Complete' requires: a binding for every occurrence AND byte-confirmed
+  // audio for every binding AT ITS CURRENT REVISION. Anything less is
+  // Uncertain/Partial/Blocked — never a false completion (Rowan check 1).
   async function chapterDisplay(bookId, chapterId) {
-    const content = await cachedEntity('content', bookId);
+    const s = await load();
+    const content = s.caches.content?.entities[bookId]?.payload;
     if (!content) return { label: 'Unknown', certain: false, reason: 'not_cached' };
     const chapter = (content.chapters ?? []).find((c) => c.id === chapterId);
     if (!chapter) return { label: 'Unknown', certain: false, reason: 'no_chapter' };
-    const bindings = await familyCache('bindings');
+    const bindings = s.caches.bindings ?? { entities: {} };
     let ready = 0, unverified = 0, blocked = 0, missing = 0;
     for (const seg of chapter.segments) {
-      const b = bindings.entities[`${bookId}:${seg.occurrenceId}`];
-      if (!b) { missing += 1; continue; }
-      if (b.outcome === 'policy_block') { blocked += 1; continue; }
-      if (await bytesConfirmed(b.cacheKey)) ready += 1; else unverified += 1;
+      const rec = bindings.entities[`${bookId}:${seg.occurrenceId}`];
+      if (!rec) { missing += 1; continue; }
+      if (rec.payload?.outcome === 'policy_block') { blocked += 1; continue; }
+      if (rec.payload?.cacheKey && s.bytes[rec.payload.cacheKey]?.bindingRevision === rec.revision) ready += 1; else unverified += 1;
     }
     const total = chapter.segments.length;
     if (blocked > 0) return { label: 'Blocked', certain: true, counts: { ready, unverified, blocked, missing, total } };
@@ -224,29 +269,28 @@ export function createClientStore({ deviceId, storage, transport }) {
   async function refreshMoney() {
     try {
       const view = await transport.quotaView();
-      const money = { view, asOfLedgerSeq: view.ledgerSeq, asOfSettingsRevision: view.settingsRevision, stale: false };
-      await set(K.money, money);
-      return money;
+      return mutate((s) => {
+        s.money = { view, asOfLedgerSeq: view.ledgerSeq, asOfSettingsRevision: view.settingsRevision, stale: false };
+        return s.money;
+      });
     } catch {
-      const money = await get(K.money, { view: null, asOfLedgerSeq: null, asOfSettingsRevision: null, stale: true });
-      money.stale = true;
-      await set(K.money, money);
-      return money;
+      return mutate((s) => { s.money.stale = true; return s.money; });
     }
   }
-  async function moneyDisplay() { return get(K.money, { view: null, asOfLedgerSeq: null, asOfSettingsRevision: null, stale: true }); }
+  async function moneyDisplay() { return (await load()).money; }
 
   // -------------------------------------------------------- find (F10)
   // Standalone search over the Content cache. Pure read of read models; no
   // dependency on any lab/generation surface — verified with Prosody Lab
   // absent (its code simply is not part of this layer).
   async function findText(query, { bookId = null } = {}) {
-    const content = await familyCache('content');
+    const s = await load();
     const q = String(query).toLowerCase();
     const hits = [];
-    for (const [key, book] of Object.entries(content.entities)) {
+    for (const [key, rec] of Object.entries(s.caches.content?.entities ?? {})) {
+      const book = rec.payload;
       if (bookId && key !== bookId) continue;
-      for (const ch of book.chapters ?? []) {
+      for (const ch of book?.chapters ?? []) {
         for (const seg of ch.segments ?? []) {
           const idx = (seg.text ?? '').toLowerCase().indexOf(q);
           if (idx >= 0) hits.push({ bookId: key, chapterId: ch.id, occurrenceId: seg.occurrenceId, snippet: seg.text.slice(Math.max(0, idx - 20), idx + q.length + 20) });
@@ -259,8 +303,7 @@ export function createClientStore({ deviceId, storage, transport }) {
   // ------------------------------------------------------- playback (all providers)
   // Playback of existing audio is provider-agnostic and preserved for every
   // former provider (azure/fish/speechify/elevenlabs bindings resolve
-  // identically). Playback never writes: a missing object is reported via
-  // diagnostics, not edited into a record (inventory D).
+  // identically). Playback never writes records.
   function resolvePlayback(binding) {
     if (!binding || !binding.cacheKey) return { ok: false, reason: 'no_binding' };
     return { ok: true, cacheKey: binding.cacheKey, provider: binding.provider ?? null };
@@ -271,7 +314,7 @@ export function createClientStore({ deviceId, storage, transport }) {
     intent, flushOutbox, outboxState,
     syncFamily, applyPullPage, cacheState, cachedEntity,
     notePosition, flushJournal, journalState,
-    confirmBytes, bytesConfirmed, verifyBindingBytes, chapterDisplay,
+    verifyBindingBytes, bytesConfirmedFor, reportBytesMissing, chapterDisplay,
     refreshMoney, moneyDisplay,
     findText, resolvePlayback,
   };

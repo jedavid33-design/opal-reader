@@ -74,7 +74,7 @@ test("outbox: intent + idempotency key are durable BEFORE any dispatch", async (
   const w = makeWorld();
   const s = w.store();
   const id = await s.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 50 } });
-  const raw = await w.storage.get("cs:outbox");
+  const raw = (await w.storage.get("cs:state:v1")).outbox;
   assert.equal(raw.length, 1);
   assert.equal(raw[0].command_id, id);
   assert.equal(raw[0].status, "queued");
@@ -173,10 +173,8 @@ test("chapter display: bindings without confirmed bytes read Uncertain — never
   assert.equal(d.certain, false);
   assert.equal(d.reason, "audio_unverified");
   w.byteWorld.add("k1"); w.byteWorld.add("k2"); // bytes become reachable
-  const b1 = await s.cachedEntity("bindings", "bk:o1");
-  const b2 = await s.cachedEntity("bindings", "bk:o2");
-  assert.equal(await s.verifyBindingBytes(b1), true);
-  assert.equal(await s.verifyBindingBytes(b2), true);
+  assert.equal(await s.verifyBindingBytes("bk", "o1"), true);
+  assert.equal(await s.verifyBindingBytes("bk", "o2"), true);
   d = await s.chapterDisplay("bk", "ch1");
   assert.equal(d.label, "Complete");
   assert.equal(d.certain, true);
@@ -212,6 +210,68 @@ test("journal: offline events keep stable device sequence across a restart and r
   assert.equal((await s2.journalState("bk")).unacked, 0);
   assert.equal(w.coord.positionView("bk").canonical.occurrenceId, "o2");
   assert.equal(w.coord.positionView("bk").asOfReceiptSeq, 3);
+});
+
+// ---------- review fixes: atomic allocation + version-aware bytes ----------
+
+test("atomicity: a crash inside the persistence write leaves NO partial state — no burned id, no orphan intent", async () => {
+  const w = makeWorld();
+  let armed = true;
+  const flaky = {
+    get: w.storage.get, del: w.storage.del,
+    set: async (k, v) => { if (armed) { armed = false; throw new Error("crash during write"); } return w.storage.set(k, v); },
+  };
+  const s = createClientStore({ deviceId: "devA", storage: flaky, transport: w.transport });
+  await assert.rejects(() => s.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 33 } }), /crash during write/);
+  const st = await s.outboxState();
+  assert.deepEqual(st, { pending: [], outcomes: [] }); // nothing half-persisted
+  const id = await s.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 33 } });
+  assert.equal(id, "devA-cmd-1"); // the id was not burned by the crashed attempt
+  await s.flushOutbox();
+  assert.equal(w.coord._all("SELECT * FROM commands WHERE command_id = ?", id).length, 1);
+  assert.equal(w.coord.quotaView().monthlyCap, 33);
+});
+
+test("atomicity: simultaneous store instances over one storage allocate disjoint command + event ids", async () => {
+  const w = makeWorld();
+  await seedBook(w.coord);
+  const a = w.store(), b = w.store();
+  const ids = await Promise.all([
+    a.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 40 } }),
+    b.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 41 } }),
+    a.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 42 } }),
+    b.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 43 } }),
+  ]);
+  assert.equal(new Set(ids).size, 4); // no collisions despite the race
+  const evts = await Promise.all([
+    a.notePosition("bk", { kind: "seek", occurrenceId: "o1", offsetSec: 1 }),
+    b.notePosition("bk", { kind: "seek", occurrenceId: "o1", offsetSec: 2 }),
+  ]);
+  assert.notEqual(evts[0].eventId, evts[1].eventId);
+  assert.deepEqual(evts.map((e) => e.localSeq).sort(), [1, 2]);
+});
+
+test("bytes: a binding revision change invalidates prior confirmations; a missing-bytes report does too", async () => {
+  const w = makeWorld();
+  await seedBook(w.coord);
+  const s = w.store();
+  await s.syncFamily("content");
+  await s.syncFamily("bindings");
+  w.byteWorld.add("k1"); w.byteWorld.add("k2");
+  await s.verifyBindingBytes("bk", "o1");
+  await s.verifyBindingBytes("bk", "o2");
+  assert.equal((await s.chapterDisplay("bk", "ch1")).label, "Complete");
+  // The binding for o1 is republished at a new revision (same cache key):
+  const seed = new SyncClient(w.coord, "seed9");
+  await seed.push([{ family: "bindings", entityKey: "bk:o1", bookId: "bk", baseRevision: 1, op: "upsert", payload: { cacheKey: "k1", outcome: "ready" } }]);
+  await s.syncFamily("bindings");
+  const d = await s.chapterDisplay("bk", "ch1");
+  assert.equal(d.label, "Uncertain"); // the rev-1 confirmation does not carry to rev 2
+  assert.equal(d.reason, "audio_unverified");
+  await s.verifyBindingBytes("bk", "o1"); // re-verify at the new revision
+  assert.equal((await s.chapterDisplay("bk", "ch1")).label, "Complete");
+  await s.reportBytesMissing("k1"); // playback found the audio gone
+  assert.equal((await s.chapterDisplay("bk", "ch1")).label, "Uncertain");
 });
 
 // ---------- money: revisioned read with as-of/stale (F8) ----------
