@@ -240,15 +240,17 @@ export function createClientStore({ deviceId, storage, transport }) {
     if (s.bytes[cacheKey]?.bindingRevision === rec.revision) return true;
     const ok = await transport.byteCheck(cacheKey);
     if (!ok) return false;
-    // Race 2 (P5 follow-up): the binding may have changed DURING the async
-    // byte check. Re-read it; record the confirmation only if the revision
-    // and key are exactly what was checked — otherwise discard and let a
-    // later verify run against the new binding.
-    const s2 = await load();
-    const now = s2.caches.bindings?.entities[`${bookId}:${occurrenceId}`];
-    if (!now || now.revision !== rec.revision || now.payload?.cacheKey !== cacheKey) return false;
-    await mutate((s3) => { s3.bytes[cacheKey] = { bindingRevision: rec.revision }; });
-    return true;
+    // Race 2 (P5 follow-up, tightened in the Stage-1 review): the binding
+    // may change DURING the async byte check — or between the recheck and
+    // the record. So the recheck happens INSIDE the same serialized
+    // mutation that records the confirmation: revision + key are compared
+    // against the live cache at the moment of recording, atomically.
+    return mutate((s3) => {
+      const now = s3.caches.bindings?.entities[`${bookId}:${occurrenceId}`];
+      if (!now || now.revision !== rec.revision || now.payload?.cacheKey !== cacheKey) return false;
+      s3.bytes[cacheKey] = { bindingRevision: rec.revision };
+      return true;
+    });
   }
 
   async function bytesConfirmedFor(rec) {
