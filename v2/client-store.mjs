@@ -139,6 +139,19 @@ export function createClientStore({ deviceId, storage, transport }) {
       }
       const povLists = [inlineBook?.povs, savedBook?.povs, payload?.povs];
       const defaultProviders = [inlineBook?.defaultVoice?.provider, savedBook?.defaultVoice?.provider, payload?.defaultVoice?.provider];
+      // Sufficiency means VOICES, not shapes: the resolved data must
+      // contain at least one actual voice (a POV voice or a default
+      // voice) — there is nothing to synthesize with otherwise. An
+      // explicitly empty POV list is missing data in a data costume and
+      // fails closed like any other absence.
+      let voiceCount = 0;
+      for (const list of povLists) for (const pov of Array.isArray(list) ? list : []) if (pov?.voice?.provider) voiceCount += 1;
+      for (const dp of defaultProviders) if (dp) voiceCount += 1;
+      if (voiceCount === 0) {
+        const err = new Error('book_voice_data_unavailable: no voices in the resolved book data');
+        err.code = 'book_voice_data_unavailable';
+        throw err;
+      }
       for (const list of povLists) {
         for (const pov of Array.isArray(list) ? list : []) {
           const provider = pov?.voice?.provider;

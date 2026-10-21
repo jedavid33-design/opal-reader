@@ -197,8 +197,11 @@ test("stage4 review gate 4: inline vs saved representations are BOTH checked; a 
   // No bookId, no book, no voice data: nothing verifiable — may not enqueue:
   await assert.rejects(() => a.store.intent("SubmitJob", { provider: "gemini" }), /book_voice_data_unavailable/);
   await assert.rejects(() => a.store.intent("RepairJob", {}), /book_voice_data_unavailable/);
-  // An explicit (even empty) voice list IS verifiable data and enqueues:
-  const id = await a.store.intent("SubmitJob", { povs: [] });
+  // An explicitly EMPTY voice list is NOT sufficient (Rowan's follow-up):
+  // it verifies nothing — there is no voice to synthesize with:
+  await assert.rejects(() => a.store.intent("SubmitJob", { povs: [] }), /book_voice_data_unavailable/);
+  // But a book whose ONLY voice is its default voice IS sufficient:
+  const id = await a.store.intent("SubmitJob", { book: { povs: [], defaultVoice: { provider: "openai", voice_id: "alloy" } } });
   assert.ok(id);
   const st = await a.store.outboxState();
   assert.equal(st.pending.length, 1);
