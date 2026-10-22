@@ -47,6 +47,23 @@ credentials rule. This changes one Part 2 assumption (see Playbook
 deltas): the smoke is exercised THROUGH the token check, not beneath
 it.
 
+**B7 revision amendment (Rowan 6345016639):** the sentence above
+("production routing names `account`") described a capability the
+staging script must not have. As revised, the fetch handler fails
+closed on the instance selector: while the script is scoped
+`staging-smoke`, `X-OpalReader-Instance` must be explicitly
+`smoke-p8`; a missing header, `account`, or any other value is denied
+(403 `staging_instance_required`) BEFORE the DO namespace is touched,
+so no probe or accidental write can reach the future production
+(`account`) DO from the staging script. There is no `account` default
+and no `account` acceptance in staging scope. **Production-instance
+routing is a deliberate, separately authorized routing change
+belonging to migration/cutover — not a config flip or header value
+available to the staging script.** (The queue handler's instance name
+is likewise part of that future routing surface; in the staging spec
+it stays unreachable — no consumer is registered and the halt refuses
+before any DO contact.)
+
 ## D3. Cutover migration execution locus
 
 **Decision:** the production flip runs the migration as a LOCAL runner
@@ -118,6 +135,14 @@ pre-decided here.
 worse risk than the residue, and the instance's isolation is
 structural (separate DO instance), not conventional.
 
+**B7 revision amendment (Rowan 6345016639):** the smoke instance's R2
+footprint is namespaced as well. The deploy spec sets the plain-text
+binding `R2_KEY_PREFIX=smoke-p8/`, and the DO host passes it to the
+audio cache, so every staging read/write lands under
+`smoke-p8/audio/<cacheKey>.<ext>` — non-overlapping with production
+audio keys in the shared bucket. Production key shapes are unchanged;
+the future production configuration sets no prefix.
+
 ## D7. Health/build identity contract
 
 **Decision:** `GET /health` returns
@@ -187,6 +212,27 @@ if Rowan wants the seam closed harder before B7 sign-off, the
 candidate fix is an executor-level "flush-before-report" callback,
 which changes the P3 seam and needs its own review round.
 
+**B7 revision state (Rowan 6345016639):** two parts of this seam were
+closed in the revision round; the core design question was ruled on,
+not resolved:
+
+- *Flush write safety (fixed):* `flush()` no longer retries a failed
+  conditional PUT unconditionally. Every PUT is conditional; an
+  indeterminate PUT error fails closed (`R2FlushError`
+  `r2_flush_indeterminate`); a winning competing object is re-read and
+  adopted only when its bytes verify against the intended digest
+  (`r2_winner_digest_mismatch` / `r2_winner_unverifiable` otherwise);
+  and the winner-adoption ordering bug (hydrate-before-evict, which
+  made adoption a no-op) is fixed and regression-covered.
+- *Flush-before-commit (NOT done — production-activation blocker):*
+  Rowan ruled the write-behind design **not accepted as production
+  durability**: a one-time smoke cannot prove crash consistency. The
+  design must be revised to flush and verify durable bytes before any
+  binding/report commit, with failure-injection tests, before
+  generation or any real-audio binding after cutover. The snapshot
+  may remain only in zero-generation synthetic staging. See
+  "Production-activation blockers" below.
+
 ## Integration fixes the assembled-artifact tests forced
 
 Two defects were invisible to the module-level suite and only appeared
@@ -243,6 +289,44 @@ regression tests:
    observability re-apply via the `/settings` multipart PATCH, D4
    smoke sequence, D5 root-hash verification, D6 device acceptance,
    D7 close-out) is unchanged.
+
+## Production-activation blockers (B7 revision, Rowan 6345016639)
+
+Rowan's B7 review ruled on the three flagged questions. None of the
+three is cleared for production; two are explicit blockers that the
+Part 2/cutover checklist must carry as gates, and the third is a
+staging-only acceptance with a named future obligation. **Generation
+and real-audio binding after cutover stay blocked on blockers 1 and 2
+regardless of any staging success.**
+
+1. **D10 flush-before-commit redesign — BLOCKER.** The write-behind
+   snapshot (D10) is not accepted as production durability: a
+   coordinator report can commit a binding before the corresponding
+   R2 bytes are durable, and no smoke run can prove crash consistency.
+   Before generation or any real-audio binding is enabled after
+   cutover, the design must be revised so durable bytes are flushed
+   AND verified before any binding/report commit, with tests injecting
+   R2 PUT failure and crash/retry boundaries. The current write-behind
+   may exist only in zero-generation synthetic staging. (The B7
+   revision's fail-closed flush — no unconditional retry, verified
+   winner adoption — is a write-safety fix inside the staging design,
+   NOT this redesign.)
+2. **Migrated-text plane — BLOCKER.** Deferred specifically to
+   cutover, and generation stays blocked until it is resolved: the
+   cutover plan must name and verify the actual source of every
+   migrated segment's text, with stable IDs/POV mapping and a
+   no-silent-skips proof. Text is never manufactured, never
+   regenerated by guessing, and a `no_content` skip is never treated
+   as a completed chapter.
+3. **Never-accepted Batch evidence — staging-only acceptance, future
+   obligation.** Rowan ACCEPTED the fail-closed posture (route not
+   exposed over HTTP; `verifyNeverAcceptedEvidence` throws
+   `never_accepted_evidence_unverifiable`) for dark staging ONLY. It
+   is an intentionally unavailable capability, not a fulfilled
+   positive P3 evidence proof; it must remain non-callable and
+   non-bypassable, and it must be addressed explicitly before Batch
+   rescue is enabled or any flow depends on a "never accepted"
+   assertion.
 
 ## Flagged for Rowan (genuinely undecidable from the sources)
 

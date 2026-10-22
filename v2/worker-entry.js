@@ -14,6 +14,17 @@
 // script at Part 2 time — never copied from the v1 script). A missing
 // token configuration denies access; it never opens it.
 //
+// Instance routing (B7 revision, Rowan 6345016639): while this script
+// is scoped staging-smoke, the ONLY routable coordinator instance is
+// the synthetic smoke instance "smoke-p8", and it must be named
+// explicitly. There is no "account" default and "account" is not
+// accepted: no request reaching this script can instantiate — let
+// alone write to — the future production DO. Production-instance
+// routing is a deliberate, separately authorized routing change that
+// belongs to migration/cutover (see decisions doc, D2 amendment); it
+// is not a header value or config flip available to the staging
+// script.
+//
 // Generation is fail-closed: while GENERATION_HALT is set (the staging
 // value), the queue handler refuses with a named error before any
 // coordinator or provider contact, the coordinator is constructed
@@ -29,6 +40,7 @@ import {
 import { BUILD_VERSION, BUILD_COMMIT } from "./host/build-identity.mjs";
 
 export const STAGING_SCOPE = "staging-smoke";
+export const SMOKE_INSTANCE = "smoke-p8";
 const INTERNAL_HEADER = "x-opalreader-internal";
 const TOKEN_ERROR_BODY = { error: "The personal access token is missing or incorrect." };
 
@@ -73,7 +85,14 @@ export class OpalReaderCoordinator {
   }
 
   async _cache() {
-    const cache = createR2AudioCache(this.env.OPALREADER_STORAGE);
+    // B7 revision: the staging deploy spec sets R2_KEY_PREFIX to
+    // "smoke-p8/", a non-overlapping namespace in the shared bucket,
+    // so no staging write can land on a production audio key. The
+    // future production configuration sets no prefix and keeps the
+    // production key shape.
+    const cache = createR2AudioCache(this.env.OPALREADER_STORAGE, {
+      keyPrefix: this.env.R2_KEY_PREFIX || "",
+    });
     await cache.hydrateIndex(this.state.storage.sql);
     return cache;
   }
@@ -166,9 +185,14 @@ async function fetchHandler(request, env) {
     return json(404, { error: "route_not_found" }, cors);
   const denied = stagingGate(request, env);
   if (denied) return denied;
-  const instance = request.headers.get("x-opalreader-instance") || "account";
-  if (!["account", "smoke-p8"].includes(instance))
-    return json(400, { error: "invalid_instance" }, cors);
+  // B7 revision (6345016639): staging fails closed to the smoke
+  // instance. The header must be explicitly "smoke-p8"; a missing
+  // header, "account", or any other value is denied BEFORE the DO
+  // namespace is touched, so no probe can instantiate the future
+  // production instance from this script.
+  const instance = request.headers.get("x-opalreader-instance");
+  if (instance !== SMOKE_INSTANCE)
+    return json(403, { error: "staging_instance_required" }, cors);
   if (!env.COORDINATOR)
     return json(503, { error: "coordinator_not_bound" }, cors);
   const stub = env.COORDINATOR.get(env.COORDINATOR.idFromName(instance));

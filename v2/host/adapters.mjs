@@ -60,6 +60,24 @@ export class UnsupportedProviderError extends Error {
   }
 }
 
+// Fail-closed R2 flush failures (B7 revision, Rowan 6345016639). A
+// flush either makes the intended bytes durable, adopts a verified
+// identical winner, or throws one of these — it never reports success
+// for bytes it could not verify, and it never overwrites. Codes:
+//   r2_flush_indeterminate   — the conditional PUT errored in a way
+//                              that leaves the outcome unknown.
+//   r2_winner_digest_mismatch — another writer's object exists at the
+//                              key but its bytes hash differently.
+//   r2_winner_unverifiable   — a winner was indicated but its bytes
+//                              could not be re-read for verification.
+export class R2FlushError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "R2FlushError";
+    this.code = code;
+  }
+}
+
 // The staging configuration is fail-closed: synthesis dispatch is
 // permitted ONLY when the deployment explicitly enables it. This is a
 // layer-3 check; the worker entry also refuses queue work and registers
@@ -393,13 +411,29 @@ export function createProviderAdapters(env = {}, fetchFn = globalThis.fetch) {
 // host hydrates every coordinator-indexed key (plus the work-source
 // primed fingerprint key) into memory; the executor's cache writes land
 // in the snapshot and are flushed to R2 AFTER the synchronous phase.
-// R2 PUTs use a create-if-absent guard where the binding supports it.
+//
+// Flush write safety (B7 revision, Rowan 6345016639): every PUT is
+// conditional (create-if-absent). A failed conditional PUT is NEVER
+// retried unconditionally — the pre-fix fallback could overwrite
+// another writer's object on a race and disguised network errors as
+// success. Instead flush fails closed: indeterminate errors throw
+// R2FlushError, and when another writer won the key, the winner's
+// bytes are re-read and adopted ONLY if their digest matches the
+// digest this cache intended to make durable.
+//
+// Key namespace: production keys are `audio/<cacheKey>.<ext>`. A host
+// may pass `keyPrefix` (the staging deploy spec sets
+// R2_KEY_PREFIX="smoke-p8/") so every staging read/write lands under a
+// non-overlapping prefix in the shared bucket; the production key
+// shape itself is unchanged.
 //
 // Residual (stated, not smoothed): this is a write-behind snapshot, not
-// a truly synchronous conditional write. The real-DO/R2 smoke in Part 2
-// must prove the seam, and generation stays halted until then.
+// a truly synchronous conditional write. Rowan's B7 ruling makes the
+// flush-before-commit redesign an explicit production-activation
+// blocker (decisions doc): generation and real-audio binding stay
+// blocked on it; the snapshot may exist only in zero-generation
+// synthetic staging until then.
 const AUDIO_EXTENSIONS = ["mp3", "wav"];
-const objectKeyFor = (cacheKey, format) => `audio/${cacheKey}.${format}`;
 
 function bytesOf(audio) {
   if (audio instanceof Uint8Array) return audio;
@@ -408,7 +442,8 @@ function bytesOf(audio) {
   return new TextEncoder().encode(String(audio ?? ""));
 }
 
-export function createR2AudioCache(bucket) {
+export function createR2AudioCache(bucket, { keyPrefix = "" } = {}) {
+  const objectKeyFor = (cacheKey, format) => `${keyPrefix}audio/${cacheKey}.${format}`;
   const snapshot = new Map(); // cacheKey -> { audio, format, durationSec, identity, sha256, recordedSha256, pending }
   const pending = new Set();
 
@@ -467,6 +502,39 @@ export function createR2AudioCache(bucket) {
 
   function get(key) { return snapshot.get(key) ?? null; }
 
+  // Another writer landed an object at objectKey first. NEVER
+  // overwrite it: re-read the winner's bytes and adopt them as this
+  // key's durable entry ONLY if their digest equals the digest this
+  // cache intended to make durable. Any other outcome fails closed.
+  //
+  // Ordering (B7 fix): the pending snapshot entry is evicted BEFORE
+  // the winner's entry is set. The pre-fix code called hydrateKey()
+  // while the pending entry was still in the snapshot — hydrateKey
+  // returns the cached entry on sight, so it "hydrated" the pending
+  // bytes, and the subsequent delete discarded the key entirely: the
+  // winner was never adopted.
+  async function adoptWinner(key, record, objectKey) {
+    let object = null;
+    try { object = await bucket.get(objectKey); } catch { object = null; }
+    if (!object)
+      throw new R2FlushError("r2_winner_unverifiable",
+        `flush: a competing object exists at ${objectKey} but its bytes could not be re-read for digest verification; failing closed without overwriting`);
+    const bytes = new Uint8Array(await object.arrayBuffer());
+    const digest = sha256Hex(bytes);
+    if (digest !== record.sha256)
+      throw new R2FlushError("r2_winner_digest_mismatch",
+        `flush: competing object at ${objectKey} has sha256 ${digest}, expected ${record.sha256}; failing closed without overwriting`);
+    const meta = object.customMetadata || {};
+    snapshot.delete(key);
+    setEntry(key, {
+      audio: bytes, format: record.format,
+      durationSec: meta.duration_seconds ? Number(meta.duration_seconds) : record.durationSec,
+      identity: meta.identity ?? record.identity,
+      sha256: digest, recordedSha256: meta.sha256 ?? digest,
+      pending: false,
+    });
+  }
+
   async function flush() {
     if (!bucket) return { flushed: 0, bucket: false };
     let flushed = 0;
@@ -476,39 +544,38 @@ export function createR2AudioCache(bucket) {
       const objectKey = objectKeyFor(key, record.format);
       const head = await bucket.head(objectKey);
       if (head) {
-        // Someone (or a redelivery) wrote first: adopt the winner,
-        // exactly as a create-if-absent semantic would.
-        await hydrateKey(key);
-        snapshot.delete(key);
+        // Someone (or a redelivery) wrote first: adopt the verified
+        // winner, exactly as a create-if-absent semantic would.
+        await adoptWinner(key, record, objectKey);
         pending.delete(key);
+        flushed += 1;
         continue;
       }
+      let created;
       try {
-        const created = await bucket.put(objectKey, record.audio, {
+        created = await bucket.put(objectKey, record.audio, {
           httpMetadata: { contentType: record.format === "wav" ? "audio/wav" : "audio/mpeg" },
           customMetadata: {
             sha256: record.sha256, identity: record.identity,
             ...(record.durationSec != null ? { duration_seconds: String(record.durationSec) } : {}),
           },
-          // Atomic conditional write where the binding honors it.
+          // Atomic conditional write: create only if absent.
           onlyIf: { etagDoesNotMatch: "*" },
         });
-        if (created === null || created === undefined) {
-          await hydrateKey(key);
-          snapshot.delete(key);
-          pending.delete(key);
-          continue;
-        }
-      } catch {
-        // A binding without conditional-write support: fall back to the
-        // head-guard result above (the write is idempotent by content).
-        await bucket.put(objectKey, record.audio, {
-          httpMetadata: { contentType: record.format === "wav" ? "audio/wav" : "audio/mpeg" },
-          customMetadata: {
-            sha256: record.sha256, identity: record.identity,
-            ...(record.durationSec != null ? { duration_seconds: String(record.durationSec) } : {}),
-          },
-        });
+      } catch (e) {
+        // Indeterminate: the write may or may not have landed. Fail
+        // closed — NEVER retry unconditionally. (The pre-fix fallback
+        // re-PUT without the condition: it could overwrite another
+        // writer's object and disguised network errors as success.)
+        throw new R2FlushError("r2_flush_indeterminate",
+          `flush: conditional PUT for ${objectKey} failed indeterminately (${(e && e.message) || e}); refusing any unconditional retry`);
+      }
+      if (created === null || created === undefined) {
+        // Precondition unmet: another writer won between head and PUT.
+        await adoptWinner(key, record, objectKey);
+        pending.delete(key);
+        flushed += 1;
+        continue;
       }
       record.pending = false;
       pending.delete(key);
