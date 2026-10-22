@@ -8,15 +8,29 @@
 // module (and, for differential checks, the REAL shipped module) against
 // the shared mock stores, and prove:
 //   (1) every mutating census route returns 423 with zero writes;
+//  (1b) auth order (Rowan 6330658336): the shipped authentication runs
+//       BEFORE the freeze refusal — unauthenticated requests get the
+//       shipped 401, byte-identical to the shipped worker; only an
+//       authenticated request meets the 423;
 //   (2) the D1 job GETs serve their stored reads with zero writes, zero
 //       queue sends, zero waitUntil registrations, zero blocked-write
 //       attempts (the reconciliations are skipped, not merely blocked);
-//   (3) the D2 export GET returns 423 and does NOT consume its token;
+//   (3) the D2 export GET: shipped failure responses keep precedence
+//       (malformed token 400, unknown token 410 — auth first); a valid
+//       link returns 423 and does NOT consume its token, and the same
+//       link downloads normally once the freeze lifts;
 //   (4) D3: a chapter-composite cache hit serves with zero writes, a
 //       miss returns 423 and creates nothing, per-segment playback is
 //       untouched;
-//   (5) the queue consumer under freeze acks without processing;
-//   (6) the freeze engaging mid-job blocks every subsequent write;
+//   (5) the queue consumer under freeze RETRIES without processing
+//       (preservation redelivery, Rowan 6330658336) — never acks;
+//  (5b) a job delivered while frozen resumes and completes after the
+//       freeze lifts, its segment generated exactly once;
+//   (6) the freeze engaging mid-job blocks every subsequent write, and
+//       the in-flight message is retried, not acked;
+//  (6b) mid-job resumption: after the lift, the interrupted job
+//       completes exactly once in effect — no provider call repeats
+//       for a completed segment, no output is duplicated;
 //   (7) the mirror family is inert under freeze (catch-up never
 //       scheduled; its writer is gated at its entry — source-pinned);
 //   (8) recordTtsUsage is unreachable under freeze from both the speech
@@ -160,8 +174,9 @@ test("(1) every mutating census route returns 423 and writes nothing", async () 
       ["POST", "/api/providers/fish/speech", seg],
       ["POST", "/api/providers/openai/speech", seg],
       ["POST", "/api/providers/gemini/speech", seg],
-      // D2 rides along here; it gets its own token-consumption test too.
-      ["GET", `/api/export/audio/${"a".repeat(32)}`],
+      // The D2 export GET is deliberately NOT in this sweep: under
+      // auth-first its refusal lives inside its handler (test (3)),
+      // and an unknown token now correctly gets the shipped 410.
     ];
     for (const [method, path, body] of routes) {
       const res = await h.request(path, { method, body });
@@ -180,6 +195,91 @@ test("(1) every mutating census route returns 423 and writes nothing", async () 
       [...h.r2.store.keys()].filter((k) => k.startsWith("usage/")).length,
       0,
       "no usage ledger objects created",
+    );
+  } finally {
+    h.restore();
+  }
+});
+
+// ---- (1b) auth order: shipped authentication precedes the 423 ---------------
+
+test("(1b) unauthenticated requests get the shipped 401 — the refusal never precedes auth", async () => {
+  assert.equal(__freezeControl.engaged(), true, "variant boots frozen");
+  __freezeControl.resetBlockedWrites();
+  const seg = makeSegment("freeze-auth");
+  const jobId = sha256Hex("freeze-auth-job");
+  const routes = [
+    ["PUT", `/api/sync/book/${BOOK}`, { id: BOOK, title: "Changed" }],
+    ["POST", "/api/generation/jobs", {
+      job_id: jobId,
+      book_id: BOOK,
+      chapter_index: 0,
+      generation_release: RELEASE,
+      client_version: CLIENT_VERSION,
+      segments: [seg],
+    }],
+    ["POST", "/api/providers/gemini/speech", seg],
+    ["POST", "/api/export/audio-url", { key: seg.cache_key }],
+    ["DELETE", "/api/audio/purge", { book_id: BOOK }],
+  ];
+  const raw = (worker, h, path, { method, body, token } = {}) =>
+    worker.fetch(
+      new Request(`https://reader.test${path}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token !== undefined ? { "X-OpalReader-Token": token } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      }),
+      h.env,
+      h.ctx,
+    );
+
+  // Differential: for every refused-route representative, the frozen
+  // variant's unauthenticated response is the SHIPPED 401 — same
+  // status, same body bytes — with and without a (wrong) token header.
+  // (Shipped responses are collected first: harnesses patch globals
+  // and cannot be alive at the same time.)
+  const expected401 = new Map();
+  const hs = makeHarness(shipped, { clockStart: T0 });
+  try {
+    for (const [method, path, body] of routes) {
+      for (const token of [undefined, "wrong-token"]) {
+        const res = await raw(shipped, hs, path, { method, body, token });
+        assert.equal(res.status, 401, "shipped sanity: the same request 401s unfrozen");
+        expected401.set(`${method} ${path} ${token}`, await bodyBytes(res));
+      }
+    }
+  } finally {
+    hs.restore();
+  }
+
+  const h = makeHarness(variant, { clockStart: T0 });
+  try {
+    await h.kv.put(`book:${BOOK}`, JSON.stringify({ id: BOOK, title: "T" }));
+    const snap = storeSnapshot(h);
+    const counts = counters(h);
+    for (const [method, path, body] of routes) {
+      for (const token of [undefined, "wrong-token"]) {
+        const res = await raw(variant, h, path, { method, body, token });
+        assert.equal(res.status, 401, `${method} ${path} (token: ${token}) must 401, not 423`);
+        assert.equal(
+          await bodyBytes(res),
+          expected401.get(`${method} ${path} ${token}`),
+          `${method} ${path}: 401 body is byte-identical to shipped`,
+        );
+      }
+      // The authenticated counterpart meets the refusal: auth first,
+      // then — and only then — the 423.
+      const authed = await h.request(path, { method, body });
+      assert.equal(authed.status, 423, `${method} ${path} authenticated must 423`);
+    }
+    assertUnchanged(h, snap, counts, "auth-order sweep");
+    assert.equal(
+      __freezeControl.blockedWrites().count,
+      0,
+      "unauthenticated requests never reach a handler write attempt",
     );
   } finally {
     h.restore();
@@ -391,7 +491,7 @@ test("(2c) D1 books/jobs GET: discovery from stored state, backfill/reconcile de
 
 // ---- (3) D2: export GET --------------------------------------------------------
 
-test("(3) D2 export GET returns 423 and does not consume the one-time token", async () => {
+test("(3) D2 export GET: shipped auth failures precede the 423; a valid link is refused unconsumed", async () => {
   const token = "a".repeat(32);
   const cacheKey = sha256Hex("freeze-d2-audio");
   const wav = new Uint8Array(Buffer.from(wavBase64(0.2), "base64"));
@@ -403,6 +503,10 @@ test("(3) D2 export GET returns 423 and does not consume the one-time token", as
     await h.r2.put(`audio/${cacheKey}.wav`, wav);
   };
 
+  // Shipped reference behavior: a valid link downloads AND consumes
+  // the token; a malformed token gets the shipped 400; an unknown
+  // token gets the shipped 410.
+  const shippedFailures = {};
   const hs = makeHarness(shipped, { clockStart: T0 });
   try {
     await seedExport(hs);
@@ -412,6 +516,12 @@ test("(3) D2 export GET returns 423 and does not consume the one-time token", as
       !hs.kv.store.has(`audio-export:${token}`),
       "shipped GET consumed (deleted) the token — scenario is live",
     );
+    const bad = await hs.request(`/api/export/audio/not-a-token`);
+    shippedFailures.malformed = { status: bad.status, body: await bodyBytes(bad) };
+    const unknown = await hs.request(`/api/export/audio/${"b".repeat(32)}`);
+    shippedFailures.unknown = { status: unknown.status, body: await bodyBytes(unknown) };
+    assert.equal(shippedFailures.malformed.status, 400);
+    assert.equal(shippedFailures.unknown.status, 410);
   } finally {
     hs.restore();
   }
@@ -419,13 +529,32 @@ test("(3) D2 export GET returns 423 and does not consume the one-time token", as
   const h = makeHarness(variant, { clockStart: T0 });
   try {
     await seedExport(h);
+    // Auth first: the shipped failure responses keep precedence over
+    // the freeze refusal, byte-identical — the freeze never turns a
+    // bad link into a 423.
+    const bad = await h.request(`/api/export/audio/not-a-token`);
+    assert.equal(bad.status, shippedFailures.malformed.status, "malformed token: shipped 400, not 423");
+    assert.equal(await bodyBytes(bad), shippedFailures.malformed.body);
+    const unknown = await h.request(`/api/export/audio/${"b".repeat(32)}`);
+    assert.equal(unknown.status, shippedFailures.unknown.status, "unknown token: shipped 410, not 423");
+    assert.equal(await bodyBytes(unknown), shippedFailures.unknown.body);
+
+    // A VALID link meets the refusal — and the token is not consumed.
     const snap = storeSnapshot(h);
     const counts = counters(h);
     const res = await h.request(`/api/export/audio/${token}`);
     assert.equal(res.status, 423);
     assert.ok(h.kv.store.has(`audio-export:${token}`), "token NOT consumed while frozen");
     assertUnchanged(h, snap, counts, "D2 export GET");
+
+    // Preservation: because the frozen refusal left the token intact,
+    // the very same link downloads once the freeze lifts.
+    __freezeControl.disengage();
+    const after = await h.request(`/api/export/audio/${token}`);
+    assert.equal(after.status, 200, "the same link works after the freeze lifts");
+    assert.ok(!h.kv.store.has(`audio-export:${token}`), "and is consumed then, as shipped");
   } finally {
+    __freezeControl.engage();
     h.restore();
   }
 });
@@ -519,7 +648,7 @@ test("(4) D3 composite POST: hit serves read-only, miss 423s, segment fallback i
 
 // ---- (5) queue consumer under freeze ---------------------------------------------
 
-test("(5) queue consumer under freeze acks without processing or writing", async () => {
+test("(5) queue consumer under freeze retries (preservation) without processing or writing", async () => {
   const h = makeHarness(variant, { clockStart: T0 });
   try {
     const jobId = sha256Hex("freeze-queue-job");
@@ -527,7 +656,7 @@ test("(5) queue consumer under freeze acks without processing or writing", async
     const snap = storeSnapshot(h);
     const counts = counters(h);
     let acked = 0;
-    let retried = 0;
+    const retryOpts = [];
     await variant.queue(
       {
         messages: [
@@ -535,19 +664,86 @@ test("(5) queue consumer under freeze acks without processing or writing", async
             body: { job_id: jobId, segment_index: 0 },
             attempts: 1,
             ack() { acked++; },
-            retry() { retried++; },
+            retry(opts) { retryOpts.push(opts); },
           },
         ],
       },
       h.env,
     );
-    assert.equal(acked, 1, "message acked (refused, not retried)");
-    assert.equal(retried, 0);
+    assert.equal(acked, 0, "a frozen delivery is never acked — acking would drop the work");
+    assert.equal(retryOpts.length, 1, "the delivery is retried for redelivery after the freeze");
+    assert.equal(
+      retryOpts[0].delaySeconds,
+      900,
+      "redelivery carries the documented preservation delay (FREEZE_RETRY_DELAY_SECONDS)",
+    );
     assertUnchanged(h, snap, counts, "frozen queue delivery");
     assert.equal(h.google.calls.interactions, 0, "no provider call was made");
     const status = await h.r2.readJson(statusKey(jobId));
     assert.equal(status.state, "queued", "the job did not advance");
   } finally {
+    h.restore();
+  }
+});
+
+test("(5b) a job delivered while frozen resumes and completes after the lift — segment generated exactly once", async () => {
+  __freezeControl.disengage();
+  const h = makeHarness(variant, { clockStart: T0 });
+  try {
+    const jobId = sha256Hex("freeze-resume-frozen-job");
+    const created = await h.request("/api/generation/jobs", {
+      method: "POST",
+      body: {
+        job_id: jobId,
+        book_id: BOOK,
+        chapter_index: 0,
+        generation_release: RELEASE,
+        client_version: CLIENT_VERSION,
+        segments: [makeSegment("resume-frozen-1")],
+      },
+    });
+    assert.equal(created.status, 202, "job creation works on the variant while unfrozen");
+    assert.equal(h.queue.pending.length, 1);
+    const msg = h.queue.pending.shift();
+
+    // Deliver while frozen: retried with the preservation delay; the
+    // job is left exactly as created.
+    __freezeControl.engage();
+    const snap = storeSnapshot(h);
+    const counts = counters(h);
+    let acked = 0;
+    const retryOpts = [];
+    await variant.queue(
+      { messages: [{ body: msg.body, attempts: 1, ack() { acked++; }, retry(o) { retryOpts.push(o); } }] },
+      h.env,
+    );
+    assert.equal(acked, 0);
+    assert.equal(retryOpts.length, 1);
+    assert.equal(retryOpts[0].delaySeconds, 900);
+    assertUnchanged(h, snap, counts, "frozen delivery (5b)");
+    assert.equal(h.google.calls.interactions, 0, "no provider call while frozen");
+    assert.equal((await h.r2.readJson(statusKey(jobId))).state, "queued", "job untouched");
+
+    // Lift the freeze and redeliver the SAME message: the job resumes
+    // from its checkpoint and completes; its one segment is generated
+    // exactly once (the frozen delivery spent no provider call).
+    __freezeControl.disengage();
+    h.clock.advance(120000);
+    let acked2 = 0;
+    const retryOpts2 = [];
+    await variant.queue(
+      { messages: [{ body: msg.body, attempts: 2, ack() { acked2++; }, retry(o) { retryOpts2.push(o); } }] },
+      h.env,
+    );
+    assert.equal(acked2, 1, "redelivered work is processed and acked after the lift");
+    assert.equal(retryOpts2.length, 0);
+    await h.drain();
+    const status = await h.r2.readJson(statusKey(jobId));
+    assert.equal(status.state, "ready", "the job completed after resumption");
+    assert.equal(status.segments[0].state, "ready");
+    assert.equal(h.google.calls.interactions, 1, "the segment was generated exactly once");
+  } finally {
+    __freezeControl.engage();
     h.restore();
   }
 });
@@ -597,7 +793,7 @@ test("(6) freeze engaging mid-job blocks every subsequent write from that job", 
     __freezeControl.resetBlockedWrites();
     armed = true;
     let acked = 0;
-    let retried = 0;
+    const retryOpts = [];
     const msg = h.queue.pending.shift();
     await variant.queue(
       {
@@ -606,15 +802,16 @@ test("(6) freeze engaging mid-job blocks every subsequent write from that job", 
             body: msg.body,
             attempts: 1,
             ack() { acked++; },
-            retry() { retried++; },
+            retry(opts) { retryOpts.push(opts); },
           },
         ],
       },
       h.env,
     );
     assert.ok(atEngagement, "the job attempted at least one write (scenario is live)");
-    assert.equal(acked, 1, "the frozen mid-flight job is acked, not retried");
-    assert.equal(retried, 0);
+    assert.equal(acked, 0, "mid-flight frozen work is never acked — it must survive the freeze");
+    assert.equal(retryOpts.length, 1, "the in-flight message is retried for redelivery");
+    assert.equal(retryOpts[0].delaySeconds, 900, "with the preservation delay");
     assert.equal(h.kv.putCalls.length, atEngagement.kvPuts, "no KV write landed after engagement");
     assert.equal(h.r2.putCalls.length, atEngagement.r2Puts, "no R2 write landed after engagement");
     assert.equal(h.queue.sentLog.length, atEngagement.sends, "no queue send landed after engagement");
@@ -627,6 +824,158 @@ test("(6) freeze engaging mid-job blocks every subsequent write from that job", 
       __freezeControl.blockedWrites().count >= 1,
       "the gate actively refused at least one post-engagement write",
     );
+  } finally {
+    __freezeControl.engage();
+    h.restore();
+  }
+});
+
+// ---- (6b) mid-job resumption: exactly once in effect -----------------------------
+
+test("(6b) freeze engaging mid-job: message preserved, resumption completes the job exactly once in effect", async () => {
+  __freezeControl.disengage();
+  const H = { h: null };
+  let armed = false;
+  let atEngagement = null;
+  const flip = () => {
+    if (!armed || atEngagement || !H.h) return;
+    atEngagement = {
+      kvPuts: H.h.kv.putCalls.length,
+      r2Puts: H.h.r2.putCalls.length,
+      sends: H.h.queue.sentLog.length,
+    };
+    __freezeControl.engage();
+  };
+  // Per-segment provider accounting: the interactions request body
+  // carries the segment's narration text, which names its seed.
+  const providerBodies = [];
+  const h = makeHarness(variant, {
+    clockStart: T0,
+    kvHooks: { onPut: flip },
+    r2Hooks: { onPut: flip },
+    fetchBehavior: {
+      onInteractions: (n, init) => {
+        providerBodies.push(String(init?.body || ""));
+      },
+    },
+  });
+  H.h = h;
+  const deliver = async (msg, attempts) => {
+    const rec = { acked: 0, retryOpts: [] };
+    await variant.queue(
+      {
+        messages: [
+          {
+            body: msg.body,
+            attempts,
+            ack() { rec.acked++; },
+            retry(o) { rec.retryOpts.push(o); },
+          },
+        ],
+      },
+      h.env,
+    );
+    return rec;
+  };
+  try {
+    const jobId = sha256Hex("freeze-resume-mid-job");
+    const segs = [makeSegment("resume-a"), makeSegment("resume-b"), makeSegment("resume-c")];
+    const created = await h.request("/api/generation/jobs", {
+      method: "POST",
+      body: {
+        job_id: jobId,
+        book_id: BOOK,
+        chapter_index: 0,
+        generation_release: RELEASE,
+        client_version: CLIENT_VERSION,
+        segments: segs,
+      },
+    });
+    assert.equal(created.status, 202, "job creation works on the variant while unfrozen");
+    assert.equal(h.queue.pending.length, 1);
+
+    // Delivery 1 (unfrozen): segment A completes; the job chains the
+    // segment-B message.
+    const r1 = await deliver(h.queue.pending.shift(), 1);
+    assert.equal(r1.acked, 1);
+    assert.equal(providerBodies.length, 1, "one provider call so far");
+    assert.ok(providerBodies[0].includes("resume-a"), "and it was segment A's");
+    assert.equal(h.queue.pending.length, 1, "the job chained the next message");
+    let status = await h.r2.readJson(statusKey(jobId));
+    assert.equal(status.segments[0].state, "ready", "segment A is checkpointed complete");
+
+    // Delivery 2: the freeze engages on the job's first write (its
+    // processing lease, ahead of any dispatch for segment B). The
+    // lease write itself lands (it is the write the engagement hooks
+    // fire on); every write after it is refused — including the
+    // finally-block lease release, whose delete the guard blocks and
+    // releaseProcessingLease swallows — so the lease is ORPHANED.
+    __freezeControl.resetBlockedWrites();
+    armed = true;
+    const msgB = h.queue.pending.shift();
+    const r2 = await deliver(msgB, 1);
+    assert.ok(atEngagement, "the job attempted at least one write (scenario is live)");
+    assert.equal(r2.acked, 0, "the interrupted message is NOT acked");
+    assert.equal(r2.retryOpts.length, 1, "it is retried for redelivery");
+    assert.equal(r2.retryOpts[0].delaySeconds, 900, "with the preservation delay");
+    assert.equal(h.kv.putCalls.length, atEngagement.kvPuts, "no KV write landed after engagement");
+    assert.equal(h.r2.putCalls.length, atEngagement.r2Puts, "no R2 write landed after engagement");
+    assert.equal(h.queue.sentLog.length, atEngagement.sends, "no queue send landed after engagement");
+    assert.ok(
+      __freezeControl.blockedWrites().count >= 1,
+      "the gate actively refused the job's next write",
+    );
+    assert.equal(providerBodies.length, 1, "no provider call was spent on segment B");
+    status = await h.r2.readJson(statusKey(jobId));
+    assert.equal(status.segments[0].state, "ready", "segment A stays complete");
+    assert.notEqual(status.segments[1].state, "ready", "segment B did not advance — no partial state");
+    const leaseKey = `generation/locks/${jobId}/job.lock`;
+    assert.ok(
+      h.r2.store.has(leaseKey),
+      "the interrupted delivery's lease is orphaned (its release was frozen out)",
+    );
+
+    // Lift the freeze and redeliver the SAME message on its own retry
+    // schedule: the 900s preservation delay outlasts the shipped
+    // lease's 5-minute staleness window, so the redelivery's acquire
+    // deletes the orphaned lease and takes over (shipped
+    // acquireProcessingLease behavior) — then let the chain drain.
+    // The job must now complete.
+    __freezeControl.disengage();
+    h.clock.advance(960000);
+    const r3 = await deliver(msgB, 2);
+    assert.equal(r3.acked, 1, "the redelivered message is processed and acked");
+    assert.equal(r3.retryOpts.length, 0);
+    await h.drain();
+    status = await h.r2.readJson(statusKey(jobId));
+    assert.equal(status.state, "ready", "the job completed after resumption");
+    assert.deepEqual(
+      status.segments.map((s) => s.state),
+      ["ready", "ready", "ready"],
+      "every segment completed exactly once",
+    );
+    // Exactly once in effect, provider side: the completed segment A
+    // was never re-called (its saved state + the content-addressed
+    // cache carry it), and B and C were each called exactly once —
+    // B's single call is the post-lift one; the frozen delivery spent
+    // none.
+    for (const seed of ["resume-a", "resume-b", "resume-c"])
+      assert.equal(
+        providerBodies.filter((b) => b.includes(seed)).length,
+        1,
+        `provider called exactly once for ${seed}`,
+      );
+    // Exactly once in effect, output side: one cached audio object per
+    // segment, each written by exactly one successful put.
+    for (const seg of segs) {
+      assert.ok(h.r2.store.has(`audio/${seg.cache_key}.wav`), `audio cached for ${seg.cache_key}`);
+      assert.equal(
+        h.r2.putCount(`audio/${seg.cache_key}.wav`),
+        1,
+        "the audio object was written exactly once",
+      );
+    }
+    assert.ok(!h.r2.store.has(leaseKey), "the job lease is released at the end, as shipped");
   } finally {
     __freezeControl.engage();
     h.restore();
@@ -900,13 +1249,46 @@ test("(10) fail-closed: every census route has a freeze disposition; every fence
     'if (freezeEngaged()) return { mirrored: false, reason: "frozen" };', // N2 mirror entry
     "if (freezeEngaged()) return;\n  if (!env.OPALREADER_STORAGE) return;", // D4 recorder
     "error.status = 423;", // D3 composite miss
-    "for (const message of batch.messages) message.ack();", // N1 consumer refusal
-    "if (error?.freezeBlocked) message.ack();", // race: ack frozen work
+    "const FREEZE_RETRY_DELAY_SECONDS = 900;", // N1 preservation delay
     "countJobRegistryPending", // D1 discovery count-only
     'legacyScan = freezeEngaged() ? "deferred"', // D1 backfill deferred
   ];
   for (const pin of pins)
     assert.ok(variantSrc.includes(pin), `variant is missing fence: ${pin}`);
+  // Redelivery semantics (Rowan 6330658336): BOTH frozen-consumer
+  // paths — the at-entry refusal and the mid-job refusal — retry with
+  // the preservation delay; neither acks.
+  assert.equal(
+    (variantSrc.match(/message\.retry\(\{ delaySeconds: FREEZE_RETRY_DELAY_SECONDS \}\)/g) || [])
+      .length,
+    2,
+    "at-entry and mid-job frozen deliveries both retry with the preservation delay",
+  );
+  assert.ok(
+    !variantSrc.includes("for (const message of batch.messages) message.ack();"),
+    "the frozen consumer no longer acks at entry",
+  );
+  assert.ok(
+    !variantSrc.includes("if (error?.freezeBlocked) message.ack();"),
+    "mid-flight frozen work is no longer acked",
+  );
+  // Auth order (Rowan 6330658336): the shipped token gate precedes the
+  // freeze refusal in fetch; the D2 refusal sits inside the export
+  // handler, ahead of the token-consuming delete it exists to prevent.
+  const gateIdx = variantSrc.indexOf(
+    'request.headers.get("X-OpalReader-Token") !== env.OPALREADER_ACCESS_TOKEN',
+  );
+  const refusalIdx = variantSrc.indexOf("freezeRefusedRoute(request.method, url.pathname)");
+  assert.ok(
+    gateIdx > 0 && refusalIdx > gateIdx,
+    "the token gate runs before the freeze refusal",
+  );
+  const d2Idx = variantSrc.indexOf("P8 FREEZE (D2): the one-time token has now been validated");
+  const deleteIdx = variantSrc.indexOf("OPALREADER_KV.delete(`audio-export:");
+  assert.ok(
+    d2Idx > 0 && deleteIdx > d2Idx,
+    "the D2 refusal precedes (and prevents) the token-consuming delete",
+  );
   assert.equal(
     (variantSrc.match(/env = freezeGuardEnv\(env\);/g) || []).length,
     2,

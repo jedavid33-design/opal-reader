@@ -114,10 +114,15 @@ const GENERATION_RELEASE_ID = APP_VERSION + "/" + READER_GENERATION_UI_VERSION;
 // freeze mid-scenario and restore it. Production use never disengages.
 //
 // Consulted at:
-//  (a) fetch entry — every MUTATING census route (except D3's playback
-//      POST, which serves cache hits) plus the D2 export GET returns 423
-//      before the token gate and before any shipped handler code runs
-//      (freezeRefusedRoute below);
+//  (a) fetch — every MUTATING census route (except D3's playback POST,
+//      which serves cache hits) returns 423 (freezeRefusedRoute below).
+//      Per Rowan (issue #15, 6330658336) the refusal runs AFTER the
+//      shipped authentication, in the shipped order: gate-covered
+//      routes pass the token gate first, so an unauthenticated request
+//      gets the shipped 401 and never reaches the refusal; the D2
+//      export GET — which sits ahead of the gate and authenticates by
+//      its one-time token — is refused inside its own handler, after
+//      the token has been validated WITHOUT being consumed;
 //  (b) the binding guard (freezeGuardEnv) — wraps env at fetch/queue
 //      entry so EVERY KV/R2 write and queue send in the file routes
 //      through the gate: while engaged, the write is refused with
@@ -131,13 +136,25 @@ const GENERATION_RELEASE_ID = APP_VERSION + "/" + READER_GENERATION_UI_VERSION;
 //      performs zero writes); a miss throws 423 instead of composing;
 //  (e) recordTtsUsage (D4) and mirrorGenerationStatus (N2) — inert at
 //      their entries while engaged;
-//  (f) the queue consumer — refuses (ack, no processing) at entry.
+//  (f) the queue consumer — while frozen it RETRIES every delivery
+//      with a long delay (preservation, per Rowan 6330658336), never
+//      acks it: the work survives the freeze and resumes from the
+//      job's saved checkpoint once the freeze lifts. The same retry
+//      answers a step the gate refuses mid-flight.
 // Read-only routes are never gated: listening and reading are untouched.
 // ============================================================================
 const freezeState = { engaged: true };
 function freezeEngaged() {
   return freezeState.engaged === true;
 }
+// P8 FREEZE (N1): the redelivery delay for work the frozen consumer
+// refuses. 900s (15 minutes) — long enough that a frozen Reader does
+// not churn the queue with rapid redeliveries, short enough that
+// preserved work resumes promptly once the freeze lifts. The platform
+// queue pause remains the primary fence (a paused queue never
+// delivers, so no retry budget is spent while it holds); this consumer
+// behavior is the safety net for a delivery that arrives anyway.
+const FREEZE_RETRY_DELAY_SECONDS = 900;
 class FreezeWriteBlocked extends Error {
   constructor(binding, method) {
     super(`P8 freeze: ${binding}.${method} refused while the Reader is frozen.`);
@@ -190,8 +207,10 @@ function freezeGuardEnv(env) {
   });
 }
 // The 423 set: every MUTATING census key except POST /api/playback/
-// chapter (D3 serves its cache hits), PLUS the D2 export GET. The D1 job
-// GETs are deliberately absent — they serve their stored reads.
+// chapter (D3 serves its cache hits). The D1 job GETs are deliberately
+// absent — they serve their stored reads. The D2 export GET is also
+// absent: it is refused inside its own handler, after its one-time
+// token has been validated without being consumed (auth first).
 function freezeRefusedRoute(method, pathname) {
   if (method === "PUT" && pathname.startsWith("/api/sync/book/")) return true;
   if (method === "DELETE" && pathname.startsWith("/api/sync/book/")) return true;
@@ -199,7 +218,6 @@ function freezeRefusedRoute(method, pathname) {
   if (method === "PUT" && pathname === "/api/sync/settings") return true;
   if (method === "PUT" && pathname.startsWith("/api/sync/epub/")) return true;
   if (method === "POST" && pathname === "/api/export/audio-url") return true;
-  if (method === "GET" && pathname.startsWith("/api/export/audio/")) return true; // D2
   if (method === "DELETE" && pathname === "/api/audio/purge") return true;
   if (method === "POST" && pathname === "/api/generation/jobs") return true;
   if (method === "POST" && pathname.startsWith("/api/generation/jobs/") && pathname.endsWith("/resume")) return true;
@@ -3923,22 +3941,9 @@ export default {
     const url = new URL(request.url);
     if ((url.pathname === "/health" || url.pathname === "/health/") && request.method === "GET")
       return json({ ok: true, app: "OpalReader API", version: APP_VERSION, sync_protocol: SYNC_PROTOCOL_VERSION }, 200, origin, env);
-    // P8 FREEZE: refuse every fenced route (all MUTATING census keys
-    // except D3's playback POST, plus the D2 export GET) with 423 before
-    // the shipped handlers — and before the token gate: the freeze
-    // refusal is not an auth decision. Then wrap env so that every write
-    // through the bindings routes through the freeze gate for the rest
-    // of this handler (the binding guard, top of file).
-    if (freezeEngaged() && freezeRefusedRoute(request.method, url.pathname))
-      return json(
-        {
-          error:
-            "Reader is frozen for the v2 cutover. Changes are disabled; listening and reading are unaffected.",
-        },
-        423,
-        origin,
-        env,
-      );
+    // P8 FREEZE: wrap env first, so every write through the bindings
+    // routes through the freeze gate for the rest of this handler
+    // (the binding guard, top of file).
     env = freezeGuardEnv(env);
     if (url.pathname.startsWith("/api/export/audio/") && request.method === "GET") {
       if (!env.OPALREADER_KV || !env.OPALREADER_STORAGE)
@@ -3949,6 +3954,22 @@ export default {
       const record = await env.OPALREADER_KV.get(`audio-export:${token}`, "json");
       if (!record?.key || !validCacheKey(record.key))
         return json({ error: "This export link has expired." }, 410, origin, env);
+      // P8 FREEZE (D2): the one-time token has now been validated
+      // exactly as shipped — the shipped failure responses above keep
+      // precedence (auth first, per Rowan 6330658336). A valid link is
+      // refused WITHOUT consuming the token (the delete below is the
+      // write the freeze exists to prevent), so the link still works
+      // once the freeze lifts.
+      if (freezeEngaged())
+        return json(
+          {
+            error:
+              "Reader is frozen for the v2 cutover. Changes are disabled; listening and reading are unaffected.",
+          },
+          423,
+          origin,
+          env,
+        );
       await env.OPALREADER_KV.delete(`audio-export:${token}`);
       const found = await cachedAudio(env, record.key);
       if (!found) return json({ error: "Audio not found." }, 404, origin, env);
@@ -3966,6 +3987,22 @@ export default {
       return json(
         { error: "The personal access token is missing or incorrect." },
         401,
+        origin,
+        env,
+      );
+    // P8 FREEZE: refuse every fenced route (all MUTATING census keys
+    // except D3's playback POST) with 423. The shipped token gate
+    // above has already run, in the shipped order (auth first, per
+    // Rowan 6330658336): a request that reaches this line is
+    // authenticated exactly as it would be in the shipped worker —
+    // an unauthenticated request already received the shipped 401.
+    if (freezeEngaged() && freezeRefusedRoute(request.method, url.pathname))
+      return json(
+        {
+          error:
+            "Reader is frozen for the v2 cutover. Changes are disabled; listening and reading are unaffected.",
+        },
+        423,
         origin,
         env,
       );
@@ -4826,16 +4863,22 @@ export default {
   },
   async queue(batch, env) {
     // P8 FREEZE (N1): while frozen the consumer refuses every message —
-    // ack without processing, so a delivered message can never advance
-    // a job. (Pausing the queue at the platform level is the operational
-    // half of this fence at deploy time; this is the code half.)
+    // but it RETRIES it with a long delay instead of acking it
+    // (preservation, per Rowan 6330658336): the delivery is postponed,
+    // never dropped, so the job survives the freeze and is processed
+    // once it lifts. (Pausing the queue at the platform level is the
+    // operational half of this fence at deploy time and spends no
+    // retry budget at all; this is the code half, the safety net for a
+    // delivery that arrives anyway.)
     if (freezeEngaged()) {
-      for (const message of batch.messages) message.ack();
+      for (const message of batch.messages)
+        message.retry({ delaySeconds: FREEZE_RETRY_DELAY_SECONDS });
       return;
     }
     // The binding guard stays wrapped while processing, so if the
     // freeze engages mid-job every write from that moment is refused at
-    // the gate; the catch below acks instead of retrying frozen work.
+    // the gate; the catch below retries the refused work on the same
+    // preservation terms instead of dropping it.
     env = freezeGuardEnv(env);
     for (const message of batch.messages) {
       const jobId = message.body?.job_id;
@@ -4851,8 +4894,13 @@ export default {
       } catch (error) {
         // P8 FREEZE race: the freeze engaged while this job was
         // mid-processing; the gate has already refused every write after
-        // that moment. Ack — retrying would re-attempt frozen work.
-        if (error?.freezeBlocked) message.ack();
+        // that moment, so the job's persisted state is still its last
+        // completed checkpoint. Retry with the preservation delay —
+        // never ack: on redelivery after the freeze lifts, the job
+        // resumes from that checkpoint (completed segments are skipped
+        // by their saved state and the content-addressed audio cache).
+        if (error?.freezeBlocked)
+          message.retry({ delaySeconds: FREEZE_RETRY_DELAY_SECONDS });
         // Deterministic refusals (e.g. Gemini content-filter blocks) never
         // succeed on retry: drop the message instead of burning quota.
         else if (error?.noRetry || (message.attempts || 1) >= 4) message.ack();
