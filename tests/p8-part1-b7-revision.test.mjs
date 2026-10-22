@@ -92,11 +92,12 @@ function makeWorkerEnv({ doOverrides = {}, envOverrides = {} } = {}) {
   return { env, bucket, coordinator };
 }
 
-function req(path, { method = "GET", body, token = "staging-token", scope = "staging-smoke", instance = "smoke-p8" } = {}) {
+function req(path, { method = "GET", body, token = "staging-token", scope = "staging-smoke", instance = "smoke-p8", origin = null } = {}) {
   const headers = { "content-type": "application/json" };
   if (token !== null) headers["x-opalreader-token"] = token;
   if (scope !== null) headers["x-opalreader-scope"] = scope;
   if (instance !== null) headers["x-opalreader-instance"] = instance;
+  if (origin !== null) headers["origin"] = origin;
   return new Request("https://staging.test" + path, {
     method, headers, body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -261,4 +262,130 @@ test("fix2: the deploy spec carries the smoke namespace binding (R2_KEY_PREFIX=s
   assert.equal(binding.type, "plain_text");
   assert.equal(binding.text, "smoke-p8/");
   assert.equal(spec.smoke_r2_namespace?.key_prefix, "smoke-p8/");
+});
+
+// ============================================================ F-A
+// Preview-session finding F-A (Rowan close review 6353069802; fix
+// shape approved 6353186341): stagingGate's refusals must carry the
+// same allowlisted CORS headers as every other public response, so
+// a browser at the allowlisted origin can READ a refusal instead of
+// surfacing a network "Load failed". For a non-allowlisted or absent
+// Origin the refusal must stay exactly what it was (no ACAO, no
+// leak); statuses, bodies, and gate order are unchanged throughout.
+// The env-scope and token-not-configured legs are harness-only (they
+// cannot be produced on the live worker without breaking its
+// configuration).
+const PAGES_ORIGIN = "https://jedavid33-design.github.io";
+const EVIL_ORIGIN = "https://evil.example";
+
+const gateDenials = [
+  ["bad token → 401", (origin) => ({
+    ...makeWorkerEnv(),
+    request: req("/v2/quota", { token: "wrong-token-value", origin }),
+  }), 401, "The personal access token is missing or incorrect."],
+  ["bad request scope → 403", (origin) => ({
+    ...makeWorkerEnv(),
+    request: req("/v2/quota", { scope: "bogus-scope", origin }),
+  }), 403, "staging_scope_required"],
+  ["bad env scope → 403 (harness-only leg)", (origin) => ({
+    ...makeWorkerEnv({ envOverrides: { OPALREADER_V2_SCOPE: "production" } }),
+    request: req("/v2/quota", { origin }),
+  }), 403, "staging_scope_required"],
+  ["token not configured → 503 (harness-only leg)", (origin) => ({
+    ...makeWorkerEnv({ envOverrides: { OPALREADER_ACCESS_TOKEN: undefined } }),
+    request: req("/v2/quota", { origin }),
+  }), 503, "staging_token_not_configured"],
+];
+
+for (const [name, setup, status, errorText] of gateDenials) {
+  test(`F-A: gate refusal (${name}) is CORS-readable only from the allowlisted origin`, async () => {
+    // Allowlisted Origin: refusal carries the echoed ACAO + Vary,
+    // status and body unchanged.
+    {
+      const { env, request } = setup(PAGES_ORIGIN);
+      const res = await call(env, request);
+      assert.equal(res.status, status);
+      assert.equal((await res.json()).error, errorText);
+      assert.equal(res.headers.get("access-control-allow-origin"), PAGES_ORIGIN);
+      assert.equal(res.headers.get("vary"), "Origin");
+    }
+    // Non-allowlisted Origin: NO ACAO (fail-closed, nothing leaks to
+    // an unapproved origin); status/body identical.
+    {
+      const { env, request } = setup(EVIL_ORIGIN);
+      const res = await call(env, request);
+      assert.equal(res.status, status);
+      assert.equal((await res.json()).error, errorText);
+      assert.equal(res.headers.get("access-control-allow-origin"), null);
+    }
+    // No Origin (non-browser clients): byte-for-byte the pre-fix
+    // behavior — same status, same body, no ACAO.
+    {
+      const { env, request } = setup(null);
+      const res = await call(env, request);
+      assert.equal(res.status, status);
+      assert.equal((await res.json()).error, errorText);
+      assert.equal(res.headers.get("access-control-allow-origin"), null);
+    }
+  });
+}
+
+test("F-A: no gate refusal leaks a token value in body or headers", async () => {
+  const { env } = makeWorkerEnv();
+  const res = await call(env, req("/v2/quota", { token: "wrong-token-value", origin: PAGES_ORIGIN }));
+  assert.equal(res.status, 401);
+  const text = await res.text();
+  assert.ok(!text.includes("wrong-token-value"), "the presented token is not echoed");
+  assert.ok(!text.includes("staging-token"), "the configured token never appears");
+  for (const [, v] of res.headers) {
+    assert.ok(!v.includes("wrong-token-value") && !v.includes("staging-token"),
+      "no credential material in any response header");
+  }
+});
+
+test("F-A: browser-shaped sequence — preflight, then a denied request whose refusal is readable verbatim", async () => {
+  const { env } = makeWorkerEnv();
+  // The preflight a browser sends before a token-bearing request.
+  const pre = await call(env, new Request("https://staging.test/v2/quota", {
+    method: "OPTIONS",
+    headers: {
+      origin: PAGES_ORIGIN,
+      "access-control-request-method": "GET",
+      "access-control-request-headers": "x-opalreader-token, x-opalreader-scope, x-opalreader-instance",
+    },
+  }));
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get("access-control-allow-origin"), PAGES_ORIGIN);
+  assert.ok(pre.headers.get("access-control-allow-headers").includes("x-opalreader-token"));
+  // The actual request, denied at the gate: with ACAO present the
+  // browser exposes status + body to the page — this is the exact
+  // sequence that surfaced only "Load failed" on Julie's phone.
+  const res = await call(env, req("/v2/quota", { token: "wrong-token-value", origin: PAGES_ORIGIN }));
+  assert.equal(res.status, 401);
+  assert.equal(res.headers.get("access-control-allow-origin"), PAGES_ORIGIN);
+  assert.equal((await res.json()).error, "The personal access token is missing or incorrect.");
+});
+
+test("F-A: success and already-readable paths are unchanged (health, route 404, instance 403, DO 200)", async () => {
+  const { env } = makeWorkerEnv();
+  const health = await call(env, req("/health", { token: null, scope: null, instance: null, origin: PAGES_ORIGIN }));
+  assert.equal(health.status, 200);
+  assert.equal((await health.json()).app, "OpalReader API v2");
+  assert.equal(health.headers.get("access-control-allow-origin"), PAGES_ORIGIN);
+
+  const missing = await call(env, req("/nope", { token: null, scope: null, instance: null, origin: PAGES_ORIGIN }));
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).error, "route_not_found");
+  assert.equal(missing.headers.get("access-control-allow-origin"), PAGES_ORIGIN);
+
+  const inst = await call(env, req("/v2/sync/snapshot?family=settings", { instance: "account", origin: PAGES_ORIGIN }));
+  assert.equal(inst.status, 403);
+  assert.equal((await inst.json()).error, "staging_instance_required");
+  assert.equal(inst.headers.get("access-control-allow-origin"), PAGES_ORIGIN);
+
+  const okRes = await call(env, req("/v2/sync/snapshot?family=settings", { origin: PAGES_ORIGIN }));
+  assert.equal(okRes.status, 200);
+  assert.equal((await okRes.json()).family, "settings");
+  assert.equal(okRes.headers.get("access-control-allow-origin"), PAGES_ORIGIN,
+    "the DO-forwarded response keeps its merged CORS headers");
 });

@@ -90,6 +90,36 @@ export function assertStagingHealth(health) {
   return health;
 }
 
+// The F-B authenticated proof (Rowan 6353186341): a candidate
+// connection is proven by a DIRECT transport quotaView() whose
+// resolved payload is checked against the coordinator's quota view
+// (v2/coordinator.mjs quotaView()) — specifically the numeric fields
+// the client itself consumes (the store's as-of stamps and the
+// Settings money text). A genuine quota view always carries them; an
+// error body or a junk 200 does not.
+//
+// This deliberately does NOT go through surfaces.quotaModel() /
+// store.refreshMoney(): that path catches EVERY quotaView()
+// rejection and returns cached money (marked stale) instead of
+// throwing, so a refused token could appear to pass — precisely the
+// misleading reconnect outcome F-B exists to prevent. The proof runs
+// at the transport level, where a refusal still throws and nothing
+// is read from any cache.
+const QUOTA_PROOF_NUMERIC_FIELDS = Object.freeze([
+  "attemptsToday", "dailyLimit", "spentMicroCents",
+  "monthlyCap", "ledgerSeq", "settingsRevision",
+]);
+
+export function assertWellFormedQuotaView(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload))
+    throw new Error("preview_quota_proof_malformed");
+  for (const field of QUOTA_PROOF_NUMERIC_FIELDS) {
+    if (typeof payload[field] !== "number" || !Number.isFinite(payload[field]))
+      throw new Error("preview_quota_proof_malformed");
+  }
+  return payload;
+}
+
 export async function fetchVerifiedStagingHealth({
   fetchFn = (...args) => globalThis.fetch(...args),
 } = {}) {
@@ -162,6 +192,12 @@ export async function connectPreviewClient({
   clientStorage = storage,
   shelfTransport = fakeShelf,
 } = {}) {
+  // F-B (Rowan 6353186341): a blank token is refused before anything
+  // is touched — no identity read, no health probe, no transport —
+  // and therefore long before connect() could swap the installed
+  // client for an unproven one.
+  if (typeof token !== "string" || token.trim() === "")
+    throw new Error("Enter the staging token to connect.");
   if (!deviceId) throw new Error("preview device identity is required");
   // Local identity preflight happens before the health probe and
   // therefore before any possible authenticated request. A mismatch is
@@ -173,6 +209,15 @@ export async function connectPreviewClient({
     baseUrl: STAGING_WORKER_ORIGIN, token, deviceId,
     scope: "staging-smoke", instance: "smoke-p8", fetchFn,
   });
+  // F-B authenticated proof: the candidate exists only as a TRANSPORT
+  // until it proves itself. quotaView() throws on any non-2xx, and
+  // the resolved payload must be a well-formed quota view — so a
+  // wrong, expired, or otherwise refused token fails here, before
+  // any assembled client (the thing that can mutate shared local
+  // storage) is composed around it. The candidate's token dies with
+  // this discarded transport on failure; it is never logged or
+  // persisted either way.
+  assertWellFormedQuotaView(await createdTransport.quotaView());
   const shelf = shelfTransport === fakeShelf
     ? { shelfApiBase: fakeShelf.base, fetchFn: fakeShelf.fetchFn }
     : { shelfApiBase: shelfTransport.base, fetchFn: shelfTransport.fetchFn };
@@ -282,22 +327,55 @@ function syncSegments() {
   }
 }
 
+// F-B attempt sequencing: only the NEWEST connect attempt may
+// install its candidate or report its outcome. A slower attempt
+// resolving later — successfully or not — never overwrites a newer
+// connection and never relabels the page with its stale result.
+let connectAttemptSeq = 0;
+
 export async function connect() {
-  // A failed reconnect must not leave a previous token-bearing client
-  // available to the page's other actions.
-  client = null;
-  transport = null;
   const tokenInput = $("accessToken");
-  const token = tokenInput.value;
+  const token = tokenInput.value ?? "";
+  // F-B (Rowan 6353186341): a blank token ends the tap HERE, with a
+  // visible explanation, before the installed client/transport is
+  // touched. The field is cleared after every successful connect, so
+  // this is exactly where a second Connect tap used to land: it read
+  // the empty field, discarded the working client, and installed an
+  // empty-token replacement that still reported "connected" (the
+  // acceptance session's opening wall). Now the tap changes nothing.
+  if (!token.trim()) {
+    $("health").textContent = "Enter the staging token to connect.";
+    log("connect: no token entered; any existing connection was left unchanged");
+    return false;
+  }
+  const attempt = ++connectAttemptSeq;
   let connected;
   try {
     const deviceId = await previewDeviceIdentity();
     connected = await connectPreviewClient({ token, deviceId });
   } catch (e) {
+    if (attempt !== connectAttemptSeq) {
+      log(`connect: a superseded attempt failed (${e?.message || e}); the current connection was left unchanged`);
+      return false;
+    }
     $("health").textContent = `Connection refused: ${e?.message || e}`;
     fail("connect", e);
     return false;
   }
+  if (attempt !== connectAttemptSeq) {
+    // The candidate proved itself, but a newer attempt started while
+    // it was proving: the newer attempt owns the installed
+    // connection, so this candidate is discarded uninstalled.
+    log("connect: a superseded attempt was discarded; the current connection was kept");
+    return false;
+  }
+  // Replace-after-proof (F-B): the installed client/transport is
+  // swapped ONLY here, after the candidate has proven itself on a
+  // direct authenticated read (connectPreviewClient). The client
+  // being replaced is Julie's own earlier connection, made with the
+  // credential she herself entered; keeping it through a failed new
+  // attempt exposes nothing new, and the health line always states
+  // which connection the page is actually using.
   transport = connected.transport;
   client = connected.client;
   // Successful connection only: do not leave Julie's staging token in
@@ -311,13 +389,27 @@ export async function connect() {
   return true;
 }
 
+// F-C (Rowan 6353186341): the not-found diagnostics name the exact
+// ID submitted — never a rewritten or normalized one — and, when
+// that ID contains uppercase characters, add the exact-case hint.
+// The hint deliberately does NOT assert the OS or the keyboard
+// changed the input; it points at the likeliest cause, and IDs stay
+// case-sensitive end to end (the #bookId input now also opts out of
+// keyboard capitalization/correction — see v2-preview/index.html).
+export function bookNotFoundLines(bookId) {
+  const lines = [`loadBook: ${bookId} not in the smoke instance`];
+  if (/[A-Z]/.test(bookId))
+    lines.push("loadBook: IDs are case-sensitive; check the exact case");
+  return lines;
+}
+
 async function loadBook() {
   if (!client) return;
   const bookId = $("bookId").value.trim();
   try {
     await client.funnel.syncNow();
     const book = await client.funnel.refreshWorking(bookId);
-    if (!book) { log(`loadBook: ${bookId} not in the smoke instance`); return; }
+    if (!book) { for (const line of bookNotFoundLines(bookId)) log(line); return; }
     populateBook({ id: bookId, ...book });
     log(`loaded book ${bookId}`);
   } catch (e) { fail("loadBook", e); }

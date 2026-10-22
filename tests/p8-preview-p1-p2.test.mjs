@@ -19,6 +19,7 @@ import {
   EXPECTED_STAGING_HEALTH,
   STAGING_WORKER_ORIGIN,
   assertPreviewDeviceIdentity,
+  bookNotFoundLines,
   connectPreviewClient,
   createPreviewStorage,
   ensurePreviewDeviceId,
@@ -127,19 +128,25 @@ test("preview P1: correct health identity opens the gate before authenticated qu
   assert.equal(connected.health.build, EXPECTED_STAGING_BUILD);
   assert.equal(transports.constructions(), 1);
   assert.equal(clients.constructions(), 1);
-  assert.equal(instrumented.calls.length, 1);
+  // The health probe is still first and unauthenticated. F-B (Rowan
+  // 6353186341) then makes exactly ONE authenticated call during
+  // connect: the candidate transport's direct quotaView() proof,
+  // which must succeed before the assembled client is composed.
+  assert.equal(instrumented.calls.length, 2);
   assert.equal(instrumented.calls[0].url, `${STAGING_WORKER_ORIGIN}/health`);
   assert.equal(instrumented.calls[0].token, null);
-  assert.equal(instrumented.authenticatedCalls().length, 0,
-    "constructing the transport must not itself send the token");
-
-  const quota = await connected.client.surfaces.quotaModel();
-  assert.equal(quota.view.dailyLimit, 100);
-  assert.equal(instrumented.authenticatedCalls().length, 1);
+  assert.equal(instrumented.authenticatedCalls().length, 1,
+    "the only authenticated call during connect is the transport-level proof");
   assert.equal(instrumented.authenticatedCalls()[0].url, `${STAGING_WORKER_ORIGIN}/v2/quota`);
   assert.equal(instrumented.authenticatedCalls()[0].token, FAKE_TOKEN);
   assert.equal(instrumented.authenticatedCalls()[0].scope, "staging-smoke");
   assert.equal(instrumented.authenticatedCalls()[0].instance, "smoke-p8");
+
+  const quota = await connected.client.surfaces.quotaModel();
+  assert.equal(quota.view.dailyLimit, 100);
+  assert.equal(instrumented.authenticatedCalls().length, 2);
+  assert.equal(instrumented.authenticatedCalls()[1].url, `${STAGING_WORKER_ORIGIN}/v2/quota`);
+  assert.equal(instrumented.authenticatedCalls()[1].token, FAKE_TOKEN);
 });
 
 test("preview P1: a poisoned arbitrary origin is ignored; requests stay on the pinned staging origin", async () => {
@@ -164,7 +171,9 @@ test("preview P1: a poisoned arbitrary origin is ignored; requests stay on the p
   await connected.client.surfaces.quotaModel();
   assert.equal(transports.constructions(), 1);
   assert.ok(instrumented.calls.every((c) => c.url.startsWith(STAGING_WORKER_ORIGIN)));
-  assert.equal(instrumented.authenticatedCalls().length, 1);
+  // Two authenticated calls, both pinned: the F-B connect proof and
+  // the quotaModel read.
+  assert.equal(instrumented.authenticatedCalls().length, 2);
   assert.ok(instrumented.authenticatedCalls().every((c) => c.url.startsWith(STAGING_WORKER_ORIGIN)));
 });
 
@@ -338,4 +347,221 @@ test("preview P2: two fresh-storage clients allocate disjoint command and positi
   assert.ok([...sharedTransport.commandReceipts.values()].every((r) => r.replayed === false));
   assert.deepEqual(sharedTransport.duplicateCommandIds, []);
   assert.deepEqual(sharedTransport.duplicateEventIds, []);
+});
+
+// ------------------------------------------------------------ F-B
+// Rowan 6353186341 (mandatory correction): the candidate proof is a
+// DIRECT transport quotaView() that throws on non-2xx and requires a
+// well-formed payload — never surfaces.quotaModel(), whose store
+// path (client-store refreshMoney) catches every quotaView()
+// rejection and returns cached money (stale: true / view: null), so
+// a refused token could appear to pass. Below, no rejected candidate
+// ever reaches client composition.
+const TOKEN_ERROR = "The personal access token is missing or incorrect.";
+const GOOD_QUOTA = {
+  dayKey: "2026-10-22", monthKey: "2026-10", basis: "Reader estimate (server attempt ledger)",
+  attemptsToday: 0, dailyLimit: 100, spentMicroCents: 0,
+  monthlyCap: 50, ledgerSeq: 1, settingsRevision: 1, parked: null,
+};
+
+function quotaGateFetch(behavior) {
+  // behavior(token) -> Response (or throws) for /v2/quota.
+  return instrumentedFetch(async (url, init) => {
+    if (url === `${STAGING_WORKER_ORIGIN}/health`) return healthResponse();
+    if (url === `${STAGING_WORKER_ORIGIN}/v2/quota`) {
+      const token = new Headers(init.headers || {}).get("x-opalreader-token");
+      return behavior(token);
+    }
+    throw new Error(`unexpected URL ${url}`);
+  });
+}
+
+test("preview F-B: a blank token is refused before identity, health, transport, or client", async () => {
+  for (const blank of ["", "   ", undefined, null]) {
+    const instrumented = quotaGateFetch(() => quotaResponse());
+    const transports = transportSpy();
+    const clients = clientSpy();
+    await assert.rejects(
+      () => connectPreviewClient({
+        token: blank,
+        deviceId: "preview-fb-blank",
+        fetchFn: instrumented.fetchFn,
+        createTransportFn: transports.create,
+        createClientFn: clients.create,
+        clientStorage: memAsyncStorage(),
+      }),
+      /Enter the staging token to connect/,
+    );
+    assert.equal(instrumented.calls.length, 0, "not even the health probe is sent");
+    assert.equal(transports.constructions(), 0);
+    assert.equal(clients.constructions(), 0);
+  }
+});
+
+test("preview F-B: a wrong token fails the transport proof with the server's verbatim refusal; no client is composed", async () => {
+  const instrumented = quotaGateFetch(() =>
+    Response.json({ error: TOKEN_ERROR }, { status: 401 }));
+  const transports = transportSpy();
+  const clients = clientSpy();
+  await assert.rejects(
+    () => connectPreviewClient({
+      token: "wrong-token",
+      deviceId: "preview-fb-wrong",
+      fetchFn: instrumented.fetchFn,
+      createTransportFn: transports.create,
+      createClientFn: clients.create,
+      clientStorage: memAsyncStorage(),
+    }),
+    (e) => e.message === TOKEN_ERROR && e.status === 401,
+  );
+  assert.equal(transports.constructions(), 1, "the candidate existed as a transport only");
+  assert.equal(clients.constructions(), 0, "no assembled client was composed around a refused token");
+  assert.equal(instrumented.authenticatedCalls().length, 1, "exactly one authenticated call: the proof");
+  assert.equal(instrumented.authenticatedCalls()[0].token, "wrong-token");
+});
+
+test("preview F-B: an expired token is refused identically — every non-2xx proof fails the same way", async () => {
+  const instrumented = quotaGateFetch(() =>
+    Response.json({ error: TOKEN_ERROR }, { status: 401 }));
+  const clients = clientSpy();
+  await assert.rejects(
+    () => connectPreviewClient({
+      token: "expired-token",
+      deviceId: "preview-fb-expired",
+      fetchFn: instrumented.fetchFn,
+      createTransportFn: transportSpy().create,
+      createClientFn: clients.create,
+      clientStorage: memAsyncStorage(),
+    }),
+    (e) => e.message === TOKEN_ERROR && e.status === 401,
+  );
+  assert.equal(clients.constructions(), 0);
+});
+
+test("preview F-B: a transport/network failure during the proof composes no client", async () => {
+  const instrumented = quotaGateFetch(() => { throw new Error("network down"); });
+  const clients = clientSpy();
+  await assert.rejects(
+    () => connectPreviewClient({
+      token: FAKE_TOKEN,
+      deviceId: "preview-fb-network",
+      fetchFn: instrumented.fetchFn,
+      createTransportFn: transportSpy().create,
+      createClientFn: clients.create,
+      clientStorage: memAsyncStorage(),
+    }),
+    /network down/,
+  );
+  assert.equal(clients.constructions(), 0);
+});
+
+test("preview F-B: a malformed 200 from quotaView is not proof", async () => {
+  for (const junk of [{ ok: true }, [], { ...GOOD_QUOTA, ledgerSeq: "1" }, { ...GOOD_QUOTA, settingsRevision: undefined }]) {
+    const instrumented = quotaGateFetch(() => Response.json(junk));
+    const clients = clientSpy();
+    await assert.rejects(
+      () => connectPreviewClient({
+        token: FAKE_TOKEN,
+        deviceId: "preview-fb-malformed",
+        fetchFn: instrumented.fetchFn,
+        createTransportFn: transportSpy().create,
+        createClientFn: clients.create,
+        clientStorage: memAsyncStorage(),
+      }),
+      /preview_quota_proof_malformed/,
+    );
+    assert.equal(clients.constructions(), 0, `payload ${JSON.stringify(junk)} must not install a client`);
+  }
+});
+
+test("preview F-B: a cached quota view in local storage cannot rescue a refused candidate (the stale-cache trap)", async () => {
+  // Seed the client-store state with a healthy cached money view —
+  // exactly the state in which the rejected quotaModel() proof would
+  // have resolved (stale data) and let a 401 candidate "pass". The
+  // transport-level proof never consults the cache.
+  const storage = memAsyncStorage();
+  await storage.set("cs:state:v1", {
+    deviceId: "preview-fb-stale",
+    money: {
+      view: { ...GOOD_QUOTA, attemptsToday: 3, ledgerSeq: 9, settingsRevision: 2 },
+      asOfLedgerSeq: 9, asOfSettingsRevision: 2, stale: false,
+    },
+  });
+  const instrumented = quotaGateFetch(() =>
+    Response.json({ error: TOKEN_ERROR }, { status: 401 }));
+  const clients = clientSpy();
+  await assert.rejects(
+    () => connectPreviewClient({
+      token: "wrong-token",
+      deviceId: "preview-fb-stale",
+      fetchFn: instrumented.fetchFn,
+      createTransportFn: transportSpy().create,
+      createClientFn: clients.create,
+      clientStorage: storage,
+    }),
+    (e) => e.message === TOKEN_ERROR,
+  );
+  assert.equal(clients.constructions(), 0);
+});
+
+test("preview F-B: a successful re-auth composes the replacement only after its own proof passes", async () => {
+  const instrumented = quotaGateFetch((token) =>
+    token === "first-good-token" || token === "second-good-token"
+      ? Response.json(GOOD_QUOTA)
+      : Response.json({ error: TOKEN_ERROR }, { status: 401 }));
+  const clients = clientSpy();
+  const storage = memAsyncStorage();
+  const first = await connectPreviewClient({
+    token: "first-good-token", deviceId: "preview-fb-reauth",
+    fetchFn: instrumented.fetchFn, createTransportFn: transportSpy().create,
+    createClientFn: clients.create, clientStorage: storage,
+  });
+  const second = await connectPreviewClient({
+    token: "second-good-token", deviceId: "preview-fb-reauth",
+    fetchFn: instrumented.fetchFn, createTransportFn: transportSpy().create,
+    createClientFn: clients.create, clientStorage: storage,
+  });
+  assert.equal(clients.constructions(), 2);
+  assert.notEqual(second.client, first.client);
+  const proofs = instrumented.authenticatedCalls();
+  assert.deepEqual(proofs.map((c) => c.token), ["first-good-token", "second-good-token"],
+    "each composition was preceded by a proof carrying that attempt's token");
+});
+
+// ------------------------------------------------------------ F-C
+test("preview F-C: identifier inputs opt out of keyboard correction; all other inputs unchanged", () => {
+  const html = readFileSync(new URL("../v2-preview/index.html", import.meta.url), "utf8");
+  const tag = (id) => {
+    const m = html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`));
+    assert.ok(m, `#${id} input present`);
+    return m[0];
+  };
+  for (const id of ["bookId", "readId"]) {
+    const t = tag(id);
+    assert.ok(t.includes('autocapitalize="none"'), `#${id} autocapitalize`);
+    assert.ok(t.includes('autocorrect="off"'), `#${id} autocorrect`);
+    assert.ok(t.includes('spellcheck="false"'), `#${id} spellcheck`);
+  }
+  // A credential and a free-text search are NOT exact-match
+  // identifier entries; Rowan's fix leaves them untouched.
+  for (const id of ["accessToken", "findQuery"]) {
+    assert.ok(!tag(id).includes("autocapitalize"), `#${id} unchanged`);
+  }
+});
+
+test("preview F-C: not-found lines name the submitted ID verbatim; the exact-case hint appears only for uppercase", () => {
+  assert.deepEqual(bookNotFoundLines("Smoke-p8-book"), [
+    "loadBook: Smoke-p8-book not in the smoke instance",
+    "loadBook: IDs are case-sensitive; check the exact case",
+  ]);
+  assert.deepEqual(bookNotFoundLines("smoke-p8-book"), [
+    "loadBook: smoke-p8-book not in the smoke instance",
+  ]);
+  assert.equal(bookNotFoundLines("smoke-P8-book")[0],
+    "loadBook: smoke-P8-book not in the smoke instance",
+    "a mixed-case ID is reported byte-for-byte, never normalized");
+  assert.equal(bookNotFoundLines("smoke-P8-book").length, 2);
+  const app = readFileSync(new URL("../v2-preview/preview-app.js", import.meta.url), "utf8");
+  assert.ok(app.includes("bookNotFoundLines(bookId)"), "loadBook reports through the helper");
+  assert.ok(!app.includes("bookId.toLowerCase"), "the submitted ID is never rewritten");
 });

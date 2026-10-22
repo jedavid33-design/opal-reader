@@ -191,15 +191,28 @@ export class OpalReaderCoordinator {
 
 // Deny-by-default staging gate for the public fetch surface. Returns a
 // Response when access is denied, null when the request may proceed.
-function stagingGate(request, env) {
+//
+// F-A (preview session finding; Rowan close review 6353069802, fix
+// shape approved 6353186341): every refusal carries the SAME
+// allowlisted CORS headers fetchHandler puts on its other public
+// responses. Without them, a browser at the allowlisted origin cannot
+// read a refusal at all — the fetch rejects as a network error
+// ("Load failed") and the real 401/403/503 is undisplayable, which is
+// what the device-acceptance session hit. The headers come ONLY from
+// corsHeaders(request, env): the Origin is echoed solely on an exact
+// match with env.ALLOWED_ORIGIN, never a wildcard; for any other or
+// absent Origin the refusal is byte-for-byte what it was before this
+// change. Statuses, bodies, gate order, and fail-closed behavior are
+// unchanged — a refusal simply becomes readable.
+function stagingGate(request, env, cors) {
   if (env.OPALREADER_V2_SCOPE !== STAGING_SCOPE)
-    return json(403, { error: "staging_scope_required" });
+    return json(403, { error: "staging_scope_required" }, cors);
   if (request.headers.get("x-opalreader-scope") !== STAGING_SCOPE)
-    return json(403, { error: "staging_scope_required" });
+    return json(403, { error: "staging_scope_required" }, cors);
   if (!env.OPALREADER_ACCESS_TOKEN)
-    return json(503, { error: "staging_token_not_configured" });
+    return json(503, { error: "staging_token_not_configured" }, cors);
   if (request.headers.get("x-opalreader-token") !== env.OPALREADER_ACCESS_TOKEN)
-    return json(401, TOKEN_ERROR_BODY);
+    return json(401, TOKEN_ERROR_BODY, cors);
   return null;
 }
 
@@ -225,7 +238,7 @@ async function fetchHandler(request, env) {
   // filtering: the only surfaces are /health and /v2/*.
   if (!url.pathname.startsWith("/v2/"))
     return json(404, { error: "route_not_found" }, cors);
-  const denied = stagingGate(request, env);
+  const denied = stagingGate(request, env, cors);
   if (denied) return denied;
   // B7 revision (6345016639): staging fails closed to the smoke
   // instance. The header must be explicitly "smoke-p8"; a missing
