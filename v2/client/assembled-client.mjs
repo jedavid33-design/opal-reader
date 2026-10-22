@@ -20,9 +20,10 @@ import { createClientStore } from "../client-store.mjs";
 import { createFunnel } from "./funnel.mjs";
 import { chapterModel, surfaceModel, SURFACES } from "./projection.mjs";
 import { createSurfaces } from "./surfaces.mjs";
+import { createShelfBridge } from "./shelf-bridge.mjs";
 import { REMOVED_GENERATION_PROVIDERS, LEGACY_PLAYABLE_PROVIDERS, voiceStatus } from "./removals.mjs";
 
-export function createAssembledClient({ deviceId, storage, transport }) {
+export function createAssembledClient({ deviceId, storage, transport, shelf = {} }) {
   const store = createClientStore({ deviceId, storage, transport });
   const funnel = createFunnel({ store, storage });
   const projection = {
@@ -32,5 +33,21 @@ export function createAssembledClient({ deviceId, storage, transport }) {
   };
   const surfaces = createSurfaces({ store, transport });
   const removals = { REMOVED_GENERATION_PROVIDERS, LEGACY_PLAYABLE_PROVIDERS, voiceStatus };
-  return { store, funnel, projection, surfaces, removals, findText: (q, opts) => store.findText(q, opts) };
+  // Part 1 (B5): the Shelf bridge is composed here at last. It keeps its
+  // own storage key (cs:shelf-bridge:v1), isolated from the shipped v1
+  // outbox, and its behavior is unchanged byte-for-byte (F12) — this is
+  // composition only, proven by the existing replay tests plus the
+  // Part 1 composition test. `shelf` may carry { shelfApiBase, fetchFn,
+  // clock, idGen }; with no shelfApiBase the bridge still queues
+  // sessions locally and flush() reports the missing URL, exactly as
+  // the shipped bridge does.
+  const shelfBridge = createShelfBridge({
+    storage,
+    fetchFn: shelf.fetchFn,
+    shelfApiBase: shelf.shelfApiBase,
+    clock: shelf.clock,
+    idGen: shelf.idGen,
+  });
+  return { store, funnel, projection, surfaces, removals, shelfBridge,
+           findText: (q, opts) => store.findText(q, opts) };
 }

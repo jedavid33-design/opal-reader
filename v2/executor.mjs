@@ -15,6 +15,22 @@
 // is ambiguity, and ambiguity is never resolved by spending again.
 import { createHash } from "node:crypto";
 
+// SHA-256 over the value's actual bytes. Strings hash as UTF-8 (the P3
+// fake-cache contract); byte arrays hash as themselves, so a real
+// provider adapter returning Uint8Array audio reports the digest of the
+// stored bytes, not of a decimal-string rendering of them. (Part 1
+// integration fix; string behavior is byte-identical to before.)
+export function sha256Of(value) {
+  const h = createHash("sha256");
+  if (typeof value === "string") h.update(value, "utf8");
+  else if (value instanceof Uint8Array) h.update(value);
+  else if (value instanceof ArrayBuffer) h.update(new Uint8Array(value));
+  else if (ArrayBuffer.isView(value))
+    h.update(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+  else h.update(String(value), "utf8");
+  return h.digest("hex");
+}
+
 // The P1-pinned fingerprint: cache_key = sha256(rawText + cfgJson),
 // cfgJson = {provider, voice, model, rate: 1, style} in that order.
 export function fingerprintFor(payload) {
@@ -79,7 +95,7 @@ export function createExecutor({ coordinator, providers, cache, consumerId, work
     // The digest of the bytes actually stored — the coordinator's
     // binding gate requires a verified digest for every new recording
     // (P2 round 3) and checks it against the cache's write-time record.
-    const sha256 = createHash("sha256").update(String(v.object.audio)).digest("hex");
+    const sha256 = sha256Of(v.object.audio);
     await reportResults(grantId, jobId, [{
       occurrenceId: occ.occurrenceId, outcome: "success",
       revisionKey: key, cacheKey: key, sha256 }]);
@@ -94,7 +110,7 @@ export function createExecutor({ coordinator, providers, cache, consumerId, work
     const key = fingerprintFor(occ.payload);
     const v = verifyStored(key, occ.payload);
     if (!v.ok) return { skipped: true, reason: "intent_success_cache_unverified" };
-    const sha256 = createHash("sha256").update(String(v.object.audio)).digest("hex");
+    const sha256 = sha256Of(v.object.audio);
     await reportResults(grantId, jobId, [{
       occurrenceId: occ.occurrenceId, outcome: "success",
       revisionKey: key, cacheKey: key, sha256 }]);

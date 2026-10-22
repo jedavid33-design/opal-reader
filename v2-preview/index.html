@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#32243f">
+<title>Opal Reader v2 — Preview (smoke data only)</title>
+<link rel="stylesheet" href="../styles-149.css?v=batch-setup-20261018">
+<link rel="stylesheet" href="./preview.css">
+</head>
+<body>
+<main class="preview-shell">
+  <header class="preview-head">
+    <h1>Opal Reader v2 — Preview</h1>
+    <p class="muted">Staging smoke data only. This preview talks to the dark
+    v2 worker's <strong>smoke-p8</strong> instance. It cannot see the real
+    library: no book flips happen here.</p>
+  </header>
+
+  <section class="card" aria-labelledby="connect-h">
+    <h2 id="connect-h">Connect</h2>
+    <label>Worker base URL <input id="workerBase" class="field" type="url" placeholder="https://opalreader-api-v2.…workers.dev"></label>
+    <label>Staging access token <input id="accessToken" class="field" type="password" autocomplete="off" placeholder="Staging-only token (kept in memory, never stored)"></label>
+    <label>Device ID <input id="deviceId" class="field" type="text" value="preview-device"></label>
+    <label>Shelf API base (optional) <input id="shelfBase" class="field" type="url" placeholder="Leave empty to queue sessions locally only"></label>
+    <div class="row">
+      <button id="connect" class="primary">Connect</button>
+      <span id="health" class="muted" role="status"></span>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="library-h">
+    <h2 id="library-h">Library (smoke)</h2>
+    <div class="row">
+      <button id="syncNow" class="secondary">Sync now</button>
+      <span id="syncStatus" class="muted" role="status"></span>
+    </div>
+    <label>Book ID <input id="bookId" class="field" type="text" placeholder="smoke-p8-book"></label>
+    <div class="row"><button id="loadBook" class="secondary">Load book</button></div>
+    <label>Chapter
+      <select id="chapterSelect" class="field"></select>
+    </label>
+    <div id="chapterModels" class="model-list" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="find-h">
+    <h2 id="find-h">Find text in segments</h2>
+    <div class="row">
+      <input id="findQuery" class="field" type="search" placeholder="Text to find">
+      <button id="findRun" class="secondary">Find</button>
+    </div>
+    <div id="findResults" class="model-list" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="style-h">
+    <h2 id="style-h">Style directions</h2>
+    <p class="muted tiny">Editing a style direction saves the book as a new
+    content revision through the save funnel — it never applies silently.</p>
+    <label>POV <select id="povSelect" class="field"></select></label>
+    <label>Style direction <textarea id="styleText" class="field" rows="3"></textarea></label>
+    <div class="row">
+      <button id="styleSave" class="secondary">Save as new revision</button>
+      <span id="styleStatus" class="muted" role="status"></span>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="player-h">
+    <h2 id="player-h">Player</h2>
+    <div id="positionModel" class="model-list" aria-live="polite"></div>
+    <label>Segment <select id="segmentSelect" class="field"></select></label>
+    <div class="row">
+      <button id="posPlay" class="secondary">▶ Play (report position)</button>
+      <button id="posPause" class="secondary">Ⅱ Pause (report position)</button>
+      <button id="posRefresh" class="ghost">Restore position</button>
+    </div>
+    <audio id="previewAudio" preload="metadata"></audio>
+    <div class="audio-recovery-row">
+      <button id="recoverAudio" type="button">Restore sound</button>
+      <button id="copyPlaybackLog" type="button">Copy playback log</button>
+    </div>
+    <p class="muted tiny">Restore sound and the playback log live in these
+    secondary player controls (F11). Playback restore reads the
+    coordinator's canonical position — the only position truth.</p>
+  </section>
+
+  <section class="card" aria-labelledby="shelf-h">
+    <h2 id="shelf-h">Shelf bridge</h2>
+    <label>Read ID <input id="readId" class="field" type="text" value="smoke-p8-read"></label>
+    <div class="row">
+      <button id="shelfStart" class="secondary">Start session</button>
+      <button id="shelfPause" class="secondary">Pause</button>
+      <button id="shelfStop" class="secondary">Stop</button>
+      <button id="shelfFlush" class="ghost">Flush outbox</button>
+    </div>
+    <div id="shelfStatus" class="model-list" aria-live="polite"></div>
+  </section>
+
+  <section class="card" aria-labelledby="settings-h">
+    <h2 id="settings-h">Settings</h2>
+    <div id="quotaModel" class="model-list" aria-live="polite"></div>
+    <label>Smoke settings (JSON) <textarea id="settingsJson" class="field" rows="4">{}</textarea></label>
+    <div class="row">
+      <button id="settingsLoad" class="secondary">Load settings</button>
+      <button id="settingsSave" class="secondary">Save settings</button>
+      <span id="settingsStatus" class="muted" role="status"></span>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="diag-h">
+    <h2 id="diag-h">Diagnostics</h2>
+    <pre id="diagLog" class="diag-log" aria-live="polite"></pre>
+  </section>
+</main>
+<script type="module" src="./preview-app.js"></script>
+</body>
+</html>

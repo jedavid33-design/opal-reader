@@ -224,7 +224,25 @@ export class GenerationCoordinator {
     // Schema DDL is idempotent and runs on writable instances. Read-only
     // facades (the GET API) pass ASSUME_SCHEMA: the tables exist because
     // every writable wake creates them first.
-    if (!env.ASSUME_SCHEMA) this.sql.exec(SCHEMA);
+    if (!env.ASSUME_SCHEMA) {
+      this.sql.exec(SCHEMA);
+      // Part 1 integration fix: seed every sync family's state row at
+      // schema time (history-aware, insert-or-ignore). _familyState's
+      // lazy INSERT is a WRITE, and the GET API's read-only facade
+      // rightly rejects it — so a never-written family (e.g. bindings
+      // before the first binding) made snapshot/pullChanges throw on
+      // the real HTTP surface even though the harness's direct calls
+      // passed. Seeding here means a writable construction (which the
+      // DO host always performs first) makes every family readable.
+      for (const family of SYNC_FAMILIES) {
+        const mx = this._one(
+          `SELECT COALESCE(MAX(seq), 0) AS tip, MIN(seq) AS fl FROM sync_changes WHERE family = ?`,
+          family);
+        this.sql.exec(
+          `INSERT OR IGNORE INTO sync_family_state (family, tip, floor) VALUES (?, ?, ?)`,
+          family, mx ? mx.tip : 0, mx && mx.fl !== null ? mx.fl : 1);
+      }
+    }
   }
 
   _now() { return typeof this.env.now === "function" ? this.env.now() : Date.now(); }
