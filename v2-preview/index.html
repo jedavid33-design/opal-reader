@@ -19,9 +19,10 @@
 
   <section class="card" aria-labelledby="connect-h">
     <h2 id="connect-h">Connect</h2>
-    <label>Worker base URL <input id="workerBase" class="field" type="url" placeholder="https://opalreader-api-v2.…workers.dev"></label>
+    <p class="muted">Worker base URL <strong>https://opalreader-api-v2.4d8v7jw78c.workers.dev</strong> (pinned; not editable)</p>
     <label>Staging access token <input id="accessToken" class="field" type="password" autocomplete="off" placeholder="Staging-only token (kept in memory, never stored)"></label>
-    <label>Device ID <input id="deviceId" class="field" type="text" value="preview-device"></label>
+    <p>Device ID <strong id="deviceId" role="status">Generating…</strong><br>
+    <span class="muted tiny">Generated once on this device and retained only in preview-local storage. It is not a secret.</span></p>
     <div class="row">
       <button id="connect" class="primary">Connect</button>
       <span id="health" class="muted" role="status"></span>

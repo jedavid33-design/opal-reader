@@ -4,7 +4,11 @@
 // + Shelf bridge) to these preview screens. This file is the §7 wiring
 // for the PREVIEW only: the shipped root index.html / app-256.js are
 // not part of it and are not modified by it. The preview talks only to
-// the staging worker's smoke-p8 instance, with a token held in memory.
+// the pinned staging worker's smoke-p8 instance, with a token held in
+// memory. Before any token-bearing transport can be created, an
+// unauthenticated health response must match the deployed staging
+// build exactly (preview source review P1, Rowan 6351482794). Each
+// browser/device gets its own stable preview device identity (P2).
 // Its Shelf bridge never leaves the page: it is composed with a local
 // fixture transport (./fake-shelf-transport.js), so no external Shelf
 // POST is possible from this bundle (B7 safety round, 6346291349).
@@ -36,16 +40,147 @@ function fail(where, e) { log(`${where}: ${e?.message || e}`); }
 // Preview-local storage: one namespaced localStorage record per key,
 // matching the assembled client's async storage contract. The token is
 // NEVER stored — it lives in the transport closure only.
-const storage = {
-  async get(key) {
-    const raw = localStorage.getItem(`opalreader-v2-preview:${key}`);
-    return raw === null ? undefined : JSON.parse(raw);
-  },
-  async set(key, value) {
-    localStorage.setItem(`opalreader-v2-preview:${key}`, JSON.stringify(value));
-  },
-  async del(key) { localStorage.removeItem(`opalreader-v2-preview:${key}`); },
+export function createPreviewStorage(storageLike) {
+  if (!storageLike) throw new Error("preview local storage is required");
+  return {
+    async get(key) {
+      const raw = storageLike.getItem(`opalreader-v2-preview:${key}`);
+      return raw === null ? undefined : JSON.parse(raw);
+    },
+    async set(key, value) {
+      storageLike.setItem(`opalreader-v2-preview:${key}`, JSON.stringify(value));
+    },
+    async del(key) { storageLike.removeItem(`opalreader-v2-preview:${key}`); },
+  };
+}
+
+const inertLocalStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
 };
+const storage = createPreviewStorage(globalThis.localStorage ?? inertLocalStorage);
+
+export const STAGING_WORKER_ORIGIN = "https://opalreader-api-v2.4d8v7jw78c.workers.dev";
+// The deployed staging Worker's build stamp. This preview correction
+// does not redeploy the Worker, so the value intentionally remains the
+// Part 2 replacement pin even though the preview source is repinned.
+export const EXPECTED_STAGING_BUILD = "a2b0031fcba6d3cdaadb949d900a4a642da05807";
+export const EXPECTED_STAGING_HEALTH = Object.freeze({
+  ok: true,
+  app: "OpalReader API v2",
+  version: "2.0.0",
+  build: EXPECTED_STAGING_BUILD,
+  coordinator: "armed",
+  scope: "staging-smoke",
+  generation: "halted",
+});
+
+export function assertStagingHealth(health) {
+  if (!health || typeof health !== "object" || Array.isArray(health))
+    throw new Error("staging_health_malformed");
+  const expectedKeys = Object.keys(EXPECTED_STAGING_HEALTH).sort();
+  const actualKeys = Object.keys(health).sort();
+  if (JSON.stringify(actualKeys) !== JSON.stringify(expectedKeys))
+    throw new Error("staging_health_mismatch: fields");
+  for (const [key, expected] of Object.entries(EXPECTED_STAGING_HEALTH)) {
+    if (health[key] !== expected)
+      throw new Error(`staging_health_mismatch: ${key}`);
+  }
+  return health;
+}
+
+export async function fetchVerifiedStagingHealth({
+  fetchFn = (...args) => globalThis.fetch(...args),
+} = {}) {
+  let res;
+  try {
+    // Deliberately no headers: the staging token must not be attached
+    // to the identity probe, and no transport exists yet.
+    res = await fetchFn(`${STAGING_WORKER_ORIGIN}/health`, { method: "GET" });
+  } catch (e) {
+    throw new Error(`staging_health_unreachable: ${e?.message || e}`);
+  }
+  if (!res?.ok) throw new Error(`staging_health_http_${res?.status ?? "unknown"}`);
+  let health;
+  try { health = await res.json(); }
+  catch { throw new Error("staging_health_malformed"); }
+  return assertStagingHealth(health);
+}
+
+export const PREVIEW_DEVICE_ID_KEY = "device-id";
+
+function defaultRandomPreviewDeviceId() {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  if (uuid) return `preview-${uuid}`;
+  return `preview-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function deviceIdMismatch(message) {
+  const err = new Error(`device_id_mismatch: ${message}`);
+  err.code = "device_id_mismatch";
+  return err;
+}
+
+export async function ensurePreviewDeviceId(previewStorage, randomId = defaultRandomPreviewDeviceId) {
+  if (!previewStorage) throw new Error("preview storage is required");
+  const existing = await previewStorage.get(PREVIEW_DEVICE_ID_KEY);
+  if (typeof existing === "string" && existing.trim()) return existing;
+  if (existing !== undefined && existing !== null)
+    throw deviceIdMismatch("stored preview device identity is malformed");
+  const generated = randomId();
+  if (typeof generated !== "string" || !generated.trim())
+    throw new Error("preview device identity generation failed");
+  await previewStorage.set(PREVIEW_DEVICE_ID_KEY, generated);
+  return generated;
+}
+
+export async function assertPreviewDeviceIdentity(previewStorage, deviceId) {
+  const state = await previewStorage.get("cs:state:v1");
+  const storedDeviceId = state?.deviceId;
+  if (storedDeviceId !== undefined && storedDeviceId !== null && storedDeviceId !== deviceId)
+    throw deviceIdMismatch(`storage belongs to ${storedDeviceId}, not ${deviceId}`);
+  return true;
+}
+
+let deviceIdentityPromise = null;
+export function previewDeviceIdentity() {
+  deviceIdentityPromise ??= ensurePreviewDeviceId(storage).then((id) => {
+    const el = $("deviceId");
+    if (el) el.textContent = id;
+    return id;
+  });
+  return deviceIdentityPromise;
+}
+
+export async function connectPreviewClient({
+  token,
+  deviceId,
+  fetchFn = (...args) => globalThis.fetch(...args),
+  createTransportFn = createHttpTransport,
+  createClientFn = createAssembledClient,
+  clientStorage = storage,
+  shelfTransport = fakeShelf,
+} = {}) {
+  if (!deviceId) throw new Error("preview device identity is required");
+  // Local identity preflight happens before the health probe and
+  // therefore before any possible authenticated request. A mismatch is
+  // surfaced; neither the dedicated identity nor the client state is
+  // silently rewritten to make it agree.
+  await assertPreviewDeviceIdentity(clientStorage, deviceId);
+  const health = await fetchVerifiedStagingHealth({ fetchFn });
+  const createdTransport = createTransportFn({
+    baseUrl: STAGING_WORKER_ORIGIN, token, deviceId,
+    scope: "staging-smoke", instance: "smoke-p8", fetchFn,
+  });
+  const shelf = shelfTransport === fakeShelf
+    ? { shelfApiBase: fakeShelf.base, fetchFn: fakeShelf.fetchFn }
+    : { shelfApiBase: shelfTransport.base, fetchFn: shelfTransport.fetchFn };
+  const createdClient = createClientFn({
+    deviceId, storage: clientStorage, transport: createdTransport, shelf,
+  });
+  return { health, transport: createdTransport, client: createdClient };
+}
 
 function row(label, value) {
   const div = document.createElement("div");
@@ -147,27 +282,33 @@ function syncSegments() {
   }
 }
 
-async function connect() {
-  const baseUrl = $("workerBase").value.trim();
-  const token = $("accessToken").value;
-  const deviceId = $("deviceId").value.trim() || "preview-device";
-  transport = createHttpTransport({
-    baseUrl, token, deviceId, scope: "staging-smoke", instance: "smoke-p8",
-  });
-  client = createAssembledClient({
-    deviceId, storage, transport,
-    // Local fixture transport only — see the fakeShelf note at the
-    // top of this file. There is deliberately no user-entered base.
-    shelf: { shelfApiBase: fakeShelf.base, fetchFn: fakeShelf.fetchFn },
-  });
+export async function connect() {
+  // A failed reconnect must not leave a previous token-bearing client
+  // available to the page's other actions.
+  client = null;
+  transport = null;
+  const tokenInput = $("accessToken");
+  const token = tokenInput.value;
+  let connected;
   try {
-    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/health`);
-    const health = await res.json();
-    $("health").textContent = `Worker: ${health.app} ${health.version} · build ${health.build} · generation ${health.generation}`;
-    log(`connected: ${JSON.stringify(health)}`);
-  } catch (e) { fail("health", e); }
+    const deviceId = await previewDeviceIdentity();
+    connected = await connectPreviewClient({ token, deviceId });
+  } catch (e) {
+    $("health").textContent = `Connection refused: ${e?.message || e}`;
+    fail("connect", e);
+    return false;
+  }
+  transport = connected.transport;
+  client = connected.client;
+  // Successful connection only: do not leave Julie's staging token in
+  // the DOM. It remains solely in the transport closure.
+  tokenInput.value = "";
+  const { health } = connected;
+  $("health").textContent = `Worker: ${health.app} ${health.version} · build ${health.build} · generation ${health.generation}`;
+  log(`connected to pinned staging worker: ${JSON.stringify(health)}`);
   await renderQuota();
   await renderShelf();
+  return true;
 }
 
 async function loadBook() {
@@ -295,5 +436,11 @@ function wire() {
   });
 }
 
-wire();
-log("preview bundle loaded (no worker connection yet)");
+if (typeof document !== "undefined") {
+  wire();
+  void previewDeviceIdentity().catch((e) => {
+    const el = $("health");
+    if (el) el.textContent = `Device identity error: ${e?.message || e}`;
+  });
+  log("preview bundle loaded (no worker connection yet)");
+}

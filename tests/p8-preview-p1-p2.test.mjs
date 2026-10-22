@@ -1,0 +1,341 @@
+// Opal Reader v2 — preview source-review corrections P1 + P2
+// (Rowan 6351482794).
+//
+// P1 is proven with an instrumented fetch: every request is recorded,
+// and any request carrying x-opalreader-token is counted as an
+// authenticated request. Bad staging health must produce exactly one
+// unauthenticated /health probe, no transport construction, and zero
+// authenticated requests. P2 uses two independent preview-local
+// storage instances and one shared recording transport to prove that
+// independently generated device identities allocate disjoint command
+// and position-event IDs, with no ID presented to the server twice.
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createHttpTransport } from "../v2/client/http-transport.mjs";
+import { createAssembledClient } from "../v2/client/assembled-client.mjs";
+import {
+  EXPECTED_STAGING_BUILD,
+  EXPECTED_STAGING_HEALTH,
+  STAGING_WORKER_ORIGIN,
+  assertPreviewDeviceIdentity,
+  connectPreviewClient,
+  createPreviewStorage,
+  ensurePreviewDeviceId,
+} from "../v2-preview/preview-app.js";
+
+const FAKE_TOKEN = "fake-staging-token-for-tests-only";
+
+function instrumentedFetch(handler) {
+  const calls = [];
+  const fetchFn = async (url, init = {}) => {
+    const headers = new Headers(init.headers || {});
+    calls.push({
+      url: String(url),
+      method: init.method || "GET",
+      token: headers.get("x-opalreader-token"),
+      scope: headers.get("x-opalreader-scope"),
+      instance: headers.get("x-opalreader-instance"),
+    });
+    return handler(String(url), init, calls);
+  };
+  return {
+    calls,
+    fetchFn,
+    authenticatedCalls: () => calls.filter((c) => c.token !== null),
+  };
+}
+
+function healthResponse(overrides = {}) {
+  return Response.json({ ...EXPECTED_STAGING_HEALTH, ...overrides });
+}
+
+function quotaResponse() {
+  return Response.json({
+    ledgerSeq: 1,
+    settingsRevision: 1,
+    spentMicroCents: 0,
+    attemptsToday: 0,
+    dailyLimit: 100,
+    monthlyCap: 50,
+  });
+}
+
+function memAsyncStorage() {
+  const map = new Map();
+  return {
+    get: async (key) => (map.has(key) ? structuredClone(map.get(key)) : undefined),
+    set: async (key, value) => { map.set(key, structuredClone(value)); },
+    del: async (key) => { map.delete(key); },
+    _map: map,
+  };
+}
+
+function transportSpy() {
+  let constructions = 0;
+  return {
+    create(opts) {
+      constructions += 1;
+      return createHttpTransport(opts);
+    },
+    constructions: () => constructions,
+  };
+}
+
+function clientSpy() {
+  let constructions = 0;
+  return {
+    create(opts) {
+      constructions += 1;
+      return createAssembledClient(opts);
+    },
+    constructions: () => constructions,
+  };
+}
+
+test("preview P1/P2 source: no editable worker origin and no shared default device ID", () => {
+  const html = readFileSync(new URL("../v2-preview/index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../v2-preview/preview-app.js", import.meta.url), "utf8");
+  assert.ok(!html.includes('id="workerBase"'));
+  assert.ok(!app.includes("workerBase"));
+  assert.ok(html.includes(STAGING_WORKER_ORIGIN));
+  assert.ok(app.includes(`"${STAGING_WORKER_ORIGIN}"`));
+  assert.ok(app.includes(`"${EXPECTED_STAGING_BUILD}"`),
+    "the health gate is bound to the deployed staging build");
+  assert.ok(!html.includes('value="preview-device"'));
+  assert.ok(!html.includes('<input id="deviceId"'));
+  assert.ok(html.includes('<strong id="deviceId"'));
+});
+
+test("preview P1: correct health identity opens the gate before authenticated quota traffic", async () => {
+  const instrumented = instrumentedFetch(async (url) => {
+    if (url === `${STAGING_WORKER_ORIGIN}/health`) return healthResponse();
+    if (url === `${STAGING_WORKER_ORIGIN}/v2/quota`) return quotaResponse();
+    throw new Error(`unexpected URL ${url}`);
+  });
+  const transports = transportSpy();
+  const clients = clientSpy();
+  const connected = await connectPreviewClient({
+    token: FAKE_TOKEN,
+    deviceId: "preview-p1-success",
+    fetchFn: instrumented.fetchFn,
+    createTransportFn: transports.create,
+    createClientFn: clients.create,
+    clientStorage: memAsyncStorage(),
+  });
+
+  assert.equal(connected.health.build, EXPECTED_STAGING_BUILD);
+  assert.equal(transports.constructions(), 1);
+  assert.equal(clients.constructions(), 1);
+  assert.equal(instrumented.calls.length, 1);
+  assert.equal(instrumented.calls[0].url, `${STAGING_WORKER_ORIGIN}/health`);
+  assert.equal(instrumented.calls[0].token, null);
+  assert.equal(instrumented.authenticatedCalls().length, 0,
+    "constructing the transport must not itself send the token");
+
+  const quota = await connected.client.surfaces.quotaModel();
+  assert.equal(quota.view.dailyLimit, 100);
+  assert.equal(instrumented.authenticatedCalls().length, 1);
+  assert.equal(instrumented.authenticatedCalls()[0].url, `${STAGING_WORKER_ORIGIN}/v2/quota`);
+  assert.equal(instrumented.authenticatedCalls()[0].token, FAKE_TOKEN);
+  assert.equal(instrumented.authenticatedCalls()[0].scope, "staging-smoke");
+  assert.equal(instrumented.authenticatedCalls()[0].instance, "smoke-p8");
+});
+
+test("preview P1: a poisoned arbitrary origin is ignored; requests stay on the pinned staging origin", async () => {
+  const instrumented = instrumentedFetch(async (url) => {
+    assert.ok(url.startsWith(STAGING_WORKER_ORIGIN), `request escaped the pin: ${url}`);
+    if (url.endsWith("/health")) return healthResponse();
+    if (url.endsWith("/v2/quota")) return quotaResponse();
+    throw new Error(`unexpected URL ${url}`);
+  });
+  const transports = transportSpy();
+  const connected = await connectPreviewClient({
+    // Extra caller input must have no effect: connectPreviewClient has
+    // no caller-selected origin in its connection contract.
+    baseUrl: "https://evil.example",
+    token: FAKE_TOKEN,
+    deviceId: "preview-p1-poisoned-origin",
+    fetchFn: instrumented.fetchFn,
+    createTransportFn: transports.create,
+    createClientFn: clientSpy().create,
+    clientStorage: memAsyncStorage(),
+  });
+  await connected.client.surfaces.quotaModel();
+  assert.equal(transports.constructions(), 1);
+  assert.ok(instrumented.calls.every((c) => c.url.startsWith(STAGING_WORKER_ORIGIN)));
+  assert.equal(instrumented.authenticatedCalls().length, 1);
+  assert.ok(instrumented.authenticatedCalls().every((c) => c.url.startsWith(STAGING_WORKER_ORIGIN)));
+});
+
+const badHealthCases = [
+  ["wrong build", async () => healthResponse({ build: "0000000000000000000000000000000000000000" })],
+  ["wrong scope", async () => healthResponse({ scope: "production" })],
+  ["generation active", async () => healthResponse({ generation: "enabled" })],
+  ["coordinator unbound", async () => healthResponse({ coordinator: "unbound" })],
+  ["wrong app", async () => healthResponse({ app: "OpalReader API" })],
+  ["malformed JSON", async () => new Response("{not-json", { status: 200, headers: { "content-type": "application/json" } })],
+  ["HTTP failure", async () => Response.json({ error: "nope" }, { status: 500 })],
+  ["fetch failure", async () => { throw new Error("network down"); }],
+];
+
+for (const [name, handler] of badHealthCases) {
+  test(`preview P1: bad health identity (${name}) stops with zero authenticated requests`, async () => {
+    const instrumented = instrumentedFetch(handler);
+    const transports = transportSpy();
+    const clients = clientSpy();
+    await assert.rejects(
+      () => connectPreviewClient({
+        token: FAKE_TOKEN,
+        deviceId: `preview-p1-${name.replaceAll(" ", "-")}`,
+        fetchFn: instrumented.fetchFn,
+        createTransportFn: transports.create,
+        createClientFn: clients.create,
+        clientStorage: memAsyncStorage(),
+      }),
+      /staging_health_/,
+    );
+    assert.equal(instrumented.calls.length, 1);
+    assert.equal(instrumented.calls[0].url, `${STAGING_WORKER_ORIGIN}/health`);
+    assert.equal(instrumented.calls[0].token, null);
+    assert.equal(instrumented.authenticatedCalls().length, 0);
+    assert.equal(transports.constructions(), 0);
+    assert.equal(clients.constructions(), 0);
+  });
+}
+
+class FakeLocalStorage {
+  constructor() { this.map = new Map(); }
+  getItem(key) { return this.map.has(key) ? this.map.get(key) : null; }
+  setItem(key, value) { this.map.set(key, String(value)); }
+  removeItem(key) { this.map.delete(key); }
+}
+
+test("preview P2: device identity is generated once per fresh storage and then reused", async () => {
+  const storageA = createPreviewStorage(new FakeLocalStorage());
+  const storageB = createPreviewStorage(new FakeLocalStorage());
+  let generated = 0;
+  const randomId = () => `preview-test-${++generated}`;
+
+  const a1 = await ensurePreviewDeviceId(storageA, randomId);
+  const a2 = await ensurePreviewDeviceId(storageA, randomId);
+  const b1 = await ensurePreviewDeviceId(storageB, randomId);
+
+  assert.equal(a1, "preview-test-1");
+  assert.equal(a2, a1, "the same device reuses its stored identity");
+  assert.equal(b1, "preview-test-2");
+  assert.notEqual(a1, b1);
+  assert.equal(generated, 2, "reuse must not mint a replacement identity");
+  assert.equal(await storageA.get("device-id"), a1);
+  assert.equal(await storageB.get("device-id"), b1);
+});
+
+test("preview P2: identity mismatch is surfaced before any network or transport creation", async () => {
+  const previewStorage = createPreviewStorage(new FakeLocalStorage());
+  const deviceId = await ensurePreviewDeviceId(previewStorage, () => "preview-mismatch-device");
+  await previewStorage.set("cs:state:v1", { deviceId: "preview-belonging-to-another-device" });
+  const instrumented = instrumentedFetch(async () => healthResponse());
+  const transports = transportSpy();
+
+  await assert.rejects(
+    () => connectPreviewClient({
+      token: FAKE_TOKEN,
+      deviceId,
+      fetchFn: instrumented.fetchFn,
+      createTransportFn: transports.create,
+      createClientFn: clientSpy().create,
+      clientStorage: previewStorage,
+    }),
+    (e) => e.code === "device_id_mismatch",
+  );
+  assert.equal(instrumented.calls.length, 0);
+  assert.equal(instrumented.authenticatedCalls().length, 0);
+  assert.equal(transports.constructions(), 0);
+  assert.equal(await previewStorage.get("device-id"), deviceId,
+    "the stored identity was not silently mutated");
+  await assert.rejects(
+    () => assertPreviewDeviceIdentity(previewStorage, "preview-someone-else"),
+    (e) => e.code === "device_id_mismatch",
+  );
+});
+
+class RecordingTransport {
+  constructor() {
+    this.commandReceipts = new Map();
+    this.eventReceipts = new Map();
+    this.duplicateCommandIds = [];
+    this.duplicateEventIds = [];
+    this.nextReceiptSeq = 1;
+  }
+  async sendCommand(cmd) {
+    if (this.commandReceipts.has(cmd.command_id)) {
+      this.duplicateCommandIds.push(cmd.command_id);
+      return { ...this.commandReceipts.get(cmd.command_id), replayed: true };
+    }
+    const receipt = { outcome: "applied", replayed: false };
+    this.commandReceipts.set(cmd.command_id, receipt);
+    return receipt;
+  }
+  async snapshot() { throw new Error("not used by this regression"); }
+  async pullChanges() { throw new Error("not used by this regression"); }
+  async positionView() {
+    return {
+      canonical: null,
+      asOfReceiptSeq: this.eventReceipts.size,
+      supersededCount: 0,
+      journalGaps: [],
+    };
+  }
+  async pushPosition(_bookId, events) {
+    const receipts = [];
+    for (const event of events) {
+      if (this.eventReceipts.has(event.eventId)) {
+        this.duplicateEventIds.push(event.eventId);
+        receipts.push({ eventId: event.eventId, receiptSeq: this.eventReceipts.get(event.eventId), superseded: false, replayed: true });
+      } else {
+        const receiptSeq = this.nextReceiptSeq++;
+        this.eventReceipts.set(event.eventId, receiptSeq);
+        receipts.push({ eventId: event.eventId, receiptSeq, superseded: false, replayed: false });
+      }
+    }
+    return { receipts, rejected: [], tip: this.eventReceipts.size, journalGaps: [] };
+  }
+  async byteCheck() { return false; }
+  async quotaView() { throw new Error("not used by this regression"); }
+}
+
+test("preview P2: two fresh-storage clients allocate disjoint command and position IDs with no replay", async () => {
+  const localA = new FakeLocalStorage();
+  const localB = new FakeLocalStorage();
+  const storageA = createPreviewStorage(localA);
+  const storageB = createPreviewStorage(localB);
+  const deviceA = await ensurePreviewDeviceId(storageA, () => "preview-client-a");
+  const deviceB = await ensurePreviewDeviceId(storageB, () => "preview-client-b");
+  assert.notEqual(deviceA, deviceB);
+
+  const sharedTransport = new RecordingTransport();
+  const clientA = createAssembledClient({ deviceId: deviceA, storage: storageA, transport: sharedTransport });
+  const clientB = createAssembledClient({ deviceId: deviceB, storage: storageB, transport: sharedTransport });
+
+  const commandA = await clientA.store.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 50 } });
+  const commandB = await clientB.store.intent("SetSettings", { baseRevision: 0, data: { monthlyCap: 51 } });
+  assert.equal(commandA, `${deviceA}-cmd-1`);
+  assert.equal(commandB, `${deviceB}-cmd-1`);
+  assert.notEqual(commandA, commandB);
+  await clientA.store.flushOutbox();
+  await clientB.store.flushOutbox();
+
+  const positionA = await clientA.surfaces.reportPosition("smoke-p8-book",
+    { kind: "play", occurrenceId: "o1", offsetSec: 1 });
+  const positionB = await clientB.surfaces.reportPosition("smoke-p8-book",
+    { kind: "pause", occurrenceId: "o1", offsetSec: 2 });
+  assert.equal(positionA.event.eventId, `${deviceA}:1`);
+  assert.equal(positionB.event.eventId, `${deviceB}:1`);
+  assert.notEqual(positionA.event.eventId, positionB.event.eventId);
+
+  assert.deepEqual([...sharedTransport.commandReceipts.keys()].sort(), [commandA, commandB].sort());
+  assert.deepEqual([...sharedTransport.eventReceipts.keys()].sort(), [positionA.event.eventId, positionB.event.eventId].sort());
+  assert.ok([...sharedTransport.commandReceipts.values()].every((r) => r.replayed === false));
+  assert.deepEqual(sharedTransport.duplicateCommandIds, []);
+  assert.deepEqual(sharedTransport.duplicateEventIds, []);
+});
