@@ -14,6 +14,24 @@
 // behavior on brand-new empty instances — directly against the
 // coordinator and through the worker entry -> DO transport, in the
 // §5 smoke order for the settings/idempotency portion.
+//
+// REVISION (Rowan 6349834892, Proof 1): the entry tests' DO env now
+// models the ACTUAL staged script's binding set. Real Cloudflare
+// hands a Durable Object the script's own bindings; the first
+// version of makeWorkerEnv() gave the DO only the bucket and the
+// halt flag, omitting OPALREADER_V2_SCOPE and R2_KEY_PREFIX — so
+// OpalReaderCoordinator._cache()'s staging namespace check compared
+// an ABSENT scope against "staging-smoke", never fired, and the
+// entry scenarios passed with the fail-closed R2 namespace check
+// inadvertently bypassed. The DO env below is the pinned
+// deploy-spec set (v2/p8/deploy-spec.json): the COORDINATOR
+// namespace itself, the R2 bucket, the generation queue, and the
+// four plain texts (ALLOWED_ORIGIN — the pages origin —,
+// OPALREADER_V2_SCOPE, GENERATION_HALT, R2_KEY_PREFIX), plus the
+// OPALREADER_ACCESS_TOKEN secret binding modeled PRESENCE-ONLY
+// (a marker, never a value; nothing inside the DO reads it — the
+// token gate runs in the worker fetch handler, whose env carries
+// the test fixture as before).
 import test from "node:test";
 import assert from "node:assert/strict";
 import workerEntry, { OpalReaderCoordinator } from "../v2/worker-entry.js";
@@ -23,19 +41,29 @@ import { makeHarness } from "./helpers/do-harness.mjs";
 // Mirrors tests/p8-part1-integration.test.mjs: the worker entry wired
 // to the DO class over the SQLite harness, so the full transport
 // (staging gate -> instance routing -> DO fetch -> API) is exercised.
+// The bucket records every operation (op + key), in the manner of
+// the B7 safety tests' InstrumentedBucket, so the namespace
+// assertions below can prove WHICH keys the cache touched — not
+// merely what it answered.
 class FakeBucket {
-  constructor() { this.map = new Map(); }
+  constructor() { this.map = new Map(); this.calls = []; }
   async get(key) {
+    this.calls.push({ op: "get", key });
     const e = this.map.get(key);
     if (!e) return null;
     return { arrayBuffer: async () => e.bytes.slice().buffer, customMetadata: e.customMetadata, httpMetadata: {} };
   }
-  async head(key) { return this.map.has(key) ? { size: this.map.get(key).bytes.length } : null; }
+  async head(key) {
+    this.calls.push({ op: "head", key });
+    return this.map.has(key) ? { size: this.map.get(key).bytes.length } : null;
+  }
   async put(key, bytes, opts = {}) {
+    this.calls.push({ op: "put", key });
     if (opts.onlyIf?.etagDoesNotMatch === "*" && this.map.has(key)) return null;
     this.map.set(key, { bytes: new Uint8Array(bytes), customMetadata: opts.customMetadata || {} });
     return { key };
   }
+  seed(key, bytes, meta = {}) { this.map.set(key, { bytes: new Uint8Array(bytes), customMetadata: meta }); }
 }
 
 function makeDoNamespace(doEnv) {
@@ -54,19 +82,37 @@ function makeDoNamespace(doEnv) {
   };
 }
 
-function makeWorkerEnv(overrides = {}) {
+function makeWorkerEnv(overrides = {}, doOverrides = {}) {
   const bucket = new FakeBucket();
-  const doEnv = { OPALREADER_STORAGE: bucket, GENERATION_HALT: "1" };
+  const queueSends = [];
+  const queue = { send: async (msg) => { queueSends.push(msg); } };
+  // The staged script's binding set, per the pinned deploy-spec —
+  // this is the env the DO is constructed with in production.
+  const doEnv = {
+    OPALREADER_STORAGE: bucket,
+    OPALREADER_GENERATION: queue,
+    ALLOWED_ORIGIN: "https://jedavid33-design.github.io",
+    OPALREADER_V2_SCOPE: "staging-smoke",
+    GENERATION_HALT: "1",
+    R2_KEY_PREFIX: "smoke-p8/",
+    // Secret binding modeled presence-only (see the header note).
+    OPALREADER_ACCESS_TOKEN: "<presence-only: harness models no secret values>",
+    ...doOverrides,
+  };
+  const namespace = makeDoNamespace(doEnv);
+  doEnv.COORDINATOR = namespace; // the script's env carries its own DO namespace binding
   const env = {
-    COORDINATOR: makeDoNamespace(doEnv),
+    COORDINATOR: namespace,
     OPALREADER_ACCESS_TOKEN: "staging-token",
     OPALREADER_V2_SCOPE: "staging-smoke",
     GENERATION_HALT: "1",
     ALLOWED_ORIGIN: "https://jedavid33-design.github.io",
     OPALREADER_STORAGE: bucket,
+    OPALREADER_GENERATION: queue,
+    R2_KEY_PREFIX: "smoke-p8/",
     ...overrides,
   };
-  return { env, bucket };
+  return { env, bucket, queueSends };
 }
 
 function req(path, { method = "GET", body } = {}) {
@@ -262,4 +308,52 @@ test("F1 entry: missing meta.frozen is not a 500 — commands flow, and a freeze
   // Reads still work while frozen.
   const read = await call(env, req("/v2/settings"));
   assert.equal(read.status, 200);
+});
+
+// --------------------------- revised DO env (Rowan 6349834892, Proof 1)
+// The two tests above this block now run under the corrected env by
+// construction (makeWorkerEnv). These two pin WHY the correction
+// matters: with the staged binding set present in the DO env, the
+// staging R2 namespace check is satisfied by the real prefix — and
+// it is genuinely LIVE, so the same env shape with a wrong or absent
+// prefix fails closed instead of passing silently as it did before.
+test("F1 entry (revised env): smoke prefix respected — byte-check sees the smoke object, never the production twin", async () => {
+  const { env, bucket, queueSends } = makeWorkerEnv();
+  const smokeKey = "a".repeat(64);
+  const prodKey = "b".repeat(64);
+  bucket.seed(`smoke-p8/audio/${smokeKey}.mp3`, new Uint8Array([1, 2, 3]));
+  bucket.seed(`audio/${prodKey}.mp3`, new Uint8Array([4, 5, 6])); // production twin: must stay invisible
+  // The F1 settings scenario still runs clean on this instance.
+  const settings = await call(env, req("/v2/settings"));
+  assert.equal(settings.status, 200);
+  // Byte-check trio through the entry (the §5 smoke step-7 shape).
+  const hit = await call(env, req(`/v2/sync/byte-check/${smokeKey}`));
+  assert.equal(hit.status, 200);
+  assert.deepEqual(await hit.json(), { cacheKey: smokeKey, exists: true });
+  const miss = await call(env, req(`/v2/sync/byte-check/${prodKey}`));
+  assert.equal(miss.status, 200);
+  assert.deepEqual(await miss.json(), { cacheKey: prodKey, exists: false });
+  const malformed = await call(env, req("/v2/sync/byte-check/not-a-key"));
+  assert.equal(malformed.status, 400);
+  assert.equal((await malformed.json()).error, "invalid_cache_key");
+  // Every bucket operation the whole sequence performed stayed
+  // inside the smoke namespace — and the bucket really was consulted
+  // (a pass with zero R2 contact would prove nothing).
+  assert.ok(bucket.calls.length > 0, "the corrected env really did consult R2");
+  for (const c of bucket.calls)
+    assert.ok(c.key.startsWith("smoke-p8/"), `bucket ${c.op} escaped the smoke namespace: ${c.key}`);
+  // The queue binding is present in both envs now, as staged — and
+  // with GENERATION_HALT=1 it still delivers nothing.
+  assert.deepEqual(queueSends, []);
+});
+
+test("F1 entry (revised env): the namespace guard is LIVE — wrong or absent DO prefix fails closed, zero bucket operations", async () => {
+  for (const bad of ["audio/", "", undefined]) {
+    const { env, bucket } = makeWorkerEnv({}, { R2_KEY_PREFIX: bad });
+    const res = await call(env, req("/v2/settings"));
+    assert.equal(res.status, 500, `prefix ${JSON.stringify(bad)} must fail the request closed`);
+    assert.match((await res.json()).error, /R2_KEY_PREFIX/,
+      "the failure is the named staging namespace error, not a generic 500");
+    assert.deepEqual(bucket.calls, [], `zero bucket operations for prefix ${JSON.stringify(bad)}`);
+  }
 });

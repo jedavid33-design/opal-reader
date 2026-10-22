@@ -97,3 +97,90 @@ test("envelope: a missing closure module FAIL (A0/A2)", () => {
   assert.equal(code, 1);
   assert.match(out, /\[FAIL\] (A0|A2) /);
 });
+
+// ------------------------------------------------- UPDATE envelope
+// F1 revision, Proof 2 (Rowan 6349834892): the SECOND upload is an
+// update of the existing script, validated separately by
+// tools/validate-update-envelope.mjs against the committed overlay
+// tools/update-envelope.json. The positive case must pass 13/13;
+// each negative reintroduces one update-specific defect into a COPY
+// of the envelope and requires a FAIL with the expected assertion id.
+const UPDATE_VALIDATOR = join(root, "tools", "validate-update-envelope.mjs");
+const UPDATE_ENVELOPE = join(root, "tools", "update-envelope.json");
+
+function runUpdateValidator(envelope) {
+  try {
+    const out = execFileSync(process.execPath, [UPDATE_VALIDATOR, "--dist", dist, "--envelope", envelope], { encoding: "utf8" });
+    return { code: 0, out };
+  } catch (e) {
+    return { code: e.status ?? 1, out: String(e.stdout || "") + String(e.stderr || "") };
+  }
+}
+
+function mutatedEnvelope(fn) {
+  const path = join(tmp, "env-" + Math.random().toString(36).slice(2, 9) + ".json");
+  const env = JSON.parse(readFileSync(UPDATE_ENVELOPE, "utf8"));
+  fn(env);
+  writeFileSync(path, JSON.stringify(env, null, 2) + "\n");
+  return path;
+}
+
+test("update-envelope: the committed overlay validates clean against the built artifact", () => {
+  const { code, out } = runUpdateValidator(UPDATE_ENVELOPE);
+  assert.equal(code, 0, out);
+  assert.match(out, /UPDATE ENVELOPE VALIDATION: PASS \(13\/13 assertions\)/);
+  for (const part of ["v2/worker-entry.js", "v2/api.mjs", "v2/coordinator.mjs", "v2/executor.mjs", "v2/host/adapters.mjs", "v2/host/build-identity.mjs"])
+    assert.ok(out.includes(part), `update closure lists ${part}`);
+});
+
+test("update-envelope: replaying the creation migration FAIL (U2/U3)", () => {
+  const creation = JSON.parse(readFileSync(join(dist, "upload-metadata.json"), "utf8"));
+  const path = mutatedEnvelope((e) => { e.metadata.migrations = creation.migrations; });
+  const { code, out } = runUpdateValidator(path);
+  assert.equal(code, 1);
+  assert.match(out, /\[FAIL\] U2 /);
+  assert.match(out, /\[FAIL\] U3 /);
+});
+
+test("update-envelope: omitting the inherit binding FAIL (U4)", () => {
+  const path = mutatedEnvelope((e) => {
+    e.metadata.bindings = e.metadata.bindings.filter((b) => b.type !== "inherit");
+  });
+  const { code, out } = runUpdateValidator(path);
+  assert.equal(code, 1);
+  assert.match(out, /\[FAIL\] U4 /);
+});
+
+test("update-envelope: renaming the inherited secret FAIL (U4)", () => {
+  const path = mutatedEnvelope((e) => {
+    e.metadata.bindings.find((b) => b.type === "inherit").name = "OPALREADER_ACCESS_TOKN";
+  });
+  const { code, out } = runUpdateValidator(path);
+  assert.equal(code, 1);
+  assert.match(out, /\[FAIL\] U4 /);
+});
+
+test("update-envelope: dropping a configuration binding FAIL (U6)", () => {
+  const path = mutatedEnvelope((e) => {
+    e.metadata.bindings = e.metadata.bindings.filter((b) => b.name !== "OPALREADER_STORAGE");
+  });
+  const { code, out } = runUpdateValidator(path);
+  assert.equal(code, 1);
+  assert.match(out, /\[FAIL\] U6 /);
+});
+
+test("update-envelope: altering a configuration binding FAIL (U6)", () => {
+  const path = mutatedEnvelope((e) => {
+    e.metadata.bindings.find((b) => b.name === "GENERATION_HALT").text = "0";
+  });
+  const { code, out } = runUpdateValidator(path);
+  assert.equal(code, 1);
+  assert.match(out, /\[FAIL\] U6 /);
+});
+
+test("update-envelope: dropping bindings_inherit=strict FAIL (U5)", () => {
+  const path = mutatedEnvelope((e) => { delete e.request.query.bindings_inherit; });
+  const { code, out } = runUpdateValidator(path);
+  assert.equal(code, 1);
+  assert.match(out, /\[FAIL\] U5 /);
+});

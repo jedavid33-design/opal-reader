@@ -1,0 +1,66 @@
+{
+  "comment": "Existing-script UPDATE envelope for opalreader-api-v2 (Part 2 replacement upload). DERIVED from the pinned creation metadata by tools/derive-update-envelope.mjs: the creation migration is removed (no migration is applied; replaying new_sqlite_classes on the deployed class would fail), and the dashboard-set secret is carried as an inherit binding. The value of OPALREADER_ACCESS_TOKEN never appears here. Execution is governed by the replacement-upload plan; this file authorizes nothing.",
+  "request": {
+    "method": "PUT",
+    "path": "/accounts/{account_id}/workers/scripts/opalreader-api-v2",
+    "query": {
+      "bindings_inherit": "strict"
+    }
+  },
+  "metadata": {
+    "main_module": "v2/worker-entry.js",
+    "compatibility_date": "2026-08-29",
+    "compatibility_flags": [
+      "nodejs_compat"
+    ],
+    "bindings": [
+      {
+        "class_name": "OpalReaderCoordinator",
+        "name": "COORDINATOR",
+        "type": "durable_object_namespace"
+      },
+      {
+        "bucket_name": "opalreader-storage",
+        "name": "OPALREADER_STORAGE",
+        "type": "r2_bucket"
+      },
+      {
+        "name": "OPALREADER_GENERATION",
+        "queue_name": "opalreader-generation",
+        "type": "queue"
+      },
+      {
+        "name": "ALLOWED_ORIGIN",
+        "text": "https://jedavid33-design.github.io",
+        "type": "plain_text"
+      },
+      {
+        "name": "OPALREADER_V2_SCOPE",
+        "text": "staging-smoke",
+        "type": "plain_text"
+      },
+      {
+        "name": "GENERATION_HALT",
+        "text": "1",
+        "type": "plain_text"
+      },
+      {
+        "name": "R2_KEY_PREFIX",
+        "text": "smoke-p8/",
+        "type": "plain_text"
+      },
+      {
+        "name": "OPALREADER_ACCESS_TOKEN",
+        "type": "inherit"
+      }
+    ],
+    "observability": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "logs": {
+        "enabled": true,
+        "persist_invocations": true
+      }
+    }
+  }
+}
