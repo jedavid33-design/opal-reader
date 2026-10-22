@@ -143,6 +143,24 @@ audio cache, so every staging read/write lands under
 audio keys in the shared bucket. Production key shapes are unchanged;
 the future production configuration sets no prefix.
 
+**B7 safety-round amendment (Rowan 6346291349):** the namespace is
+now enforced in code, not only in the spec. Rowan's point was that
+the isolation claim must not depend on error-free upload metadata:
+if the staging binding were omitted or misconfigured at upload, the
+previous `_cache()` fell back to `R2_KEY_PREFIX || ""` and would
+silently have read/written `audio/<key>` in the shared bucket. As
+amended, `OpalReaderCoordinator._cache()` — the single construction
+gate every R2 access in the DO flows through — refuses to construct
+the cache at all while `OPALREADER_V2_SCOPE` is `staging-smoke`
+unless `R2_KEY_PREFIX` is exactly `smoke-p8/`, throwing the named
+`StagingR2NamespaceError` (`staging_r2_namespace_required`) BEFORE
+the cache exists and therefore before any bucket get/head/put can
+occur. Regression tests assert zero bucket operations for missing,
+empty, and wrong prefixes, at both the DO level and through the
+public entry. Unprefixed-or-configured behavior is preserved only
+for a future, deliberately authorized production build (any other
+scope value).
+
 ## D7. Health/build identity contract
 
 **Decision:** `GET /health` returns
@@ -267,7 +285,7 @@ regression tests:
 | Books visible | Julie's 7 books, listenable | Synthetic smoke book only; no read path over v1 records exists |
 | Generation | Halted; queue delivery paused; FP job PARKED_POLICY | Halted at 3 layers; no consumer; no provider secrets |
 | Sync | v1 sync protocol 2 | v2 sync contracts (this doc set); no dual-read either way |
-| Shelf bridge | Shipped v1 outbox, untouched | Bridge composed into the assembled client; storage key `cs:shelf-bridge:v1`; no live Shelf contact in Part 1/2 smoke beyond Julie-approved device checks |
+| Shelf bridge | Shipped v1 outbox, untouched | Bridge composed into the assembled client; storage key `cs:shelf-bridge:v1`. In the preview it is dry-run/local-only BY CONSTRUCTION (B7 safety round, 6346291349): no Shelf URL input exists and the bridge's only fetch seam is a local fixture transport that records would-be sends — no external Shelf POST is possible from the preview bundle. Live Shelf integration is a separate, later gate |
 | Rollback target | — (never modified) | Delete the v2 script; frozen worker is never the deploy's rollback target |
 
 ## Part 2 playbook deltas (assumptions Part 1 changed)

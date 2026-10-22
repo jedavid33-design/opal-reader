@@ -5,14 +5,26 @@
 // for the PREVIEW only: the shipped root index.html / app-256.js are
 // not part of it and are not modified by it. The preview talks only to
 // the staging worker's smoke-p8 instance, with a token held in memory.
+// Its Shelf bridge never leaves the page: it is composed with a local
+// fixture transport (./fake-shelf-transport.js), so no external Shelf
+// POST is possible from this bundle (B7 safety round, 6346291349).
 import { createAssembledClient } from "../v2/client/assembled-client.mjs";
 import { createHttpTransport } from "../v2/client/http-transport.mjs";
+import { createFakeShelfTransport } from "./fake-shelf-transport.js";
 
 const $ = (id) => document.getElementById(id);
 const diag = [];
 let client = null;
 let transport = null;
 let currentBook = null;
+
+// The preview's Shelf bridge is dry-run/local-only BY CONSTRUCTION
+// (B7 safety round, Rowan 6346291349): there is no Shelf API base
+// input and no code path that can POST to an external Shelf. The
+// bridge is composed with this fixture transport as its fetch seam —
+// flushing exercises the bridge's FIFO discipline against the local
+// fixture and records what WOULD be sent, visibly, in the Shelf card.
+const fakeShelf = createFakeShelfTransport();
 
 function log(line) {
   diag.push(`${new Date().toISOString()} ${line}`);
@@ -88,6 +100,12 @@ async function renderShelf() {
   if (!client) return;
   const pending = await client.shelfBridge.pendingCount();
   host.append(row("Shelf outbox pending", String(pending)));
+  host.append(row("Shelf transport", "local fixture — dry-run only; nothing leaves this page"));
+  host.append(row("Would-be sends recorded", String(fakeShelf.sent.length)));
+  fakeShelf.sent.forEach((p, i) => {
+    host.append(row(`would-send #${i + 1}`,
+      `${p.read_id} · ${p.duration_seconds}s · ${p.started_at}`));
+  });
 }
 
 function populateBook(book) {
@@ -138,7 +156,9 @@ async function connect() {
   });
   client = createAssembledClient({
     deviceId, storage, transport,
-    shelf: { shelfApiBase: $("shelfBase").value.trim() || undefined },
+    // Local fixture transport only — see the fakeShelf note at the
+    // top of this file. There is deliberately no user-entered base.
+    shelf: { shelfApiBase: fakeShelf.base, fetchFn: fakeShelf.fetchFn },
   });
   try {
     const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/health`);
@@ -250,7 +270,7 @@ function wire() {
   $("shelfPause").addEventListener("click", async () => { client?.shelfBridge.playbackPaused($("readId").value); await renderShelf(); });
   $("shelfStop").addEventListener("click", async () => { client?.shelfBridge.playbackStopped($("readId").value); await renderShelf(); });
   $("shelfFlush").addEventListener("click", async () => {
-    try { const r = await client.shelfBridge.flush(); log(`shelfFlush: ${JSON.stringify(r)}`); }
+    try { const r = await client.shelfBridge.flush(); log(`shelfFlush (local dry-run — nothing was sent to any Shelf): ${JSON.stringify(r)}`); }
     catch (e) { fail("shelfFlush", e); }
     await renderShelf();
   });

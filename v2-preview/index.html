@@ -22,7 +22,6 @@
     <label>Worker base URL <input id="workerBase" class="field" type="url" placeholder="https://opalreader-api-v2.…workers.dev"></label>
     <label>Staging access token <input id="accessToken" class="field" type="password" autocomplete="off" placeholder="Staging-only token (kept in memory, never stored)"></label>
     <label>Device ID <input id="deviceId" class="field" type="text" value="preview-device"></label>
-    <label>Shelf API base (optional) <input id="shelfBase" class="field" type="url" placeholder="Leave empty to queue sessions locally only"></label>
     <div class="row">
       <button id="connect" class="primary">Connect</button>
       <span id="health" class="muted" role="status"></span>
@@ -85,12 +84,16 @@
 
   <section class="card" aria-labelledby="shelf-h">
     <h2 id="shelf-h">Shelf bridge</h2>
+    <p class="muted tiny">Dry-run only, by construction: this preview's
+    Shelf bridge runs against a local fixture transport. There is no
+    Shelf URL to enter and no flush from this page can reach the real
+    Shelf — a flush only records, below, what WOULD have been sent.</p>
     <label>Read ID <input id="readId" class="field" type="text" value="smoke-p8-read"></label>
     <div class="row">
       <button id="shelfStart" class="secondary">Start session</button>
       <button id="shelfPause" class="secondary">Pause</button>
       <button id="shelfStop" class="secondary">Stop</button>
-      <button id="shelfFlush" class="ghost">Flush outbox</button>
+      <button id="shelfFlush" class="ghost">Flush outbox (local dry-run)</button>
     </div>
     <div id="shelfStatus" class="model-list" aria-live="polite"></div>
   </section>

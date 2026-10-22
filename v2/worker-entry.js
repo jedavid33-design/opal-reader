@@ -25,6 +25,16 @@
 // is not a header value or config flip available to the staging
 // script.
 //
+// R2 namespace (B7 safety round, Rowan 6346291349): the smoke
+// instance's `smoke-p8/` key prefix is enforced in code, not only in
+// the deploy spec. While scoped staging-smoke, _cache() refuses to
+// construct the audio cache unless R2_KEY_PREFIX is exactly
+// "smoke-p8/", failing closed with StagingR2NamespaceError before
+// any R2 contact — so an omitted or misconfigured binding can never
+// silently fall back to the production `audio/<key>` namespace in
+// the shared bucket. Unprefixed cache behavior remains only for a
+// future, deliberately authorized production build.
+//
 // Generation is fail-closed: while GENERATION_HALT is set (the staging
 // value), the queue handler refuses with a named error before any
 // coordinator or provider contact, the coordinator is constructed
@@ -41,6 +51,26 @@ import { BUILD_VERSION, BUILD_COMMIT } from "./host/build-identity.mjs";
 
 export const STAGING_SCOPE = "staging-smoke";
 export const SMOKE_INSTANCE = "smoke-p8";
+export const SMOKE_R2_KEY_PREFIX = "smoke-p8/";
+
+// Named fail-closed error for the staging R2 namespace (B7 safety
+// round, Rowan 6346291349). Thrown by OpalReaderCoordinator._cache()
+// BEFORE the audio cache is constructed — hence before any R2 bucket
+// operation can occur — whenever this script is scoped staging-smoke
+// but R2_KEY_PREFIX is anything other than exactly "smoke-p8/". The
+// isolation claim must not depend on error-free upload metadata: a
+// staging upload with the binding omitted or misconfigured refuses
+// all R2 contact instead of silently reading/writing the production
+// `audio/<key>` namespace in the shared bucket.
+export class StagingR2NamespaceError extends Error {
+  constructor(actual) {
+    super(`staging scope requires R2_KEY_PREFIX "${SMOKE_R2_KEY_PREFIX}" (got ${
+      actual === undefined || actual === "" ? "unset" : JSON.stringify(actual)
+    }); refusing all R2 contact`);
+    this.name = "StagingR2NamespaceError";
+    this.code = "staging_r2_namespace_required";
+  }
+}
 const INTERNAL_HEADER = "x-opalreader-internal";
 const TOKEN_ERROR_BODY = { error: "The personal access token is missing or incorrect." };
 
@@ -90,9 +120,21 @@ export class OpalReaderCoordinator {
     // so no staging write can land on a production audio key. The
     // future production configuration sets no prefix and keeps the
     // production key shape.
-    const cache = createR2AudioCache(this.env.OPALREADER_STORAGE, {
-      keyPrefix: this.env.R2_KEY_PREFIX || "",
-    });
+    //
+    // B7 safety round (Rowan 6346291349): the namespace is enforced
+    // HERE, in code — this method is the single construction gate
+    // every R2 access in this DO flows through (fetch, _execute,
+    // alarm). While the scope is staging-smoke, the cache may only
+    // be constructed with R2_KEY_PREFIX exactly "smoke-p8/"; any
+    // other value (missing, empty, wrong) throws
+    // StagingR2NamespaceError before createR2AudioCache runs, so no
+    // bucket operation — get, head, or put — can occur on violation.
+    // Any other scope (a future, deliberately authorized production
+    // build) keeps the unprefixed-or-configured behavior unchanged.
+    const keyPrefix = this.env.R2_KEY_PREFIX || "";
+    if (this.env.OPALREADER_V2_SCOPE === STAGING_SCOPE && keyPrefix !== SMOKE_R2_KEY_PREFIX)
+      throw new StagingR2NamespaceError(this.env.R2_KEY_PREFIX);
+    const cache = createR2AudioCache(this.env.OPALREADER_STORAGE, { keyPrefix });
     await cache.hydrateIndex(this.state.storage.sql);
     return cache;
   }
