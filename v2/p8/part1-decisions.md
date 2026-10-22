@@ -365,3 +365,41 @@ regardless of any staging success.**
    the cutover must state where its text plane comes from. Part 1
    takes no position beyond "the executor skips `no_content` rather
    than inventing words."
+
+## Preflight amendment — upload-envelope conformance (Rowan 6347245912)
+
+The Part 2 proposal's multipart envelope was preflighted against
+Cloudflare's documented Workers Script Upload schema before any upload
+word. Three findings, all in the metadata/spec/builder emission; no
+worker or client code changed:
+
+1. **Part-name mapping (no change).** Bundle root = the builder's
+   `worker/` directory; a module's part name is its path relative to
+   that root, which is what the builder already produces and what
+   `main_module: "v2/worker-entry.js"` already names. The part set is
+   the entry's transitive relative-import closure (6 modules). Tree
+   files outside the closure (client set, migration runner, freeze
+   source, the JSON spec) are not uploaded as parts.
+2. **Migration tag (amended).** The documented migrations flow
+   requires a tag to identify each migration ("Migrations require a
+   migration tag... used to determine which migrations have already
+   been applied" — DO class migrations, legacy). The generated API
+   schema lists `new_tag` as optional, but every documented
+   class-creating migration carries one, and an untagged creation has
+   no documented identity to record, verify (`old_tag`), or read back
+   at S6. `durable_object_migrations` now carries
+   `new_tag: "v1"` alongside `new_sqlite_classes`.
+3. **Queue metadata (amended).** The documented queue binding shape is
+   exactly `{type, name, queue_name}`; `producer_only` is not a
+   documented metadata field and was removed from the spec's binding
+   (which the builder emits verbatim). The top-level `queue_consumers`
+   key is not a documented upload-metadata attribute and is no longer
+   emitted; the spec's `queue_consumers: []` remains the intent
+   record. A consumer can only ever attach via the Queues API /
+   `wrangler queues consumer` — never via a script upload — and the
+   no-consumer property is verified live at proposal S6 regardless.
+
+The deterministic local validation lives at
+`tools/validate-upload-envelope.mjs` (in-memory envelope assembly +
+schema assertions + part table), regression-covered by
+`tests/p8-upload-envelope.test.mjs`.

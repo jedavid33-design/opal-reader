@@ -232,7 +232,17 @@ test("isolation (iii): queue handler and DO execute refuse while halted; spec ha
 
   const spec = JSON.parse(readFileSync(new URL("../v2/p8/deploy-spec.json", import.meta.url), "utf8"));
   assert.deepEqual(spec.queue_consumers, []);
-  assert.equal(spec.bindings.find((b) => b.name === "OPALREADER_GENERATION").producer_only, true);
+  // Preflight (Rowan 6347245912): the emitted metadata conforms to the
+  // documented Script Upload schema — the queue binding carries ONLY the
+  // documented {type, name, queue_name} keys (no producer_only, which is
+  // not a documented metadata field), and the migrations object names
+  // its migration with new_tag, as the documented migrations flow
+  // requires. Producer-only / no-consumer intent lives in the spec's
+  // queue_producers + queue_consumers records and is verified live.
+  const queueBinding = spec.bindings.find((b) => b.name === "OPALREADER_GENERATION");
+  assert.deepEqual(Object.keys(queueBinding).sort(), ["name", "queue_name", "type"]);
+  assert.equal(spec.durable_object_migrations.new_tag, "v1");
+  assert.deepEqual(spec.durable_object_migrations.new_sqlite_classes, ["OpalReaderCoordinator"]);
   assert.deepEqual(spec.kv_bindings, []);
   assert.deepEqual(spec.provider_secrets_present, []);
   assert.ok(spec.provider_secrets_absent_by_design.includes("GEMINI_API_KEY"));

@@ -88,7 +88,13 @@ const uploadMetadata = {
   bindings: spec.bindings,
   migrations: spec.durable_object_migrations,
   observability: spec.observability,
-  queue_consumers: spec.queue_consumers,
+  // NOTE (preflight, Rowan 6347245912): spec.queue_consumers is an intent
+  // record in the SPEC only. It is deliberately NOT emitted here:
+  // queue_consumers is not a documented top-level attribute of the
+  // Script Upload metadata, and a script upload cannot attach a queue
+  // consumer (consumers attach via the Queues API only). The emitted
+  // metadata is restricted to the documented schema; the shape is
+  // enforced by tools/validate-upload-envelope.mjs.
 };
 emit("upload-metadata.json", Buffer.from(JSON.stringify(uploadMetadata, null, 2) + "\n", "utf8"));
 emit("deploy-spec.json", readFileSync(join(v2Dir, "p8", "deploy-spec.json")));
