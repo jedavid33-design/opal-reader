@@ -6,22 +6,40 @@
 import { DatabaseSync } from "node:sqlite";
 import { GenerationCoordinator } from "../../v2/coordinator.mjs";
 
+// A cursor shaped like Cloudflare's SQLite-backed DO SqlCursor
+// (Finding F1 fix, Rowan 6349288135). Production semantics, verified
+// against the Cloudflare docs and the live Part 2 smoke: `.one()`
+// THROWS unless the result holds exactly one row — on zero rows
+// ("Expected exactly one result from SQL query, but got no
+// results.") and on more than one. The pre-F1 fake returned null on
+// zero and silently the first row on >1, which is exactly how 563
+// green tests hid the fresh-instance bootstrap deadlock: every
+// coordinator fallback written for "no such row" only ever ran here.
+class SqlCursor {
+  constructor(rows) { this.rows = rows ?? []; }
+  toArray() { return this.rows; }
+  one() {
+    if (this.rows.length === 0)
+      throw new Error("Expected exactly one result from SQL query, but got no results.");
+    if (this.rows.length > 1)
+      throw new Error("Expected exactly one result from SQL query, but got multiple results.");
+    return this.rows[0];
+  }
+}
+
 class SqlFacade {
   constructor(db) { this.db = db; }
   exec(query, ...params) {
     if (params.length === 0 && query.includes(";")) {
       this.db.exec(query); // DDL batch (schema)
-      return { toArray: () => [], one: () => null };
+      return new SqlCursor([]);
     }
     const stmt = this.db.prepare(query);
     const isQuery = /^\s*(SELECT|WITH)\b/i.test(query);
     let rows = null;
     if (isQuery) rows = stmt.all(...params);
     else stmt.run(...params);
-    return {
-      toArray: () => rows ?? [],
-      one: () => (rows && rows.length ? rows[0] : null),
-    };
+    return new SqlCursor(rows);
   }
 }
 

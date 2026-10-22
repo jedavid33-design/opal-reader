@@ -256,6 +256,23 @@ export class GenerationCoordinator {
     finally { this._txDepth = 0; }
   }
   _one(q, ...params) { return this.sql.exec(q, ...params).one(); }
+  // Optional single-row lookup (Finding F1 fix, Rowan 6349288135):
+  // absence is a legitimate, expected state at the audited call sites
+  // that use this — a first-ever command, settings before anyone has
+  // saved any, an absent meta key, an unknown job/grant/binding.
+  // Implemented over toArray() with an explicit cardinality check:
+  // 0 rows -> null, 1 row -> the row, >1 rows -> THROW (a duplicate
+  // singleton is corruption and must stay loud — never rows[0] by
+  // silence, never a caught .one() exception). Strict reads (scalar
+  // aggregates; rows a live invariant guarantees) keep using _one().
+  // Full audit: v2/p8/f1-fix-addendum.md.
+  _oneOrNull(q, ...params) {
+    const rows = this.sql.exec(q, ...params).toArray();
+    if (rows.length === 0) return null;
+    if (rows.length > 1)
+      throw new Error(`Expected at most one result from SQL query, but got ${rows.length}.`);
+    return rows[0];
+  }
   _all(q, ...params) { return this.sql.exec(q, ...params).toArray(); }
 
   _logTransition(aggregate, id, cause, from, to, revision, detail) {
@@ -268,7 +285,7 @@ export class GenerationCoordinator {
 
   // ---- freeze ------------------------------------------------------------
   _frozen() {
-    const r = this._one(`SELECT value FROM meta WHERE key = 'frozen'`);
+    const r = this._oneOrNull(`SELECT value FROM meta WHERE key = 'frozen'`);
     return r && r.value === "1";
   }
 
@@ -278,7 +295,7 @@ export class GenerationCoordinator {
   // revision must match, in the caller's transaction — otherwise the
   // event is rejected and the rejection is logged (I12).
   applyJobEvent(jobId, event, cause, detail = null, expectedRevision = null) {
-    const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
+    const job = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
     if (!job) return { ok: false, reason: "job_not_found" };
     if (expectedRevision !== null && expectedRevision !== job.revision) {
       this._logTransition("job", jobId, cause, job.state, job.state, job.revision,
@@ -299,7 +316,7 @@ export class GenerationCoordinator {
   }
 
   applyOccEvent(jobId, occurrenceId, event, cause, detail = null) {
-    const occ = this._one(
+    const occ = this._oneOrNull(
       `SELECT * FROM occurrences WHERE job_id = ? AND occurrence_id = ?`, jobId, occurrenceId);
     if (!occ) return { ok: false, reason: "occurrence_not_found" };
     const to = (OCC_TRANSITIONS[occ.state] || {})[event];
@@ -324,7 +341,7 @@ export class GenerationCoordinator {
       return { ok: false, reason: "command_id_required" };
     if (!COMMAND_TYPES.includes(cmd.type))
       return { ok: false, reason: "unknown_command_type", type: cmd.type };
-    const existing = this._one(`SELECT * FROM commands WHERE command_id = ?`, cmd.command_id);
+    const existing = this._oneOrNull(`SELECT * FROM commands WHERE command_id = ?`, cmd.command_id);
     if (existing) {
       return { command_id: existing.command_id, outcome: existing.outcome,
                ...(existing.outcome_json ? JSON.parse(existing.outcome_json) : {}),
@@ -389,7 +406,7 @@ export class GenerationCoordinator {
   _submitJob(p, commandId, kind) {
     if (!p.jobId || !Array.isArray(p.occurrences) || p.occurrences.length === 0)
       return { outcome: "rejected", reason: "job_shape" };
-    const dupe = this._one(`SELECT job_id FROM jobs WHERE job_id = ?`, p.jobId);
+    const dupe = this._oneOrNull(`SELECT job_id FROM jobs WHERE job_id = ?`, p.jobId);
     if (dupe) return { outcome: "rejected", reason: "job_exists" };
     const now = this._now();
     this.sql.exec(
@@ -407,7 +424,7 @@ export class GenerationCoordinator {
   }
 
   _resume(p, commandId) {
-    const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, p.jobId);
+    const job = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, p.jobId);
     if (!job) return { outcome: "rejected", reason: "job_not_found" };
     if (job.state === "paused_quota") {
       // F5: resume from a quota park is a single-probe grant — exactly one
@@ -440,7 +457,7 @@ export class GenerationCoordinator {
     // §1.1: auditions and single-segment generation pass the same gate as
     // jobs. Cached answer first; otherwise a one-occurrence job + grant.
     if (p.revisionKey && p.occurrenceId) {
-      const b = this._one(
+      const b = this._oneOrNull(
         `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
         p.occurrenceId, p.revisionKey);
       if (b) return { outcome: "applied", answer: "cached", cacheKey: b.cache_key };
@@ -448,7 +465,7 @@ export class GenerationCoordinator {
       // (P2 review round 2, gap 1): two devices requesting the same audio
       // before either recording exists share the operation — the second
       // request joins it instead of paying for a duplicate synthesis.
-      const dupe = this._one(
+      const dupe = this._oneOrNull(
         `SELECT j.job_id AS jobId, o.state AS occState
            FROM occurrences o JOIN jobs j ON j.job_id = o.job_id
           WHERE o.occurrence_id = ? AND o.revision_key = ?
@@ -481,9 +498,9 @@ export class GenerationCoordinator {
     class Rollback extends Error { constructor(reason) { super(reason); this.reason = reason; } }
     try {
       return this._tx(() => {
-      const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
+      const job = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
       if (!job) return { ok: false, reason: "job_not_found" };
-      const park = this._one(
+      const park = this._oneOrNull(
         `SELECT * FROM quota_parks WHERE released_at IS NULL ORDER BY id DESC LIMIT 1`);
       if (park && !bypassPark) return { ok: false, reason: "quota_parked" };
       const now = this._now();
@@ -502,7 +519,7 @@ export class GenerationCoordinator {
       if (attempts + targets.length > DAILY_QUOTA_LIMIT)
         return { ok: false, reason: "quota_estimate_exhausted" };
       const grantId = `grant:${jobId}:${job.revision}:${probe ? "probe" : "full"}`;
-      const dupe = this._one(`SELECT grant_id FROM grants WHERE grant_id = ?`, grantId);
+      const dupe = this._oneOrNull(`SELECT grant_id FROM grants WHERE grant_id = ?`, grantId);
       if (dupe) return { ok: false, reason: "grant_exists" };
       this.sql.exec(
         `INSERT INTO grants (grant_id, job_id, revision, state, created_at, lease_expires_at)
@@ -557,7 +574,7 @@ export class GenerationCoordinator {
   // nothing: resume owns their continuation.
   _scheduleReAdvance(jobId) {
     if (!jobId) return;
-    const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
+    const job = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
     if (!job || job.state !== "generating") return;
     const existing = this._one(
       `SELECT COUNT(*) AS n FROM schedule WHERE kind = 'retry_grant' AND ref = ? AND state = 'pending'`,
@@ -600,9 +617,9 @@ export class GenerationCoordinator {
       // not been sent yet.
       if (this._frozen()) continue;
       const job = payload.jobId
-        ? this._one(`SELECT * FROM jobs WHERE job_id = ?`, payload.jobId) : null;
+        ? this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, payload.jobId) : null;
       const grant = payload.grantId
-        ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, payload.grantId) : null;
+        ? this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, payload.grantId) : null;
       // Rows belonging to settled grants are debris (round 4): cleared
       // without touching accounting — their spend settled by report.
       if (payload.grantId && (!grant || grant.state === "reported" || grant.state === "voided")) {
@@ -657,7 +674,7 @@ export class GenerationCoordinator {
       // is governed by the executor's dedupe-by-grantId contract, and
       // the event is logged visibly rather than silently re-arming.
       const settled = payload.grantId
-        ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, payload.grantId) : null;
+        ? this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, payload.grantId) : null;
       if (payload.grantId && settled &&
           settled.state !== "issued" && settled.state !== "handoff_uncertain") {
         this._logTransition("grant", payload.grantId, "handoff_acked_after_settle",
@@ -734,7 +751,7 @@ export class GenerationCoordinator {
     // handoff path never passes this flag — it resolves claimed
     // grants as accepted instead (claim fence, handoff_check).
     if (!opts.claimedOk) {
-      const claim = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
+      const claim = this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
       if (claim && claim.state === "claimed") {
         this._logTransition("grant", grantId, "void_refused_claimed",
           null, null, null, { reason, claimedBy: claim.consumer_id });
@@ -748,7 +765,7 @@ export class GenerationCoordinator {
       // Release this attempt's reservation exactly once: the provider
       // was never contacted for it, so it must not consume quota or cap.
       const relKey = `rel:${op.op_key}`;
-      if (!this._one(`SELECT op_key FROM ledger_ops WHERE op_key = ?`, relKey)) {
+      if (!this._oneOrNull(`SELECT op_key FROM ledger_ops WHERE op_key = ?`, relKey)) {
         const d = JSON.parse(op.detail_json || "{}");
         this.sql.exec(
           `INSERT INTO ledger_ops (op_key, at, day_key, month_key, kind, est_micro_cents, detail_json)
@@ -760,7 +777,7 @@ export class GenerationCoordinator {
       }
       const oid = JSON.parse(op.detail_json || "{}").occurrenceId;
       if (!oid) continue;
-      const o = this._one(
+      const o = this._oneOrNull(
         `SELECT * FROM occurrences WHERE job_id = ? AND occurrence_id = ?`, payload.jobId, oid);
       if (o && o.state === "granted")
         this.applyOccEvent(payload.jobId, oid, "defer", "dispatch_voided",
@@ -782,7 +799,7 @@ export class GenerationCoordinator {
   // justifies calling the occurrence spent.
   noteProviderRequest(grantId, occurrenceId, providerRequestId) {
     const opKey = `op:${grantId}:${occurrenceId}`;
-    const row = this._one(`SELECT * FROM ledger_ops WHERE op_key = ?`, opKey);
+    const row = this._oneOrNull(`SELECT * FROM ledger_ops WHERE op_key = ?`, opKey);
     if (!row) return { ok: false, reason: "op_not_found" };
     const detail = { ...(JSON.parse(row.detail_json || "{}")), providerRequestId };
     this.sql.exec(`UPDATE ledger_ops SET detail_json = ? WHERE op_key = ?`,
@@ -800,7 +817,7 @@ export class GenerationCoordinator {
     if (!["failed", "spent_without_audio"].includes(outcome))
       return { ok: false, reason: "unknown_provider_outcome" };
     const opKey = `op:${grantId}:${occurrenceId}`;
-    const row = this._one(`SELECT * FROM ledger_ops WHERE op_key = ?`, opKey);
+    const row = this._oneOrNull(`SELECT * FROM ledger_ops WHERE op_key = ?`, opKey);
     if (!row) return { ok: false, reason: "op_not_found" };
     const detail = { ...(JSON.parse(row.detail_json || "{}")),
                      providerOutcome: outcome, providerEvidence: evidence };
@@ -817,7 +834,7 @@ export class GenerationCoordinator {
     if (!report || !report.grantId) return { ok: false, reason: "grant_required" };
     await this.wake();
     const result = this._tx(() => {
-      const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, report.grantId);
+      const grant = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, report.grantId);
       if (!grant) return { ok: false, reason: "grant_not_found" };
       if (grant.state === "reported")
         return { ok: true, replayed: true };
@@ -830,7 +847,7 @@ export class GenerationCoordinator {
         this._logTransition("grant", grant.grant_id, "handoff_resolved",
           "handoff_uncertain", "issued", null, { via: "executor_report" });
       }
-      const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, grant.job_id);
+      const job = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, grant.job_id);
       if (!job) return { ok: false, reason: "job_not_found" };
       if (report.jobRevision !== undefined && report.jobRevision !== job.revision) {
         this._logTransition("job", job.job_id, "report", job.state, job.state, job.revision,
@@ -897,7 +914,7 @@ export class GenerationCoordinator {
       for (const op of grantOps) {
         const oid = JSON.parse(op.detail_json || "{}").occurrenceId;
         if (!oid || reportedIds.has(oid)) continue;
-        const o = this._one(
+        const o = this._oneOrNull(
           `SELECT * FROM occurrences WHERE job_id = ? AND occurrence_id = ?`, grant.job_id, oid);
         if (o && o.state === "granted")
           this.applyOccEvent(grant.job_id, oid, "defer", "report:grant_closed",
@@ -918,7 +935,7 @@ export class GenerationCoordinator {
       // B7/F6: a repair plan that finishes with eligible blocked
       // occurrences remaining spawns its follow-on plan server-side —
       // the chain advances with no client present.
-      const jobRow = this._one(`SELECT * FROM jobs WHERE job_id = ?`, grant.job_id);
+      const jobRow = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, grant.job_id);
       const followOn = report.detail && report.detail.followOn;
       if (jobRow && jobRow.kind === "repair" &&
           (jobRow.state === "complete" || jobRow.state === "partial") &&
@@ -983,7 +1000,7 @@ export class GenerationCoordinator {
     // uncertainty about identity provenance, but a KNOWN digest is never
     // ignored for them either.
     const actualSha = probe.hash ? probe.hash(cacheKey) : null;
-    const idx = this._one(`SELECT * FROM cache_index WHERE cache_key = ?`, cacheKey);
+    const idx = this._oneOrNull(`SELECT * FROM cache_index WHERE cache_key = ?`, cacheKey);
     const isLegacy = typeof revisionKey === "string" && revisionKey.startsWith("legacy:");
     const idxSha = (idx && idx.sha256) || null;
     const writeSha = probe.recordedSha256 ? probe.recordedSha256(cacheKey) : null;
@@ -994,7 +1011,7 @@ export class GenerationCoordinator {
       if (stated && actualSha !== stated)
         return conflict(stated, actualSha, "content_hash_mismatch");
     }
-    const existing = this._one(
+    const existing = this._oneOrNull(
       `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
       occurrenceId, revisionKey);
     if (existing && existing.cache_key === cacheKey)
@@ -1028,7 +1045,7 @@ export class GenerationCoordinator {
   // The ONLY exits from outcome_unknown. Re-dispatch is not one of them.
   reconcileUnknown(jobId, occurrenceId) {
     return this._tx(() => {
-      const occ = this._one(
+      const occ = this._oneOrNull(
         `SELECT * FROM occurrences WHERE job_id = ? AND occurrence_id = ?`, jobId, occurrenceId);
       if (!occ || occ.state !== "outcome_unknown")
         return { ok: false, reason: "not_unknown" };
@@ -1059,16 +1076,16 @@ export class GenerationCoordinator {
       // completed or charged the request, so without a confirmed
       // outcome the occurrence stays outcome_unknown below — visible,
       // and never auto-replayed.
-      const entry = this._one(
+      const entry = this._oneOrNull(
         `SELECT detail_json FROM transitions
           WHERE aggregate = 'occurrence' AND aggregate_id = ? AND to_state = 'outcome_unknown'
           ORDER BY id DESC LIMIT 1`, `${jobId}/${occurrenceId}`);
       const sourceGrantId = entry
         ? (JSON.parse(entry.detail_json || "{}").grantId || null) : null;
       const sourceGrant = sourceGrantId
-        ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, sourceGrantId) : null;
+        ? this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, sourceGrantId) : null;
       const spend = (sourceGrant && sourceGrant.job_id === jobId)
-        ? this._one(`SELECT * FROM ledger_ops WHERE op_key = ?`,
+        ? this._oneOrNull(`SELECT * FROM ledger_ops WHERE op_key = ?`,
             `op:${sourceGrantId}:${occurrenceId}`)
         : null;
       if (spend) {
@@ -1091,7 +1108,7 @@ export class GenerationCoordinator {
     // Julie's explicit authorization of a fresh synthesis (§1.2 rule 4c):
     // the occurrence returns to pending under a NEW operation identity.
     const r = this._tx(() => {
-      const occ = this._one(
+      const occ = this._oneOrNull(
         `SELECT * FROM occurrences WHERE job_id = ? AND occurrence_id = ?`, p.jobId, p.occurrenceId);
       if (!occ || occ.state !== "outcome_unknown")
         return { outcome: "rejected", reason: "not_unknown" };
@@ -1121,7 +1138,7 @@ export class GenerationCoordinator {
        FROM occurrences WHERE job_id = ?`, jobId);
     if (counts.unknown > 0) return this.applyJobEvent(jobId, "unknown", cause, {});
     if (counts.open > 0) {
-      const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
+      const job = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
       if (job && job.state === "outcome_unknown")
         return this.applyJobEvent(jobId, "resolve", cause, {});
       return { ok: true, state: job ? job.state : null };
@@ -1139,13 +1156,13 @@ export class GenerationCoordinator {
 
   // ---- settings aggregate ----------------------------------------------------
   _settings() {
-    const row = this._one(`SELECT * FROM settings WHERE id = 1`);
+    const row = this._oneOrNull(`SELECT * FROM settings WHERE id = 1`);
     if (!row) return { monthlyCap: 50, geminiLane: "batch", revision: 0 };
     return { ...JSON.parse(row.data_json), revision: row.revision };
   }
 
   _setSettings(p, commandId) {
-    const cur = this._one(`SELECT * FROM settings WHERE id = 1`);
+    const cur = this._oneOrNull(`SELECT * FROM settings WHERE id = 1`);
     const curRev = cur ? cur.revision : 0;
     if (p.baseRevision !== undefined && p.baseRevision !== curRev)
       return { outcome: "rejected", reason: "settings_conflict", revision: curRev };
@@ -1268,7 +1285,7 @@ export class GenerationCoordinator {
         // provably landed, or record the spend ONLY on a confirmed
         // provider outcome (a dispatch record alone proves nothing).
         // Whatever cannot be proven stays outcome_unknown for Julie.
-        const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
+        const grant = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
         if (!grant || grant.state === "reported" || grant.state === "voided") break;
         // Pre-delivery expiry (round 4, Rowan blocker 1): provider
         // uncertainty may be inferred ONLY for work provably handed
@@ -1277,7 +1294,7 @@ export class GenerationCoordinator {
         // NO unknown outcome to record: void the dispatch, release its
         // reservations, and return its occurrences to pending so the
         // work can be granted fresh. No phantom outcome_unknown, ever.
-        const outRow = this._one(`SELECT * FROM outbox WHERE id = ?`, grant.grant_id);
+        const outRow = this._oneOrNull(`SELECT * FROM outbox WHERE id = ?`, grant.grant_id);
         if (!outRow || !outRow.sent_at) {
           if (this._frozen()) {
             // A freeze holds EVERYTHING, including this decision:
@@ -1350,7 +1367,7 @@ export class GenerationCoordinator {
         // safe voids (round 5, B). A freeze defers it like everything
         // else; a refusal by the grant gate (park, cap, quota, nothing
         // pending) ends the chain — no self-rescheduling, no spin.
-        const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, row.ref);
+        const job = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, row.ref);
         if (job && this._frozen()) {
           this._schedule(this._now() + 60000, "retry_grant", row.ref,
             { ...payload, deferred: "frozen" });
@@ -1373,7 +1390,7 @@ export class GenerationCoordinator {
         // final for the grant), never merely "not seen yet" while a
         // send may still be in flight. Anything short of terminal is
         // "unknown".
-        const before = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
+        const before = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
         if (!before || before.state !== "handoff_uncertain") break;
         if (this._frozen()) {
           // A freeze holds this decision too (round 6, race 2): the
@@ -1395,8 +1412,8 @@ export class GenerationCoordinator {
         // logged and changes nothing — it can neither resurrect a
         // reported grant to 'issued' nor void a delivered one.
         this._tx(() => {
-          const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
-          const outRow = this._one(`SELECT * FROM outbox WHERE id = ?`, row.ref);
+          const grant = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, row.ref);
+          const outRow = this._oneOrNull(`SELECT * FROM outbox WHERE id = ?`, row.ref);
           if (!grant || grant.state !== "handoff_uncertain" || !outRow || outRow.sent_at) {
             this._logTransition("grant", row.ref, "handoff_verdict_stale",
               grant ? grant.state : null, grant ? grant.state : null, null,
@@ -1428,7 +1445,7 @@ export class GenerationCoordinator {
             // from here; an unreported execution ages into
             // outcome-unknown through the normal lease path — never
             // into a void, a false release, and an orphaned report.
-            const claim = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grant.grant_id);
+            const claim = this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grant.grant_id);
             if (claim && claim.state === "claimed") {
               const t = this._now();
               this._logTransition("grant", grant.grant_id, "handoff_verdict_contradicts_claim",
@@ -1469,7 +1486,7 @@ export class GenerationCoordinator {
 
   // ---- read models (pure — used by the GET API; no writes) -------------------
   receipt(commandId) {
-    const c = this._one(`SELECT * FROM commands WHERE command_id = ?`, commandId);
+    const c = this._oneOrNull(`SELECT * FROM commands WHERE command_id = ?`, commandId);
     if (!c) return null;
     return { command_id: c.command_id, type: c.type, outcome: c.outcome,
              ...(c.outcome_json ? JSON.parse(c.outcome_json) : {}),
@@ -1477,7 +1494,7 @@ export class GenerationCoordinator {
   }
 
   jobView(jobId) {
-    const job = this._one(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
+    const job = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, jobId);
     if (!job) return null;
     const occs = this._all(
       `SELECT occurrence_id, revision_key, state, cache_key FROM occurrences WHERE job_id = ? ORDER BY occurrence_id`,
@@ -1497,7 +1514,7 @@ export class GenerationCoordinator {
     const day = dayKeyPT(now), month = monthKey(now);
     const attemptsToday = this._attemptsOn(day);
     const spentMonth = this._spendIn(month);
-    const park = this._one(
+    const park = this._oneOrNull(
       `SELECT * FROM quota_parks WHERE released_at IS NULL ORDER BY id DESC LIMIT 1`);
     const ledgerSeq = this._one(`SELECT COALESCE(MAX(rowid), 0) AS m FROM ledger_ops`).m;
     return { dayKey: day, attemptsToday, dailyLimit: DAILY_QUOTA_LIMIT,
@@ -1534,9 +1551,9 @@ export class GenerationCoordinator {
   // provider call — only AcquireSpendIntent does.
   claimGrant({ grantId, consumerId }) {
     return this._tx(() => {
-      const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, grantId);
+      const grant = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, grantId);
       if (!grant) return { status: "unknown_grant" };
-      const existing = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
+      const existing = this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
       if (existing) {
         return { status: existing.state === "claimed" ? "already_claimed"
                 : existing.state, claim: existing };
@@ -1567,7 +1584,7 @@ export class GenerationCoordinator {
   // itself required terminal evidence); NO ROW -> unknown, forever
   // until a row exists. Absence is never a terminal negative.
   probeVerdict(grantId) {
-    const claim = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
+    const claim = this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
     if (!claim) return { verdict: "unknown" };
     if (claim.state === "closed") return { verdict: "not_accepted", reason: claim.closed_reason };
     return { verdict: "accepted", claimedAt: claim.claimed_at };
@@ -1581,12 +1598,12 @@ export class GenerationCoordinator {
   // closure is rejected_terminal by claimGrant's row check.
   closeAcceptance({ grantId, evidence }) {
     return this._tx(() => {
-      const existing = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
+      const existing = this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
       if (existing) {
         if (existing.state === "claimed") return { closed: false, reason: "claimed" };
         return { closed: existing.state === "closed", reason: existing.closed_reason };
       }
-      const grant = this._one(`SELECT * FROM grants WHERE grant_id = ?`, grantId);
+      const grant = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, grantId);
       if (!grant) return { closed: false, reason: "unknown_grant" };
       const t = this._now();
       this.sql.exec(`INSERT INTO claims (grant_id, state, consumer_id, claimed_at, closed_reason, updated_at)
@@ -1614,13 +1631,13 @@ export class GenerationCoordinator {
   // fence follows the occurrence, a deferred occurrence re-granted
   // under a fresh grant meets the same fence — no second spend.
   _latestIntent(jobId, occurrenceId) {
-    return this._one(
+    return this._oneOrNull(
       `SELECT * FROM spend_intents WHERE job_id = ? AND occurrence_id = ?
        ORDER BY generation DESC LIMIT 1`, jobId, occurrenceId);
   }
 
   _latestBatchMap(jobId, occurrenceId) {
-    return this._one(
+    return this._oneOrNull(
       `SELECT * FROM batch_maps WHERE job_id = ? AND occurrence_id = ?
        ORDER BY generation DESC LIMIT 1`, jobId, occurrenceId);
   }
@@ -1630,7 +1647,7 @@ export class GenerationCoordinator {
       const latest = this._latestIntent(jobId, occurrenceId);
       // A live (non-superseded) intent is the spend boundary: final.
       if (latest && !latest.superseded_at) return { acquired: false, intent: latest };
-      const claim = this._one(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
+      const claim = this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grantId);
       if (!claim || claim.state !== "claimed") return { acquired: false, reason: "not_claimed" };
       if (claim.consumer_id !== consumerId) return { acquired: false, reason: "claimed_by_other" };
       const t = this._now();
@@ -1764,7 +1781,7 @@ export class GenerationCoordinator {
       // CLAIM on that grant is untouched — acceptance happened; only
       // the batch submission is resolved as never-accepted.
       const grant = cur.grant_id
-        ? this._one(`SELECT * FROM grants WHERE grant_id = ?`, cur.grant_id) : null;
+        ? this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, cur.grant_id) : null;
       if (grant && (grant.state === "issued" || grant.state === "delivered" || grant.state === "handoff_uncertain")) {
         // claimedOk: this caller owns the claimed case — its
         // evidence is about the PROVIDER submission (not the queue
@@ -1779,7 +1796,7 @@ export class GenerationCoordinator {
   }
 
   claimView(grantId) {
-    return this._one(`SELECT * FROM claims WHERE grant_id = ?`, grantId) || null;
+    return this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grantId) || null;
   }
 
   workView(jobId) {
@@ -1809,7 +1826,7 @@ export class GenerationCoordinator {
   // order; revisioned tombstones; money read-only from the ledger.
 
   _familyState(family) {
-    let st = this._one(`SELECT * FROM sync_family_state WHERE family = ?`, family);
+    let st = this._oneOrNull(`SELECT * FROM sync_family_state WHERE family = ?`, family);
     if (!st) {
       // Lazy init from whatever history exists (pre-P4-fix data).
       const mx = this._one(`SELECT COALESCE(MAX(seq), 0) AS tip, MIN(seq) AS fl FROM sync_changes WHERE family = ?`, family);
@@ -1848,7 +1865,7 @@ export class GenerationCoordinator {
   }
 
   _syncEntity(family, entityKey) {
-    return this._one(`SELECT * FROM sync_entities WHERE family = ? AND entity_key = ?`,
+    return this._oneOrNull(`SELECT * FROM sync_entities WHERE family = ? AND entity_key = ?`,
       family, entityKey);
   }
 
@@ -2071,14 +2088,14 @@ export class GenerationCoordinator {
     const canonical = JSON.stringify({
       deviceId: ev.deviceId, localSeq: ev.localSeq, kind: ev.kind,
       occurrenceId: ev.occurrenceId, offsetSec: ev.offsetSec, baseSeq: ev.baseSeq });
-    const prior = this._one(
+    const prior = this._oneOrNull(
       `SELECT * FROM position_events WHERE book_id = ? AND event_id = ?`, bookId, ev.eventId);
     if (prior) {
       return prior.payload_json === canonical
         ? { eventId: ev.eventId, status: "replay", receiptSeq: prior.receipt_seq, superseded: !!prior.superseded }
         : { eventId: ev.eventId, status: "conflict", reason: "event_id_payload_mismatch" };
     }
-    const st = this._one(`SELECT * FROM position_state WHERE book_id = ?`, bookId)
+    const st = this._oneOrNull(`SELECT * FROM position_state WHERE book_id = ?`, bookId)
       || { occurrence_id: null, occ_index: null, offset_sec: null, playing: 0, tip: 0, superseded_count: 0 };
     if (typeof ev.baseSeq !== "number" || ev.baseSeq > st.tip)
       return { eventId: ev.eventId, status: "rejected", reason: "base_ahead" };
@@ -2123,7 +2140,7 @@ export class GenerationCoordinator {
   }
 
   positionView(bookId) {
-    const st = this._one(`SELECT * FROM position_state WHERE book_id = ?`, bookId);
+    const st = this._oneOrNull(`SELECT * FROM position_state WHERE book_id = ?`, bookId);
     if (!st) return { bookId, canonical: null, asOfReceiptSeq: 0, supersededCount: 0, journalGaps: [] };
     const byDevice = new Map();
     for (const r of this._all(
