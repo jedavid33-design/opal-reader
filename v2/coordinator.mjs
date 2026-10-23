@@ -2710,22 +2710,56 @@ export class GenerationCoordinator {
         chunk.totalBytes > MIGRATION_CHUNK_LIMITS.maxChunkBytes)
       return reject("migration_chunk_oversize");
     // B1 (§3A.7, D4-P4 adopted): server-side full-content
-    // enforcement. When the book carries a freeze-carry pin and
-    // this command presents content, the content's canonical hash
-    // must equal the pin BEFORE anything is primed or written —
-    // this state check runs in handleCommand ahead of priming and
-    // again inside the command transaction, so an altered but
-    // binding-compatible content payload (swapped POV, reordered
-    // chapters, altered segment data or cast) is refused here,
-    // at zero R2 contact, with zero migration business rows. (A
-    // durable REJECTED command receipt is still recorded by
-    // handleCommand — Rowan checkpoint 1: that receipt is the
-    // legitimate record of the refusal, not an import row.)
-    if (p.content) {
-      const carryPin = this._carryBook(bookId);
-      if (carryPin &&
-          sha256HexText(canonicalJson(p.content)) !== carryPin.contentSha256)
+    // enforcement. When the book carries a freeze-carry pin, the
+    // content this import will use must hash to the pin BEFORE
+    // anything is primed or written — this state check runs in
+    // handleCommand ahead of priming and again inside the command
+    // transaction, so an altered but binding-compatible content
+    // payload (swapped POV, reordered chapters, altered segment
+    // data or cast) is refused here, at zero R2 contact, with zero
+    // migration business rows. (A durable REJECTED command receipt
+    // is still recorded by handleCommand — Rowan checkpoint 1:
+    // that receipt is the legitimate record of the refusal, not
+    // an import row.)
+    //
+    // B1-C1 (Rowan B1 review 6369823670): the check covers the
+    // EFFECTIVE content — every source the apply step could draw
+    // on, in its own precedence: this command's presented content,
+    // a preexisting content sync entity, and the copy held in the
+    // import record from an earlier chunk. The apply step refuses
+    // any divergence BETWEEN sources, so the import can only ever
+    // proceed when all present sources agree — and the carry is
+    // only sound if that agreed content is the pinned content.
+    // Verifying just the presented copy left a hole: altered
+    // content already sitting in the sync entity (e.g. landed via
+    // SyncPush, which does no content verification) with NO
+    // content on the chunk command was used unchecked. Now: every
+    // present source must hash to the pin, and if NO trustworthy
+    // source exists the chunk refuses here too — pre-prime, at
+    // zero R2 contact — rather than priming rows for an apply
+    // step that could only fail (or worse, bind against content
+    // nobody verified).
+    const carryPin = this._carryBook(bookId);
+    if (carryPin) {
+      const sources = [];
+      if (p.content) sources.push(p.content);
+      const storedEnt = this._syncEntity("content", bookId);
+      if (storedEnt && !storedEnt.deleted && storedEnt.data_json) {
+        try { sources.push(JSON.parse(storedEnt.data_json)); }
+        catch { sources.push(null); }
+      }
+      const heldRow = this._oneOrNull(
+        `SELECT content_json FROM migration_imports WHERE book_id = ?`, bookId);
+      if (heldRow && heldRow.content_json) {
+        try { sources.push(JSON.parse(heldRow.content_json)); }
+        catch { sources.push(null); }
+      }
+      if (sources.length === 0)
         return reject("migration_content_mismatch");
+      for (const src of sources)
+        if (!src || typeof src !== "object" ||
+            sha256HexText(canonicalJson(src)) !== carryPin.contentSha256)
+          return reject("migration_content_mismatch");
     }
     // Durable state: identity fences, convergence, order.
     const imports = this._oneOrNull(
@@ -3154,6 +3188,29 @@ export class GenerationCoordinator {
     // (any book outside the approved freeze's carry set) keep
     // the pre-B1 gate semantics exactly.
     if (this._carryBook(bookId)) {
+      const carryPin = this._carryBook(bookId);
+      // B1-C1 (Rowan B1 review 6369823670): re-verify the DURABLE
+      // STORED sync content against the carry pin, here in the
+      // gate's own transaction. The chunk-time check (in
+      // _migrationChunkState) proves the content the import USED;
+      // it cannot see a later alteration of the stored entity
+      // through the supported sync path (SyncPush verifies
+      // identity/revision, never content). A book whose stored
+      // content no longer hashes to the pin — same occurrence IDs,
+      // altered order/POV/cast — must not flip: refuse with zero
+      // gate rows, distinctly from a carry refusal.
+      const storedEnt = this._syncEntity("content", bookId);
+      let storedContentSha256 = null;
+      if (storedEnt && !storedEnt.deleted && storedEnt.data_json) {
+        try {
+          storedContentSha256 =
+            sha256HexText(canonicalJson(JSON.parse(storedEnt.data_json)));
+        } catch { storedContentSha256 = null; }
+      }
+      if (storedContentSha256 !== carryPin.contentSha256)
+        return { outcome: "rejected", reason: "flip_gate_content_mismatch",
+                 bookId, expected: carryPin.contentSha256,
+                 found: storedContentSha256 };
       const carry = this._migrationCarryVerification(bookId);
       if (!carry.ok)
         return { outcome: "rejected", reason: "flip_gate_carry_incomplete",
@@ -3433,6 +3490,31 @@ export class GenerationCoordinator {
         const wantIdx = occIds.indexOf(pin.position.occurrenceId);
         if (st.occ_index !== wantIdx)
           diverge("positions", "occ_index", wantIdx, st.occ_index);
+        // B1-C2 (Rowan B1 review 6369823670): the truthful
+        // no-playback baseline. The carried state is the book's
+        // OPENING state in v2 — not playing, journal tip 0,
+        // nothing superseded — and the position journal for the
+        // book is EMPTY: any event row means v2 playback history
+        // exists that the frozen record does not account for, and
+        // the position the gate would certify is no longer purely
+        // the carried one. SCOPE, exactly as bounded in review:
+        // this baseline is a condition of the MIGRATION GATE's
+        // carry verification only (the D4 pre-flip state). It is
+        // NOT a playback restriction — nothing in the position
+        // event path consults it, PushPositionEvents keeps its
+        // ordinary semantics, and after the flip (D5) genuine
+        // device events fold onto the carried state by the normal
+        // causality rules, tip advancing from 0 as on any book.
+        if (st.playing !== 0)
+          diverge("positions", "playing", 0, st.playing);
+        if (st.tip !== 0)
+          diverge("positions", "tip", 0, st.tip);
+        if (st.superseded_count !== 0)
+          diverge("positions", "superseded_count", 0, st.superseded_count);
+        const journalRows = this._all(
+          `SELECT event_id FROM position_events WHERE book_id = ?`, bookId).length;
+        if (journalRows !== 0)
+          diverge("positions", "position_events", 0, journalRows);
         // The stored state, folded with the audit's verbatim
         // checkpoints, must recompute to the audit's hash (which
         // must equal the pin's): a tampered stored row or a
@@ -3487,6 +3569,24 @@ export class GenerationCoordinator {
         if (!row) { diverge("jobs", "missing_job", pinAgg.jobId, null, pinAgg.jobId); continue; }
         if (row.state !== pinAgg.v2State)
           diverge("jobs", "state", pinAgg.v2State, row.state, pinAgg.jobId);
+        // B1-C2 (Rowan B1 review 6369823670): the COMPLETE stored
+        // row is verified, not just its digests — every column of
+        // the stored aggregate against the pinned descriptor
+        // (which supplies kind, lane, and chapterIndex for every
+        // aggregate). A row whose definition still recomputes but
+        // whose kind/lane/chapter/revision/book was rewritten is
+        // not the carried aggregate.
+        if (row.kind !== pinAgg.kind)
+          diverge("jobs", "kind", pinAgg.kind, row.kind, pinAgg.jobId);
+        if (row.lane !== pinAgg.lane)
+          diverge("jobs", "lane", pinAgg.lane, row.lane, pinAgg.jobId);
+        if (row.chapter_index !== pinAgg.chapterIndex)
+          diverge("jobs", "chapter_index", pinAgg.chapterIndex,
+            row.chapter_index, pinAgg.jobId);
+        if (row.revision !== 1)
+          diverge("jobs", "revision", 1, row.revision, pinAgg.jobId);
+        if (row.book_id !== bookId)
+          diverge("jobs", "book_id", bookId, row.book_id, pinAgg.jobId);
         let defDigest = null;
         try { defDigest = sha256HexText(canonicalJson(JSON.parse(row.data_json || "{}"))); }
         catch { defDigest = null; }
