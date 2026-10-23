@@ -5,6 +5,7 @@
 // anchor) without touching a single real key, digest, or byte.
 import { createR2AudioCache, sha256Hex } from "../../v2/host/adapters.mjs";
 import { MIGRATION_CHUNK_LIMITS, partitionBookRows } from "../../v2/p8/migration-chunk-limits.mjs";
+import { digest as transformDigest } from "../../v2/migration/util.mjs";
 import { makeHarness } from "./do-harness.mjs";
 
 export { sha256Hex };
@@ -104,18 +105,66 @@ export function makeWorld({ freezeDigest = SYNTHETIC_FREEZE_DIGEST } = {}) {
   const cache = createR2AudioCache(bucket);
   const manifest = { snapshotDigest: freezeDigest, books: {} };
   const chunksManifest = { snapshotDigest: freezeDigest, books: {} };
+  const carryManifest = { snapshotDigest: freezeDigest, books: {} };
   const harness = makeHarness({
     probe: cache.probe,
     extraEnv: { migrationPrime: (k) => cache.primeForMigration(k),
                 approvedFreezeManifest: manifest,
-                approvedFreezeChunks: chunksManifest },
+                approvedFreezeChunks: chunksManifest,
+                approvedFreezeCarry: carryManifest },
   });
   return { bucket, cache, harness, coord: harness.coord, manifest, chunksManifest,
+           carryManifest,
            pinBook(bookId, pairs) { manifest.books[bookId] = pinnedEntry(pairs); },
            pinBookChunks(bookId, pairs, limits) {
              manifest.books[bookId] = pinnedEntry(pairs);
              chunksManifest.books[bookId] = pinnedChunksEntry(pairs, limits);
+           },
+           // B1: pin a synthetic carry for a book (the same shape
+           // the committed carry pin uses). `content` must be the
+           // exact content object the chunks will present (with
+           // occurrenceIds) — the pin binds its canonical hash.
+           // `position`: { occurrenceId, offsetSec, checkpoints }.
+           // `jobs`: [{ jobId, chapterIndex, v2State, definition,
+           // occurrences }] where definition is the transform-
+           // shaped preimage (its digest is computed here) and
+           // occurrences is the derived occurrence set.
+           pinBookCarry(bookId, { content, position, jobs = [] }) {
+             carryManifest.books[bookId] = pinnedCarryEntry({ bookId, content, position, jobs });
            } };
+}
+
+// The synthetic carry pin entry for one book, in exactly the
+// shape tools/derive-approved-freeze-carry.mjs emits and
+// v2/coordinator.mjs's _carryBook consumes.
+export function pinnedCarryEntry({ bookId, content, position, jobs = [] }) {
+  const aggregates = jobs.map((j) => ({
+    jobId: j.jobId, chapterIndex: j.chapterIndex, kind: "job", lane: "standard",
+    v2State: j.v2State, cause: j.cause || "synthetic carry (test fixture)",
+    definitionDigest: transformDigest(j.definition),
+    definition: j.definition,
+    occurrenceSetSha256: sha256Hex(canonicalJson(j.occurrences)),
+    occurrences: j.occurrences,
+  }));
+  const descriptor = aggregates.map((a) => ({
+    jobId: a.jobId, chapterIndex: a.chapterIndex, v2State: a.v2State,
+    definitionDigest: a.definitionDigest, occurrenceSetSha256: a.occurrenceSetSha256 }));
+  return {
+    contentSha256: sha256Hex(canonicalJson(content)),
+    occurrenceCount: (content.occurrenceIds || []).length,
+    boundCount: 0,
+    position: {
+      occurrenceId: position.occurrenceId, offsetSec: position.offsetSec,
+      source: "synthetic",
+      payloadSha256: sha256Hex(canonicalJson({
+        bookId,
+        position: { occurrenceId: position.occurrenceId, offsetSec: position.offsetSec },
+        checkpoints: position.checkpoints || [] })),
+      checkpoints: position.checkpoints || [],
+    },
+    jobs: { count: aggregates.length,
+            setSha256: sha256Hex(canonicalJson(descriptor)), aggregates },
+  };
 }
 
 // The synthetic chunk pin for a seeded book (D3): the exact ordered
@@ -209,4 +258,27 @@ export function chunkCmd(commandId, { migrationId, freezeDigest, bookId, chunkIn
   const payload = { migrationId, freezeDigest, bookId, chunkIndex, rows };
   if (content !== undefined) payload.content = content;
   return { command_id: commandId, type: "MigrateImportChunk", payload };
+}
+
+// B1 carry commands (§3A.2/§3A.3). The payloads are built from a
+// pinned carry entry (pinnedCarryEntry / the committed carry
+// pin): positions payload = the pinned position verbatim; jobs
+// payload = the pinned aggregates reduced to the command shape
+// (the definition itself never travels — the coordinator takes
+// it from its own pin; only its digest is presented).
+export function positionsCmd(commandId, { migrationId, freezeDigest, bookId, carry }) {
+  return { command_id: commandId, type: "MigrateImportPositions",
+           payload: { migrationId, freezeDigest, bookId,
+             position: { occurrenceId: carry.position.occurrenceId,
+                         offsetSec: carry.position.offsetSec },
+             checkpoints: carry.position.checkpoints } };
+}
+export function jobsCmd(commandId, { migrationId, freezeDigest, bookId, carry }) {
+  return { command_id: commandId, type: "MigrateImportJobs",
+           payload: { migrationId, freezeDigest, bookId,
+             aggregates: carry.jobs.aggregates.map((a) => ({
+               jobId: a.jobId, chapterIndex: a.chapterIndex, kind: a.kind,
+               lane: a.lane, v2State: a.v2State,
+               definitionDigest: a.definitionDigest,
+               occurrences: a.occurrences })) } };
 }
