@@ -99,6 +99,27 @@ const uploadMetadata = {
 emit("upload-metadata.json", Buffer.from(JSON.stringify(uploadMetadata, null, 2) + "\n", "utf8"));
 emit("deploy-spec.json", readFileSync(join(v2Dir, "p8", "deploy-spec.json")));
 
+// --- D3: the PRODUCTION script's upload metadata, derived from ITS
+// OWN spec (v2/p8/deploy-spec-prod.json) in exactly the same shape.
+// The two scripts' metadata are emitted side by side and validated
+// by separate validators (tools/validate-upload-envelope.mjs for
+// staging, tools/validate-prod-envelope.mjs for production); neither
+// derivation can contaminate the other.
+const prodSpecPath = join(v2Dir, "p8", "deploy-spec-prod.json");
+if (existsSync(prodSpecPath)) {
+  const prodSpec = JSON.parse(readFileSync(prodSpecPath, "utf8"));
+  const prodUploadMetadata = {
+    main_module: prodSpec.main_module,
+    compatibility_date: prodSpec.compatibility_date,
+    compatibility_flags: prodSpec.compatibility_flags,
+    bindings: prodSpec.bindings,
+    migrations: prodSpec.durable_object_migrations,
+    observability: prodSpec.observability,
+  };
+  emit("upload-metadata-prod.json", Buffer.from(JSON.stringify(prodUploadMetadata, null, 2) + "\n", "utf8"));
+  emit("deploy-spec-prod.json", readFileSync(prodSpecPath));
+}
+
 // --- protected root files: recorded so the artifact itself proves the
 // build touched nothing it must not. (Hashes, not copies.)
 const protectedRoots = {};

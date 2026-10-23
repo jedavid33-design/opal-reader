@@ -4,6 +4,7 @@
 // binding classes (fingerprinted / fingerprinted-distinct / legacy
 // anchor) without touching a single real key, digest, or byte.
 import { createR2AudioCache, sha256Hex } from "../../v2/host/adapters.mjs";
+import { MIGRATION_CHUNK_LIMITS, partitionBookRows } from "../../v2/p8/migration-chunk-limits.mjs";
 import { makeHarness } from "./do-harness.mjs";
 
 export { sha256Hex };
@@ -102,13 +103,43 @@ export function makeWorld({ freezeDigest = SYNTHETIC_FREEZE_DIGEST } = {}) {
   const bucket = new RecordingBucket();
   const cache = createR2AudioCache(bucket);
   const manifest = { snapshotDigest: freezeDigest, books: {} };
+  const chunksManifest = { snapshotDigest: freezeDigest, books: {} };
   const harness = makeHarness({
     probe: cache.probe,
     extraEnv: { migrationPrime: (k) => cache.primeForMigration(k),
-                approvedFreezeManifest: manifest },
+                approvedFreezeManifest: manifest,
+                approvedFreezeChunks: chunksManifest },
   });
-  return { bucket, cache, harness, coord: harness.coord, manifest,
-           pinBook(bookId, pairs) { manifest.books[bookId] = pinnedEntry(pairs); } };
+  return { bucket, cache, harness, coord: harness.coord, manifest, chunksManifest,
+           pinBook(bookId, pairs) { manifest.books[bookId] = pinnedEntry(pairs); },
+           pinBookChunks(bookId, pairs, limits) {
+             manifest.books[bookId] = pinnedEntry(pairs);
+             chunksManifest.books[bookId] = pinnedChunksEntry(pairs, limits);
+           } };
+}
+
+// The synthetic chunk pin for a seeded book (D3): the exact ordered
+// partition of the book's pinned rows under the given limits
+// (default: the code limits), in exactly the shape the
+// coordinator's committed chunk pin uses — { chunkCount,
+// totalBytes, chunks: [{ index, start, rowCount, totalBytes,
+// rowsSha256 }] }, where a chunk's rows are the contiguous slice
+// [start, start + rowCount) of the book pin's occurrence-sorted
+// rows and rowsSha256 digests that slice's pinned tuples.
+export function pinnedChunksEntry(pairs, limits = MIGRATION_CHUNK_LIMITS) {
+  const rows = pairs.map(({ row, etag }) => ({
+    occurrenceId: row.occurrenceId, revisionKey: row.revisionKey,
+    cacheKey: row.cacheKey, size: row.manifest.size, format: row.manifest.format,
+    sha256Prefix: row.manifest.sha256.slice(0, 16), etag }));
+  rows.sort((a, b) => (a.occurrenceId < b.occurrenceId ? -1 : 1));
+  const parts = partitionBookRows(rows, limits);
+  const chunks = parts.map(c => ({ ...c,
+    rowsSha256: sha256Hex(canonicalJson(
+      rows.slice(c.start, c.start + c.rowCount)
+        .map(r => [r.occurrenceId, r.revisionKey, r.cacheKey,
+                   r.size, r.format, r.sha256Prefix, r.etag]))) }));
+  return { chunkCount: chunks.length,
+           totalBytes: chunks.reduce((n, c) => n + c.totalBytes, 0), chunks };
 }
 
 // Seed one object and return the manifest row for it.
@@ -159,4 +190,23 @@ export function importCmd(commandId, { migrationId, freezeDigest, bookId, conten
 export function gateCmd(commandId, { migrationId, bookId, certificateSha256 }) {
   return { command_id: commandId, type: "MigrateRecordFlipGate",
            payload: { migrationId, bookId, certificateSha256 } };
+}
+// The canonical per-chunk row-set digest over a set of pinned
+// pairs (occurrence-sorted) — the same computation
+// pinnedChunksEntry and the derive tool perform. Exported so
+// tests can hand-craft chunk pins the partitioner would refuse to
+// derive (the oversize cases), proving the COORDINATOR's
+// enforcement rather than the derivation's honesty.
+export function chunkPinDigest(pairs) {
+  const tuples = pairs.map(({ row, etag }) => [row.occurrenceId, row.revisionKey,
+    row.cacheKey, row.manifest.size, row.manifest.format,
+    row.manifest.sha256.slice(0, 16), etag]);
+  tuples.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  return sha256Hex(canonicalJson(tuples));
+}
+
+export function chunkCmd(commandId, { migrationId, freezeDigest, bookId, chunkIndex, content, rows }) {
+  const payload = { migrationId, freezeDigest, bookId, chunkIndex, rows };
+  if (content !== undefined) payload.content = content;
+  return { command_id: commandId, type: "MigrateImportChunk", payload };
 }

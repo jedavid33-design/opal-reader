@@ -40,6 +40,16 @@
 // coordinator or provider contact, the coordinator is constructed
 // WITHOUT a queue delivery function (outbox rows stay visibly unsent),
 // and the provider adapters refuse again at the synthesis seam.
+//
+// D3 (cutover plan §S4 as corrected; Rowan D1 sign-off 6355565715):
+// the PRODUCTION surface is a separate script with its own entry —
+// v2/worker-entry-prod.js — which subclasses this module's
+// coordinator class behind production fences and owns its own
+// Durable Object namespace. This staging entry is unchanged by it:
+// it still refuses every non-staging scope, still routes only the
+// smoke-p8 instance, and still requires the smoke-p8/ prefix. The
+// two surfaces are disjoint by construction; neither can serve the
+// other's scope, instance, or R2 namespace.
 import { createApi } from "./api.mjs";
 import { GenerationCoordinator, MIGRATION_COMMAND_TYPES } from "./coordinator.mjs";
 import { createExecutor } from "./executor.mjs";
@@ -74,13 +84,13 @@ export class StagingR2NamespaceError extends Error {
 const INTERNAL_HEADER = "x-opalreader-internal";
 const TOKEN_ERROR_BODY = { error: "The personal access token is missing or incorrect." };
 
-function json(status, body, extraHeaders = {}) {
+export function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status, headers: { "content-type": "application/json", ...extraHeaders },
   });
 }
 
-function corsHeaders(request, env) {
+export function corsHeaders(request, env) {
   const origin = request.headers.get("origin");
   if (origin && env.ALLOWED_ORIGIN && origin === env.ALLOWED_ORIGIN)
     return { "access-control-allow-origin": origin, vary: "Origin" };
@@ -125,6 +135,23 @@ export class OpalReaderCoordinator {
     this.coordinator = new GenerationCoordinator(state, hostEnv(env, null));
   }
 
+  // ---- surface hooks (D3). THIS class is the staging surface; the
+  // production entry (v2/worker-entry-prod.js) subclasses it and
+  // overrides exactly these three: the scope its internal callers
+  // must declare, the refusal naming a wrong one, and the R2
+  // namespace rule its cache is constructed under. Everything else
+  // — the API dispatch, the executor path, the alarm, the scoped
+  // hydration — is shared verbatim, so the two scripts run the same
+  // coordinator logic behind disjoint fences, each owning its own
+  // Durable Object namespace. The defaults below are exactly the
+  // pre-D3 staging behavior.
+  _expectedScope() { return STAGING_SCOPE; }
+  _scopeRequiredError() { return "staging_scope_required"; }
+  _enforceR2Namespace(keyPrefix) {
+    if (this.env.OPALREADER_V2_SCOPE === STAGING_SCOPE && keyPrefix !== SMOKE_R2_KEY_PREFIX)
+      throw new StagingR2NamespaceError(this.env.R2_KEY_PREFIX);
+  }
+
   async _cache() {
     // B7 revision: the staging deploy spec sets R2_KEY_PREFIX to
     // "smoke-p8/", a non-overlapping namespace in the shared bucket,
@@ -143,8 +170,7 @@ export class OpalReaderCoordinator {
     // Any other scope (a future, deliberately authorized production
     // build) keeps the unprefixed-or-configured behavior unchanged.
     const keyPrefix = this.env.R2_KEY_PREFIX || "";
-    if (this.env.OPALREADER_V2_SCOPE === STAGING_SCOPE && keyPrefix !== SMOKE_R2_KEY_PREFIX)
-      throw new StagingR2NamespaceError(this.env.R2_KEY_PREFIX);
+    this._enforceR2Namespace(keyPrefix);
     // G1 (Rowan re-review 6354569652): NO eager index hydration.
     // The pre-correction cache downloaded EVERY indexed object's
     // bytes on EVERY request; at the approved freeze's scale
@@ -170,8 +196,8 @@ export class OpalReaderCoordinator {
   async fetch(request) {
     if (request.headers.get(INTERNAL_HEADER) !== "1")
       return json(403, { error: "internal_only" });
-    if (request.headers.get("x-opalreader-scope") !== STAGING_SCOPE)
-      return json(403, { error: "staging_scope_required" });
+    if (request.headers.get("x-opalreader-scope") !== this._expectedScope())
+      return json(403, { error: this._scopeRequiredError() });
     const url = new URL(request.url);
     try {
       if (url.pathname === "/internal/execute" && request.method === "POST")
