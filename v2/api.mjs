@@ -51,6 +51,26 @@ export function createApi(env) {
     try {
       if (request.method === "POST" && path === "/v2/commands") {
         const cmd = await request.json();
+        // D3-1 fail-closed backup (Rowan D3 re-review 6356184643):
+        // on the PRODUCTION surface the legacy whole-book command
+        // MigrateImportBindings is refused outright — chunking is
+        // the D1-mandated execution shape, and the whole-book path
+        // would prime without row/byte limits. The surface mark is
+        // the scope header the worker entries set from their own
+        // surface and the DO class validates against its
+        // _expectedScope() hook before dispatching here
+        // ("production" is PRODUCTION_SCOPE in
+        // v2/worker-entry-prod.js); a request carrying that mark
+        // is refused before any coordinator state is touched,
+        // before preparing/priming, and before any command is
+        // recorded. The production entry fence and the DO class's
+        // _migrationChunkRequired hook refuse the same type ahead
+        // of this layer; this is the last fence, not the only one.
+        // Staging-marked and unmarked requests are unaffected:
+        // staging keeps the whole-book command exactly as reviewed.
+        if (cmd && cmd.type === "MigrateImportBindings" &&
+            request.headers.get("x-opalreader-scope") === "production")
+          return json(403, { error: "migration_chunk_required" });
         // G2 admission fence, layer 2 (the DO side): migration
         // commands are operator-only. The worker entry checks the
         // operator credential and marks the forwarded (internal)

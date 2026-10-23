@@ -137,20 +137,32 @@ export class OpalReaderCoordinator {
 
   // ---- surface hooks (D3). THIS class is the staging surface; the
   // production entry (v2/worker-entry-prod.js) subclasses it and
-  // overrides exactly these three: the scope its internal callers
-  // must declare, the refusal naming a wrong one, and the R2
-  // namespace rule its cache is constructed under. Everything else
-  // — the API dispatch, the executor path, the alarm, the scoped
-  // hydration — is shared verbatim, so the two scripts run the same
-  // coordinator logic behind disjoint fences, each owning its own
-  // Durable Object namespace. The defaults below are exactly the
-  // pre-D3 staging behavior.
+  // overrides exactly these: the scope its internal callers
+  // must declare, the refusal naming a wrong one, the R2
+  // namespace rule its cache is constructed under, and (D3-1)
+  // whether the whole-book migration command is refused on the
+  // surface. Everything else — the API dispatch, the executor
+  // path, the alarm, the scoped hydration — is shared verbatim, so
+  // the two scripts run the same coordinator logic behind disjoint
+  // fences, each owning its own Durable Object namespace. The
+  // defaults below are exactly the pre-D3 staging behavior.
   _expectedScope() { return STAGING_SCOPE; }
   _scopeRequiredError() { return "staging_scope_required"; }
   _enforceR2Namespace(keyPrefix) {
     if (this.env.OPALREADER_V2_SCOPE === STAGING_SCOPE && keyPrefix !== SMOKE_R2_KEY_PREFIX)
       throw new StagingR2NamespaceError(this.env.R2_KEY_PREFIX);
   }
+  // D3-1 (Rowan D3 re-review 6356184643): whether this surface
+  // refuses the legacy whole-book MigrateImportBindings outright.
+  // Staging keeps the command exactly as reviewed (false — the
+  // default, and the pre-D3-1 behavior). The production class
+  // overrides this to true: chunking is the D1-mandated execution
+  // shape there, so the DO layer refuses the whole-book type
+  // (migration_chunk_required) before the API dispatch — a direct
+  // internal request bypassing the public entry fence cannot
+  // execute it either. The API layer carries the same refusal for
+  // production-marked requests (v2/api.mjs).
+  _migrationChunkRequired() { return false; }
 
   async _cache() {
     // B7 revision: the staging deploy spec sets R2_KEY_PREFIX to
@@ -202,6 +214,21 @@ export class OpalReaderCoordinator {
     try {
       if (url.pathname === "/internal/execute" && request.method === "POST")
         return await this._execute(await request.json());
+      // D3-1 fail-closed backup (the _migrationChunkRequired
+      // surface hook): on a surface that refuses the whole-book
+      // migration command, refuse it HERE — after the internal +
+      // scope checks, before the cache is constructed and before
+      // the API dispatch can prepare or prime anything. A direct
+      // internal request that bypassed the public entry fence
+      // (where the same refusal lives) executes nothing and
+      // writes nothing.
+      if (this._migrationChunkRequired() && request.method === "POST" &&
+          url.pathname === "/v2/commands") {
+        let peek = null;
+        try { peek = await request.clone().json(); } catch { peek = null; }
+        if (peek && peek.type === "MigrateImportBindings")
+          return json(403, { error: "migration_chunk_required" });
+      }
       const cache = await this._cache();
       const api = createApi(hostEnv(this.env, cache));
       const response = await api(request, this.state);

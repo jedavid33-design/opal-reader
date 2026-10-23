@@ -242,12 +242,21 @@ test("prod DO class enforces the production scope on direct internal calls", asy
 test("prod surface imports from the UNPREFIXED namespace; smoke-prefixed objects are invisible to it", async () => {
   const prod = makeProd();
   const book = seedSurfaceBook(prod, "", "prod-book-ns", [128, 96, 64]);
-  const imp = await prod.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR,
-    body: { command_id: "prod-imp-ns", type: "MigrateImportBindings",
-      payload: { migrationId: MIG, freezeDigest: FREEZE, bookId: "prod-book-ns",
-        content: book.content, rows: book.rows } } });
-  assert.equal(imp.status, 200);
-  assert.equal((await imp.json()).outcome, "applied");
+  // The import path exercised here is the pinned chunk sequence —
+  // the only migration import this surface serves. (At D3 pin
+  // 4eb5a4b3 this test imported via the whole-book command; the
+  // D3-1 correction refuses that command on production —
+  // migration_chunk_required — so the namespace claims now ride
+  // the sanctioned path. See tests/p8-d3-chunk-mandate.test.mjs.)
+  let last = null;
+  for (let i = 0; i < book.chunks.length; i++) {
+    const res = await prod.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR,
+      body: chunkBody(book, "prod-book-ns", i, `${MIG}:prod-book-ns:chunk:${i}`) });
+    assert.equal(res.status, 200);
+    last = await res.json();
+    assert.equal(last.outcome, "applied");
+  }
+  assert.equal(last.bookComplete, true);
   for (const g of prod.bucket.gets) assert.ok(!g.key.startsWith("smoke-p8/"), g.key);
 
   // The same book seeded ONLY under the smoke prefix: production
@@ -257,9 +266,7 @@ test("prod surface imports from the UNPREFIXED namespace; smoke-prefixed objects
   seedSurfaceBook(prod2, "smoke-p8/", "prod-book-ns", [128, 96, 64]);
   prod2.bucket.resetGets();
   const imp2 = await prod2.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR,
-    body: { command_id: "prod-imp-ns2", type: "MigrateImportBindings",
-      payload: { migrationId: MIG, freezeDigest: FREEZE, bookId: "prod-book-ns",
-        content: book.content, rows: book.rows } } });
+    body: chunkBody(book, "prod-book-ns", 0, `${MIG}:prod-book-ns:chunk:0`) });
   const imp2Body = await imp2.json();
   assert.equal(imp2Body.outcome, "rejected");
   assert.equal(imp2Body.reason, "object_missing");

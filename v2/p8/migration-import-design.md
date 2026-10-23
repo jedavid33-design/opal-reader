@@ -834,3 +834,62 @@ the flat memory shape).
   `tests/p8-d3-resource-proofs.test.mjs`,
   `tests/p8-d3-prod-envelope.test.mjs` (all new); chunk helpers
   in `tests/helpers/migration-fixtures.mjs`.
+
+## 11. D3-1 correction addendum — the chunk mandate enforced on production (Rowan D3 re-review 6356184643)
+
+Rowan's D3 re-review found one hard stop in the D3 build as pinned
+at `4eb5a4b3`: the row/byte limits lived only in the chunk path.
+The whole-book `MigrateImportBindings` remained admissible on the
+production surface under the operator credential with no limits,
+and its chunked-in-progress guard fired only AFTER the async
+prime — so a mistaken whole-book call could spend a full 510-row
+/ ~1.56 GB / 1,020-GET prime before rejecting, or import the
+largest book in a single invocation if no chunk had run. That
+defeated the D1 mandate this design serves: chunking is the
+REQUIRED execution shape on production.
+
+The correction makes the mandate a surface property, in three
+layers, each refusing with the named error
+`migration_chunk_required` before anything is prepared, primed,
+or written:
+
+1. **Production entry fence** (`v2/worker-entry-prod.js`): a
+   `POST /v2/commands` whose type is `MigrateImportBindings` is
+   refused (403) before the DO namespace is touched and before
+   any R2 access. The refusal is a capability refusal, not a
+   credential outcome — it precedes the operator check, so a
+   correct operator credential gains nothing. `MigrateImportChunk`
+   and `MigrateRecordFlipGate` remain admitted under the existing
+   operator policy, unchanged.
+2. **DO-class backup** (the `_migrationChunkRequired` surface
+   hook, `v2/worker-entry.js`; `false` on the staging class,
+   `true` on `OpalReaderCoordinatorProd`): a direct internal
+   request that bypasses the public entry is refused after the
+   internal + scope checks, before the cache is constructed and
+   before the API dispatch.
+3. **API-layer backup** (`v2/api.mjs`): a production-surface-
+   marked request (the `x-opalreader-scope` mark the entries set
+   and the DO class validates) carrying the whole-book type is
+   refused beside the G2 operator-admission fence, before any
+   coordinator state is touched.
+
+Staging is unchanged in every outcome: the whole-book command
+keeps working there exactly as reviewed (the hook default is the
+pre-correction behavior), and no coordinator logic changed at
+all — `MigrateImportBindings` remains a valid command type whose
+admission is a surface decision, which is where the D1 mandate
+lives.
+
+Regressions (`tests/p8-d3-chunk-mandate.test.mjs`, production
+surface, real Worker path, counting bucket, pinned Pucked Over
+510-row shape): (a) whole-book + correct operator credential →
+403 `migration_chunk_required`, ZERO R2 GETs, ZERO commands or
+receipts written; (b) the same after chunk 1 is applied → same
+refusal, zero additional GETs, applied chunk untouched; (c) the
+chunk sequence and the flip gate still complete in intended
+order after a refusal; (d) the direct-internal and direct-API
+bypasses refuse identically with zero GETs. All four fail on pin
+`4eb5a4b3` (the command returns 200 there). The two
+production-surface namespace tests that previously imported via
+the whole-book command now ride the chunk path; their claims are
+unchanged.
