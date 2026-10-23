@@ -1117,7 +1117,7 @@ export class GenerationCoordinator {
       case "MigrateRecordFlipGate": {
         const gate = this._oneOrNull(
           `SELECT * FROM migration_gates WHERE book_id = ?`, bookId);
-        if (gate) return { complete: this._gateEffectsVerified(p, gate),
+        if (gate) return { complete: this._gateEffectsVerified(rec, p, gate),
                            zero: false };
         return { complete: false, zero: true };
       }
@@ -1131,7 +1131,13 @@ export class GenerationCoordinator {
   // over the pending record's own stored rows, the row count,
   // and the class-C evidence rows verifying field-for-field
   // against the command's rows and (where pinned) the frozen
-  // chunk partition, including the pinned byte total.
+  // chunk partition, including the pinned byte total. AND
+  // (Correction 2, Rowan re-review 6375091653, B1) the ACTUAL
+  // rows the chunk applied — the live bindings / cache_index
+  // records and any required provenance attestation — must
+  // still be present and exact: the slot and its evidence are
+  // the apply's summary of its effects, and a summary is not
+  // the effects.
   _chunkEffectsVerified(rec, p, slot) {
     const rows = Array.isArray(p.rows) ? p.rows : [];
     if (slot.migration_id !== p.migrationId) return false;
@@ -1163,6 +1169,94 @@ export class GenerationCoordinator {
             want.cacheKey !== r.cacheKey) return false;
       }
     }
+    // Correction 2 (B1): verify the live applied rows, not only
+    // the slot's reported evidence.
+    return this._chunkAppliedRowsVerified(p, rows, byOcc, pinned);
+  }
+
+  // The live-rows leg of the chunk audit (Correction 2, Rowan
+  // re-review 6375091653, B1). For each exact pinned row of the
+  // command, SELECT the records the apply wrote and compare
+  // them against the slot evidence and the immutable pins —
+  // database rows only, no R2 sends. Any missing or divergent
+  // row returns false (the audit's `neither`), however intact
+  // the slot, its evidence and the commands receipt remain.
+  // The expectations mirror _migrationCompleteness — the
+  // forensic standard the flip gate already trusts — at chunk
+  // scope:
+  //   bindings:    keyed (occurrence, revision) — cache_key and
+  //                provenance ("migration", or
+  //                "migration:freeze_snapshot_attestation" when
+  //                the slot evidence's status for the row is
+  //                accepted_provenance — the apply's own record
+  //                of which path it took);
+  //   cache_index: keyed by cache_key — format, SHA-256, and
+  //                the applicable identity (the revision key;
+  //                for a legacy row, null or the cache key
+  //                itself — the two values an honest apply can
+  //                have anchored);
+  //   attestation: an accepted_provenance row additionally
+  //                requires its migration_audit record, intact
+  //                and field-equal (see below).
+  _chunkAppliedRowsVerified(p, rows, byOcc, pinned) {
+    const pinnedByOcc = pinned
+      ? new Map(pinned.rows.map(r => [r.occurrenceId, r])) : new Map();
+    for (const r of rows) {
+      const ev = byOcc.get(r.occurrenceId);
+      const wantProvenance = ev.status === "accepted_provenance"
+        ? "migration:freeze_snapshot_attestation" : "migration";
+      const b = this._oneOrNull(
+        `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
+        r.occurrenceId, r.revisionKey);
+      if (!b) return false;
+      if (b.cache_key !== r.cacheKey) return false;
+      if (b.provenance !== wantProvenance) return false;
+      const idx = this._oneOrNull(
+        `SELECT * FROM cache_index WHERE cache_key = ?`, r.cacheKey);
+      if (!idx) return false;
+      if (idx.format !== r.manifest.format) return false;
+      if (idx.sha256 !== r.manifest.sha256) return false;
+      const identityOk = r.revisionKey.startsWith("legacy:")
+        ? (idx.identity === null || idx.identity === r.cacheKey)
+        : idx.identity === r.revisionKey;
+      if (!identityOk) return false;
+      if (ev.status === "accepted_provenance" &&
+          !this._chunkProvenanceAuditVerified(p, r, pinnedByOcc.get(r.occurrenceId)))
+        return false;
+    }
+    return true;
+  }
+
+  // The provenance leg of the chunk audit: the migration_audit
+  // row a provenance-accepted row's apply wrote must be present,
+  // singular, and THIS migration's; its stored attestation must
+  // be intact (the recorded fingerprint recomputes over the
+  // stored attestation JSON) and field-equal to the attestation
+  // the COMMAND carried — snapshot digest, bookkeeping identity,
+  // manifest facts, and (where the chunk is pinned) the pinned
+  // row's etag. A corrupted or rewritten attestation earns the
+  // chunk no completion credit.
+  _chunkProvenanceAuditVerified(p, r, pinnedRow) {
+    const att = r.provenanceAttestation || null;
+    if (!att) return false;
+    const list = this._all(
+      `SELECT * FROM migration_audit WHERE book_id = ? AND occurrence_id = ?`,
+      p.bookId, r.occurrenceId);
+    if (list.length !== 1) return false;
+    const a = list[0];
+    if (a.migration_id !== p.migrationId) return false;
+    if (a.revision_key !== r.revisionKey || a.cache_key !== r.cacheKey) return false;
+    if (a.outcome !== "accepted_provenance") return false;
+    let stored;
+    try { stored = JSON.parse(a.attestation_json); } catch { return false; }
+    if (a.attestation_sha256 !== sha256HexText(a.attestation_json)) return false;
+    if (canonicalJson(stored) !== canonicalJson(att)) return false;
+    if (stored.bookId !== p.bookId || stored.occurrenceId !== r.occurrenceId ||
+        stored.revisionKey !== r.revisionKey || stored.cacheKey !== r.cacheKey ||
+        stored.sha256 !== r.manifest.sha256 || stored.size !== r.manifest.size ||
+        stored.format !== r.manifest.format ||
+        stored.snapshotDigest !== p.freezeDigest) return false;
+    if (pinnedRow && stored.r2Etag !== pinnedRow.etag) return false;
     return true;
   }
 
@@ -1249,10 +1343,18 @@ export class GenerationCoordinator {
   // and, for a chunked import, the import record — with both
   // planes exactly complete and (where a carry pin applies) the
   // required carries verified. A gate row echoing a caller's
-  // certificate over the wrong book proves nothing.
-  _gateEffectsVerified(p, gate) {
+  // certificate over the wrong book proves nothing. AND
+  // (Correction 2, Rowan re-review 6375091653, B2) the gate
+  // record must be attributable to THIS command: the gate's
+  // stored detail names the command that created it, and that
+  // name must equal the pending record's id exactly — a gate
+  // flipped by a different command earns this one no credit.
+  _gateEffectsVerified(rec, p, gate) {
     if (gate.migration_id !== p.migrationId) return false;
     if (gate.certificate_sha256 !== p.certificateSha256) return false;
+    let detail;
+    try { detail = JSON.parse(gate.detail_json); } catch { return false; }
+    if (!detail || detail.commandId !== rec.command_id) return false;
     const book = this._oneOrNull(
       `SELECT * FROM migration_books WHERE book_id = ?`, p.bookId);
     if (!book || book.certificate_sha256 !== p.certificateSha256) return false;

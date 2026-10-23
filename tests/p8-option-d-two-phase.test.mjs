@@ -16,7 +16,12 @@
 //                           outcome/evidence are REQUESTS, never
 //                           proofs; the handler verifies claim +
 //                           receipt + business effects server-
-//                           side before settling anything
+//                           side before settling anything;
+//                           Correction 2 (6375091653): the chunk
+//                           audit reads the ACTUAL bindings /
+//                           cache_index / attestation rows, and
+//                           the gate audit binds the gate record
+//                           to the exact command (detail_json)
 //   §3.3.5 crash matrix ... every row, by name
 //   §3.5 / I2 read purity . read-purity-overdue-pending,
 //                           read-purity-stale-lease-executing
@@ -34,7 +39,7 @@ import { createApi } from "../v2/api.mjs";
 import stagingEntry from "../v2/worker-entry.js";
 import {
   makeWorld, seedRow, importCmd, chunkCmd, positionsCmd, jobsCmd, gateCmd,
-  canonicalJson,
+  attestationFor, canonicalJson,
   SYNTHETIC_FREEZE_DIGEST as FREEZE,
 } from "./helpers/migration-fixtures.mjs";
 
@@ -998,6 +1003,16 @@ test("reconciliation (Blocker B): complete-looking effects with NO trustworthy r
       `INSERT INTO bindings (occurrence_id, revision_key, cache_key, provenance, bound_at)
        VALUES (?, ?, ?, 'migration', ?)`)
       .run(r.occurrenceId, r.revisionKey, r.cacheKey, w.harness.now());
+  // Correction 2 (B1): the audit now also reads the cache_index
+  // rows a genuine apply writes — plant those too, exactly as
+  // the apply writes them, so this state remains what it claims
+  // to be: COMPLETE effects with no execution behind them.
+  for (const r of cmd.payload.rows)
+    w.harness.db.prepare(
+      `INSERT INTO cache_index (cache_key, identity, format, sha256, recorded_at)
+       VALUES (?, ?, ?, ?, ?)`)
+      .run(r.cacheKey, r.revisionKey, r.manifest.format, r.manifest.sha256,
+           w.harness.now());
   craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
   const grantsBefore = w.harness.sentGrants.length;
   const res = reconcile(w, "od-b8", "applied", { basis: "effects verified complete" });
@@ -1065,6 +1080,267 @@ test("reconciliation audit (Blocker B): a genuinely complete gate settles applie
   assert.equal(settled.outcome, "applied");
   assert.equal(
     JSON.parse(pendingRow(w, gate.command_id).detail_json).verification.receiptBound, true);
+  assert.equal(w.harness.rows("commands").length, 4,
+    "chunk + positions + jobs + gate — nothing re-executed or inserted");
+});
+
+// ============================================================ Correction 2 (Rowan re-review 6375091653)
+// B1: the chunk audit must read the ACTUAL applied rows — the
+// live bindings / cache_index records and the provenance
+// attestation — not only the slot's reported evidence. In every
+// negative case below the slot, its evidence_json and the
+// genuine bound commands receipt are left perfectly intact; a
+// single live row is deleted, altered or corrupted, and an
+// `applied` reconciliation must still preserve the record.
+// B2: the gate record must name the exact command that created
+// it (migration_gates.detail_json.commandId) before a gate
+// command can be credited with the flip.
+
+test("reconciliation audit (Correction 2, B1): a DELETED binding earns no completion credit — the slot's evidence is not the effects", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-c2-b1-del", ctx);
+  const applied = await w.coord.handleCommand(cmd);
+  assert.equal(applied.outcome, "applied");
+  assert.equal(w.harness.rows("bindings").length, ctx.rows.length);
+  // Delete ONE binding the chunk applied. Slot, evidence and
+  // receipt all stay intact.
+  const victim = ctx.rows[1];
+  w.harness.db.prepare(
+    `DELETE FROM bindings WHERE occurrence_id = ? AND revision_key = ?`)
+    .run(victim.occurrenceId, victim.revisionKey);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const grantsBefore = w.harness.sentGrants.length;
+  const res = reconcile(w, "od-c2-b1-del", "applied", { note: "slot looks complete" });
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false,
+    "a missing applied row is a missing effect, however intact the summary");
+  assert.equal(res.verification.receiptBound, true,
+    "the receipt was genuine — the live rows are what failed proof");
+  const after = pendingRow(w, "od-c2-b1-del");
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 1, "no synthetic receipt inserted");
+  assert.equal(w.harness.rows("migration_gates").length, 0, "no book flip");
+  assert.equal(w.harness.sentGrants.length, grantsBefore, "no grant");
+});
+
+test("reconciliation audit (Correction 2, B1): an ALTERED binding (cache key rewritten) earns no completion credit", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-c2-b1-alt", ctx);
+  const applied = await w.coord.handleCommand(cmd);
+  assert.equal(applied.outcome, "applied");
+  const victim = ctx.rows[0];
+  w.harness.db.prepare(
+    `UPDATE bindings SET cache_key = 'rewritten-cache-key' WHERE occurrence_id = ? AND revision_key = ?`)
+    .run(victim.occurrenceId, victim.revisionKey);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, "od-c2-b1-alt", "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false);
+  assert.equal(res.verification.receiptBound, true);
+  const after = pendingRow(w, "od-c2-b1-alt");
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 1);
+  assert.equal(w.harness.rows("migration_gates").length, 0);
+});
+
+test("reconciliation audit (Correction 2, B1): an altered cache_index SHA-256 earns no completion credit", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-c2-b1-sha", ctx);
+  const applied = await w.coord.handleCommand(cmd);
+  assert.equal(applied.outcome, "applied");
+  const victim = ctx.rows[2];
+  w.harness.db.prepare(
+    `UPDATE cache_index SET sha256 = ? WHERE cache_key = ?`)
+    .run(WRONG_HASH, victim.cacheKey);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, "od-c2-b1-sha", "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false,
+    "the anchored digest in the live index no longer equals the pinned manifest digest");
+  assert.equal(res.verification.receiptBound, true);
+  const after = pendingRow(w, "od-c2-b1-sha");
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 1);
+});
+
+test("reconciliation audit (Correction 2, B1): an altered cache_index identity earns no completion credit", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-c2-b1-ident", ctx);
+  const applied = await w.coord.handleCommand(cmd);
+  assert.equal(applied.outcome, "applied");
+  const victim = ctx.rows[0];
+  w.harness.db.prepare(
+    `UPDATE cache_index SET identity = 'foreign-identity' WHERE cache_key = ?`)
+    .run(victim.cacheKey);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, "od-c2-b1-ident", "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false,
+    "the identity the index anchored is not the identity the pin admits");
+  assert.equal(res.verification.receiptBound, true);
+  const after = pendingRow(w, "od-c2-b1-ident");
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 1);
+});
+
+// A chunk world whose middle row is fingerprinted-distinct:
+// accepted only through its freeze-snapshot attestation, so its
+// apply writes a migration_audit record (the provenance leg).
+function provenanceChunkWorld(bookId = "od-c2-prov-book") {
+  const w = makeWorld();
+  const pairs = [], rows = [], contentIds = [];
+  const forms = ["fingerprinted", "distinct", "fingerprinted"];
+  for (let i = 1; i <= 3; i++) {
+    const s = seedRow(w.bucket, { bookId, occurrenceId: `${bookId}-o${i}`, form: forms[i - 1] });
+    const row = { ...s.row };
+    if (forms[i - 1] === "distinct")
+      row.provenanceAttestation = attestationFor(s, { bookId, freezeDigest: FREEZE });
+    pairs.push({ row, etag: s.etag });
+    rows.push(row);
+    contentIds.push(row.occurrenceId);
+  }
+  w.pinBookChunks(bookId, pairs);
+  return { w, bookId, pairs, rows, content: { title: bookId, occurrenceIds: contentIds } };
+}
+
+test("reconciliation audit (Correction 2, B1): a corrupted provenance attestation earns no completion credit", async () => {
+  const ctx = provenanceChunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-c2-b1-prov", ctx);
+  const applied = await w.coord.handleCommand(cmd);
+  assert.equal(applied.outcome, "applied");
+  const auditRows = w.harness.rows("migration_audit");
+  assert.equal(auditRows.length, 1, "the provenance row's apply wrote its audit record");
+  assert.equal(auditRows[0].outcome, "accepted_provenance");
+  // Corrupt the stored attestation itself — flip the digest it
+  // claims for the audio. The audit row still exists, the slot
+  // evidence still says accepted_provenance, the receipt is
+  // genuine; only re-reading the attestation catches it.
+  const tampered = { ...JSON.parse(auditRows[0].attestation_json), sha256: WRONG_HASH };
+  w.harness.db.prepare(
+    `UPDATE migration_audit SET attestation_json = ? WHERE book_id = ?`)
+    .run(JSON.stringify(tampered), ctx.bookId);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, "od-c2-b1-prov", "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false);
+  assert.equal(res.verification.receiptBound, true);
+  const after = pendingRow(w, "od-c2-b1-prov");
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 1);
+  assert.equal(w.harness.rows("migration_gates").length, 0);
+});
+
+test("reconciliation audit (Correction 2, B1): genuinely applied rows settle applied on the EXISTING receipt (positive control)", async () => {
+  const ctx = provenanceChunkWorld("od-c2-pos-book");
+  const { w } = ctx;
+  const cmd = chunk0("od-c2-b1-pos", ctx);
+  const applied = await w.coord.handleCommand(cmd);
+  assert.equal(applied.outcome, "applied");
+  assert.equal(applied.bookComplete, true);
+  // The live rows are exactly what the stricter audit reads:
+  // all bindings (incl. the provenance one), all index rows,
+  // the one audit record — untouched.
+  assert.equal(w.harness.rows("bindings").length, 3);
+  assert.equal(w.harness.rows("cache_index").length, 3);
+  assert.equal(w.harness.rows("migration_audit").length, 1);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const settled = reconcile(w, "od-c2-b1-pos", "applied", {});
+  assert.equal(settled.state, "applied");
+  assert.equal(settled.outcome, "applied");
+  assert.equal(settled.certificateSha256, applied.certificateSha256,
+    "the settled receipt IS the durable execution receipt");
+  assert.equal(
+    JSON.parse(pendingRow(w, "od-c2-b1-pos").detail_json).verification.effectsComplete, true);
+  assert.equal(w.harness.rows("commands").length, 1, "still exactly one execution");
+});
+
+test("reconciliation audit (Correction 2, B2): a gate record naming a DIFFERENT command earns this command no credit", async () => {
+  const ctx = carryWorld();
+  const { w, bookId } = ctx;
+  const { gate } = await carryWorldFullyExecuted(w, ctx, "od-c2-g1");
+  // Everything stays genuine — anchored certificate, complete
+  // planes, verified carries — except the gate record's own
+  // attribution: it now names another command as its creator.
+  w.harness.db.prepare(
+    `UPDATE migration_gates SET detail_json = ? WHERE book_id = ?`)
+    .run(JSON.stringify({ commandId: "od-c2-g1-OTHER" }), bookId);
+  craftStuckRecord(w, gate, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, gate.command_id, "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false,
+    "a marker created by a different command must not be credited to this one");
+  assert.equal(res.verification.receiptBound, true);
+  const after = pendingRow(w, gate.command_id);
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 4, "no synthetic receipt inserted");
+  assert.equal(w.harness.rows("migration_gates").length, 1, "the gate row itself is untouched");
+});
+
+test("reconciliation audit (Correction 2, B2): a gate record with NO command attribution earns no credit", async () => {
+  const ctx = carryWorld();
+  const { w, bookId } = ctx;
+  const { gate } = await carryWorldFullyExecuted(w, ctx, "od-c2-g2");
+  w.harness.db.prepare(
+    `UPDATE migration_gates SET detail_json = ? WHERE book_id = ?`)
+    .run(JSON.stringify({}), bookId);
+  craftStuckRecord(w, gate, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, gate.command_id, "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false);
+  const after = pendingRow(w, gate.command_id);
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 4);
+});
+
+test("reconciliation audit (Correction 2, B2): an UNPARSEABLE gate detail earns no credit", async () => {
+  const ctx = carryWorld();
+  const { w, bookId } = ctx;
+  const { gate } = await carryWorldFullyExecuted(w, ctx, "od-c2-g3");
+  w.harness.db.prepare(
+    `UPDATE migration_gates SET detail_json = ? WHERE book_id = ?`)
+    .run("{not json", bookId);
+  craftStuckRecord(w, gate, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, gate.command_id, "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false);
+  assert.equal(pendingRow(w, gate.command_id).state, "needs_reconciliation");
+  assert.equal(pendingRow(w, gate.command_id).receipt_json, null);
+});
+
+test("reconciliation audit (Correction 2, B2): a genuinely attributed gate settles applied on its existing receipt (positive control)", async () => {
+  const ctx = carryWorld();
+  const { w, bookId } = ctx;
+  const { gate } = await carryWorldFullyExecuted(w, ctx, "od-c2-g4");
+  assert.equal(
+    JSON.parse(w.harness.rows("migration_gates")[0].detail_json).commandId,
+    gate.command_id, "the gate record names the command that created it");
+  craftStuckRecord(w, gate, { claimedAt: staleClaim(w) });
+  const settled = reconcile(w, gate.command_id, "applied", {});
+  assert.equal(settled.state, "applied");
+  assert.equal(settled.outcome, "applied");
+  const detail = JSON.parse(pendingRow(w, gate.command_id).detail_json);
+  assert.equal(detail.verification.receiptBound, true);
+  assert.equal(detail.verification.effectsComplete, true);
   assert.equal(w.harness.rows("commands").length, 4,
     "chunk + positions + jobs + gate — nothing re-executed or inserted");
 });
