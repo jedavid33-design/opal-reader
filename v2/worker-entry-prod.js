@@ -203,7 +203,15 @@ async function fetchHandler(request, env) {
   let operatorAdmitted = false;
   if (isOperatorRoute) {
     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
-    if (!operatorToken || operatorToken === env.OPALREADER_ACCESS_TOKEN)
+    // The two-secret configuration requirement is conjunctive
+    // (Rowan code review 6374624466): the operator routes are
+    // closed when EITHER secret is unconfigured — client unset
+    // included, even though this route never presents the
+    // client credential — or when the two are configured
+    // equal. A half-configured surface admits nothing here,
+    // even for already-pending work.
+    if (!operatorToken || !env.OPALREADER_ACCESS_TOKEN ||
+        operatorToken === env.OPALREADER_ACCESS_TOKEN)
       return json(503, { error: "migration_operator_not_configured" }, cors);
     if (request.headers.get("x-opalreader-operator-token") !== operatorToken)
       return json(403, { error: "migration_operator_required" }, cors);

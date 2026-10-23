@@ -430,3 +430,42 @@ test("the production deploy spec describes a distinct script that owns its class
   assert.equal(stagingSpec.bindings.find(b => b.name === "R2_KEY_PREFIX").text, "smoke-p8/");
   assert.equal(stagingSpec.bindings.find(b => b.name === "OPALREADER_V2_SCOPE").text, "staging-smoke");
 });
+
+// ============================================================ either-secret rule
+// (Rowan code review 6374624466, remaining check.) The
+// two-secret configuration requirement is conjunctive: an
+// operator-only route refuses when EITHER secret is
+// unconfigured — operator unset (covered above), operator
+// equal to the client token (covered above), and now CLIENT
+// UNSET with the operator configured. The operator routes
+// never present the client credential, but a half-configured
+// surface admits nothing there — even for already-pending
+// work. Both surfaces, both operator routes.
+test("operator routes refuse when the CLIENT secret is unconfigured — either-secret rule, both surfaces, both routes", async () => {
+  const approvalBody = { commandId: "ghost", payloadSha256: "0".repeat(64) };
+  const reconcileBody = { commandId: "ghost", outcome: "applied", evidence: {} };
+  // Production surface with the client secret REMOVED from the
+  // entry env after construction (the entry reads env per
+  // request; the operator secret stays configured + distinct).
+  const prod = makeProd();
+  delete prod.env.OPALREADER_ACCESS_TOKEN;
+  for (const [path, body] of [["/v2/command-approvals", approvalBody],
+                              ["/v2/command-reconciliation", reconcileBody]]) {
+    const res = await prod.call(path, { method: "POST", operator: PROD_OPERATOR,
+      token: "irrelevant", body });
+    assert.equal(res.status, 503, `prod ${path}`);
+    assert.equal((await res.json()).error, "migration_operator_not_configured");
+  }
+  assert.equal(prod.commandCount(), 0);
+  // Staging surface, same shape.
+  const staging = makeStaging();
+  delete staging.env.OPALREADER_ACCESS_TOKEN;
+  for (const [path, body] of [["/v2/command-approvals", approvalBody],
+                              ["/v2/command-reconciliation", reconcileBody]]) {
+    const res = await staging.call(path, { method: "POST", operator: OPERATOR,
+      token: "irrelevant", body });
+    assert.equal(res.status, 503, `staging ${path}`);
+    assert.equal((await res.json()).error, "migration_operator_not_configured");
+  }
+  assert.equal(staging.commandCount(), 0);
+});

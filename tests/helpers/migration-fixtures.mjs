@@ -8,7 +8,7 @@ import { MIGRATION_CHUNK_LIMITS, partitionBookRows } from "../../v2/p8/migration
 import { digest as transformDigest } from "../../v2/migration/util.mjs";
 import { makeHarness } from "./do-harness.mjs";
 
-export { sha256Hex };
+export { sha256Hex, canonicalJson };
 
 // A bucket that records every write attempt. The migration path
 // must perform ZERO puts across every scenario, success or failure.

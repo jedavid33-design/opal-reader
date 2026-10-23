@@ -572,6 +572,40 @@ export class GenerationCoordinator {
       command_id: cmd.command_id, type: cmd.type, payload: cmd.payload || {} }));
   }
 
+  // The stored record's own integrity (§3.3.6 invariant 2):
+  // the canonical hash RECOMPUTED over the record's stored
+  // (command_id, type, payload) must equal the digest T1
+  // stored. Anything else — a rewritten payload_json, a
+  // divergent stored type, a tampered stored digest, an
+  // unparseable payload — means the record no longer names
+  // the command that was submitted, and every later step
+  // (T2 claim, T3 apply, reconciliation) fails closed on it.
+  // Comparing an operator-supplied digest against the stored
+  // digest alone is NOT this check: a payload rewritten under
+  // an intact digest would pass that comparison.
+  _pendingIntegrityOk(rec) {
+    try {
+      return this._pendingHashOf({ command_id: rec.command_id, type: rec.type,
+        payload: JSON.parse(rec.payload_json) }) === rec.payload_sha256;
+    } catch { return false; }
+  }
+
+  // The canonical per-chunk row-set digest (§10): the exact
+  // rows a chunk command carries, occurrence-sorted. Computed
+  // identically by the chunk apply (which persists it on the
+  // migration_chunks slot) and by the reconciliation effects
+  // audit (which recomputes it from the pending record's
+  // stored payload), so the two can never drift apart.
+  _chunkRowsDigest(rows) {
+    const canonicalChunkRows = (rows || [])
+      .map(r => ({ occurrenceId: r.occurrenceId, revisionKey: r.revisionKey,
+                   cacheKey: r.cacheKey, sha256: r.manifest && r.manifest.sha256,
+                   size: r.manifest && r.manifest.size,
+                   format: r.manifest && r.manifest.format }))
+      .sort((a, b) => (a.occurrenceId < b.occurrenceId ? -1 : 1));
+    return sha256HexText(canonicalJson(canonicalChunkRows));
+  }
+
   _pendingRecord(commandId) {
     return this._oneOrNull(
       `SELECT * FROM pending_commands WHERE command_id = ?`, commandId);
@@ -884,6 +918,24 @@ export class GenerationCoordinator {
         return { kind: "final",
                  view: this._pendingView(this._pendingRecord(commandId), now) };
       }
+      // Payload integrity BEFORE anything acts on the record
+      // (§3.3.6 invariant 2): the canonical hash is RECOMPUTED
+      // over the stored (command_id, type, payload) and must
+      // equal the stored digest. The operator-digest comparison
+      // below alone would let a record whose payload was
+      // rewritten under an intact digest be claimed on a valid
+      // approval. A record that fails its own hash names no
+      // trustworthy command: it can never be claimed or
+      // executed, so the verdict is the same durable fail-closed
+      // refusal as the approval-hash mismatch — permanent.
+      if (!this._pendingIntegrityOk(rec)) {
+        this.sql.exec(
+          `UPDATE pending_commands SET state = 'refused', receipt_json = ? WHERE command_id = ?`,
+          JSON.stringify({ outcome: "rejected", reason: "pending_payload_integrity" }),
+          commandId);
+        return { kind: "final",
+                 view: this._pendingView(this._pendingRecord(commandId), now) };
+      }
       if (payloadSha256 !== rec.payload_sha256) {
         this.sql.exec(
           `UPDATE pending_commands SET state = 'refused', receipt_json = ? WHERE command_id = ?`,
@@ -945,6 +997,25 @@ export class GenerationCoordinator {
       if (!cur || cur.state !== "executing" || cur.claim_owner !== claim.owner ||
           cur.claimed_at === null || now >= cur.claimed_at + this._claimLeaseMs())
         return this._pendingView(cur || rec, now);
+      // Payload integrity at the apply gate (§3.3.6 invariant
+      // 2): recompute the canonical hash over the CURRENTLY
+      // stored record AND over the prepared in-memory command;
+      // both must equal the stored digest, so the command that
+      // applies is exactly the re-verified stored command.
+      // THIS recomputation is authoritative over T2's: if the
+      // stored payload changed while preparation was in flight
+      // (the async window between claim and apply), the apply
+      // fails closed here — _recordAndApply writes nothing,
+      // no receipt exists, and the record moves to the STOP
+      // state for manual reconciliation. Never a blind retry.
+      if (!this._pendingIntegrityOk(cur) ||
+          this._pendingHashOf(cmd) !== cur.payload_sha256) {
+        this.sql.exec(
+          `UPDATE pending_commands SET state = 'needs_reconciliation', claim_owner = NULL,
+             detail_json = ? WHERE command_id = ?`,
+          JSON.stringify({ integrityFailure: true, at: now }), commandId);
+        return this._pendingView(this._pendingRecord(commandId), now);
+      }
       const result = this._recordAndApply(cmd, prepared);
       this.sql.exec(
         `UPDATE pending_commands SET state = ?, receipt_json = ? WHERE command_id = ?`,
@@ -959,16 +1030,32 @@ export class GenerationCoordinator {
   // are complete-and-pin-exact, provably zero, or neither —
   // recomputed from the durable business rows and the command's
   // own pinned expectations, never from a request. SELECT-only.
+  //
+  // `complete` is a forensic claim, and it is held to that
+  // standard (Rowan code review 6374624466, Blocker B): full,
+  // server-recomputed, pin-exact, COMMAND-ATTRIBUTABLE evidence
+  // per type — never the mere presence of a slot, a carry
+  // marker, or a gate row. A slot under the right migration id
+  // with a wrong row digest, a carry marker whose actual stored
+  // state was rewritten, a gate row echoing a certificate the
+  // book never anchored: all stay `neither`, and the uncertain
+  // record is preserved for manual investigation.
   _migrationEffectsAudit(rec) {
-    const p = JSON.parse(rec.payload_json);
-    const bookId = p.bookId || null;
     const neither = { complete: false, zero: false };
+    // A record whose stored payload fails its own hash
+    // (§3.3.6 invariant 2) names no trustworthy command: its
+    // payload cannot be the yardstick for any effect.
+    if (!this._pendingIntegrityOk(rec)) return neither;
+    let p;
+    try { p = JSON.parse(rec.payload_json); } catch { return neither; }
+    const bookId = p.bookId || null;
     switch (rec.type) {
       case "MigrateImportChunk": {
         const slot = this._oneOrNull(
           `SELECT * FROM migration_chunks WHERE book_id = ? AND chunk_index = ?`,
           bookId, p.chunkIndex);
-        if (slot) return { complete: slot.migration_id === p.migrationId, zero: false };
+        if (slot) return { complete: this._chunkEffectsVerified(rec, p, slot),
+                           zero: false };
         const pinned = this._pinnedChunk(bookId, p.chunkIndex);
         if (!pinned) return neither;
         let bound = 0;
@@ -983,8 +1070,8 @@ export class GenerationCoordinator {
       case "MigrateImportBindings": {
         const book = this._oneOrNull(
           `SELECT * FROM migration_books WHERE book_id = ?`, bookId);
-        if (book) return { complete: book.migration_id === p.migrationId &&
-                                     book.freeze_digest === p.freezeDigest, zero: false };
+        if (book) return { complete: this._bindingsEffectsVerified(p, book),
+                           zero: false };
         const pinned = this._pinnedBook(bookId);
         if (!pinned) return neither;
         let bound = 0;
@@ -1001,7 +1088,12 @@ export class GenerationCoordinator {
         const payloadHash = sha256HexText(canonicalJson({ bookId,
           position: { occurrenceId: p.position.occurrenceId, offsetSec: p.position.offsetSec },
           checkpoints: p.checkpoints }));
-        if (carry) return { complete: carry.payload_hash === payloadHash, zero: false };
+        if (carry) return { complete:
+          carry.command_id === rec.command_id &&
+          carry.payload_hash === payloadHash &&
+          this._auditRowIntact(carry) &&
+          this._storedPositionMatches(bookId, p) &&
+          this._carryVerificationOk(rec, bookId, "positions"), zero: false };
         const st = this._oneOrNull(
           `SELECT book_id FROM position_state WHERE book_id = ?`, bookId);
         return { complete: false, zero: !st };
@@ -1009,7 +1101,12 @@ export class GenerationCoordinator {
       case "MigrateImportJobs": {
         const carry = this._carryAuditRow(bookId, "jobs");
         const { setSha256 } = this._jobsDescriptor(p);
-        if (carry) return { complete: carry.payload_hash === setSha256, zero: false };
+        if (carry) return { complete:
+          carry.command_id === rec.command_id &&
+          carry.payload_hash === setSha256 &&
+          this._auditRowIntact(carry) &&
+          this._storedJobsMatch(bookId, p) &&
+          this._carryVerificationOk(rec, bookId, "jobs"), zero: false };
         let existing = 0;
         for (const a of p.aggregates || []) {
           const j = this._oneOrNull(`SELECT job_id FROM jobs WHERE job_id = ?`, a.jobId);
@@ -1020,8 +1117,7 @@ export class GenerationCoordinator {
       case "MigrateRecordFlipGate": {
         const gate = this._oneOrNull(
           `SELECT * FROM migration_gates WHERE book_id = ?`, bookId);
-        if (gate) return { complete: gate.migration_id === p.migrationId &&
-                                     gate.certificate_sha256 === p.certificateSha256,
+        if (gate) return { complete: this._gateEffectsVerified(p, gate),
                            zero: false };
         return { complete: false, zero: true };
       }
@@ -1029,57 +1125,160 @@ export class GenerationCoordinator {
     }
   }
 
-  // The receipt for a record whose effects verify complete but
-  // whose execution left no commands-row receipt (the apply's
-  // effects landed through a path that did not record one, or
-  // the record of it was the casualty): reconstructed from the
-  // SAME durable rows the apply itself wrote, in the apply's
-  // own result shape, and marked reconciled (§3.3.5).
-  _reconciledReceipt(rec) {
-    const p = JSON.parse(rec.payload_json);
-    const bookId = p.bookId || null;
-    switch (rec.type) {
-      case "MigrateImportChunk": {
-        const imports = this._oneOrNull(
-          `SELECT * FROM migration_imports WHERE book_id = ?`, bookId);
-        const applied = this._all(
-          `SELECT chunk_index FROM migration_chunks WHERE book_id = ?`, bookId).length;
-        const done = !!(imports && imports.completed_at);
-        return { outcome: "applied", bookId, migrationId: p.migrationId,
-          chunkIndex: p.chunkIndex, chunksApplied: applied,
-          chunksExpected: imports ? imports.chunks_expected : applied,
-          bookComplete: done,
-          certificateSha256: done ? imports.certificate_sha256 : null,
-          reconciled: true };
-      }
-      case "MigrateImportBindings": {
-        const book = this._oneOrNull(
-          `SELECT * FROM migration_books WHERE book_id = ?`, bookId);
-        return { outcome: "applied", bookId, migrationId: p.migrationId,
-          rowCount: book.row_count, rowsSha256: book.rows_sha256,
-          certificateSha256: book.certificate_sha256, reconciled: true };
-      }
-      case "MigrateImportPositions": {
-        const contentEnt = this._syncEntity("content", bookId);
-        const occIds = contentEnt
-          ? (JSON.parse(contentEnt.data_json || "{}").occurrenceIds || []) : [];
-        return { outcome: "applied", bookId, migrationId: p.migrationId,
-          position: { occurrenceId: p.position.occurrenceId,
-                      occIndex: occIds.indexOf(p.position.occurrenceId),
-                      offsetSec: p.position.offsetSec },
-          reconciled: true };
-      }
-      case "MigrateImportJobs": {
-        const { setSha256 } = this._jobsDescriptor(p);
-        return { outcome: "applied", bookId, migrationId: p.migrationId,
-          jobs: { count: (p.aggregates || []).length, setSha256 }, reconciled: true };
-      }
-      case "MigrateRecordFlipGate":
-        return { outcome: "applied", bookId, flipped: true, reconciled: true };
-      default:
-        return { outcome: "applied", bookId, reconciled: true };
+  // Chunk `complete`: the slot must be THIS command's — written
+  // by it (command attribution), under its migration — and its
+  // persisted evidence must recompute exactly: the row digest
+  // over the pending record's own stored rows, the row count,
+  // and the class-C evidence rows verifying field-for-field
+  // against the command's rows and (where pinned) the frozen
+  // chunk partition, including the pinned byte total.
+  _chunkEffectsVerified(rec, p, slot) {
+    const rows = Array.isArray(p.rows) ? p.rows : [];
+    if (slot.migration_id !== p.migrationId) return false;
+    if (slot.command_id !== rec.command_id) return false;
+    if (slot.row_count !== rows.length) return false;
+    if (slot.rows_sha256 !== this._chunkRowsDigest(rows)) return false;
+    let evidence;
+    try { evidence = JSON.parse(slot.evidence_json); } catch { return false; }
+    if (!Array.isArray(evidence) || evidence.length !== rows.length) return false;
+    const byOcc = new Map(evidence.map(e => [e && e.occurrenceId, e]));
+    if (byOcc.size !== evidence.length) return false;
+    for (const r of rows) {
+      const ev = byOcc.get(r.occurrenceId);
+      if (!ev) return false;
+      if (ev.revisionKey !== r.revisionKey || ev.cacheKey !== r.cacheKey) return false;
+      if (ev.manifestSha256 !== r.manifest.sha256) return false;
+      if (ev.computedSha256 !== r.manifest.sha256) return false;
+      if (ev.verified !== true) return false;
+      if (ev.status !== "accepted" && ev.status !== "accepted_provenance") return false;
     }
+    const pinned = this._pinnedChunk(p.bookId, p.chunkIndex);
+    if (pinned) {
+      if (slot.total_bytes !== pinned.chunk.totalBytes) return false;
+      if (rows.length !== pinned.rows.length) return false;
+      const pinnedByOcc = new Map(pinned.rows.map(r => [r.occurrenceId, r]));
+      for (const r of rows) {
+        const want = pinnedByOcc.get(r.occurrenceId);
+        if (!want || want.revisionKey !== r.revisionKey ||
+            want.cacheKey !== r.cacheKey) return false;
+      }
+    }
+    return true;
   }
+
+  // Whole-book `complete`: the import record must be internally
+  // intact (its stored row set hashes to its stored digest),
+  // must describe exactly THIS command's row set, and both
+  // planes must pass the shared exact completeness computation
+  // (B1/G4 — the same one the flip gate trusts). Attribution
+  // rides on the commands receipt binding in
+  // reconcileMigrationCommand: migration_books carries no
+  // command column, so the audit proves the effect set and the
+  // receipt proves whose execution wrote it.
+  _bindingsEffectsVerified(p, book) {
+    const rows = Array.isArray(p.rows) ? p.rows : [];
+    if (book.migration_id !== p.migrationId) return false;
+    if (book.freeze_digest !== p.freezeDigest) return false;
+    if (book.row_count !== rows.length) return false;
+    let storedRows;
+    try { storedRows = JSON.parse(book.rows_json); } catch { return false; }
+    if (sha256HexText(book.rows_json) !== book.rows_sha256) return false;
+    if (!Array.isArray(storedRows) || storedRows.length !== rows.length) return false;
+    const byOcc = new Map(storedRows.map(r => [r && r.occurrenceId, r]));
+    if (byOcc.size !== storedRows.length) return false;
+    for (const r of rows) {
+      const s = byOcc.get(r.occurrenceId);
+      if (!s || s.revisionKey !== r.revisionKey || s.cacheKey !== r.cacheKey ||
+          s.sha256 !== r.manifest.sha256 || s.size !== r.manifest.size ||
+          s.format !== r.manifest.format) return false;
+    }
+    return this._migrationCompleteness(p.bookId).complete === true;
+  }
+
+  // A carry audit row is evidence only if it is internally
+  // intact: its stored payload hashes to its stored hash.
+  _auditRowIntact(row) {
+    try { return sha256HexText(row.payload_json) === row.payload_hash; }
+    catch { return false; }
+  }
+
+  // The stored position_state row must BE the position this
+  // command carried (occurrence + offset), not merely exist
+  // alongside a matching carry marker.
+  _storedPositionMatches(bookId, p) {
+    if (!p.position) return false;
+    const st = this._oneOrNull(
+      `SELECT * FROM position_state WHERE book_id = ?`, bookId);
+    return !!st && st.occurrence_id === p.position.occurrenceId &&
+           st.offset_sec === p.position.offsetSec;
+  }
+
+  // Every aggregate this command carried must exist as a stored
+  // job in exactly the state the command named. (An empty
+  // aggregate set is bound by the carry row's set hash alone.)
+  _storedJobsMatch(bookId, p) {
+    for (const a of p.aggregates || []) {
+      const j = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, a.jobId);
+      if (!j || j.state !== a.v2State || j.book_id !== bookId) return false;
+    }
+    return true;
+  }
+
+  // The B1 carry verification as the audit's pin leg, scoped to
+  // THIS kind: when a carry pin applies to the book, its leg
+  // must be divergence-free, its carry/receipt records present,
+  // and the carry must name THIS command. Without a pin there
+  // is nothing further to verify against — the carry row's own
+  // attribution + integrity + stored-state checks above carry
+  // the proof.
+  _carryVerificationOk(rec, bookId, kind) {
+    const v = this._migrationCarryVerification(bookId);
+    if (!v.applicable) return true;
+    const leg = kind === "positions" ? v.positions : v.jobs;
+    if (!leg || leg.commandId !== rec.command_id) return false;
+    const missingForKind = kind === "positions"
+      ? ["positions_carry", "positions_receipt", "position_state"]
+      : ["jobs_carry", "jobs_receipt"];
+    if (v.missing.some(m => missingForKind.includes(m))) return false;
+    return !v.divergences.some(d => d.element === kind);
+  }
+
+  // Gate `complete`: the gate row must name this migration and
+  // the certificate the command carried, and that certificate
+  // must be the one ANCHORED server-side — in the book record
+  // and, for a chunked import, the import record — with both
+  // planes exactly complete and (where a carry pin applies) the
+  // required carries verified. A gate row echoing a caller's
+  // certificate over the wrong book proves nothing.
+  _gateEffectsVerified(p, gate) {
+    if (gate.migration_id !== p.migrationId) return false;
+    if (gate.certificate_sha256 !== p.certificateSha256) return false;
+    const book = this._oneOrNull(
+      `SELECT * FROM migration_books WHERE book_id = ?`, p.bookId);
+    if (!book || book.certificate_sha256 !== p.certificateSha256) return false;
+    const imports = this._oneOrNull(
+      `SELECT * FROM migration_imports WHERE book_id = ?`, p.bookId);
+    if (imports && (imports.completed_at === null ||
+                    imports.certificate_sha256 !== p.certificateSha256)) return false;
+    if (this._migrationCompleteness(p.bookId).complete !== true) return false;
+    const v = this._migrationCarryVerification(p.bookId);
+    if (v.applicable && !v.ok) return false;
+    return true;
+  }
+
+  // NOTE (Blocker B correction, Rowan 6374624466): there is
+  // deliberately NO receipt-reconstruction helper anymore.
+  // T3 commits a command's business effects, its commands-row
+  // receipt, and its pending-record receipt in ONE transaction
+  // — so a state whose effects are complete but whose durable
+  // receipt is missing cannot be the product of any execution
+  // this code performs. Reconstructing a receipt for such a
+  // state would fabricate the very evidence reconciliation
+  // exists to verify. Reconciliation therefore settles
+  // `applied` ONLY on the existing durable receipt (bound to
+  // this record, below); a receipt-less record stays
+  // needs_reconciliation — STOP, manual investigation —
+  // however complete its effects appear.
 
   // Manual reconciliation (the control route, §3.3.1/§3.3.5) —
   // the ONLY write path that settles a needs_reconciliation
@@ -1122,24 +1321,45 @@ export class GenerationCoordinator {
         `SELECT * FROM commands WHERE command_id = ?`, commandId);
       const receiptObj = cmdRow && cmdRow.outcome_json
         ? JSON.parse(cmdRow.outcome_json) : null;
+      // The commands receipt is evidence only if it is BOUND to
+      // this pending record: same id (by lookup), same type, and
+      // a stored payload that hashes to the pending record's
+      // digest. A row naming a different command — or the same
+      // id over a different payload — is foreign paperwork.
+      let receiptBound = false;
+      if (cmdRow && receiptObj) {
+        try {
+          receiptBound = cmdRow.type === rec.type &&
+            this._pendingHashOf({ command_id: cmdRow.command_id, type: cmdRow.type,
+              payload: JSON.parse(cmdRow.payload_json) }) === rec.payload_sha256;
+        } catch { receiptBound = false; }
+      }
       const audit = this._migrationEffectsAudit(rec);
       // A claim must have existed: reconciliation settles a
       // CLAIM's uncertain outcome, nothing else.
       const claimVerified = rec.claimed_at !== null;
       let canApplied = false, canRefused = false, appliedReceipt = null;
-      if (receiptObj && cmdRow.outcome === "applied" && audit.complete) {
+      if (receiptBound && cmdRow.outcome === "applied" && audit.complete) {
         canApplied = true; appliedReceipt = receiptObj;
-      } else if (receiptObj && cmdRow.outcome === "rejected" && audit.zero) {
+      } else if (receiptBound && cmdRow.outcome === "rejected" && audit.zero) {
         canRefused = true;
-      } else if (!receiptObj && audit.complete) {
-        canApplied = true; appliedReceipt = this._reconciledReceipt(rec);
-      } else if (!receiptObj && audit.zero) {
+      } else if (!cmdRow && audit.zero) {
         canRefused = true;
       }
+      // DELIBERATELY ABSENT (Blocker B, Rowan 6374624466): any
+      // receipt-less path to `applied`. T3's atomicity means
+      // complete effects without the durable commands receipt
+      // cannot be one of this command's executions, however
+      // pin-exact the effects audit finds them — the audit
+      // still reports effectsComplete truthfully below, but
+      // settlement refuses and the record stays
+      // needs_reconciliation for manual investigation. This
+      // route never invents a receipt.
       canApplied = canApplied && claimVerified;
       canRefused = canRefused && claimVerified;
       const verification = { claimRecorded: claimVerified,
-        receiptPresent: !!receiptObj,
+        receiptPresent: !!receiptObj, receiptBound,
+        payloadIntegrity: this._pendingIntegrityOk(rec),
         effectsComplete: audit.complete, effectsZero: audit.zero };
       if (outcome === "applied" && !canApplied)
         return { ok: false, error: "reconciliation_evidence_mismatch",
@@ -1154,15 +1374,9 @@ export class GenerationCoordinator {
           `UPDATE pending_commands SET state = 'applied', receipt_json = ?, detail_json = ?
            WHERE command_id = ?`,
           JSON.stringify(appliedReceipt), detail, commandId);
-        if (!receiptObj) {
-          this.sql.exec(
-            `INSERT INTO commands (command_id, type, payload_json, received_at, outcome, outcome_json)
-             VALUES (?, ?, ?, ?, 'applied', ?)`,
-            commandId, rec.type, rec.payload_json, now, JSON.stringify(appliedReceipt));
-        }
         return this._pendingView(this._pendingRecord(commandId), now);
       }
-      const refusal = receiptObj && cmdRow.outcome === "rejected"
+      const refusal = receiptBound && cmdRow.outcome === "rejected"
         ? receiptObj : { outcome: "rejected", reason: "reconciled_abandoned" };
       this.sql.exec(
         `UPDATE pending_commands SET state = 'refused', receipt_json = ?, detail_json = ?
@@ -3628,12 +3842,7 @@ export class GenerationCoordinator {
       if (c.status === "accepted") certificate.totals.accepted++;
       else if (c.status === "accepted_provenance") certificate.totals.acceptedProvenance++;
     }
-    const canonicalChunkRows = rows
-      .map(r => ({ occurrenceId: r.occurrenceId, revisionKey: r.revisionKey,
-                   cacheKey: r.cacheKey, sha256: r.manifest.sha256,
-                   size: r.manifest.size, format: r.manifest.format }))
-      .sort((a, b) => (a.occurrenceId < b.occurrenceId ? -1 : 1));
-    const chunkRowsSha256 = sha256HexText(canonicalJson(canonicalChunkRows));
+    const chunkRowsSha256 = this._chunkRowsDigest(rows);
     this.sql.exec(
       `INSERT INTO migration_chunks (book_id, chunk_index, migration_id, rows_sha256,
          row_count, total_bytes, evidence_json, command_id, applied_at)

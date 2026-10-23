@@ -34,6 +34,7 @@ import { createApi } from "../v2/api.mjs";
 import stagingEntry from "../v2/worker-entry.js";
 import {
   makeWorld, seedRow, importCmd, chunkCmd, positionsCmd, jobsCmd, gateCmd,
+  canonicalJson,
   SYNTHETIC_FREEZE_DIGEST as FREEZE,
 } from "./helpers/migration-fixtures.mjs";
 
@@ -430,6 +431,156 @@ test("crash matrix — submit/approve race: an approval that arrives before its 
   assert.equal((await approve(w, "od-race", view.payloadSha256)).outcome, "applied");
 });
 
+// ============================================================ payload integrity
+// (Blocker A correction, Rowan code review 6374624466; design
+// §3.3.6 invariant 2.) The stored payload hash is RECOMPUTED
+// over the stored (command_id, type, payload) at T2 before any
+// claim, and again at T3 inside the apply transaction. These
+// tests corrupt the DURABLE record itself — not the operator's
+// input — and exercise the actual coordinator logic.
+const flipFirstHex = (hex) => (hex[0] === "a" ? "b" : "a") + hex.slice(1);
+function tamperPayloadRow(w, id) {
+  const rec = pendingRow(w, id);
+  const p = JSON.parse(rec.payload_json);
+  p.rows[0].manifest.sha256 = flipFirstHex(p.rows[0].manifest.sha256);
+  w.harness.db.prepare(
+    `UPDATE pending_commands SET payload_json = ? WHERE command_id = ?`)
+    .run(JSON.stringify(p), id);
+}
+
+test("payload integrity (T2 recompute): a stored payload rewritten after submit fails approval closed — permanently refused, never claimed", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const view = submit(w, chunk0("od-i1", ctx));
+  tamperPayloadRow(w, "od-i1");
+  // The approval names the ORIGINAL digest, which still equals
+  // the stored digest field — only the recomputation can see
+  // that the stored payload no longer hashes to it.
+  const res = await approve(w, "od-i1", view.payloadSha256);
+  assert.equal(res.state, "refused");
+  assert.equal(res.reason, "pending_payload_integrity");
+  const rec = pendingRow(w, "od-i1");
+  assert.equal(rec.state, "refused");
+  assert.equal(rec.claimed_at, null, "never claimed");
+  assert.equal(JSON.parse(rec.receipt_json).reason, "pending_payload_integrity");
+  assert.equal(w.harness.rows("commands").length, 0);
+  assert.equal(w.harness.rows("bindings").length, 0);
+  // Durable: a later approval replays the refusal; there is no
+  // blind retry path back to claimable.
+  const again = await approve(w, "od-i1", view.payloadSha256);
+  assert.equal(again.state, "refused");
+  assert.equal(w.harness.rows("commands").length, 0);
+  assert.equal(w.harness.rows("bindings").length, 0);
+});
+
+test("payload integrity (T2 recompute): a stored TYPE rewritten after submit fails approval closed", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const view = submit(w, chunk0("od-i2", ctx));
+  w.harness.db.prepare(
+    `UPDATE pending_commands SET type = 'MigrateImportJobs' WHERE command_id = ?`)
+    .run("od-i2");
+  const res = await approve(w, "od-i2", view.payloadSha256);
+  assert.equal(res.state, "refused");
+  assert.equal(res.reason, "pending_payload_integrity");
+  assert.equal(pendingRow(w, "od-i2").claimed_at, null);
+  assert.equal(w.harness.rows("commands").length, 0);
+  assert.equal(w.harness.rows("bindings").length, 0);
+  assert.equal(w.harness.rows("jobs").length, 0);
+});
+
+test("payload integrity (T2 recompute): a tampered stored payload_sha256 fails closed even when the approval names the tampered digest", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  submit(w, chunk0("od-i3", ctx));
+  w.harness.db.prepare(
+    `UPDATE pending_commands SET payload_sha256 = ? WHERE command_id = ?`)
+    .run(WRONG_HASH, "od-i3");
+  // The supplied digest now EQUALS the stored field, so the
+  // naive stored-vs-supplied comparison would pass; the
+  // recomputation over the intact payload is what refuses.
+  const res = await approve(w, "od-i3", WRONG_HASH);
+  assert.equal(res.state, "refused");
+  assert.equal(res.reason, "pending_payload_integrity");
+  assert.equal(pendingRow(w, "od-i3").claimed_at, null);
+  assert.equal(w.harness.rows("commands").length, 0);
+  assert.equal(w.harness.rows("bindings").length, 0);
+});
+
+test("payload integrity (T2 recompute): a tampered stored command_id fails closed — the digest binds the id", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const view = submit(w, chunk0("od-i4", ctx));
+  w.harness.db.prepare(
+    `UPDATE pending_commands SET command_id = 'od-i4-moved' WHERE command_id = 'od-i4'`)
+    .run();
+  const gone = await approve(w, "od-i4", view.payloadSha256);
+  assert.equal(gone.ok, false);
+  assert.equal(gone.error, "pending_command_not_found");
+  // Under its new id the record is findable and the stored
+  // digest still matches the approval — but the recomputation
+  // binds the id, so it refuses.
+  const res = await approve(w, "od-i4-moved", view.payloadSha256);
+  assert.equal(res.state, "refused");
+  assert.equal(res.reason, "pending_payload_integrity");
+  assert.equal(w.harness.rows("commands").length, 0);
+  assert.equal(w.harness.rows("bindings").length, 0);
+});
+
+test("payload integrity (T3 recompute is authoritative): a payload mutated DURING preparation fails the apply closed — no effects, no receipt, durable STOP", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-i5", ctx);
+  const view = submit(w, cmd);
+  const gate = blockPreparation(w);
+  const approving = approve(w, "od-i5", view.payloadSha256);
+  assert.equal(pendingRow(w, "od-i5").state, "executing",
+    "T2's recompute passed on the intact record and the claim committed");
+  // Mutate the stored payload in the async window between
+  // claim and apply — the case T2 cannot see.
+  tamperPayloadRow(w, "od-i5");
+  gate.resolve();
+  const after = await approving;
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.storedState, "needs_reconciliation",
+    "T3 materialized the STOP state itself — this is not a projection");
+  const rec = pendingRow(w, "od-i5");
+  assert.equal(rec.state, "needs_reconciliation");
+  assert.equal(rec.receipt_json, null, "no applied receipt");
+  assert.equal(rec.claim_owner, null);
+  assert.equal(JSON.parse(rec.detail_json).integrityFailure, true);
+  assert.equal(w.harness.rows("commands").length, 0);
+  assert.equal(w.harness.rows("bindings").length, 0);
+  assert.equal(w.harness.rows("migration_chunks").length, 0);
+  assert.equal(w.harness.rows("migration_books").length, 0);
+  // No blind retry: a fresh approval is a STOP, not a redo.
+  const stop = await approve(w, "od-i5", view.payloadSha256);
+  assert.equal(stop.state, "needs_reconciliation");
+  assert.equal(w.harness.rows("bindings").length, 0);
+});
+
+test("payload integrity (T3 recompute): a TYPE mutated DURING preparation fails the apply closed", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const view = submit(w, chunk0("od-i6", ctx));
+  const gate = blockPreparation(w);
+  const approving = approve(w, "od-i6", view.payloadSha256);
+  assert.equal(pendingRow(w, "od-i6").state, "executing");
+  w.harness.db.prepare(
+    `UPDATE pending_commands SET type = 'MigrateImportJobs' WHERE command_id = ?`)
+    .run("od-i6");
+  gate.resolve();
+  const after = await approving;
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.storedState, "needs_reconciliation");
+  const rec = pendingRow(w, "od-i6");
+  assert.equal(rec.receipt_json, null);
+  assert.equal(JSON.parse(rec.detail_json).integrityFailure, true);
+  assert.equal(w.harness.rows("commands").length, 0);
+  assert.equal(w.harness.rows("bindings").length, 0);
+  assert.equal(w.harness.rows("jobs").length, 0);
+});
+
 // ============================================================ read purity (I2)
 test("read-purity-overdue-pending: a GET projects expired but the stored row stays byte-identical (through the SELECT-only facade)", async () => {
   const ctx = chunkWorld();
@@ -654,6 +805,268 @@ test("reconciliation security: the route cannot bypass T2/T3 — pending, live-e
   assert.equal(res.ok, false);
   assert.equal(res.error, "pending_command_not_found");
   assert.equal(w.harness.rows("pending_commands").length, countBefore);
+});
+
+// ============================================================ reconciliation audit
+// (Blocker B correction, Rowan code review 6374624466.)
+// `complete` now demands full, server-recomputed, pin-exact,
+// COMMAND-ATTRIBUTABLE evidence per type — and `applied`
+// settlement demands the durable commands receipt BOUND to the
+// pending record. Shallow markers earn nothing.
+test("reconciliation audit (Blocker B): a chunk slot with a corrupted row digest under the CORRECT migration id earns no completion credit", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-b1", ctx);
+  const applied = await w.coord.handleCommand(cmd);
+  assert.equal(applied.outcome, "applied");
+  // Corrupt the slot's row digest in place — same book, same
+  // chunk, same correct migration id, same command attribution.
+  w.harness.db.prepare(
+    `UPDATE migration_chunks SET rows_sha256 = ? WHERE book_id = ?`)
+    .run(WRONG_HASH, ctx.bookId);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, "od-b1", "applied", { note: "looks complete" });
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false,
+    "the recomputed digest over the stored payload's rows is the yardstick");
+  assert.equal(res.verification.receiptBound, true,
+    "the receipt was genuine — the EFFECTS are what failed proof");
+  const after = pendingRow(w, "od-b1");
+  assert.equal(after.state, "needs_reconciliation");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 1, "no synthetic receipt inserted");
+});
+
+test("reconciliation audit (Blocker B): a completed slot belonging to a DIFFERENT command id earns this command no credit", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const applied = await w.coord.handleCommand(chunk0("od-b3-other", ctx));
+  assert.equal(applied.outcome, "applied");
+  // This command's record carries the IDENTICAL payload — only
+  // the id differs — and was never executed by anyone.
+  craftStuckRecord(w, chunk0("od-b3", ctx), { claimedAt: staleClaim(w) });
+  const res = reconcile(w, "od-b3", "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false,
+    "attribution is part of completeness: the slot names the other command");
+  assert.equal(pendingRow(w, "od-b3").state, "needs_reconciliation");
+  assert.equal(pendingRow(w, "od-b3").receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 1);
+});
+
+test("reconciliation audit (Blocker B): a positions carry marker whose ACTUAL stored position was rewritten earns no completion credit", async () => {
+  const ctx = carryWorld();
+  const { w, bookId, carry } = ctx;
+  const chunkReceipt = await w.coord.handleCommand(chunkCmd("od-b4-c", {
+    migrationId: MIG, freezeDigest: FREEZE, bookId, chunkIndex: 0,
+    content: ctx.content, rows: ctx.rows }));
+  assert.equal(chunkReceipt.outcome, "applied");
+  const cmd = positionsCmd("od-b4",
+    { migrationId: MIG, freezeDigest: FREEZE, bookId, carry });
+  assert.equal((await w.coord.handleCommand(cmd)).outcome, "applied");
+  assert.equal(w.harness.rows("migration_carry").length, 1,
+    "the carry marker exists and names this command");
+  // Rewrite the ACTUAL stored position under the intact marker.
+  w.harness.db.prepare(
+    `UPDATE position_state SET offset_sec = 999 WHERE book_id = ?`).run(bookId);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, "od-b4", "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false);
+  assert.equal(pendingRow(w, "od-b4").state, "needs_reconciliation");
+  assert.equal(pendingRow(w, "od-b4").receipt_json, null);
+  assert.equal(w.harness.rows("migration_gates").length, 0, "no book flip");
+});
+
+test("reconciliation audit (Blocker B): a jobs carry marker whose stored job row was rewritten earns no completion credit", async () => {
+  const ctx = carryWorld();
+  const { w, bookId, carry } = ctx;
+  const chunkReceipt = await w.coord.handleCommand(chunkCmd("od-b5-c", {
+    migrationId: MIG, freezeDigest: FREEZE, bookId, chunkIndex: 0,
+    content: ctx.content, rows: ctx.rows }));
+  assert.equal(chunkReceipt.outcome, "applied");
+  const cmd = jobsCmd("od-b5",
+    { migrationId: MIG, freezeDigest: FREEZE, bookId, carry });
+  assert.equal((await w.coord.handleCommand(cmd)).outcome, "applied");
+  assert.equal(w.harness.rows("jobs")[0].state, "parked_policy");
+  // Rewrite the stored job's state under the intact marker.
+  w.harness.db.prepare(
+    `UPDATE jobs SET state = 'queued' WHERE job_id = 'od-parked-1'`).run();
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, "od-b5", "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false);
+  assert.equal(pendingRow(w, "od-b5").state, "needs_reconciliation");
+  assert.equal(pendingRow(w, "od-b5").receipt_json, null);
+});
+
+async function carryWorldFullyExecuted(w, ctx, prefix) {
+  const { bookId, carry } = ctx;
+  const chunkReceipt = await w.coord.handleCommand(chunkCmd(`${prefix}-c`, {
+    migrationId: MIG, freezeDigest: FREEZE, bookId, chunkIndex: 0,
+    content: ctx.content, rows: ctx.rows }));
+  assert.equal(chunkReceipt.outcome, "applied");
+  assert.equal((await w.coord.handleCommand(positionsCmd(`${prefix}-p`,
+    { migrationId: MIG, freezeDigest: FREEZE, bookId, carry }))).outcome, "applied");
+  assert.equal((await w.coord.handleCommand(jobsCmd(`${prefix}-j`,
+    { migrationId: MIG, freezeDigest: FREEZE, bookId, carry }))).outcome, "applied");
+  const gate = gateCmd(`${prefix}-g`,
+    { migrationId: MIG, bookId, certificateSha256: chunkReceipt.certificateSha256 });
+  assert.equal((await w.coord.handleCommand(gate)).outcome, "applied");
+  return { chunkReceipt, gate };
+}
+
+test("reconciliation audit (Blocker B): a gate row naming a wrong certificate earns no completion credit", async () => {
+  const ctx = carryWorld();
+  const { w, bookId } = ctx;
+  const { gate } = await carryWorldFullyExecuted(w, ctx, "od-b6");
+  // Corrupt the gate row's certificate AND the book's anchored
+  // certificate to the SAME wrong value: the two stored copies
+  // agree with each other perfectly — only comparison against
+  // the COMMAND'S PIN catches it. Internal consistency between
+  // two corruptible copies is not proof.
+  w.harness.db.prepare(
+    `UPDATE migration_gates SET certificate_sha256 = ? WHERE book_id = ?`)
+    .run(WRONG_HASH, bookId);
+  w.harness.db.prepare(
+    `UPDATE migration_books SET certificate_sha256 = ? WHERE book_id = ?`)
+    .run(WRONG_HASH, bookId);
+  craftStuckRecord(w, gate, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, gate.command_id, "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false);
+  assert.equal(pendingRow(w, gate.command_id).state, "needs_reconciliation");
+  assert.equal(pendingRow(w, gate.command_id).receipt_json, null);
+});
+
+test("reconciliation audit (Blocker B): a gate row over a book whose ANCHORED certificate was rewritten earns no completion credit", async () => {
+  const ctx = carryWorld();
+  const { w, bookId } = ctx;
+  const { gate } = await carryWorldFullyExecuted(w, ctx, "od-b7");
+  // The gate row itself stays intact; the book's server-side
+  // anchor is what no longer matches the command.
+  w.harness.db.prepare(
+    `UPDATE migration_books SET certificate_sha256 = ? WHERE book_id = ?`)
+    .run(WRONG_HASH, bookId);
+  craftStuckRecord(w, gate, { claimedAt: staleClaim(w) });
+  const res = reconcile(w, gate.command_id, "applied", {});
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, false);
+  assert.equal(pendingRow(w, gate.command_id).state, "needs_reconciliation");
+  assert.equal(pendingRow(w, gate.command_id).receipt_json, null);
+});
+
+test("reconciliation (Blocker B): complete-looking effects with NO trustworthy receipt stay uncertain — no synthetic receipt, no flip, no grant", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-b8", ctx);
+  // Hand-plant a slot that satisfies EVERY effects check —
+  // correct migration, attribution to this command, the
+  // recomputed row digest, field-exact evidence — plus the
+  // bindings the chunk would have written. What does NOT exist
+  // is any execution: no commands receipt, because no T3 ever
+  // ran — and T3 writes effects and receipt in ONE transaction,
+  // so this state is unattributable by construction.
+  const pinned = w.coord._pinnedChunk(ctx.bookId, 0);
+  // The slot's row digest, computed HERE from the payload rows
+  // (the apply construction, restated independently).
+  const plantedDigest = sha256Hex(canonicalJson(cmd.payload.rows
+    .map(r => ({ occurrenceId: r.occurrenceId, revisionKey: r.revisionKey,
+                 cacheKey: r.cacheKey, sha256: r.manifest.sha256,
+                 size: r.manifest.size, format: r.manifest.format }))
+    .sort((a, b) => (a.occurrenceId < b.occurrenceId ? -1 : 1))));
+  const evidence = cmd.payload.rows.map(r => ({
+    occurrenceId: r.occurrenceId, revisionKey: r.revisionKey, cacheKey: r.cacheKey,
+    objectKey: `audio/${r.cacheKey}.${r.manifest.format}`,
+    manifestSha256: r.manifest.sha256, computedSha256: r.manifest.sha256,
+    metadataSha256: null, etag: null, verified: true, status: "accepted", reason: null }));
+  w.harness.db.prepare(
+    `INSERT INTO migration_chunks (book_id, chunk_index, migration_id, rows_sha256,
+       row_count, total_bytes, evidence_json, command_id, applied_at)
+     VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(ctx.bookId, MIG, plantedDigest,
+         cmd.payload.rows.length, pinned.chunk.totalBytes,
+         JSON.stringify(evidence), "od-b8", w.harness.now());
+  for (const r of cmd.payload.rows)
+    w.harness.db.prepare(
+      `INSERT INTO bindings (occurrence_id, revision_key, cache_key, provenance, bound_at)
+       VALUES (?, ?, ?, 'migration', ?)`)
+      .run(r.occurrenceId, r.revisionKey, r.cacheKey, w.harness.now());
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const grantsBefore = w.harness.sentGrants.length;
+  const res = reconcile(w, "od-b8", "applied", { basis: "effects verified complete" });
+  assert.equal(res.ok, false);
+  assert.equal(res.error, "reconciliation_evidence_mismatch");
+  assert.equal(res.verification.effectsComplete, true,
+    "the effects audit DOES find them complete — settlement still refuses");
+  assert.equal(res.verification.receiptPresent, false);
+  assert.equal(res.verification.receiptBound, false);
+  const after = pendingRow(w, "od-b8");
+  assert.equal(after.state, "needs_reconciliation", "the uncertain record is preserved");
+  assert.equal(after.receipt_json, null);
+  assert.equal(w.harness.rows("commands").length, 0,
+    "NO synthetic commands receipt inserted");
+  assert.equal(w.harness.rows("migration_gates").length, 0, "no book flip");
+  assert.equal(w.harness.sentGrants.length, grantsBefore, "no grant");
+});
+
+test("reconciliation audit (Blocker B): a genuinely complete chunk execution settles applied on its EXISTING receipt (positive control)", async () => {
+  const ctx = chunkWorld();
+  const { w } = ctx;
+  const cmd = chunk0("od-b2", ctx);
+  const applied = await w.coord.handleCommand(cmd);
+  assert.equal(applied.outcome, "applied");
+  assert.equal(applied.bookComplete, true);
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const settled = reconcile(w, "od-b2", "applied", {});
+  assert.equal(settled.state, "applied");
+  assert.equal(settled.outcome, "applied");
+  assert.equal(settled.certificateSha256, applied.certificateSha256,
+    "the settled receipt IS the durable execution receipt");
+  const rec = pendingRow(w, "od-b2");
+  assert.equal(JSON.parse(rec.detail_json).verification.receiptBound, true,
+    "the settlement's recorded evidence shows the receipt binding was verified");
+  assert.equal(w.harness.rows("commands").length, 1, "still exactly one execution");
+});
+
+test("reconciliation audit (Blocker B): a genuinely complete positions carry settles applied on its existing receipt (positive control)", async () => {
+  const ctx = carryWorld();
+  const { w, bookId, carry } = ctx;
+  const chunkReceipt = await w.coord.handleCommand(chunkCmd("od-b9-c", {
+    migrationId: MIG, freezeDigest: FREEZE, bookId, chunkIndex: 0,
+    content: ctx.content, rows: ctx.rows }));
+  assert.equal(chunkReceipt.outcome, "applied");
+  const cmd = positionsCmd("od-b9",
+    { migrationId: MIG, freezeDigest: FREEZE, bookId, carry });
+  assert.equal((await w.coord.handleCommand(cmd)).outcome, "applied");
+  craftStuckRecord(w, cmd, { claimedAt: staleClaim(w) });
+  const settled = reconcile(w, "od-b9", "applied", {});
+  assert.equal(settled.state, "applied");
+  assert.equal(settled.outcome, "applied");
+  assert.equal(
+    JSON.parse(pendingRow(w, "od-b9").detail_json).verification.receiptBound, true);
+  assert.equal(w.harness.rows("commands").length, 2,
+    "chunk + positions executions only — nothing re-executed or inserted");
+});
+
+test("reconciliation audit (Blocker B): a genuinely complete gate settles applied on its existing receipt (positive control)", async () => {
+  const ctx = carryWorld();
+  const { w } = ctx;
+  const { gate } = await carryWorldFullyExecuted(w, ctx, "od-b10");
+  craftStuckRecord(w, gate, { claimedAt: staleClaim(w) });
+  const settled = reconcile(w, gate.command_id, "applied", {});
+  assert.equal(settled.state, "applied");
+  assert.equal(settled.outcome, "applied");
+  assert.equal(
+    JSON.parse(pendingRow(w, gate.command_id).detail_json).verification.receiptBound, true);
+  assert.equal(w.harness.rows("commands").length, 4,
+    "chunk + positions + jobs + gate — nothing re-executed or inserted");
 });
 
 // ============================================================ API negatives
