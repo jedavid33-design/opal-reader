@@ -599,8 +599,43 @@ export function createR2AudioCache(bucket, { keyPrefix = "" } = {}) {
     return probe.exists(key);
   }
 
+  // Migration prime (P8 migration-import design §2/§3; Rowan
+  // ruling 6354217340, I2+I3). The migration import path may not
+  // trust the request snapshot: on a cold coordinator the snapshot
+  // is empty (hydrateIndex loads only cache_index keys), and its
+  // sha256 can be ADVERTISED METADATA rather than a digest of the
+  // bytes (hydrateKey: meta.sha256 ?? sha256Hex(bytes)).
+  // primeForMigration therefore reads the object DIRECTLY from the
+  // bucket — inside the caller's import operation, before any
+  // bind — and ALWAYS computes the SHA-256 from the downloaded
+  // bytes. The metadata SHA is returned as a separate, untrusted
+  // field for the coordinator's three-way comparison. GET only:
+  // this function performs no bucket write of any kind, and it
+  // neither consults nor mutates the snapshot, so the general
+  // probe path is byte-identical to before.
+  async function primeForMigration(cacheKey) {
+    if (!bucket) return null;
+    for (const ext of AUDIO_EXTENSIONS) {
+      const objectKey = objectKeyFor(cacheKey, ext);
+      const object = await bucket.get(objectKey);
+      if (!object) continue;
+      const bytes = new Uint8Array(await object.arrayBuffer());
+      const meta = object.customMetadata || {};
+      return {
+        cacheKey, objectKey, format: ext,
+        byteLength: bytes.byteLength,
+        computedSha256: sha256Hex(bytes),
+        metadataSha256: meta.sha256 ?? null,
+        metadataIdentity: meta.identity ?? null,
+        etag: object.etag ?? null,
+      };
+    }
+    return null;
+  }
+
   return {
     hydrateIndex, hydrateKey, putIfAbsent, get, flush, probe, byteCheck,
+    primeForMigration,
     // Prime one fingerprint key from an occurrence payload before the
     // executor's synchronous cache phase (called by the work source).
     async prime(payload) {

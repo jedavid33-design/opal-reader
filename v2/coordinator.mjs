@@ -17,6 +17,7 @@
 //   storage.sql.exec(query, ...params) -> { toArray(), one() }
 //   storage.transactionSync(fn)
 //   storage.setAlarm(msEpoch) / storage.getAlarm() / storage.deleteAlarm()
+import { createHash } from "node:crypto";
 
 export const JOB_STATES = [
   "queued", "generating", "paused_quota", "paused_user", "outcome_unknown",
@@ -81,6 +82,7 @@ export const COMMAND_TYPES = [
   "RequestCancel", "RequestSynthesis", "AdoptAudio",
   "ResolveOutcomeUnknown", "SetSettings", "FreezeDirective",
   "SyncPush", "PushPositionEvents", "DeleteBook",
+  "MigrateImportBindings", "MigrateRecordFlipGate",
 ];
 
 // P4 sync families. Position rides the same change machinery; money
@@ -203,6 +205,26 @@ CREATE TABLE IF NOT EXISTS position_state (
   book_id TEXT PRIMARY KEY, occurrence_id TEXT, occ_index INTEGER,
   offset_sec REAL, playing INTEGER NOT NULL DEFAULT 0,
   tip INTEGER NOT NULL DEFAULT 0, superseded_count INTEGER NOT NULL DEFAULT 0);
+-- P8 migration import (v2/p8/migration-import-design.md): the
+-- per-book import record (the manifest row set a book was imported
+-- under, canonically digested), the provenance-acceptance audit
+-- trail for the fingerprinted-distinct rows, and the flip gates.
+-- A book counts as flipped ONLY through a migration_gates row,
+-- which MigrateRecordFlipGate refuses to write over an incomplete
+-- or divergent import.
+CREATE TABLE IF NOT EXISTS migration_books (
+  book_id TEXT PRIMARY KEY, migration_id TEXT, freeze_digest TEXT,
+  row_count INTEGER NOT NULL, rows_json TEXT NOT NULL,
+  rows_sha256 TEXT NOT NULL, imported_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS migration_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,
+  migration_id TEXT, book_id TEXT, occurrence_id TEXT,
+  revision_key TEXT, cache_key TEXT, recorded_identity TEXT,
+  attestation_sha256 TEXT, attestation_json TEXT, outcome TEXT);
+CREATE TABLE IF NOT EXISTS migration_gates (
+  book_id TEXT PRIMARY KEY, migration_id TEXT,
+  certificate_sha256 TEXT, flipped_at INTEGER NOT NULL,
+  detail_json TEXT);
 `;
 
 function dayKeyPT(nowMs) {
@@ -214,6 +236,19 @@ function dayKeyPT(nowMs) {
   return `${p.year}-${p.month}-${p.day}`;
 }
 function monthKey(nowMs) { return dayKeyPT(nowMs).slice(0, 7); }
+
+// Canonical JSON (sorted keys, recursively) + its SHA-256 — the
+// digest discipline for migration row sets and attestations: two
+// structures are "the same" iff their canonical forms are byte-equal.
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.keys(value).sort()
+    .map(k => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(",")}}`;
+}
+function sha256HexText(text) {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
 
 export class GenerationCoordinator {
   constructor(state, env = {}) {
@@ -347,6 +382,16 @@ export class GenerationCoordinator {
                ...(existing.outcome_json ? JSON.parse(existing.outcome_json) : {}),
                replayed: true };
     }
+    // Migration import preparation (design §2): the prime is ASYNC
+    // and must complete inside this operation, BEFORE the command
+    // transaction opens and before any bind — a fresh coordinator
+    // cannot see pre-existing objects through the request snapshot.
+    // Only the migration command type prepares; a replay returned
+    // above re-primes nothing. The prepared facts are DATA passed
+    // into the synchronous apply step; the transaction stays sync.
+    let prepared = null;
+    if (cmd.type === "MigrateImportBindings")
+      prepared = await this._prepareMigrationImport(cmd.payload || {});
     await this.wake();
     const outcome = this._tx(() => {
       this.sql.exec(
@@ -357,7 +402,7 @@ export class GenerationCoordinator {
       if (this._frozen() && cmd.type !== "FreezeDirective")
         result = { outcome: "rejected", reason: "frozen" };
       else
-        result = this._applyCommand(cmd.type, cmd.payload || {}, cmd.command_id);
+        result = this._applyCommand(cmd.type, cmd.payload || {}, cmd.command_id, prepared);
       this.sql.exec(`UPDATE commands SET outcome = ?, outcome_json = ? WHERE command_id = ?`,
         result.outcome, JSON.stringify(result), cmd.command_id);
       return result;
@@ -366,7 +411,7 @@ export class GenerationCoordinator {
     return { command_id: cmd.command_id, ...outcome };
   }
 
-  _applyCommand(type, p, commandId) {
+  _applyCommand(type, p, commandId, prepared = null) {
     switch (type) {
       case "SubmitJob": return this._submitJob(p, commandId, "job");
       case "RequestRepair": return this._submitJob(p, commandId, "repair");
@@ -391,6 +436,8 @@ export class GenerationCoordinator {
       case "SyncPush": return this._syncPush(p, commandId);
       case "PushPositionEvents": return this._pushPositionEvents(p, commandId);
       case "DeleteBook": return this._deleteBook(p, commandId);
+      case "MigrateImportBindings": return this._migrateImportBindings(p, commandId, prepared);
+      case "MigrateRecordFlipGate": return this._migrateRecordFlipGate(p, commandId);
       case "FreezeDirective": {
         this.sql.exec(`INSERT INTO meta (key, value) VALUES ('frozen', ?)
                        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -2064,6 +2111,370 @@ export class GenerationCoordinator {
     return r.status === "applied"
       ? { outcome: "applied", bookId: p.bookId, revision: r.revision, alreadyTombstoned: !!r.alreadyTombstoned }
       : { outcome: "rejected", reason: "conflict", bookId: p.bookId, currentRevision: r.currentRevision };
+  }
+
+  // ---- migration import (P8; v2/p8/migration-import-design.md) -------------
+  // The dedicated verified bind primitive Rowan's D10 ruling
+  // (6354217340) requires before any audio-containing flip may be
+  // scheduled. It REPLACES the split SyncPush + AdoptAudio path for
+  // migration only: prime (async, §2) -> byte-verify (three-way,
+  // fail closed, §3) -> bind BOTH planes (sync bindings family +
+  // SQL bindings/cache_index) inside this command's ONE transaction
+  // (§1), or apply nothing at all. Non-migration commands are
+  // untouched: SyncPush still does not verify bytes and AdoptAudio
+  // still verifies through the request snapshot.
+  //
+  // The prime seam: env.migrationPrime(cacheKey) -> fact | null,
+  // where fact = { objectKey, format, byteLength, computedSha256,
+  // metadataSha256, metadataIdentity, etag }. computedSha256 is
+  // ALWAYS the host's fresh digest over the downloaded bytes; the
+  // metadata value rides separately and is never trusted (§3).
+
+  async _prepareMigrationImport(p) {
+    const facts = new Map();
+    const prime = this.env && this.env.migrationPrime;
+    const keys = [...new Set((Array.isArray(p.rows) ? p.rows : [])
+      .map(r => r && r.cacheKey).filter(k => typeof k === "string" && k))];
+    for (const key of keys) {
+      if (typeof prime !== "function") { facts.set(key, { unavailable: true }); continue; }
+      try { facts.set(key, (await prime(key)) || null); }
+      catch (e) { facts.set(key, { error: String(e && e.message || e) }); }
+    }
+    return facts;
+  }
+
+  // The typed provenance acceptance (design §5): every attestation
+  // field must agree with the row, the freeze manifest, AND the
+  // primed facts. The caller separately proves the disagreement is
+  // exactly the known v1 limitation (no recorded identity anywhere
+  // but the cache-key default) — an attestation never rescues a
+  // positive foreign identity.
+  _migrationAttestationValid(att, row, fact, freezeDigest) {
+    if (!att || att.kind !== "freeze_snapshot_attestation") return false;
+    if (att.snapshotDigest !== freezeDigest) return false;
+    if (att.bookId !== row.bookId || att.occurrenceId !== row.occurrenceId) return false;
+    if (att.revisionKey !== row.revisionKey || att.cacheKey !== row.cacheKey) return false;
+    if (att.sha256 !== fact.computedSha256 || att.sha256 !== row.manifest.sha256) return false;
+    if (att.size !== fact.byteLength || att.size !== row.manifest.size) return false;
+    if (att.format !== fact.format || att.format !== row.manifest.format) return false;
+    if (att.r2Key !== fact.objectKey) return false;
+    if (fact.etag !== null && fact.etag !== undefined && att.r2Etag !== fact.etag) return false;
+    if (att.identityLimitation !== "v1_metadata_no_identity") return false;
+    return true;
+  }
+
+  _migrateImportBindings(p, commandId, facts) {
+    const bookId = p.bookId || null;
+    const rows = Array.isArray(p.rows) ? p.rows : null;
+    if (!bookId || !rows || rows.length === 0 || !p.migrationId || !p.freezeDigest)
+      return { outcome: "rejected", reason: "migration_shape", bookId };
+    if (this._bookTombstoned(bookId))
+      return { outcome: "rejected", reason: "rejected_tombstoned", bookId };
+    const seenOcc = new Set();
+    for (const r of rows) {
+      if (!r || !r.occurrenceId || !r.revisionKey || !r.cacheKey ||
+          !r.manifest || typeof r.manifest.sha256 !== "string" ||
+          typeof r.manifest.size !== "number" || !r.manifest.format)
+        return { outcome: "rejected", reason: "migration_shape", bookId };
+      if (seenOcc.has(r.occurrenceId))
+        return { outcome: "rejected", reason: "duplicate_row", bookId, occurrenceId: r.occurrenceId };
+      seenOcc.add(r.occurrenceId);
+    }
+    // Content: carried by the command, or already present. A stored
+    // content entity that disagrees with the carried one is a
+    // divergence — migration never silently rewrites a book's
+    // structure. Rows must belong to the book's own occurrence set
+    // (the same ownership proof _validateSyncChange performs).
+    const contentEnt = this._syncEntity("content", bookId);
+    let contentPlan = "present";
+    if (p.content) {
+      const occIds = Array.isArray(p.content.occurrenceIds) ? p.content.occurrenceIds : null;
+      if (!occIds) return { outcome: "rejected", reason: "migration_shape", bookId };
+      for (const r of rows)
+        if (!occIds.includes(r.occurrenceId))
+          return { outcome: "rejected", reason: "unknown_occurrence", bookId, occurrenceId: r.occurrenceId };
+      if (contentEnt) {
+        if (canonicalJson(JSON.parse(contentEnt.data_json || "{}")) !== canonicalJson(p.content))
+          return { outcome: "rejected", reason: "content_divergence", bookId };
+        contentPlan = "identical";
+      } else contentPlan = "insert";
+    } else {
+      if (!contentEnt)
+        return { outcome: "rejected", reason: "unknown_book", bookId };
+      const occIds = (JSON.parse(contentEnt.data_json || "{}").occurrenceIds) || [];
+      for (const r of rows)
+        if (!occIds.includes(r.occurrenceId))
+          return { outcome: "rejected", reason: "unknown_occurrence", bookId, occurrenceId: r.occurrenceId };
+    }
+    // The import record: a re-import under a different row set is a
+    // divergence, never an overwrite.
+    const canonicalRows = rows
+      .map(r => ({ occurrenceId: r.occurrenceId, revisionKey: r.revisionKey,
+                   cacheKey: r.cacheKey, sha256: r.manifest.sha256 }))
+      .sort((a, b) => (a.occurrenceId < b.occurrenceId ? -1 : 1));
+    const rowsSha256 = sha256HexText(canonicalJson(canonicalRows));
+    const priorBook = this._oneOrNull(`SELECT * FROM migration_books WHERE book_id = ?`, bookId);
+    if (priorBook && priorBook.rows_sha256 !== rowsSha256)
+      return { outcome: "rejected", reason: "migration_book_divergence", bookId };
+
+    // ---- validate EVERY row before applying anything (design §1).
+    const certRows = [];
+    const plans = [];
+    let firstBlock = null;
+    for (const r of rows) {
+      const cert = { occurrenceId: r.occurrenceId, revisionKey: r.revisionKey,
+        cacheKey: r.cacheKey, objectKey: null, manifestSha256: r.manifest.sha256,
+        computedSha256: null, metadataSha256: null, etag: null,
+        verified: false, status: "blocked", reason: null };
+      const plan = { row: r, cert, viaProvenance: false, idempotent: false,
+                     recordedIdentity: null, syncData: null, syncPresent: false };
+      const fail = (reason) => { cert.reason = reason; if (!firstBlock) firstBlock = reason; };
+      const fact = facts ? facts.get(r.cacheKey) : null;
+      if (fact && fact.unavailable) fail("migration_prime_unavailable");
+      else if (fact && fact.error) fail("prime_failed");
+      else if (!fact) fail("object_missing");
+      else {
+        cert.objectKey = fact.objectKey ?? null;
+        cert.computedSha256 = fact.computedSha256 ?? null;
+        cert.metadataSha256 = fact.metadataSha256 ?? null;
+        cert.etag = fact.etag ?? null;
+        const idx = this._oneOrNull(`SELECT * FROM cache_index WHERE cache_key = ?`, r.cacheKey);
+        const existing = this._oneOrNull(
+          `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
+          r.occurrenceId, r.revisionKey);
+        const syncEnt = this._syncEntity("bindings", `${bookId}:${r.occurrenceId}`);
+        const syncData = syncEnt && !syncEnt.deleted
+          ? JSON.parse(syncEnt.data_json || "{}") : null;
+        if (fact.format !== r.manifest.format) fail("format_mismatch");
+        else if (!fact.objectKey || !fact.objectKey.endsWith(`audio/${r.cacheKey}.${fact.format}`))
+          fail("object_key_mismatch");
+        else if (fact.byteLength !== r.manifest.size) fail("size_mismatch");
+        else if (fact.computedSha256 !== r.manifest.sha256) fail("content_hash_mismatch");
+        else if (fact.metadataSha256 !== null && fact.metadataSha256 !== undefined &&
+                 fact.metadataSha256 !== fact.computedSha256) fail("metadata_digest_mismatch");
+        else if (idx && idx.sha256 && idx.sha256 !== fact.computedSha256)
+          fail("content_hash_mismatch");
+        else if (existing && existing.cache_key !== r.cacheKey) fail("binding_conflict_existing");
+        else if (syncData && (syncData.cacheKey !== r.cacheKey ||
+                               (syncData.sha256 && syncData.sha256 !== fact.computedSha256)))
+          fail("sync_binding_divergence");
+        else {
+          // Identity (design §5). The recorded identity: the
+          // coordinator's index wins, the object's metadata is the
+          // fallback, and a v1 object with neither defaults to its
+          // cache key (the hydrateKey rule, restated on primed
+          // facts so the snapshot is never consulted here).
+          const recorded = (idx && idx.identity) || fact.metadataIdentity || r.cacheKey;
+          plan.recordedIdentity = recorded;
+          const isLegacy = r.revisionKey.startsWith("legacy:");
+          let accepted = false;
+          if (isLegacy) {
+            if (r.revisionKey === `legacy:${r.cacheKey}`) accepted = true;
+            else fail("legacy_anchor_mismatch");
+          } else if (recorded === r.revisionKey) accepted = true;
+          else {
+            const noPositiveIdentity = !(idx && idx.identity) && !fact.metadataIdentity &&
+              recorded === r.cacheKey;
+            const att = r.provenanceAttestation || null;
+            if (att && noPositiveIdentity &&
+                this._migrationAttestationValid(att, { ...r, bookId }, fact, p.freezeDigest)) {
+              accepted = true; plan.viaProvenance = true;
+            } else if (att && noPositiveIdentity) fail("attestation_invalid");
+            else fail("identity_mismatch");
+          }
+          if (accepted) {
+            cert.verified = true;
+            plan.syncData = { cacheKey: r.cacheKey, revisionKey: r.revisionKey,
+              sha256: fact.computedSha256, format: fact.format, size: fact.byteLength,
+              provenance: plan.viaProvenance ? "migration:freeze_snapshot_attestation" : "migration" };
+            plan.syncPresent = !!syncData;
+            plan.idempotent = !!existing && existing.cache_key === r.cacheKey &&
+              !!syncData && canonicalJson(syncData) === canonicalJson(plan.syncData);
+            plan.existingBinding = !!existing;
+          }
+        }
+      }
+      certRows.push(cert); plans.push(plan);
+    }
+
+    const certificate = { bookId, migrationId: p.migrationId,
+      freezeDigest: p.freezeDigest, commandId, rows: certRows,
+      totals: { rows: certRows.length, accepted: 0, acceptedIdempotent: 0,
+                acceptedProvenance: 0, blocked: 0 } };
+    if (firstBlock) {
+      for (const c of certRows) {
+        c.status = "blocked";
+        if (!c.reason) c.reason = "book_rejected";
+      }
+      certificate.totals.blocked = certRows.length;
+      return { outcome: "rejected", reason: firstBlock, bookId, certificate };
+    }
+
+    // ---- apply: one transaction (the handleCommand transaction),
+    // both planes, from the same verified facts.
+    if (contentPlan === "insert")
+      this._upsertSyncEntity("content", bookId, bookId, p.content);
+    if (!priorBook) {
+      this.sql.exec(
+        `INSERT INTO migration_books (book_id, migration_id, freeze_digest, row_count, rows_json, rows_sha256, imported_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        bookId, p.migrationId, p.freezeDigest, canonicalRows.length,
+        canonicalJson(canonicalRows), rowsSha256, this._now());
+    }
+    for (const plan of plans) {
+      const r = plan.row, fact = facts.get(r.cacheKey);
+      const provenance = plan.viaProvenance
+        ? "migration:freeze_snapshot_attestation" : "migration";
+      if (!plan.existingBinding) {
+        this.sql.exec(
+          `INSERT INTO bindings (occurrence_id, revision_key, cache_key, provenance, bound_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          r.occurrenceId, r.revisionKey, r.cacheKey, provenance, this._now());
+        if (plan.viaProvenance) {
+          this.sql.exec(
+            `INSERT INTO migration_audit (at, migration_id, book_id, occurrence_id, revision_key,
+               cache_key, recorded_identity, attestation_sha256, attestation_json, outcome)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'accepted_provenance')`,
+            this._now(), p.migrationId, bookId, r.occurrenceId, r.revisionKey,
+            r.cacheKey, plan.recordedIdentity,
+            sha256HexText(canonicalJson(r.provenanceAttestation)),
+            canonicalJson(r.provenanceAttestation));
+        }
+      }
+      // The cache_index anchor write mirrors validateAndBind's
+      // exactly: an existing identity/sha is never silently replaced.
+      this.sql.exec(
+        `INSERT INTO cache_index (cache_key, identity, format, sha256, recorded_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(cache_key) DO UPDATE SET identity = COALESCE(cache_index.identity, excluded.identity),
+           format = excluded.format, sha256 = COALESCE(cache_index.sha256, excluded.sha256),
+           recorded_at = excluded.recorded_at`,
+        r.cacheKey, r.revisionKey.startsWith("legacy:") ? null : r.revisionKey,
+        fact.format, fact.computedSha256, this._now());
+      const cur = this._syncEntity("bindings", `${bookId}:${r.occurrenceId}`);
+      const curData = cur && !cur.deleted ? JSON.parse(cur.data_json || "{}") : null;
+      if (!curData || canonicalJson(curData) !== canonicalJson(plan.syncData))
+        this._upsertSyncEntity("bindings", `${bookId}:${r.occurrenceId}`, bookId, plan.syncData);
+      plan.cert.status = plan.idempotent ? "accepted_idempotent"
+        : plan.viaProvenance ? "accepted_provenance" : "accepted";
+    }
+    for (const c of certRows) {
+      if (c.status === "accepted") certificate.totals.accepted++;
+      else if (c.status === "accepted_idempotent") certificate.totals.acceptedIdempotent++;
+      else if (c.status === "accepted_provenance") certificate.totals.acceptedProvenance++;
+    }
+    this._logTransition("book", bookId, "MigrateImportBindings", null, "imported",
+      null, { commandId, migrationId: p.migrationId, rows: certRows.length });
+    return { outcome: "applied", bookId, migrationId: p.migrationId, certificate };
+  }
+
+  // Both-plane completeness against the import record — the shared
+  // computation behind the flip gate and the read-back view. The
+  // reference set is the manifest row set the book was imported
+  // under; completeness is a statement about THAT set (a book may
+  // legitimately have occurrences with no audio yet).
+  _migrationCompleteness(bookId) {
+    const book = this._oneOrNull(`SELECT * FROM migration_books WHERE book_id = ?`, bookId);
+    if (!book) return { book: null, complete: false, missing: ["import_record"], divergences: [] };
+    const missing = [], divergences = [];
+    const content = this._syncEntity("content", bookId);
+    if (!content || content.deleted) missing.push("content");
+    for (const row of JSON.parse(book.rows_json)) {
+      const b = this._oneOrNull(
+        `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
+        row.occurrenceId, row.revisionKey);
+      if (!b) missing.push(`sql:${row.occurrenceId}`);
+      else if (b.cache_key !== row.cacheKey)
+        divergences.push({ occurrenceId: row.occurrenceId, plane: "sql",
+                           expected: row.cacheKey, found: b.cache_key });
+      const idx = this._oneOrNull(`SELECT * FROM cache_index WHERE cache_key = ?`, row.cacheKey);
+      if (!idx) missing.push(`index:${row.occurrenceId}`);
+      else if (idx.sha256 !== row.sha256)
+        divergences.push({ occurrenceId: row.occurrenceId, plane: "index",
+                           expected: row.sha256, found: idx.sha256 });
+      const e = this._syncEntity("bindings", `${bookId}:${row.occurrenceId}`);
+      if (!e || e.deleted) missing.push(`sync:${row.occurrenceId}`);
+      else {
+        const d = JSON.parse(e.data_json || "{}");
+        if (d.cacheKey !== row.cacheKey)
+          divergences.push({ occurrenceId: row.occurrenceId, plane: "sync",
+                             expected: row.cacheKey, found: d.cacheKey ?? null });
+        if (d.sha256 !== row.sha256)
+          divergences.push({ occurrenceId: row.occurrenceId, plane: "sync_digest",
+                             expected: row.sha256, found: d.sha256 ?? null });
+      }
+    }
+    return { book, complete: missing.length === 0 && divergences.length === 0,
+             missing, divergences };
+  }
+
+  _migrateRecordFlipGate(p, commandId) {
+    const bookId = p.bookId || null;
+    if (!bookId || !p.migrationId || !p.certificateSha256)
+      return { outcome: "rejected", reason: "migration_shape", bookId };
+    const chk = this._migrationCompleteness(bookId);
+    if (!chk.book)
+      return { outcome: "rejected", reason: "flip_gate_incomplete", bookId,
+               missing: chk.missing, divergences: chk.divergences };
+    if (chk.book.migration_id !== p.migrationId)
+      return { outcome: "rejected", reason: "flip_gate_incomplete", bookId,
+               missing: ["migration_mismatch"], divergences: [] };
+    if (!chk.complete)
+      return { outcome: "rejected", reason: "flip_gate_incomplete", bookId,
+               missing: chk.missing, divergences: chk.divergences };
+    const existing = this._oneOrNull(`SELECT * FROM migration_gates WHERE book_id = ?`, bookId);
+    if (existing && existing.certificate_sha256 !== p.certificateSha256)
+      return { outcome: "rejected", reason: "flip_gate_conflict", bookId };
+    if (existing)
+      return { outcome: "applied", bookId, flipped: true, idempotent: true };
+    this.sql.exec(
+      `INSERT INTO migration_gates (book_id, migration_id, certificate_sha256, flipped_at, detail_json)
+       VALUES (?, ?, ?, ?, ?)`,
+      bookId, p.migrationId, p.certificateSha256, this._now(),
+      JSON.stringify({ commandId }));
+    this._logTransition("book", bookId, "MigrateRecordFlipGate", null, "flipped",
+      null, { commandId, migrationId: p.migrationId });
+    return { outcome: "applied", bookId, flipped: true };
+  }
+
+  // Read-back surface for the flip fence (design §4, lock 2):
+  // SELECT-only, safe on the read-only facade.
+  migrationBookView(bookId) {
+    const contentEnt = this._syncEntity("content", bookId);
+    const book = this._oneOrNull(`SELECT * FROM migration_books WHERE book_id = ?`, bookId);
+    const gate = this._oneOrNull(`SELECT * FROM migration_gates WHERE book_id = ?`, bookId);
+    const syncBindings = this._all(
+      `SELECT * FROM sync_entities WHERE family = 'bindings' AND book_id = ? ORDER BY entity_key`, bookId)
+      .map(e => ({ entityKey: e.entity_key,
+                   occurrenceId: e.entity_key.slice(bookId.length + 1),
+                   revision: e.revision, tombstone: !!e.deleted,
+                   data: e.data_json ? JSON.parse(e.data_json) : null }));
+    const expected = book ? JSON.parse(book.rows_json) : [];
+    const sqlBindings = [], cacheAnchors = [], seenKeys = new Set();
+    for (const row of expected) {
+      const b = this._oneOrNull(
+        `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
+        row.occurrenceId, row.revisionKey);
+      sqlBindings.push({ occurrenceId: row.occurrenceId, revisionKey: row.revisionKey,
+        cacheKey: b ? b.cache_key : null, provenance: b ? b.provenance : null });
+      if (seenKeys.has(row.cacheKey)) continue;
+      seenKeys.add(row.cacheKey);
+      const idx = this._oneOrNull(`SELECT * FROM cache_index WHERE cache_key = ?`, row.cacheKey);
+      cacheAnchors.push({ cacheKey: row.cacheKey, identity: idx ? idx.identity : null,
+        sha256: idx ? idx.sha256 : null, format: idx ? idx.format : null });
+    }
+    const chk = this._migrationCompleteness(bookId);
+    return { bookId,
+      content: contentEnt ? { revision: contentEnt.revision,
+        tombstone: !!contentEnt.deleted,
+        occurrenceIds: (JSON.parse(contentEnt.data_json || "{}").occurrenceIds) || [] } : null,
+      importRecord: book ? { migrationId: book.migration_id,
+        freezeDigest: book.freeze_digest, rowCount: book.row_count,
+        rowsSha256: book.rows_sha256, importedAt: book.imported_at } : null,
+      syncBindings, sqlBindings, cacheAnchors,
+      gate: gate ? { flipped: true, migrationId: gate.migration_id,
+        certificateSha256: gate.certificate_sha256, flippedAt: gate.flipped_at } : null,
+      completeness: { complete: chk.complete, missing: chk.missing,
+        divergences: chk.divergences } };
   }
 
   // Position events: append-only journal, deterministic fold.

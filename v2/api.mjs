@@ -119,6 +119,10 @@ export function createApi(env) {
           else return json(503, { error: "byte_check_unavailable" });
           return json(200, { cacheKey, exists });
         }
+        if (path.startsWith("/v2/migration/book/")) {
+          const bookId = decodeURIComponent(path.slice("/v2/migration/book/".length));
+          return json(200, ro.migrationBookView(bookId));
+        }
         if (path.startsWith("/v2/commands/")) {
           const id = decodeURIComponent(path.slice("/v2/commands/".length));
           const receipt = ro.receipt(id);

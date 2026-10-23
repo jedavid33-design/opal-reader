@@ -98,6 +98,12 @@ function hostEnv(env, cache) {
   return {
     ...env,
     probe: cache ? cache.probe : undefined,
+    // Migration prime seam (design §2): bound to THIS request's
+    // cache, hence to this script's enforced key prefix — under
+    // the staging scope the prime can only ever see smoke-p8/
+    // objects, so a migration import of real books fails closed
+    // (object_missing) rather than validating production audio.
+    migrationPrime: cache ? (key) => cache.primeForMigration(key) : undefined,
     byteCheck: cache ? (key) => cache.byteCheck(key) : async () => false,
     sendGrant: generationEnabled && env.OPALREADER_GENERATION?.send
       ? async (payload) => { await env.OPALREADER_GENERATION.send(payload); }

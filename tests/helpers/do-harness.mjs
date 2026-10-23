@@ -43,7 +43,7 @@ class SqlFacade {
   }
 }
 
-export function makeHarness({ probe = null, startMs = 1760000000000 } = {}) {
+export function makeHarness({ probe = null, startMs = 1760000000000, extraEnv = {} } = {}) {
   const db = new DatabaseSync(":memory:");
   let now = startMs;
   let alarmAt = null;
@@ -66,6 +66,7 @@ export function makeHarness({ probe = null, startMs = 1760000000000 } = {}) {
     probe,
     sendGrant: g => sentGrants.push(g),
     scheduleHook: null,
+    ...extraEnv,
   };
   const state = { storage };
   let instance = new GenerationCoordinator(state, env);
