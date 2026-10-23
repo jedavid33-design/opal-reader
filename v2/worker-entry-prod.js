@@ -38,12 +38,15 @@
 //     consume `opalreader-generation` (whose single consumer
 //     stays the frozen v1 worker) and nothing can deliver to it.
 //     There are no provider secrets on this script.
-//   * Migration commands are operator-fenced exactly as on the
-//     staging surface: the distinct secret
-//     OPALREADER_MIGRATION_OPERATOR_TOKEN, unset (or equal to the
-//     client token) means migration is unreachable. Both secrets
-//     are set by Julie herself at D2; their VALUES appear nowhere
-//     in this repo — the deploy spec records names only.
+//   * Migration commands follow the Option D two-phase
+//     protocol exactly as on the staging surface: they PEND on
+//     submission under the client token and execute only through
+//     the operator-only approval route, guarded by the distinct
+//     secret OPALREADER_MIGRATION_OPERATOR_TOKEN — unset (or
+//     equal to the client token) means no migration command can
+//     ever execute here. Both secrets are set by Julie herself
+//     at D2; their VALUES appear nowhere in this repo — the
+//     deploy spec records names only.
 //
 // DO-state rollback truth (plan §S4): deleting this Worker script
 // does NOT necessarily delete a created Durable Object database.
@@ -63,7 +66,6 @@ import {
   OpalReaderCoordinator, GenerationHaltedError,
   json, corsHeaders,
 } from "./worker-entry.js";
-import { MIGRATION_COMMAND_TYPES } from "./coordinator.mjs";
 import { BUILD_VERSION, BUILD_COMMIT } from "./host/build-identity.mjs";
 
 export const PRODUCTION_SCOPE = "production";
@@ -113,11 +115,17 @@ export class OpalReaderCoordinatorProd extends OpalReaderCoordinator {
 // is echoed solely on an exact match with env.ALLOWED_ORIGIN);
 // statuses, bodies, and gate order mirror the staging surface
 // with production values.
-function productionGate(request, env, cors) {
+function productionGate(request, env, cors, { skipClientToken = false } = {}) {
   if (env.OPALREADER_V2_SCOPE !== PRODUCTION_SCOPE)
     return json(403, { error: "production_scope_required" }, cors);
   if (request.headers.get("x-opalreader-scope") !== PRODUCTION_SCOPE)
     return json(403, { error: "production_scope_required" }, cors);
+  // Option D (design §3.3.1): the two operator routes are
+  // admitted on the OPERATOR header alone — the client token is
+  // neither required nor sufficient there — so the client-token
+  // half of this gate is skipped for them; their own fence below
+  // (fail-closed, distinct-secret) is their admission.
+  if (skipClientToken) return null;
   if (!env.OPALREADER_ACCESS_TOKEN)
     return json(503, { error: "production_token_not_configured" }, cors);
   if (request.headers.get("x-opalreader-token") !== env.OPALREADER_ACCESS_TOKEN)
@@ -147,7 +155,10 @@ async function fetchHandler(request, env) {
   // construction: the only surfaces are /health and /v2/*.
   if (!url.pathname.startsWith("/v2/"))
     return json(404, { error: "route_not_found" }, cors);
-  const denied = productionGate(request, env, cors);
+  const isOperatorRoute = request.method === "POST" &&
+    (url.pathname === "/v2/command-approvals" ||
+     url.pathname === "/v2/command-reconciliation");
+  const denied = productionGate(request, env, cors, { skipClientToken: isOperatorRoute });
   if (denied) return denied;
   // Production routes ONLY the account instance, named explicitly.
   // "smoke-p8" (and anything else) is denied BEFORE the DO
@@ -158,42 +169,45 @@ async function fetchHandler(request, env) {
   const instance = request.headers.get("x-opalreader-instance");
   if (instance !== PRODUCTION_INSTANCE)
     return json(403, { error: "production_instance_required" }, cors);
-  // G2 operator admission fence — identical discipline to the
-  // staging surface (see v2/worker-entry.js): the migration
-  // command types are operator-only; the credential is a DISTINCT
-  // secret, never the client access token; unset means CLOSED.
+  // D3-1 (Rowan D3 re-review 6356184643): the legacy whole-book
+  // command is NOT SERVED on the production surface at all.
+  // Chunking is the D1-mandated execution shape — the whole-book
+  // path carries no row/byte limits, and its interleaving guard
+  // fired only after a full prime, so admitting it here (even
+  // under a correct operator credential) would let a mistaken
+  // call spend a 510-row / ~1.56 GB / 1,020-GET prime, or import
+  // the largest book in one invocation. The refusal is a surface
+  // capability refusal, not a credential outcome: it precedes
+  // every credential check, happens before the DO namespace is
+  // touched and before any R2 access, and writes nothing.
+  // MigrateImportChunk and MigrateRecordFlipGate remain
+  // admissible — under Option D they PEND on this route and
+  // execute only through the approval route below. Fail-closed
+  // backups sit behind this fence at the DO class (the
+  // _migrationChunkRequired surface hook) and the API layer.
+  if (request.method === "POST" && url.pathname === "/v2/commands") {
+    let peek = null;
+    try { peek = await request.clone().json(); } catch { peek = null; }
+    if (peek && peek.type === "MigrateImportBindings")
+      return json(403, { error: "migration_chunk_required" }, cors);
+  }
+  // Option D operator admission fence (design §3.3.1) —
+  // identical discipline to the staging surface (see
+  // v2/worker-entry.js): the operator credential is a DISTINCT
+  // secret, never the client access token; unset means the
+  // operator routes are CLOSED. It guards exactly two routes:
+  // POST /v2/command-approvals and POST /v2/command-reconciliation.
   // Refusals happen before the coordinator namespace is touched;
   // admission is marked on the forwarded internal request
   // (overwritten unconditionally) and re-checked at the API layer.
   let operatorAdmitted = false;
-  if (request.method === "POST" && url.pathname === "/v2/commands") {
-    let peek = null;
-    try { peek = await request.clone().json(); } catch { peek = null; }
-    // D3-1 (Rowan D3 re-review 6356184643): the legacy whole-book
-    // command is NOT SERVED on the production surface at all.
-    // Chunking is the D1-mandated execution shape — the whole-book
-    // path carries no row/byte limits, and its interleaving guard
-    // fired only after a full prime, so admitting it here (even
-    // under a correct operator credential) would let a mistaken
-    // call spend a 510-row / ~1.56 GB / 1,020-GET prime, or import
-    // the largest book in one invocation. The refusal is a surface
-    // capability refusal, not a credential outcome: it precedes
-    // the operator check, happens before the DO namespace is
-    // touched and before any R2 access, and writes nothing.
-    // MigrateImportChunk and MigrateRecordFlipGate remain admitted
-    // under the operator policy below, unchanged. Fail-closed
-    // backups sit behind this fence at the DO class (the
-    // _migrationChunkRequired surface hook) and the API layer.
-    if (peek && peek.type === "MigrateImportBindings")
-      return json(403, { error: "migration_chunk_required" }, cors);
-    if (peek && MIGRATION_COMMAND_TYPES.includes(peek.type)) {
-      const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
-      if (!operatorToken || operatorToken === env.OPALREADER_ACCESS_TOKEN)
-        return json(503, { error: "migration_operator_not_configured" }, cors);
-      if (request.headers.get("x-opalreader-operator-token") !== operatorToken)
-        return json(403, { error: "migration_operator_required" }, cors);
-      operatorAdmitted = true;
-    }
+  if (isOperatorRoute) {
+    const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+    if (!operatorToken || operatorToken === env.OPALREADER_ACCESS_TOKEN)
+      return json(503, { error: "migration_operator_not_configured" }, cors);
+    if (request.headers.get("x-opalreader-operator-token") !== operatorToken)
+      return json(403, { error: "migration_operator_required" }, cors);
+    operatorAdmitted = true;
   }
   if (!env.COORDINATOR)
     return json(503, { error: "coordinator_not_bound" }, cors);

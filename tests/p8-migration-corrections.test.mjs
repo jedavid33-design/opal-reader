@@ -149,6 +149,19 @@ const importBody = (id, bookId, book) => ({ command_id: id, type: "MigrateImport
 const gateBody = (id, bookId, certificateSha256) => ({ command_id: id, type: "MigrateRecordFlipGate",
   payload: { migrationId: MIG, bookId, certificateSha256 } });
 
+// Option D two-phase send through the worker world: submit under
+// the client credential alone; a durable submit refusal is itself
+// the final receipt; otherwise approve the server-returned hash
+// under the operator credential and return the final receipt.
+const postMigration = async (w, body) => {
+  const sub = await w.call("/v2/commands", { method: "POST", body });
+  const first = await sub.json();
+  if (first.state !== "pending_operator") return first;
+  const app = await w.call("/v2/command-approvals", { method: "POST", operator: OPERATOR_TOKEN,
+    body: { commandId: body.command_id, payloadSha256: first.payloadSha256 } });
+  return app.json();
+};
+
 // ============================================================== G1
 test("G1 worker path: imports fetch only their own book's bytes; read-only surfaces fetch ZERO audio", async () => {
   const manifest = { snapshotDigest: FREEZE, books: {} };
@@ -162,10 +175,7 @@ test("G1 worker path: imports fetch only their own book's bytes; read-only surfa
 
   // Import book 1 through the real worker entry + DO class.
   w.bucket.resetGets();
-  const imp1 = await w.call("/v2/commands", { method: "POST", operator: OPERATOR_TOKEN,
-    body: importBody("g1-imp-1", "g1-book-1", book1) });
-  assert.equal(imp1.status, 200);
-  const imp1Body = await imp1.json();
+  const imp1Body = await postMigration(w, importBody("g1-imp-1", "g1-book-1", book1));
   assert.equal(imp1Body.outcome, "applied", JSON.stringify(imp1Body));
   assert.deepEqual(w.bucket.keys.sort(), book1Keys);       // exactly its own objects
   assert.equal(w.bucket.totalBytes, book1Bytes);            // and nothing else's
@@ -186,9 +196,9 @@ test("G1 worker path: imports fetch only their own book's bytes; read-only surfa
   }
   const view = await (await w.call("/v2/migration/book/g1-book-1")).json();
   assert.equal(view.completeness.complete, true);
-  const gate = await w.call("/v2/commands", { method: "POST", operator: OPERATOR_TOKEN,
-    body: gateBody("g1-gate-1", "g1-book-1", imp1Body.certificate.certificateSha256) });
-  assert.equal((await gate.json()).outcome, "applied");
+  const gate = await postMigration(w,
+    gateBody("g1-gate-1", "g1-book-1", imp1Body.certificate.certificateSha256));
+  assert.equal(gate.outcome, "applied");
   assert.equal(w.bucket.gets.length, 0, `read-only surfaces fetched audio: ${JSON.stringify(w.bucket.gets)}`);
   assert.equal(w.bucket.totalBytes, 0);
 
@@ -198,9 +208,8 @@ test("G1 worker path: imports fetch only their own book's bytes; read-only surfa
 
   // Successive import: book 2's import does NOT re-fetch book 1.
   w.bucket.resetGets();
-  const imp2 = await w.call("/v2/commands", { method: "POST", operator: OPERATOR_TOKEN,
-    body: importBody("g1-imp-2", "g1-book-2", book2) });
-  assert.equal((await imp2.json()).outcome, "applied");
+  const imp2 = await postMigration(w, importBody("g1-imp-2", "g1-book-2", book2));
+  assert.equal(imp2.outcome, "applied");
   assert.deepEqual(w.bucket.keys.sort(), book2Keys);
   assert.equal(w.bucket.totalBytes, book2Bytes);
 
@@ -233,103 +242,115 @@ test("G1 worker path: imports fetch only their own book's bytes; read-only surfa
 });
 
 // ============================================================== G2
-test("G2 worker entry: migration commands are operator-only, fail closed, and never reach the coordinator otherwise", async () => {
+test("G2 worker entry (Option D): submits pend under the client credential; approvals are operator-only and fail closed", async () => {
   const manifest = { snapshotDigest: FREEZE, books: {} };
   const w = makeWorkerWorld({ manifest });
   const book = workerBook(w.bucket, manifest, "g2-book", [128]);
 
-  // Ordinary client token, no operator credential → 403, and the
-  // coordinator never saw a command.
+  // Ordinary client token, no operator credential → the command
+  // PENDS. Nothing has executed: no commands row.
   let res = await w.call("/v2/commands", { method: "POST", body: importBody("g2-a", "g2-book", book) });
+  assert.equal(res.status, 200);
+  const pendA = await res.json();
+  assert.equal(pendA.state, "pending_operator");
+  assert.equal(w.commandCount(), 0);
+  // A client-forged admission mark is worthless: the submit
+  // behaves exactly like a plain submit (it pends), and a forged
+  // mark on the approval route admits nothing.
+  res = await w.call("/v2/commands", { method: "POST", body: importBody("g2-b", "g2-book", book),
+    headers: { "x-opalreader-operator-admitted": "1" } });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).state, "pending_operator");
+  assert.equal(w.commandCount(), 0);
+  res = await w.call("/v2/command-approvals", { method: "POST",
+    headers: { "x-opalreader-operator-admitted": "1" },
+    body: { commandId: "g2-a", payloadSha256: pendA.payloadSha256 } });
   assert.equal(res.status, 403);
   assert.equal((await res.json()).error, "migration_operator_required");
   assert.equal(w.commandCount(), 0);
-  // A client-forged admission mark is worthless (the entry
-  // overwrites it unconditionally).
-  res = await w.call("/v2/commands", { method: "POST", body: importBody("g2-b", "g2-book", book),
-    headers: { "x-opalreader-operator-admitted": "1" } });
+  // Wrong operator credential on the approval route → 403.
+  res = await w.call("/v2/command-approvals", { method: "POST", operator: "test-operator-WRONG",
+    body: { commandId: "g2-a", payloadSha256: pendA.payloadSha256 } });
   assert.equal(res.status, 403);
   assert.equal(w.commandCount(), 0);
-  // Wrong operator credential → 403.
-  res = await w.call("/v2/commands", { method: "POST", operator: "test-operator-WRONG",
-    body: importBody("g2-c", "g2-book", book) });
-  assert.equal(res.status, 403);
-  assert.equal(w.commandCount(), 0);
-  // The gate command is fenced the same way.
-  res = await w.call("/v2/commands", { method: "POST",
-    body: gateBody("g2-g", "g2-book", "0".repeat(64)) });
-  assert.equal(res.status, 403);
-  assert.equal(w.commandCount(), 0);
-  // Correct operator credential → admitted; the import applies.
-  res = await w.call("/v2/commands", { method: "POST", operator: OPERATOR_TOKEN,
-    body: importBody("g2-d", "g2-book", book) });
+  // Approval under the correct operator credential → the import
+  // applies exactly once.
+  res = await w.call("/v2/command-approvals", { method: "POST", operator: OPERATOR_TOKEN,
+    body: { commandId: "g2-a", payloadSha256: pendA.payloadSha256 } });
   assert.equal(res.status, 200);
   assert.equal((await res.json()).outcome, "applied");
   assert.equal(w.commandCount(), 1);
 
-  // Operator credential UNSET → 503 fail-closed, even presenting one.
+  // Operator credential UNSET → approvals are 503 fail-closed,
+  // even presenting one; the submit itself still pends.
   const wUnset = makeWorkerWorld({ operatorToken: null, manifest });
-  res = await wUnset.call("/v2/commands", { method: "POST", operator: OPERATOR_TOKEN,
-    body: importBody("g2-e", "g2-book", book) });
+  res = await wUnset.call("/v2/commands", { method: "POST", body: importBody("g2-e", "g2-book", book) });
+  assert.equal(res.status, 200);
+  const pendE = await res.json();
+  res = await wUnset.call("/v2/command-approvals", { method: "POST", operator: OPERATOR_TOKEN,
+    body: { commandId: "g2-e", payloadSha256: pendE.payloadSha256 } });
   assert.equal(res.status, 503);
   assert.equal((await res.json()).error, "migration_operator_not_configured");
   assert.equal(wUnset.commandCount(), 0);
   // Operator credential EQUAL to the client token → still closed:
   // a shared value is not a distinct credential.
   const wShared = makeWorkerWorld({ operatorToken: CLIENT_TOKEN, manifest });
-  res = await wShared.call("/v2/commands", { method: "POST", operator: CLIENT_TOKEN,
-    body: importBody("g2-f", "g2-book", book) });
+  res = await wShared.call("/v2/commands", { method: "POST", body: importBody("g2-f", "g2-book", book) });
+  const pendF = await res.json();
+  res = await wShared.call("/v2/command-approvals", { method: "POST", operator: CLIENT_TOKEN,
+    body: { commandId: "g2-f", payloadSha256: pendF.payloadSha256 } });
   assert.equal(res.status, 503);
   assert.equal(wShared.commandCount(), 0);
 
-  // API-layer fence: a request that reaches the DO without the
-  // entry's admission mark is refused before the coordinator.
-  const direct = await w.instance.fetch(new Request("https://do.test/v2/commands", {
+  // API-layer fence: an approval request that reaches the DO
+  // without the entry's admission mark is refused before anything
+  // executes — the internal headers alone do not admit it.
+  const direct = await w.instance.fetch(new Request("https://do.test/v2/command-approvals", {
     method: "POST",
     headers: { "x-opalreader-internal": "1", "x-opalreader-scope": "staging-smoke",
       "content-type": "application/json" },
-    body: JSON.stringify(importBody("g2-h", "g2-book", book)) }));
+    body: JSON.stringify({ commandId: "g2-b", payloadSha256: "0".repeat(64) }) }));
   assert.equal(direct.status, 403);
   assert.equal((await direct.json()).error, "migration_operator_required");
-  assert.equal(w.commandCount(), 1); // still only the admitted one
+  assert.equal(w.commandCount(), 1); // still only the approved one
 });
 
 test("G2 pinned freeze: caller input may only MATCH the approved freeze, never define it", async () => {
   const manifest = { snapshotDigest: FREEZE, books: {} };
   const w = makeWorkerWorld({ manifest });
   const book = workerBook(w.bucket, manifest, "g2-pin-book", [64, 96]);
-  const post = (body) => w.call("/v2/commands", { method: "POST", operator: OPERATOR_TOKEN, body });
+  const post = (body) => postMigration(w, body);
 
   // Unapproved freeze digest (self-consistent caller claim).
-  let body = await (await post({ ...importBody("g2p-a", "g2-pin-book", book),
-    payload: { ...importBody("g2p-a", "g2-pin-book", book).payload, freezeDigest: "freeze-of-my-own" } })).json();
+  let body = await post({ ...importBody("g2p-a", "g2-pin-book", book),
+    payload: { ...importBody("g2p-a", "g2-pin-book", book).payload, freezeDigest: "freeze-of-my-own" } });
   assert.equal(body.outcome, "rejected");
   assert.equal(body.reason, "migration_freeze_unapproved");
   // A book outside the approved freeze.
-  body = await (await post(importBody("g2p-b", "g2-other-book",
-    { rows: book.rows, content: { title: "X", occurrenceIds: book.content.occurrenceIds } }))).json();
+  body = await post(importBody("g2p-b", "g2-other-book",
+    { rows: book.rows, content: { title: "X", occurrenceIds: book.content.occurrenceIds } }));
   assert.equal(body.outcome, "rejected");
   assert.equal(body.reason, "migration_freeze_unapproved");
   // One row's size redefined by the caller.
   const resized = book.rows.map((r, i) => i === 0
     ? { ...r, manifest: { ...r.manifest, size: r.manifest.size + 1 } } : r);
-  body = await (await post({ command_id: "g2p-c", type: "MigrateImportBindings",
+  body = await post({ command_id: "g2p-c", type: "MigrateImportBindings",
     payload: { migrationId: MIG, freezeDigest: FREEZE, bookId: "g2-pin-book",
-               content: book.content, rows: resized } })).json();
+               content: book.content, rows: resized } });
   assert.equal(body.outcome, "rejected");
   assert.equal(body.reason, "migration_manifest_mismatch");
   // A row set replayed from another book's manifest (extra row).
   const extended = [...book.rows, { occurrenceId: "g2-pin-book-oX",
     revisionKey: book.rows[0].revisionKey, cacheKey: book.rows[0].cacheKey,
     manifest: book.rows[0].manifest }];
-  body = await (await post({ command_id: "g2p-d", type: "MigrateImportBindings",
+  body = await post({ command_id: "g2p-d", type: "MigrateImportBindings",
     payload: { migrationId: MIG, freezeDigest: FREEZE, bookId: "g2-pin-book",
                content: { title: "g2-pin-book", occurrenceIds: [...book.content.occurrenceIds, "g2-pin-book-oX"] },
-               rows: extended } })).json();
+               rows: extended } });
   assert.equal(body.outcome, "rejected");
   assert.equal(body.reason, "migration_manifest_mismatch");
   // The exact pinned rows import cleanly.
-  body = await (await post(importBody("g2p-e", "g2-pin-book", book))).json();
+  body = await post(importBody("g2p-e", "g2-pin-book", book));
   assert.equal(body.outcome, "applied");
 });
 

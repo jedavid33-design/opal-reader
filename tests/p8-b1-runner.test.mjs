@@ -211,18 +211,28 @@ function makeProdSurface() {
   return { bucket, state, call, rows, manifest, chunksManifest, carryManifest };
 }
 
+// Option D two-phase transport: submit under the client
+// credential (pends), approve under the operator credential
+// against the SEPARATE approval route. The drop simulation loses
+// the APPROVAL response after it landed: the command executed,
+// and the runner must resolve the outcome from the stored
+// receipt under the same id rather than re-sending.
 function workerTransport(surface, { dropFirstPositions = false } = {}) {
   let dropped = false;
   return {
-    async sendCommand(cmd) {
-      const res = await surface.call("/v2/commands",
-        { method: "POST", operator: PROD_OPERATOR, body: cmd });
-      const receipt = await res.json();
-      if (dropFirstPositions && !dropped && cmd.type === "MigrateImportPositions") {
-        dropped = true; // the command LANDED; the response is "lost"
-        throw new Error("simulated transport drop after execution");
+    async submitCommand(cmd) {
+      const res = await surface.call("/v2/commands", { method: "POST", body: cmd });
+      return res.json();
+    },
+    async approveCommand({ commandId, payloadSha256 }) {
+      const res = await surface.call("/v2/command-approvals",
+        { method: "POST", operator: PROD_OPERATOR, body: { commandId, payloadSha256 } });
+      const view = await res.json();
+      if (dropFirstPositions && !dropped && commandId.endsWith(":positions")) {
+        dropped = true; // the approval LANDED; the response is "lost"
+        throw new Error("simulated transport drop after approval");
       }
-      return receipt;
+      return view;
     },
     async readView(bookId) {
       const res = await surface.call(`/v2/migration/book/${encodeURIComponent(bookId)}`);
@@ -368,7 +378,7 @@ test("PO shape through the REAL production Worker: 6 chunks + positions + 3 supe
   assert.equal(gated.view.gate.flipped, true);
 });
 
-test("operator fence on the new commands: the carry commands without the operator credential are refused at the production entry and record nothing", async () => {
+test("Option D admission: the carry commands pend under the client credential alone, and only an operator approval — never the submit — executes them", async () => {
   const surface = makeProdSurface();
   const bookId = "fence-book";
   const { plan } = surfaceBook(surface, {
@@ -376,24 +386,46 @@ test("operator fence on the new commands: the carry commands without the operato
     limits: { maxRowsPerChunk: 64, maxChunkBytes: 64 * 1024 * 1024, maxItemBytes: 16 * 1024 * 1024 },
     positionAt: 0, positionOffset: 0, checkpoints: [], jobs: [] });
   const positions = plan.commands.find((c) => c.type === "MigrateImportPositions");
-  for (const operator of [undefined, "wrong-operator-token"]) {
+  // The submit succeeds WITHOUT any operator credential — and
+  // executes nothing: no commands row, no carry row, zero
+  // bucket contact. An operator header riding the submit
+  // changes nothing (the retired dual-header shape is inert).
+  for (const operator of [undefined, PROD_OPERATOR]) {
     const res = await surface.call("/v2/commands",
-      { method: "POST", operator, body: positions });
-    assert.equal(res.status, 403);
-    const body = await res.json();
-    assert.equal(body.error, "migration_operator_required");
+      { method: "POST", operator, body: { ...positions,
+        command_id: `${positions.command_id}:${operator ? "dual" : "plain"}` } });
+    assert.equal(res.status, 200);
+    const view = await res.json();
+    assert.equal(view.state, "pending_operator");
+    assert.equal(typeof view.payloadSha256, "string");
   }
-  assert.equal(surface.rows("commands").length, 0,
-    "a fenced command is refused before the coordinator records anything");
-  // And with the operator credential the same payload is admitted
-  // (it then refuses on its merits — the import has not run —
-  // proving admission, not success, is what the fence controls).
-  const res = await surface.call("/v2/commands",
-    { method: "POST", operator: PROD_OPERATOR, body: positions });
+  assert.equal(surface.rows("commands").length, 0);
+  assert.equal(surface.rows("migration_carry").length, 0);
+  assert.equal(surface.bucket.gets.length, 0);
+  // Approvals without / with the wrong operator credential are
+  // refused at the production entry's fence.
+  const plainId = positions.command_id + ":plain";
+  const stored = surface.rows("pending_commands").find((r) => r.command_id === plainId);
+  for (const operator of [undefined, "wrong-operator-token"]) {
+    const res = await surface.call("/v2/command-approvals",
+      { method: "POST", operator,
+        body: { commandId: plainId, payloadSha256: stored.payload_sha256 } });
+    assert.equal(res.status, 403);
+    assert.equal((await res.json()).error, "migration_operator_required");
+  }
+  assert.equal(surface.rows("commands").length, 0, "still nothing executed");
+  // With the operator credential the approval executes — and the
+  // command then refuses on its merits (the import has not run),
+  // proving the fence controls admission to execution, not
+  // success.
+  const res = await surface.call("/v2/command-approvals",
+    { method: "POST", operator: PROD_OPERATOR,
+      body: { commandId: plainId, payloadSha256: stored.payload_sha256 } });
   assert.equal(res.status, 200);
   const receipt = await res.json();
   assert.equal(receipt.outcome, "rejected");
   assert.equal(receipt.element, "import_incomplete");
+  assert.equal(surface.rows("commands").length, 1);
 });
 
 test("driver discipline: a digest-pending chunk is never sent; a durable rejection halts the book with no retry and no repair", async () => {

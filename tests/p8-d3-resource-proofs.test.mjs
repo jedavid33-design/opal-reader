@@ -136,7 +136,20 @@ function makeProdWorld() {
         ...(operator !== undefined ? { "x-opalreader-operator-token": operator } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }), env);
-  return { bucket, state, instance, call, manifest, chunksManifest };
+  // Option D two-phase send: submit under the client credential
+  // (the command pends), then approve the server-returned hash
+  // under the operator credential; the approval response carries
+  // the final receipt. The resource being measured — the prime —
+  // runs inside the approval, exactly as production will run it.
+  const sendMigration = async (cmd) => {
+    const sub = await call("/v2/commands", { method: "POST", body: cmd });
+    const pending = await sub.json();
+    assert.equal(pending.state, "pending_operator", JSON.stringify(pending));
+    const app = await call("/v2/command-approvals", { method: "POST", operator: OPERATOR,
+      body: { commandId: cmd.command_id, payloadSha256: pending.payloadSha256 } });
+    return app.json();
+  };
+  return { bucket, state, instance, call, sendMigration, manifest, chunksManifest };
 }
 
 // ---- memory sampling while a phase runs. Reports, per metric,
@@ -184,14 +197,12 @@ test("resource proof: the corpus' largest single object (5,787,234 B) primes wit
   const sampler = startSampler();
   const cpu0 = process.cpuUsage();
   const t0 = performance.now();
-  const res = await world.call("/v2/commands", { method: "POST", operator: OPERATOR,
-    body: chunkCmd(`${MIG}:${bookId}:chunk:0`, {
+  const body = await world.sendMigration(chunkCmd(`${MIG}:${bookId}:chunk:0`, {
       migrationId: MIG, freezeDigest: FREEZE, bookId, chunkIndex: 0,
-      content, rows: [row] }) });
+      content, rows: [row] }));
   const wallMs = performance.now() - t0;
   const cpu = cpuMs(process.cpuUsage(cpu0));
   const mem = sampler.stop();
-  const body = await res.json();
   assert.equal(body.outcome, "applied", JSON.stringify(body));
   assert.equal(body.bookComplete, true);
   assert.equal(bucket.gets.length, 2, "one wav object = mp3 probe miss + wav hit");
@@ -257,13 +268,11 @@ test("resource proof: the largest book (Pucked Over shape — 510 rows, 1,555,99
     bucket.resetGets();
     const cpu0 = process.cpuUsage();
     const t0 = performance.now();
-    const res = await world.call("/v2/commands", { method: "POST", operator: OPERATOR,
-      body: chunkCmd(`${MIG}:${BOOK}:chunk:${c.index}`, {
+    const body = await world.sendMigration(chunkCmd(`${MIG}:${BOOK}:chunk:${c.index}`, {
         migrationId: MIG, freezeDigest: FREEZE, bookId: BOOK, chunkIndex: c.index,
-        content: c.index === 0 ? content : undefined, rows: slice }) });
+        content: c.index === 0 ? content : undefined, rows: slice }));
     const wallMs = performance.now() - t0;
     const cpu = cpuMs(process.cpuUsage(cpu0));
-    const body = await res.json();
     assert.equal(body.outcome, "applied", `chunk ${c.index}: ${JSON.stringify(body).slice(0, 200)}`);
     const expectedGets = slice.reduce((n, r) => n + (r.manifest.format === "wav" ? 2 : 1), 0);
     assert.equal(bucket.gets.length, expectedGets, `chunk ${c.index} GET count`);
@@ -289,10 +298,9 @@ test("resource proof: the largest book (Pucked Over shape — 510 rows, 1,555,99
   bucket.resetGets();
   const view = await (await world.call(`/v2/migration/book/${BOOK}`)).json();
   assert.equal(view.completeness.complete, true);
-  const gate = await world.call("/v2/commands", { method: "POST", operator: OPERATOR,
-    body: { command_id: `${MIG}:gate-po`, type: "MigrateRecordFlipGate",
-      payload: { migrationId: MIG, bookId: BOOK, certificateSha256: last.certificateSha256 } } });
-  assert.equal((await gate.json()).outcome, "applied");
+  const gate = await world.sendMigration({ command_id: `${MIG}:gate-po`, type: "MigrateRecordFlipGate",
+      payload: { migrationId: MIG, bookId: BOOK, certificateSha256: last.certificateSha256 } });
+  assert.equal(gate.outcome, "applied");
   assert.equal(bucket.gets.length, 0, "read-back + gate fetched no audio");
   // Memory: across a 1.45 GiB book imported in ~250 MiB chunks,
   // resident growth stays a small fraction of the 128 MB isolate

@@ -125,6 +125,18 @@ export const SYNC_FAMILIES = ["content", "bindings", "position", "settings"];
 
 const WATCHDOG_PERIOD_MS = 10 * 60 * 1000;
 const LEASE_MS = 15 * 60 * 1000;
+// Option D two-phase constants (design §3.3.7, §3.10): a pending
+// migration command awaits operator approval for at most 24
+// hours; a claim's lease is 10 minutes — orders of magnitude
+// beyond the bounded preparation time of the largest chunk; its
+// only job is to make a dead claim DETECTABLE (its lapse leads to
+// reconciliation, never to re-execution). Both are server-side
+// constants and never client-controllable; env may override them
+// (deployment configuration inside the trust boundary — the
+// staging short-TTL configuration of §3.8 — and tests); request
+// data never can.
+const PENDING_COMMAND_TTL_MS = 24 * 60 * 60 * 1000;
+const CLAIM_LEASE_MS = 10 * 60 * 1000;
 const DAILY_QUOTA_LIMIT = 100; // Gemini Tier 1 requests/day (provider day, PT)
 const SCHEDULE_MAX_ATTEMPTS = 8;
 
@@ -293,6 +305,20 @@ CREATE TABLE IF NOT EXISTS migration_carry (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,
   migration_id TEXT, book_id TEXT NOT NULL, kind TEXT NOT NULL,
   command_id TEXT, payload_hash TEXT NOT NULL, payload_json TEXT NOT NULL);
+-- Option D (transport plan update Part 3, Revision 3): the
+-- two-phase pending-command store. One record per migration
+-- command id submitted through the two-phase protocol: the
+-- verbatim payload, its server-computed canonical hash, and the
+-- §3.3.2 state machine's stored state. Final states carry the
+-- final receipt (receipt_json); needs_reconciliation settlements
+-- record their evidence in detail_json. Additive only — no
+-- pre-existing table changes shape (§3.6).
+CREATE TABLE IF NOT EXISTS pending_commands (
+  command_id TEXT PRIMARY KEY, type TEXT NOT NULL, payload_json TEXT NOT NULL,
+  migration_id TEXT, payload_sha256 TEXT NOT NULL, state TEXT NOT NULL,
+  submitted_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+  claim_owner TEXT, claimed_at INTEGER,
+  receipt_json TEXT, detail_json TEXT);
 `;
 
 function dayKeyPT(nowMs) {
@@ -444,6 +470,15 @@ export class GenerationCoordinator {
       return { ok: false, reason: "command_id_required" };
     if (!COMMAND_TYPES.includes(cmd.type))
       return { ok: false, reason: "unknown_command_type", type: cmd.type };
+    // Option D replay fence (§3.3.4): a two-phase record under
+    // this id is answered from the pending store — the state
+    // view, or the final receipt for a final state — and is
+    // NEVER executed or replayed as an outcome while non-final.
+    // Without this fence, resubmitting a pending migration
+    // command through this legacy dispatch would run it directly
+    // and bypass the operator approval entirely.
+    const pendingRec = this._pendingRecord(cmd.command_id);
+    if (pendingRec) return this._pendingView(pendingRec);
     const existing = this._oneOrNull(`SELECT * FROM commands WHERE command_id = ?`, cmd.command_id);
     if (existing) {
       return { command_id: existing.command_id, outcome: existing.outcome,
@@ -477,22 +512,664 @@ export class GenerationCoordinator {
       if (st && st.ok) prepared = await this._prepareMigrationImport(cmd.payload || {});
     }
     await this.wake();
-    const outcome = this._tx(() => {
-      this.sql.exec(
-        `INSERT INTO commands (command_id, type, payload_json, received_at, outcome)
-         VALUES (?, ?, ?, ?, 'recorded')`,
-        cmd.command_id, cmd.type, JSON.stringify(cmd.payload || {}), this._now());
-      let result;
-      if (this._frozen() && cmd.type !== "FreezeDirective")
-        result = { outcome: "rejected", reason: "frozen" };
-      else
-        result = this._applyCommand(cmd.type, cmd.payload || {}, cmd.command_id, prepared);
-      this.sql.exec(`UPDATE commands SET outcome = ?, outcome_json = ? WHERE command_id = ?`,
-        result.outcome, JSON.stringify(result), cmd.command_id);
-      return result;
-    });
+    const outcome = this._tx(() => this._recordAndApply(cmd, prepared));
     await this._armAlarmIfEarlier(); // the command may have scheduled earlier work
     return { command_id: cmd.command_id, ...outcome };
+  }
+
+  // The record+apply block of handleCommand, shared verbatim
+  // with the Option D T3 step so an approved execution is
+  // indistinguishable from the legacy dispatch: insert the
+  // commands row, apply, record the outcome. Caller holds the
+  // transaction.
+  _recordAndApply(cmd, prepared) {
+    this.sql.exec(
+      `INSERT INTO commands (command_id, type, payload_json, received_at, outcome)
+       VALUES (?, ?, ?, ?, 'recorded')`,
+      cmd.command_id, cmd.type, JSON.stringify(cmd.payload || {}), this._now());
+    let result;
+    if (this._frozen() && cmd.type !== "FreezeDirective")
+      result = { outcome: "rejected", reason: "frozen" };
+    else
+      result = this._applyCommand(cmd.type, cmd.payload || {}, cmd.command_id, prepared);
+    this.sql.exec(`UPDATE commands SET outcome = ?, outcome_json = ? WHERE command_id = ?`,
+      result.outcome, JSON.stringify(result), cmd.command_id);
+    return result;
+  }
+
+  // ============ Option D: two-phase migration commands =============
+  // (Transport plan update Part 3, Revision 3; Rowan final design
+  // review 6373710222.) The four production migration command
+  // types no longer execute on submission. The client credential
+  // SUBMITS: T1 validates (chunk mandate at the fences, shape,
+  // chunk-1 content pin — failures are durable refusals, never
+  // pending) and stores the command verbatim + inert as
+  // pending_operator with a server-computed canonical hash. The
+  // operator credential APPROVES on a separate request naming
+  // only (commandId, payloadSha256): T2 claims atomically, the
+  // existing preparation runs OUTSIDE any transaction, and T3
+  // applies + records the final receipt under the ORIGINAL
+  // command id, re-checking owner + state + lease validity
+  // inside the transaction. Execution itself is _recordAndApply —
+  // every execution-time fence (pins, carry completeness,
+  // flip-gate comparisons) runs exactly as before. Reads are
+  // pure (I2): they PROJECT overdue/expired and stale-claim
+  // states and persist nothing; durable transitions materialize
+  // only at mutation entry points (T1 duplicate submit, T2, the
+  // reconciliation route). An uncertain execution outcome is
+  // needs_reconciliation: manual, evidence-verified settlement
+  // only, never an automatic redo (invariant 6, §3.3.6).
+
+  _pendingTtlMs() { return this.env.pendingCommandTtlMs ?? PENDING_COMMAND_TTL_MS; }
+  _claimLeaseMs() { return this.env.claimLeaseMs ?? CLAIM_LEASE_MS; }
+
+  // The canonical command the payload hash binds: the command
+  // id, its type, and the payload EXACTLY as submitted. A single
+  // differing byte anywhere — id, type, or any payload field —
+  // is a different command (§3.3.6 invariant 2).
+  _pendingHashOf(cmd) {
+    return sha256HexText(canonicalJson({
+      command_id: cmd.command_id, type: cmd.type, payload: cmd.payload || {} }));
+  }
+
+  _pendingRecord(commandId) {
+    return this._oneOrNull(
+      `SELECT * FROM pending_commands WHERE command_id = ?`, commandId);
+  }
+
+  // The state VIEW of a two-phase record (§3.3.2/§3.3.4): the
+  // stored state projected against the coordinator clock. PURE —
+  // SELECTs only, writes nothing; a projected status is
+  // authoritative for STOP/display and settles nothing durably.
+  // Final states carry their stored receipt's fields at top
+  // level; non-final states are unmistakably not receipts (they
+  // have no outcome field).
+  _pendingView(rec, now = this._now()) {
+    if (rec.state === "applied" || rec.state === "refused" || rec.state === "expired") {
+      return { command_id: rec.command_id, type: rec.type,
+               ...(rec.receipt_json ? JSON.parse(rec.receipt_json) : {}),
+               state: rec.state, storedState: rec.state, projected: false };
+    }
+    const view = { command_id: rec.command_id, type: rec.type,
+      migrationId: rec.migration_id, payloadSha256: rec.payload_sha256,
+      state: rec.state, storedState: rec.state, projected: false,
+      submittedAt: rec.submitted_at, expiresAt: rec.expires_at };
+    if (rec.state === "pending_operator" && now >= rec.expires_at) {
+      view.state = "expired"; view.projected = true;
+    } else if (rec.state === "executing" &&
+               (rec.claimed_at === null || now >= rec.claimed_at + this._claimLeaseMs())) {
+      view.state = "needs_reconciliation"; view.projected = true;
+    }
+    if (rec.state === "executing" || rec.state === "needs_reconciliation")
+      view.claimedAt = rec.claimed_at;
+    if (rec.detail_json) view.detail = JSON.parse(rec.detail_json);
+    return view;
+  }
+
+  // The receipt surface for BOTH command generations: a two-phase
+  // record answers with its state view; anything else keeps the
+  // pre-existing receipt shape byte-for-byte. Pure (I2).
+  commandReceiptView(commandId) {
+    const rec = this._pendingRecord(commandId);
+    if (rec) return this._pendingView(rec);
+    return this.receipt(commandId);
+  }
+
+  // Materialize a projected transition at a mutation entry point
+  // (T1 duplicate submit, T2, the reconciliation route — the
+  // only writers besides T3/T3′). The caller runs inside _tx
+  // with a fresh record and re-reads the row if it continues.
+  _materializePending(rec, now) {
+    if (rec.state === "pending_operator" && now >= rec.expires_at) {
+      this.sql.exec(
+        `UPDATE pending_commands SET state = 'expired', receipt_json = ? WHERE command_id = ?`,
+        JSON.stringify({ outcome: "rejected", reason: "pending_expired" }), rec.command_id);
+    } else if (rec.state === "executing" &&
+               (rec.claimed_at === null ||
+                now >= rec.claimed_at + this._claimLeaseMs())) {
+      // A claimless executing record is definitionally stale
+      // (T2 writes the claim atomically with the state), so it
+      // materializes exactly as the read projection shows it.
+      this.sql.exec(
+        `UPDATE pending_commands SET state = 'needs_reconciliation', claim_owner = NULL
+         WHERE command_id = ?`, rec.command_id);
+    }
+  }
+
+  // The row-shape discipline shared by the row-carrying submit
+  // checks — the same checks the apply steps name migration_shape
+  // / duplicate_row, hoisted to submit time.
+  _migrationRowShapeError(rows, bookId) {
+    const seenOcc = new Set();
+    for (const r of rows) {
+      if (!r || !r.occurrenceId || !r.revisionKey || !r.cacheKey ||
+          !r.manifest || typeof r.manifest.sha256 !== "string" ||
+          typeof r.manifest.size !== "number" || !r.manifest.format)
+        return { outcome: "rejected", reason: "migration_shape", bookId };
+      if (seenOcc.has(r.occurrenceId))
+        return { outcome: "rejected", reason: "duplicate_row", bookId,
+                 occurrenceId: r.occurrenceId };
+      seenOcc.add(r.occurrenceId);
+    }
+    return null;
+  }
+
+  // The jobs-carry descriptor + set hash (§3A.3) — computed
+  // identically by the submit check, the effects audit, and the
+  // reconciled receipt; the apply step's own computation is the
+  // fourth copy and the suite pins all four to the same value.
+  _jobsDescriptor(p) {
+    const descriptor = (p.aggregates || []).map(a => ({
+      jobId: a.jobId, chapterIndex: a.chapterIndex, v2State: a.v2State,
+      definitionDigest: a.definitionDigest,
+      occurrenceSetSha256: sha256HexText(canonicalJson(a.occurrences)) }));
+    return { descriptor, setSha256: sha256HexText(canonicalJson(descriptor)) };
+  }
+
+  // T1 validation (design §3.3.3 Phase 1): every check that does
+  // not execute — payload shape, the freeze/chunk/content pins,
+  // and the carry pins, mirroring the apply steps' DETERMINISTIC
+  // heads. Durable-progress verdicts (import completeness, chunk
+  // order/convergence, prior carries, stored-state
+  // recomputation) are NOT submit checks: they are re-verified
+  // at execution inside T3. Returns null when the command may
+  // pend, else the durable refusal object.
+  _migrationSubmitRefusal(cmd) {
+    const p = cmd.payload || {};
+    const bookId = p.bookId || null;
+    switch (cmd.type) {
+      case "MigrateImportBindings": {
+        const rows = Array.isArray(p.rows) ? p.rows : null;
+        if (!bookId || !rows || rows.length === 0 || !p.migrationId || !p.freezeDigest)
+          return { outcome: "rejected", reason: "migration_shape", bookId };
+        if (this._bookTombstoned(bookId))
+          return { outcome: "rejected", reason: "rejected_tombstoned", bookId };
+        const rowShape = this._migrationRowShapeError(rows, bookId);
+        if (rowShape) return rowShape;
+        return this._migrationManifestError(p);
+      }
+      case "MigrateImportChunk": {
+        const rows = Array.isArray(p.rows) ? p.rows : null;
+        if (!bookId || !rows || rows.length === 0 || !p.migrationId || !p.freezeDigest ||
+            !Number.isInteger(p.chunkIndex) || p.chunkIndex < 0)
+          return { outcome: "rejected", reason: "migration_shape", bookId };
+        if (this._bookTombstoned(bookId))
+          return { outcome: "rejected", reason: "rejected_tombstoned", bookId };
+        const rowShape = this._migrationRowShapeError(rows, bookId);
+        if (rowShape) return rowShape;
+        const st = this._migrationChunkState(p, { submitPhase: true });
+        return st && st.rejection ? st.rejection : null;
+      }
+      case "MigrateImportPositions": {
+        const pos = p.position;
+        if (!bookId || !p.migrationId || !p.freezeDigest ||
+            !pos || typeof pos.occurrenceId !== "string" ||
+            typeof pos.offsetSec !== "number" || !(pos.offsetSec >= 0) ||
+            !Array.isArray(p.checkpoints))
+          return { outcome: "rejected", reason: "migration_shape", bookId };
+        if (this._bookTombstoned(bookId))
+          return { outcome: "rejected", reason: "rejected_tombstoned", bookId };
+        const freeze = this._approvedFreeze();
+        if (!freeze || p.freezeDigest !== freeze.snapshotDigest)
+          return { outcome: "rejected", reason: "migration_freeze_unapproved", bookId };
+        const pin = this._carryBook(bookId);
+        if (!pin)
+          return { outcome: "rejected", reason: "migration_carry_mismatch",
+                   bookId, element: "book_unpinned" };
+        const payloadHash = sha256HexText(canonicalJson({ bookId,
+          position: { occurrenceId: pos.occurrenceId, offsetSec: pos.offsetSec },
+          checkpoints: p.checkpoints }));
+        if (payloadHash !== pin.position.payloadSha256)
+          return { outcome: "rejected", reason: "migration_carry_mismatch",
+                   bookId, element: "position_payload" };
+        return null;
+      }
+      case "MigrateImportJobs": {
+        if (!bookId || !p.migrationId || !p.freezeDigest || !Array.isArray(p.aggregates))
+          return { outcome: "rejected", reason: "migration_shape", bookId };
+        if (this._bookTombstoned(bookId))
+          return { outcome: "rejected", reason: "rejected_tombstoned", bookId };
+        const freeze = this._approvedFreeze();
+        if (!freeze || p.freezeDigest !== freeze.snapshotDigest)
+          return { outcome: "rejected", reason: "migration_freeze_unapproved", bookId };
+        const mismatch = (element, extra = {}) =>
+          ({ outcome: "rejected", reason: "migration_carry_mismatch", bookId, element, ...extra });
+        const pin = this._carryBook(bookId);
+        if (!pin) return mismatch("book_unpinned");
+        const seenJobs = new Set();
+        for (const a of p.aggregates) {
+          if (!a || typeof a.jobId !== "string" || !Number.isInteger(a.chapterIndex) ||
+              typeof a.definitionDigest !== "string" || !Array.isArray(a.occurrences))
+            return { outcome: "rejected", reason: "migration_shape", bookId };
+          if (seenJobs.has(a.jobId))
+            return { outcome: "rejected", reason: "duplicate_row", bookId, jobId: a.jobId };
+          seenJobs.add(a.jobId);
+          if (a.v2State !== "parked_policy" && a.v2State !== "superseded")
+            return mismatch("state_not_carryable", { jobId: a.jobId, state: a.v2State ?? null });
+          if (a.kind !== "job" || a.lane !== "standard")
+            return mismatch("kind_lane", { jobId: a.jobId });
+          const seenOcc = new Set();
+          for (const o of a.occurrences) {
+            if (!o || typeof o.occurrenceId !== "string" ||
+                typeof o.revisionKey !== "string" || !OCC_STATES.includes(o.state))
+              return { outcome: "rejected", reason: "migration_shape", bookId };
+            if (seenOcc.has(o.occurrenceId))
+              return { outcome: "rejected", reason: "duplicate_row", bookId,
+                       jobId: a.jobId, occurrenceId: o.occurrenceId };
+            seenOcc.add(o.occurrenceId);
+          }
+        }
+        const { descriptor, setSha256 } = this._jobsDescriptor(p);
+        if (descriptor.length !== pin.jobs.count || setSha256 !== pin.jobs.setSha256)
+          return mismatch("job_set",
+            { expectedCount: pin.jobs.count, foundCount: descriptor.length });
+        return null;
+      }
+      case "MigrateRecordFlipGate": {
+        if (!bookId || !p.migrationId || !p.certificateSha256)
+          return { outcome: "rejected", reason: "migration_shape", bookId };
+        return null;
+      }
+      default:
+        return { outcome: "rejected", reason: "not_a_migration_command", type: cmd.type };
+    }
+  }
+
+  // T1 SUBMIT (client credential; the API layer routes the four
+  // migration types here). Synchronous by construction: zero R2
+  // work, zero business rows — validation is pins + shape only,
+  // and the store is one sync transaction.
+  submitMigrationCommand(cmd) {
+    if (!cmd || typeof cmd.command_id !== "string" || !cmd.command_id)
+      return { ok: false, reason: "command_id_required" };
+    if (!MIGRATION_COMMAND_TYPES.includes(cmd.type))
+      return { ok: false, reason: "not_a_migration_command", type: cmd.type ?? null };
+    const hash = this._pendingHashOf(cmd);
+    const existing = this._pendingRecord(cmd.command_id);
+    if (existing) {
+      if (existing.payload_sha256 !== hash)
+        return { outcome: "rejected", reason: "pending_payload_conflict",
+                 command_id: cmd.command_id, state: existing.state,
+                 storedState: existing.state, projected: false };
+      // A duplicate submit is a mutation entry point (§3.3.2):
+      // it may MATERIALIZE a projected transition, then answers
+      // with the current view. It never overwrites the stored
+      // record and never changes a live state.
+      return this._tx(() => {
+        const rec = this._pendingRecord(cmd.command_id);
+        this._materializePending(rec, this._now());
+        return this._pendingView(this._pendingRecord(cmd.command_id));
+      });
+    }
+    // An id already executed through the legacy dispatch keeps
+    // its legacy replay — the two generations never share an id
+    // silently.
+    const legacy = this._oneOrNull(
+      `SELECT * FROM commands WHERE command_id = ?`, cmd.command_id);
+    if (legacy) {
+      return { command_id: legacy.command_id, outcome: legacy.outcome,
+               ...(legacy.outcome_json ? JSON.parse(legacy.outcome_json) : {}),
+               replayed: true };
+    }
+    const refusal = this._migrationSubmitRefusal(cmd);
+    return this._tx(() => {
+      // Re-check inside the transaction: a racing first submit
+      // of the same id resolves to the duplicate-submit path,
+      // never to a constraint failure.
+      const raced = this._pendingRecord(cmd.command_id);
+      if (raced) {
+        if (raced.payload_sha256 !== hash)
+          return { outcome: "rejected", reason: "pending_payload_conflict",
+                   command_id: cmd.command_id, state: raced.state,
+                   storedState: raced.state, projected: false };
+        this._materializePending(raced, this._now());
+        return this._pendingView(this._pendingRecord(cmd.command_id));
+      }
+      const now = this._now();
+      if (refusal) {
+        this.sql.exec(
+          `INSERT INTO pending_commands (command_id, type, payload_json, migration_id,
+             payload_sha256, state, submitted_at, expires_at, receipt_json)
+           VALUES (?, ?, ?, ?, ?, 'refused', ?, ?, ?)`,
+          cmd.command_id, cmd.type, JSON.stringify(cmd.payload || {}),
+          (cmd.payload && cmd.payload.migrationId) || null, hash, now,
+          now + this._pendingTtlMs(), JSON.stringify(refusal));
+        return this._pendingView(this._pendingRecord(cmd.command_id), now);
+      }
+      this.sql.exec(
+        `INSERT INTO pending_commands (command_id, type, payload_json, migration_id,
+           payload_sha256, state, submitted_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, 'pending_operator', ?, ?)`,
+        cmd.command_id, cmd.type, JSON.stringify(cmd.payload || {}),
+        (cmd.payload && cmd.payload.migrationId) || null, hash, now,
+        now + this._pendingTtlMs());
+      return this._pendingView(this._pendingRecord(cmd.command_id), now);
+    });
+  }
+
+  // T2 CLAIM + preparation + T3 APPLY (operator credential; the
+  // API layer routes POST /v2/command-approvals here). The
+  // claim is one sync transaction; preparation is async and
+  // OUTSIDE any transaction; the apply is one sync transaction
+  // that re-checks owner + state + lease validity before
+  // writing anything (§3.3.2). Returns a state view (a final
+  // state carries its receipt), the processing view when a live
+  // claim by another approval is in flight, or
+  // { ok: false, error: "pending_command_not_found" } for an
+  // unknown id — which stores nothing.
+  async approveMigrationCommand({ commandId, payloadSha256, action = "approve" } = {}) {
+    const claim = this._tx(() => {
+      const now = this._now();
+      const rec = this._pendingRecord(commandId);
+      if (!rec) return { kind: "unknown" };
+      if (rec.state === "applied" || rec.state === "refused" || rec.state === "expired")
+        return { kind: "final", view: this._pendingView(rec, now) };
+      if (rec.state === "needs_reconciliation")
+        return { kind: "stop", view: this._pendingView(rec, now) };
+      if (rec.state === "executing") {
+        // A live claim is processing; a lapsed one materializes
+        // HERE (T2 is a mutation entry point) to the STOP state.
+        if (rec.claimed_at !== null && now >= rec.claimed_at + this._claimLeaseMs()) {
+          this._materializePending(rec, now);
+          return { kind: "stop",
+                   view: this._pendingView(this._pendingRecord(commandId), now) };
+        }
+        return { kind: "processing", view: this._pendingView(rec, now) };
+      }
+      // pending_operator: T2 rechecks expiry against coordinator
+      // time inside this transaction, regardless of what any
+      // earlier read projected (§3.3.2).
+      if (now >= rec.expires_at) {
+        this._materializePending(rec, now);
+        return { kind: "final",
+                 view: this._pendingView(this._pendingRecord(commandId), now) };
+      }
+      if (payloadSha256 !== rec.payload_sha256) {
+        this.sql.exec(
+          `UPDATE pending_commands SET state = 'refused', receipt_json = ? WHERE command_id = ?`,
+          JSON.stringify({ outcome: "rejected", reason: "pending_hash_mismatch" }),
+          commandId);
+        return { kind: "final",
+                 view: this._pendingView(this._pendingRecord(commandId), now) };
+      }
+      if (action === "reject") {
+        this.sql.exec(
+          `UPDATE pending_commands SET state = 'refused', receipt_json = ? WHERE command_id = ?`,
+          JSON.stringify({ outcome: "rejected", reason: "operator_rejected" }), commandId);
+        return { kind: "final",
+                 view: this._pendingView(this._pendingRecord(commandId), now) };
+      }
+      const owner = crypto.randomUUID();
+      this.sql.exec(
+        `UPDATE pending_commands SET state = 'executing', claim_owner = ?, claimed_at = ?
+         WHERE command_id = ?`, owner, now, commandId);
+      return { kind: "claimed", owner, rec: this._pendingRecord(commandId) };
+    });
+    if (claim.kind === "unknown")
+      return { ok: false, error: "pending_command_not_found", command_id: commandId };
+    if (claim.kind !== "claimed") return claim.view;
+
+    // ---- preparation: async, outside every transaction. Only
+    // the row-carrying commands prepare (the pinned prime
+    // discipline, identical to handleCommand's); the carry and
+    // gate commands skip it entirely. Preparation mutates
+    // nothing durable.
+    const rec = claim.rec;
+    const cmd = { command_id: rec.command_id, type: rec.type,
+                  payload: JSON.parse(rec.payload_json) };
+    let prepared = null;
+    try {
+      if (rec.type === "MigrateImportChunk") {
+        const st = this._migrationChunkState(cmd.payload);
+        if (st && st.ok) prepared = await this._prepareMigrationImport(cmd.payload);
+      } else if (rec.type === "MigrateImportBindings") {
+        if (!this._migrationManifestError(cmd.payload))
+          prepared = await this._prepareMigrationImport(cmd.payload);
+      }
+    } catch (e) {
+      // An unexpected preparation failure is NOT a validation
+      // verdict (§3.3.2, the T3′ row): write nothing, leave the
+      // claim to lapse into reconciliation, and answer with the
+      // current view. Never improvise a refusal from an
+      // exception.
+      return this._pendingView(this._pendingRecord(commandId) || rec);
+    }
+
+    // ---- T3 APPLY / T3′ REFUSAL: one sync transaction. The
+    // owner + state + LEASE checks run first, inside it; on any
+    // failure there are no writes of any kind — a stale executor
+    // can neither commit nor regain the claim.
+    return this._tx(() => {
+      const now = this._now();
+      const cur = this._pendingRecord(commandId);
+      if (!cur || cur.state !== "executing" || cur.claim_owner !== claim.owner ||
+          cur.claimed_at === null || now >= cur.claimed_at + this._claimLeaseMs())
+        return this._pendingView(cur || rec, now);
+      const result = this._recordAndApply(cmd, prepared);
+      this.sql.exec(
+        `UPDATE pending_commands SET state = ?, receipt_json = ? WHERE command_id = ?`,
+        result.outcome === "applied" ? "applied" : "refused",
+        JSON.stringify(result), commandId);
+      return this._pendingView(this._pendingRecord(commandId), now);
+    });
+  }
+
+  // The business-effect audit a reconciliation verdict rests on
+  // (§3.3.5): per command type, whether THIS command's effects
+  // are complete-and-pin-exact, provably zero, or neither —
+  // recomputed from the durable business rows and the command's
+  // own pinned expectations, never from a request. SELECT-only.
+  _migrationEffectsAudit(rec) {
+    const p = JSON.parse(rec.payload_json);
+    const bookId = p.bookId || null;
+    const neither = { complete: false, zero: false };
+    switch (rec.type) {
+      case "MigrateImportChunk": {
+        const slot = this._oneOrNull(
+          `SELECT * FROM migration_chunks WHERE book_id = ? AND chunk_index = ?`,
+          bookId, p.chunkIndex);
+        if (slot) return { complete: slot.migration_id === p.migrationId, zero: false };
+        const pinned = this._pinnedChunk(bookId, p.chunkIndex);
+        if (!pinned) return neither;
+        let bound = 0;
+        for (const r of pinned.rows) {
+          const b = this._oneOrNull(
+            `SELECT occurrence_id FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
+            r.occurrenceId, r.revisionKey);
+          if (b) bound++;
+        }
+        return { complete: false, zero: bound === 0 };
+      }
+      case "MigrateImportBindings": {
+        const book = this._oneOrNull(
+          `SELECT * FROM migration_books WHERE book_id = ?`, bookId);
+        if (book) return { complete: book.migration_id === p.migrationId &&
+                                     book.freeze_digest === p.freezeDigest, zero: false };
+        const pinned = this._pinnedBook(bookId);
+        if (!pinned) return neither;
+        let bound = 0;
+        for (const r of pinned.rows) {
+          const b = this._oneOrNull(
+            `SELECT occurrence_id FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
+            r.occurrenceId, r.revisionKey);
+          if (b) bound++;
+        }
+        return { complete: false, zero: bound === 0 };
+      }
+      case "MigrateImportPositions": {
+        const carry = this._carryAuditRow(bookId, "positions");
+        const payloadHash = sha256HexText(canonicalJson({ bookId,
+          position: { occurrenceId: p.position.occurrenceId, offsetSec: p.position.offsetSec },
+          checkpoints: p.checkpoints }));
+        if (carry) return { complete: carry.payload_hash === payloadHash, zero: false };
+        const st = this._oneOrNull(
+          `SELECT book_id FROM position_state WHERE book_id = ?`, bookId);
+        return { complete: false, zero: !st };
+      }
+      case "MigrateImportJobs": {
+        const carry = this._carryAuditRow(bookId, "jobs");
+        const { setSha256 } = this._jobsDescriptor(p);
+        if (carry) return { complete: carry.payload_hash === setSha256, zero: false };
+        let existing = 0;
+        for (const a of p.aggregates || []) {
+          const j = this._oneOrNull(`SELECT job_id FROM jobs WHERE job_id = ?`, a.jobId);
+          if (j) existing++;
+        }
+        return { complete: false, zero: existing === 0 };
+      }
+      case "MigrateRecordFlipGate": {
+        const gate = this._oneOrNull(
+          `SELECT * FROM migration_gates WHERE book_id = ?`, bookId);
+        if (gate) return { complete: gate.migration_id === p.migrationId &&
+                                     gate.certificate_sha256 === p.certificateSha256,
+                           zero: false };
+        return { complete: false, zero: true };
+      }
+      default: return neither;
+    }
+  }
+
+  // The receipt for a record whose effects verify complete but
+  // whose execution left no commands-row receipt (the apply's
+  // effects landed through a path that did not record one, or
+  // the record of it was the casualty): reconstructed from the
+  // SAME durable rows the apply itself wrote, in the apply's
+  // own result shape, and marked reconciled (§3.3.5).
+  _reconciledReceipt(rec) {
+    const p = JSON.parse(rec.payload_json);
+    const bookId = p.bookId || null;
+    switch (rec.type) {
+      case "MigrateImportChunk": {
+        const imports = this._oneOrNull(
+          `SELECT * FROM migration_imports WHERE book_id = ?`, bookId);
+        const applied = this._all(
+          `SELECT chunk_index FROM migration_chunks WHERE book_id = ?`, bookId).length;
+        const done = !!(imports && imports.completed_at);
+        return { outcome: "applied", bookId, migrationId: p.migrationId,
+          chunkIndex: p.chunkIndex, chunksApplied: applied,
+          chunksExpected: imports ? imports.chunks_expected : applied,
+          bookComplete: done,
+          certificateSha256: done ? imports.certificate_sha256 : null,
+          reconciled: true };
+      }
+      case "MigrateImportBindings": {
+        const book = this._oneOrNull(
+          `SELECT * FROM migration_books WHERE book_id = ?`, bookId);
+        return { outcome: "applied", bookId, migrationId: p.migrationId,
+          rowCount: book.row_count, rowsSha256: book.rows_sha256,
+          certificateSha256: book.certificate_sha256, reconciled: true };
+      }
+      case "MigrateImportPositions": {
+        const contentEnt = this._syncEntity("content", bookId);
+        const occIds = contentEnt
+          ? (JSON.parse(contentEnt.data_json || "{}").occurrenceIds || []) : [];
+        return { outcome: "applied", bookId, migrationId: p.migrationId,
+          position: { occurrenceId: p.position.occurrenceId,
+                      occIndex: occIds.indexOf(p.position.occurrenceId),
+                      offsetSec: p.position.offsetSec },
+          reconciled: true };
+      }
+      case "MigrateImportJobs": {
+        const { setSha256 } = this._jobsDescriptor(p);
+        return { outcome: "applied", bookId, migrationId: p.migrationId,
+          jobs: { count: (p.aggregates || []).length, setSha256 }, reconciled: true };
+      }
+      case "MigrateRecordFlipGate":
+        return { outcome: "applied", bookId, flipped: true, reconciled: true };
+      default:
+        return { outcome: "applied", bookId, reconciled: true };
+    }
+  }
+
+  // Manual reconciliation (the control route, §3.3.1/§3.3.5) —
+  // the ONLY write path that settles a needs_reconciliation
+  // record to a final state. MANDATORY SECURITY DISCIPLINE
+  // (Rowan 6373710222): the caller's `outcome` and `evidence`
+  // are REQUESTS, never proofs. The verdict is recomputed HERE,
+  // server-side, inside this transaction — the durable claim,
+  // any existing receipt, and the actual business-effect
+  // rows/pins — and a request whose claimed outcome contradicts
+  // the verified state fails closed: the uncertain record is
+  // preserved untouched, and nothing is granted, executed, or
+  // marked complete. This route NEVER executes a migration
+  // command, and no approval-path fence (T2 claim, T3
+  // owner/state/lease) can be bypassed through it: it can only
+  // settle a record a claim already left uncertain.
+  reconcileMigrationCommand({ commandId, outcome, evidence } = {}) {
+    // The outcome vocabulary is the route's own (applied /
+    // refused). Anything else — including the receipt
+    // vocabulary's "rejected" — fails closed here too, not only
+    // at the API schema fence: an unrecognized outcome must
+    // never fall through to a settlement branch.
+    if (outcome !== "applied" && outcome !== "refused")
+      return { ok: false, error: "malformed_reconciliation", command_id: commandId ?? null };
+    return this._tx(() => {
+      const now = this._now();
+      let rec = this._pendingRecord(commandId);
+      if (!rec)
+        return { ok: false, error: "pending_command_not_found", command_id: commandId };
+      // The one place besides T1/T2 where a lapsed-lease
+      // executing record may be materialized (§3.3.2): this
+      // route, inside its own transaction, before settling.
+      if (rec.state === "executing") this._materializePending(rec, now);
+      rec = this._pendingRecord(commandId);
+      if (rec.state !== "needs_reconciliation")
+        return { ok: false, error: "not_reconcilable", command_id: commandId,
+                 state: this._pendingView(rec, now).state };
+      // Server-side verification. None of these reads consults
+      // the request's outcome or evidence in any way.
+      const cmdRow = this._oneOrNull(
+        `SELECT * FROM commands WHERE command_id = ?`, commandId);
+      const receiptObj = cmdRow && cmdRow.outcome_json
+        ? JSON.parse(cmdRow.outcome_json) : null;
+      const audit = this._migrationEffectsAudit(rec);
+      // A claim must have existed: reconciliation settles a
+      // CLAIM's uncertain outcome, nothing else.
+      const claimVerified = rec.claimed_at !== null;
+      let canApplied = false, canRefused = false, appliedReceipt = null;
+      if (receiptObj && cmdRow.outcome === "applied" && audit.complete) {
+        canApplied = true; appliedReceipt = receiptObj;
+      } else if (receiptObj && cmdRow.outcome === "rejected" && audit.zero) {
+        canRefused = true;
+      } else if (!receiptObj && audit.complete) {
+        canApplied = true; appliedReceipt = this._reconciledReceipt(rec);
+      } else if (!receiptObj && audit.zero) {
+        canRefused = true;
+      }
+      canApplied = canApplied && claimVerified;
+      canRefused = canRefused && claimVerified;
+      const verification = { claimRecorded: claimVerified,
+        receiptPresent: !!receiptObj,
+        effectsComplete: audit.complete, effectsZero: audit.zero };
+      if (outcome === "applied" && !canApplied)
+        return { ok: false, error: "reconciliation_evidence_mismatch",
+                 command_id: commandId, state: "needs_reconciliation", verification };
+      if (outcome === "refused" && !canRefused)
+        return { ok: false, error: "reconciliation_evidence_mismatch",
+                 command_id: commandId, state: "needs_reconciliation", verification };
+      const detail = JSON.stringify({ reconciled: true, settledAt: now,
+        evidenceCited: evidence ?? null, verification });
+      if (outcome === "applied") {
+        this.sql.exec(
+          `UPDATE pending_commands SET state = 'applied', receipt_json = ?, detail_json = ?
+           WHERE command_id = ?`,
+          JSON.stringify(appliedReceipt), detail, commandId);
+        if (!receiptObj) {
+          this.sql.exec(
+            `INSERT INTO commands (command_id, type, payload_json, received_at, outcome, outcome_json)
+             VALUES (?, ?, ?, ?, 'applied', ?)`,
+            commandId, rec.type, rec.payload_json, now, JSON.stringify(appliedReceipt));
+        }
+        return this._pendingView(this._pendingRecord(commandId), now);
+      }
+      const refusal = receiptObj && cmdRow.outcome === "rejected"
+        ? receiptObj : { outcome: "rejected", reason: "reconciled_abandoned" };
+      this.sql.exec(
+        `UPDATE pending_commands SET state = 'refused', receipt_json = ?, detail_json = ?
+         WHERE command_id = ?`,
+        JSON.stringify(refusal), detail, commandId);
+      return this._pendingView(this._pendingRecord(commandId), now);
+    });
   }
 
   _applyCommand(type, p, commandId, prepared = null) {
@@ -2658,7 +3335,7 @@ export class GenerationCoordinator {
   // set, the chunk's exact membership/order (a contiguous slice of
   // the pinned rows), and the derived size limits — the caller can
   // match the pin, never define it.
-  _migrationChunkState(p) {
+  _migrationChunkState(p, { submitPhase = false } = {}) {
     const bookId = p.bookId || null;
     const rows = Array.isArray(p.rows) ? p.rows : null;
     if (!bookId || !rows || rows.length === 0 || !p.migrationId || !p.freezeDigest ||
@@ -2771,6 +3448,17 @@ export class GenerationCoordinator {
       return reject("migration_book_divergence");
     if (priorBook && !imports)
       return reject("migration_book_divergence"); // whole-book imported; not this path
+    // Option D submit phase (§3.3.3 Phase 1): validation stops
+    // here. Everything above — shape, freeze/chunk/content pins,
+    // derived limits, and the identity fences just checked — is
+    // a function of the payload, the pins, and durable identity
+    // facts; everything below (slot convergence, chunk order)
+    // depends on other commands' progress and is an EXECUTION
+    // verdict, re-run inside T3 by the ordinary path. A submit
+    // that passes here pends; it has primed nothing and written
+    // nothing.
+    if (submitPhase) return { ok: true, submitPhase: true, pinned, chunk, chunkRows,
+      imports, chunksExpected: imports ? imports.chunks_expected : found.bookChunks.chunkCount };
     const slots = this._all(
       `SELECT * FROM migration_chunks WHERE book_id = ? ORDER BY chunk_index`, bookId);
     const slot = slots.find(s2 => s2.chunk_index === p.chunkIndex);

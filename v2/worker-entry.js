@@ -51,7 +51,7 @@
 // two surfaces are disjoint by construction; neither can serve the
 // other's scope, instance, or R2 namespace.
 import { createApi } from "./api.mjs";
-import { GenerationCoordinator, MIGRATION_COMMAND_TYPES } from "./coordinator.mjs";
+import { GenerationCoordinator } from "./coordinator.mjs";
 import { createExecutor } from "./executor.mjs";
 import {
   GenerationHaltedError, assertGenerationEnabled,
@@ -290,11 +290,17 @@ export class OpalReaderCoordinator {
 // absent Origin the refusal is byte-for-byte what it was before this
 // change. Statuses, bodies, gate order, and fail-closed behavior are
 // unchanged — a refusal simply becomes readable.
-function stagingGate(request, env, cors) {
+function stagingGate(request, env, cors, { skipClientToken = false } = {}) {
   if (env.OPALREADER_V2_SCOPE !== STAGING_SCOPE)
     return json(403, { error: "staging_scope_required" }, cors);
   if (request.headers.get("x-opalreader-scope") !== STAGING_SCOPE)
     return json(403, { error: "staging_scope_required" }, cors);
+  // Option D (design §3.3.1): the two operator routes are
+  // admitted on the OPERATOR header alone — the client token is
+  // neither required nor sufficient there — so the client-token
+  // half of this gate is skipped for them; their own fence below
+  // (fail-closed, distinct-secret) is their admission.
+  if (skipClientToken) return null;
   if (!env.OPALREADER_ACCESS_TOKEN)
     return json(503, { error: "staging_token_not_configured" }, cors);
   if (request.headers.get("x-opalreader-token") !== env.OPALREADER_ACCESS_TOKEN)
@@ -324,7 +330,10 @@ async function fetchHandler(request, env) {
   // filtering: the only surfaces are /health and /v2/*.
   if (!url.pathname.startsWith("/v2/"))
     return json(404, { error: "route_not_found" }, cors);
-  const denied = stagingGate(request, env, cors);
+  const isOperatorRoute = request.method === "POST" &&
+    (url.pathname === "/v2/command-approvals" ||
+     url.pathname === "/v2/command-reconciliation");
+  const denied = stagingGate(request, env, cors, { skipClientToken: isOperatorRoute });
   if (denied) return denied;
   // B7 revision (6345016639): staging fails closed to the smoke
   // instance. The header must be explicitly "smoke-p8"; a missing
@@ -334,30 +343,32 @@ async function fetchHandler(request, env) {
   const instance = request.headers.get("x-opalreader-instance");
   if (instance !== SMOKE_INSTANCE)
     return json(403, { error: "staging_instance_required" }, cors);
-  // G2 operator admission fence (server entry; Rowan re-review
-  // 6354569652): the migration command types are operator-only.
-  // The credential is a DISTINCT secret (OPALREADER_MIGRATION_
-  // OPERATOR_TOKEN), never the client access token — if the two
-  // are configured to the same value the fence treats the operator
-  // credential as not configured at all. Unset means CLOSED: in
-  // every deployment built from the current deploy spec the secret
-  // is absent, so migration commands are unreachable, full stop.
+  // Option D operator admission fence (design §3.3.1; this
+  // RETIRES the legacy same-request dual-header fence as the one
+  // protocol — negative regression tests pin the old shape as
+  // inert). Migration commands on POST /v2/commands need NO
+  // operator credential: they PEND under the client credential
+  // alone and can never execute there. The operator credential —
+  // a DISTINCT secret (OPALREADER_MIGRATION_OPERATOR_TOKEN),
+  // never the client access token; if the two are configured to
+  // the same value the fence treats the operator credential as
+  // not configured at all — guards exactly two routes:
+  // POST /v2/command-approvals and POST /v2/command-reconciliation.
+  // Unset means those routes are CLOSED: migration commands can
+  // pend but can never execute or be reconciled, full stop.
   // Refusals happen here, before the coordinator namespace is
-  // touched; admission is marked on the forwarded internal request
-  // (overwritten unconditionally below, so a client-supplied mark
-  // is worthless) and re-checked at the API layer.
+  // touched; admission is marked on the forwarded internal
+  // request (overwritten unconditionally below, so a
+  // client-supplied mark is worthless) and re-checked at the
+  // API layer.
   let operatorAdmitted = false;
-  if (request.method === "POST" && url.pathname === "/v2/commands") {
-    let peek = null;
-    try { peek = await request.clone().json(); } catch { peek = null; }
-    if (peek && MIGRATION_COMMAND_TYPES.includes(peek.type)) {
-      const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
-      if (!operatorToken || operatorToken === env.OPALREADER_ACCESS_TOKEN)
-        return json(503, { error: "migration_operator_not_configured" }, cors);
-      if (request.headers.get("x-opalreader-operator-token") !== operatorToken)
-        return json(403, { error: "migration_operator_required" }, cors);
-      operatorAdmitted = true;
-    }
+  if (isOperatorRoute) {
+    const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+    if (!operatorToken || operatorToken === env.OPALREADER_ACCESS_TOKEN)
+      return json(503, { error: "migration_operator_not_configured" }, cors);
+    if (request.headers.get("x-opalreader-operator-token") !== operatorToken)
+      return json(403, { error: "migration_operator_required" }, cors);
+    operatorAdmitted = true;
   }
   if (!env.COORDINATOR)
     return json(503, { error: "coordinator_not_bound" }, cors);

@@ -119,8 +119,19 @@ function makeSurface({ entry, CoordinatorClass, scope, instance, prefix,
     }), env);
   const commandCount = () =>
     state.storage.sql.exec(`SELECT command_id FROM commands`).toArray().length;
+  // Option D two-phase send: submit under the client credential
+  // (pends), approve the server-returned hash under the surface's
+  // operator credential; returns the final receipt.
+  const sendMigration = async (cmd, operator = operatorToken) => {
+    const sub = await call("/v2/commands", { method: "POST", body: cmd });
+    const pending = await sub.json();
+    assert.equal(pending.state, "pending_operator", JSON.stringify(pending));
+    const app = await call("/v2/command-approvals", { method: "POST", operator,
+      body: { commandId: cmd.command_id, payloadSha256: pending.payloadSha256 } });
+    return app.json();
+  };
   return { bucket, state, instance: instanceObj, env, call, commandCount,
-           manifest, chunksManifest };
+           sendMigration, manifest, chunksManifest };
 }
 const makeStaging = (over = {}) => makeSurface({
   entry: stagingEntry, CoordinatorClass: OpalReaderCoordinator,
@@ -250,24 +261,21 @@ test("prod surface imports from the UNPREFIXED namespace; smoke-prefixed objects
   // the sanctioned path. See tests/p8-d3-chunk-mandate.test.mjs.)
   let last = null;
   for (let i = 0; i < book.chunks.length; i++) {
-    const res = await prod.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR,
-      body: chunkBody(book, "prod-book-ns", i, `${MIG}:prod-book-ns:chunk:${i}`) });
-    assert.equal(res.status, 200);
-    last = await res.json();
+    last = await prod.sendMigration(
+      chunkBody(book, "prod-book-ns", i, `${MIG}:prod-book-ns:chunk:${i}`));
     assert.equal(last.outcome, "applied");
   }
   assert.equal(last.bookComplete, true);
   for (const g of prod.bucket.gets) assert.ok(!g.key.startsWith("smoke-p8/"), g.key);
 
   // The same book seeded ONLY under the smoke prefix: production
-  // cannot see it (object_missing), and never reaches for the
-  // prefixed keys.
+  // cannot see it (object_missing at execution), and never
+  // reaches for the prefixed keys.
   const prod2 = makeProd();
   seedSurfaceBook(prod2, "smoke-p8/", "prod-book-ns", [128, 96, 64]);
   prod2.bucket.resetGets();
-  const imp2 = await prod2.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR,
-    body: chunkBody(book, "prod-book-ns", 0, `${MIG}:prod-book-ns:chunk:0`) });
-  const imp2Body = await imp2.json();
+  const imp2Body = await prod2.sendMigration(
+    chunkBody(book, "prod-book-ns", 0, `${MIG}:prod-book-ns:chunk:0`));
   assert.equal(imp2Body.outcome, "rejected");
   assert.equal(imp2Body.reason, "object_missing");
   for (const g of prod2.bucket.gets) assert.ok(!g.key.startsWith("smoke-p8/"), g.key);
@@ -287,40 +295,70 @@ test("prod class refuses ANY configured R2 prefix before bucket contact (the mir
 });
 
 // ============================================================ operator fence
-test("migration commands are operator-fenced on the production surface, fail closed, and the chunk type is fenced too", async () => {
+test("Option D admission on the production surface: submits pend under the client credential alone; approvals are operator-fenced and fail closed", async () => {
   const prod = makeProd();
   const book = seedSurfaceBook(prod, "", "prod-book-fence", [128, 96, 64]);
   const body = chunkBody(book, "prod-book-fence", 0, `${MIG}:prod-book-fence:chunk:0`);
-  // Client token only → 403, coordinator never sees a command.
+  // Client token only → the command PENDS (200). Nothing has
+  // executed: no commands row, and the receipt surface shows the
+  // pending view, not an outcome.
   let res = await prod.call("/v2/commands", { method: "POST", body });
+  assert.equal(res.status, 200);
+  const pending = await res.json();
+  assert.equal(pending.state, "pending_operator");
+  assert.equal(typeof pending.payloadSha256, "string");
+  assert.equal(prod.commandCount(), 0);
+  // The legacy dual-header shape (operator header riding the
+  // submit) is inert under the one protocol: it pends exactly
+  // like a plain submit and executes nothing. (The negative
+  // regression for the retired path; see also the dedicated
+  // battery in tests/p8-option-d-two-phase.test.mjs.)
+  res = await prod.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR,
+    body: chunkBody(book, "prod-book-fence", 0, `${MIG}:prod-book-fence:chunk:legacy`) });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).state, "pending_operator");
+  assert.equal(prod.commandCount(), 0);
+  // Forged admission mark on the approval route → still 403.
+  res = await prod.call("/v2/command-approvals", { method: "POST",
+    headers: { "x-opalreader-operator-admitted": "1" },
+    body: { commandId: body.command_id, payloadSha256: pending.payloadSha256 } });
   assert.equal(res.status, 403);
   assert.equal((await res.json()).error, "migration_operator_required");
   assert.equal(prod.commandCount(), 0);
-  // Forged admission mark → still 403.
-  res = await prod.call("/v2/commands", { method: "POST", body,
-    headers: { "x-opalreader-operator-admitted": "1" } });
-  assert.equal(res.status, 403);
+  // Wrong operator → 403. The STAGING operator credential is not
+  // the production one → 403. The client token alone is not
+  // sufficient on the approval route → 403.
+  for (const operator of ["prod-operator-WRONG", OPERATOR, undefined]) {
+    res = await prod.call("/v2/command-approvals", { method: "POST", operator,
+      body: { commandId: body.command_id, payloadSha256: pending.payloadSha256 } });
+    assert.equal(res.status, 403, `operator=${operator}`);
+    assert.equal((await res.json()).error, "migration_operator_required");
+  }
   assert.equal(prod.commandCount(), 0);
-  // Wrong operator → 403.
-  res = await prod.call("/v2/commands", { method: "POST", operator: "prod-operator-WRONG", body });
-  assert.equal(res.status, 403);
-  // The STAGING operator credential is not the production one.
-  res = await prod.call("/v2/commands", { method: "POST", operator: OPERATOR, body });
-  assert.equal(res.status, 403);
-  // Correct production operator → admitted; the chunk applies.
-  res = await prod.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR, body });
+  // Correct production operator → admitted (the client token is
+  // not even consulted on this route: a wrong one changes
+  // nothing); the chunk applies exactly once.
+  res = await prod.call("/v2/command-approvals", { method: "POST", operator: PROD_OPERATOR,
+    token: "wrong-client-token",
+    body: { commandId: body.command_id, payloadSha256: pending.payloadSha256 } });
   assert.equal(res.status, 200);
   assert.equal((await res.json()).outcome, "applied");
   assert.equal(prod.commandCount(), 1);
-  // Operator unset → 503 fail-closed even when one is presented.
+  // Operator unset → submissions still pend, but approvals are
+  // 503 fail-closed even when a credential is presented.
   const prodUnset = makeProd({ operatorToken: null });
   seedSurfaceBook(prodUnset, "", "prod-book-fence", [128, 96, 64]);
-  res = await prodUnset.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR, body });
+  res = await prodUnset.call("/v2/commands", { method: "POST", body });
+  assert.equal(res.status, 200);
+  const unsetPending = await res.json();
+  res = await prodUnset.call("/v2/command-approvals", { method: "POST", operator: PROD_OPERATOR,
+    body: { commandId: body.command_id, payloadSha256: unsetPending.payloadSha256 } });
   assert.equal(res.status, 503);
   assert.equal((await res.json()).error, "migration_operator_not_configured");
   // Operator equal to the client token → treated as not configured.
   const prodShared = makeProd({ operatorToken: PROD_CLIENT });
-  res = await prodShared.call("/v2/commands", { method: "POST", operator: PROD_CLIENT, body });
+  res = await prodShared.call("/v2/command-approvals", { method: "POST", operator: PROD_CLIENT,
+    body: { commandId: body.command_id, payloadSha256: pending.payloadSha256 } });
   assert.equal(res.status, 503);
 });
 
@@ -330,27 +368,25 @@ test("chunked import runs end-to-end on the production surface (unprefixed keys,
   const staging = makeStaging();
   const book = seedSurfaceBook(prod, "", "prod-book-e2e", [128, 96, 64, 32, 16]);
   const B = "prod-book-e2e";
-  const post = (i) => prod.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR,
-    body: chunkBody(book, B, i, `${MIG}:${B}:chunk:${i}`) });
-  let res = await post(0);
-  assert.equal((await res.json()).outcome, "applied");
+  const post = (i) => prod.sendMigration(chunkBody(book, B, i, `${MIG}:${B}:chunk:${i}`));
+  let fin = await post(0);
+  assert.equal(fin.outcome, "applied");
   let view = await (await prod.call(`/v2/migration/book/${B}`)).json();
   assert.equal(view.importRecord, null);
   assert.deepEqual(view.chunkedImport.chunksApplied, [0]);
   assert.equal(view.completeness.complete, false);
-  res = await post(1);
-  assert.equal((await res.json()).outcome, "applied");
-  res = await post(2);
-  const fin = await res.json();
+  fin = await post(1);
+  assert.equal(fin.outcome, "applied");
+  fin = await post(2);
   assert.equal(fin.outcome, "applied");
   assert.equal(fin.bookComplete, true);
   view = await (await prod.call(`/v2/migration/book/${B}`)).json();
   assert.equal(view.completeness.complete, true);
   assert.equal(view.importRecord.certificateSha256, fin.certificateSha256);
-  const gate = await prod.call("/v2/commands", { method: "POST", operator: PROD_OPERATOR,
-    body: { command_id: `${MIG}:gate-e2e`, type: "MigrateRecordFlipGate",
-      payload: { migrationId: MIG, bookId: B, certificateSha256: fin.certificateSha256 } } });
-  assert.equal((await gate.json()).outcome, "applied");
+  const gate = await prod.sendMigration({ command_id: `${MIG}:gate-e2e`,
+    type: "MigrateRecordFlipGate",
+    payload: { migrationId: MIG, bookId: B, certificateSha256: fin.certificateSha256 } });
+  assert.equal(gate.outcome, "applied");
   assert.equal(prod.bucket.putCalls.length, 0);
   // No shared state: staging's coordinator has never heard of the book.
   const stagingView = await (await staging.call(`/v2/migration/book/${B}`)).json();

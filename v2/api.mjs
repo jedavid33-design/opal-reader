@@ -71,19 +71,22 @@ export function createApi(env) {
         if (cmd && cmd.type === "MigrateImportBindings" &&
             request.headers.get("x-opalreader-scope") === "production")
           return json(403, { error: "migration_chunk_required" });
-        // G2 admission fence, layer 2 (the DO side): migration
-        // commands are operator-only. The worker entry checks the
-        // operator credential and marks the forwarded (internal)
-        // request; without that mark the command is refused here,
-        // before the coordinator sees it — a client can never reach
-        // this layer directly, and the internal mark cannot be
-        // forged from outside the entry (it overwrites the header
-        // unconditionally). Direct coordinator callers (tests, the
-        // executor host) are inside the trust boundary; the
-        // coordinator's own pinned-freeze checks still apply there.
-        if (cmd && MIGRATION_COMMAND_TYPES.includes(cmd.type) &&
-            request.headers.get("x-opalreader-operator-admitted") !== "1")
-          return json(403, { error: "migration_operator_required" });
+        // Option D admission (design §3.3.1): a migration command
+        // on this route is SUBMITTED, not executed — the
+        // coordinator validates it (shape + pins) and stores it
+        // inert as pending_operator under a server-computed hash.
+        // No operator mark is consulted here: submission is a
+        // client-credential act, and a client-supplied mark header
+        // admits nothing on this route (the entry overwrites it
+        // unconditionally in any case). Execution happens only
+        // through the operator-only approval route below. Submit
+        // does zero R2 work, so the G1 hydration seam does not
+        // run for migration commands.
+        if (cmd && MIGRATION_COMMAND_TYPES.includes(cmd.type)) {
+          const coord = new GenerationCoordinator(coordinatorState, env);
+          const view = coord.submitMigrationCommand(cmd);
+          return json(view && view.ok === false ? 400 : 200, view);
+        }
         // G1 scoped hydration: the synchronous probe paths
         // (AdoptAudio, outcome reconciliation) consult the request
         // snapshot. Hydrate exactly the keys this command names —
@@ -104,6 +107,47 @@ export function createApi(env) {
         }
         const coord = new GenerationCoordinator(coordinatorState, env);
         return json(200, await coord.handleCommand(cmd));
+      }
+      // Option D operator routes (design §3.3.1): the ONLY two
+      // operator surfaces. Each is an exact path + method
+      // allowlist entry, admitted solely under the server-set
+      // forwarded approval mark (the worker entry checks the
+      // operator credential and overwrites the mark header
+      // unconditionally; a client-supplied mark is worthless).
+      // Their bodies are schema-fenced to carry NO command
+      // content: an approval names an existing command id + its
+      // hash; a reconciliation names an existing record + a
+      // requested outcome + an evidence citation. Anything else
+      // is a malformed refusal, storing nothing.
+      if (request.method === "POST" &&
+          (path === "/v2/command-approvals" || path === "/v2/command-reconciliation")) {
+        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
+          return json(403, { error: "migration_operator_required" });
+        let body;
+        try { body = await request.json(); }
+        catch { return json(422, { error: "malformed_operator_request" }); }
+        const isObj = body && typeof body === "object" && !Array.isArray(body);
+        const keys = isObj ? Object.keys(body) : [];
+        const coord = new GenerationCoordinator(coordinatorState, env);
+        if (path === "/v2/command-approvals") {
+          if (!isObj || keys.some(k => !["commandId", "payloadSha256", "action"].includes(k)) ||
+              typeof body.commandId !== "string" || !body.commandId ||
+              typeof body.payloadSha256 !== "string" ||
+              !/^[a-f0-9]{64}$/.test(body.payloadSha256) ||
+              (body.action !== undefined && body.action !== "approve" && body.action !== "reject"))
+            return json(422, { error: "malformed_approval" });
+          const r = await coord.approveMigrationCommand(body);
+          return r && r.ok === false ? json(404, r) : json(200, r);
+        }
+        if (!isObj || keys.some(k => !["commandId", "outcome", "evidence"].includes(k)) ||
+            typeof body.commandId !== "string" || !body.commandId ||
+            (body.outcome !== "applied" && body.outcome !== "refused") ||
+            !body.evidence || typeof body.evidence !== "object" || Array.isArray(body.evidence))
+          return json(422, { error: "malformed_reconciliation" });
+        const r = coord.reconcileMigrationCommand(body);
+        if (r && r.ok === false)
+          return json(r.error === "pending_command_not_found" ? 404 : 409, r);
+        return json(200, r);
       }
       if (request.method === "POST" && path === "/v2/reports") {
         const report = await request.json();
@@ -176,7 +220,12 @@ export function createApi(env) {
         }
         if (path.startsWith("/v2/commands/")) {
           const id = decodeURIComponent(path.slice("/v2/commands/".length));
-          const receipt = ro.receipt(id);
+          // Option D read contract (§3.3.4): a two-phase record
+          // answers with its state VIEW (projected, never
+          // persisted — this facade is SELECT-only, so the read
+          // cannot write by construction); legacy commands keep
+          // the pre-existing receipt shape.
+          const receipt = ro.commandReceiptView(id);
           return receipt ? json(200, receipt) : json(404, { error: "command_not_found" });
         }
         if (path.startsWith("/v2/jobs/")) {

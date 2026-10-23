@@ -178,13 +178,23 @@ function seedPuckedOver(world) {
 const wholeBook = (id, book) => importCmd(id, {
   migrationId: MIG, freezeDigest: FREEZE, bookId: BOOK,
   content: book.content, rows: book.rows });
-const postChunk = (world, book, i) => world.call("/v2/commands", {
-  method: "POST", operator: OPERATOR,
-  body: chunkCmd(`${MIG}:${BOOK}:chunk:${i}`, {
+// Option D two-phase send: submit under the client credential
+// (pends), approve the server-returned hash under the operator
+// credential; returns the final receipt.
+const sendMigration = async (world, cmd) => {
+  const sub = await world.call("/v2/commands", { method: "POST", body: cmd });
+  const pending = await sub.json();
+  assert.equal(pending.state, "pending_operator", JSON.stringify(pending));
+  const app = await world.call("/v2/command-approvals", { method: "POST", operator: OPERATOR,
+    body: { commandId: cmd.command_id, payloadSha256: pending.payloadSha256 } });
+  return app.json();
+};
+const postChunk = (world, book, i) => sendMigration(world,
+  chunkCmd(`${MIG}:${BOOK}:chunk:${i}`, {
     migrationId: MIG, freezeDigest: FREEZE, bookId: BOOK, chunkIndex: i,
     content: i === 0 ? book.content : undefined,
     rows: book.rows.slice(book.chunks[i].start,
-                           book.chunks[i].start + book.chunks[i].rowCount) }) });
+                           book.chunks[i].start + book.chunks[i].rowCount) }));
 
 // ============================================================ (a)
 test("D3-1 (a): whole-book import on production is refused migration_chunk_required with a CORRECT operator credential — zero R2 GETs, zero commands written", async () => {
@@ -220,7 +230,7 @@ test("D3-1 (b): the refusal is identical with chunk 1 already applied — zero a
   const world = makeProdWorld();
   const book = seedPuckedOver(world);
   const first = await postChunk(world, book, 0);
-  assert.equal((await first.json()).outcome, "applied");
+  assert.equal(first.outcome, "applied");
   assert.equal(world.commandCount(), 1);
   const viewBefore = await (await world.call(`/v2/migration/book/${BOOK}`)).json();
   assert.deepEqual(viewBefore.chunkedImport.chunksApplied, [0]);
@@ -251,7 +261,7 @@ test("D3-1 (b): the refusal is identical with chunk 1 already applied — zero a
 test("D3-1 (c): after the refusal, MigrateImportChunk and MigrateRecordFlipGate are still admitted in their intended order", async () => {
   const world = makeProdWorld();
   const book = seedPuckedOver(world);
-  assert.equal((await (await postChunk(world, book, 0)).json()).outcome, "applied");
+  assert.equal((await postChunk(world, book, 0)).outcome, "applied");
   const refused = await world.call("/v2/commands", { method: "POST", operator: OPERATOR,
     body: wholeBook(`${MIG}:whole-book-c`, book) });
   assert.equal(refused.status, 403);
@@ -261,8 +271,7 @@ test("D3-1 (c): after the refusal, MigrateImportChunk and MigrateRecordFlipGate 
   // remaining chunks, completion, then the gate.
   let last = null;
   for (let i = 1; i < book.chunks.length; i++) {
-    const res = await postChunk(world, book, i);
-    last = await res.json();
+    last = await postChunk(world, book, i);
     assert.equal(last.outcome, "applied", `chunk ${i}: ${JSON.stringify(last).slice(0, 200)}`);
   }
   assert.equal(last.bookComplete, true);
@@ -270,11 +279,11 @@ test("D3-1 (c): after the refusal, MigrateImportChunk and MigrateRecordFlipGate 
   const view = await (await world.call(`/v2/migration/book/${BOOK}`)).json();
   assert.equal(view.completeness.complete, true);
   assert.equal(view.importRecord.certificateSha256, last.certificateSha256);
-  const gate = await world.call("/v2/commands", { method: "POST", operator: OPERATOR,
-    body: { command_id: `${MIG}:gate-c`, type: "MigrateRecordFlipGate",
-      payload: { migrationId: MIG, bookId: BOOK,
-        certificateSha256: last.certificateSha256 } } });
-  assert.equal((await gate.json()).outcome, "applied");
+  const gate = await sendMigration(world, { command_id: `${MIG}:gate-c`,
+    type: "MigrateRecordFlipGate",
+    payload: { migrationId: MIG, bookId: BOOK,
+      certificateSha256: last.certificateSha256 } });
+  assert.equal(gate.outcome, "applied");
   // The refused whole-book attempt left no receipt behind, ever.
   const receipt = await world.call(`/v2/commands/${MIG}:whole-book-c`);
   assert.equal(receipt.status, 404);
