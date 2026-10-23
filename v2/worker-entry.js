@@ -41,7 +41,7 @@
 // WITHOUT a queue delivery function (outbox rows stay visibly unsent),
 // and the provider adapters refuse again at the synthesis seam.
 import { createApi } from "./api.mjs";
-import { GenerationCoordinator } from "./coordinator.mjs";
+import { GenerationCoordinator, MIGRATION_COMMAND_TYPES } from "./coordinator.mjs";
 import { createExecutor } from "./executor.mjs";
 import {
   GenerationHaltedError, assertGenerationEnabled,
@@ -98,6 +98,11 @@ function hostEnv(env, cache) {
   return {
     ...env,
     probe: cache ? cache.probe : undefined,
+    // G1 scoped hydration seam: the API layer hydrates exactly the
+    // keys a command names (its payload cache key; its job's
+    // recorded occurrence keys) before the coordinator's
+    // synchronous probe paths run. Nothing hydrates the index.
+    hydrateCacheKey: cache ? (key) => cache.hydrateKey(key) : undefined,
     // Migration prime seam (design §2): bound to THIS request's
     // cache, hence to this script's enforced key prefix — under
     // the staging scope the prime can only ever see smoke-p8/
@@ -140,9 +145,26 @@ export class OpalReaderCoordinator {
     const keyPrefix = this.env.R2_KEY_PREFIX || "";
     if (this.env.OPALREADER_V2_SCOPE === STAGING_SCOPE && keyPrefix !== SMOKE_R2_KEY_PREFIX)
       throw new StagingR2NamespaceError(this.env.R2_KEY_PREFIX);
-    const cache = createR2AudioCache(this.env.OPALREADER_STORAGE, { keyPrefix });
-    await cache.hydrateIndex(this.state.storage.sql);
-    return cache;
+    // G1 (Rowan re-review 6354569652): NO eager index hydration.
+    // The pre-correction cache downloaded EVERY indexed object's
+    // bytes on EVERY request; at the approved freeze's scale
+    // (1,798 objects, ≈5.35 GB) the first post-import request
+    // would fetch and hold the entire corpus to answer a settings
+    // read. The snapshot now starts empty per request and fills
+    // only with keys a surface names: the migration prime (its own
+    // rows), byteCheck (its one key), and the API's scoped command
+    // hydration (a command's payload key + its job's keys).
+    return createR2AudioCache(this.env.OPALREADER_STORAGE, { keyPrefix });
+  }
+
+  // The cache keys a job's occurrences have recorded — the whole
+  // set an executor message for that job can legitimately touch.
+  _jobCacheKeys(jobId) {
+    try {
+      return this.state.storage.sql.exec(
+        `SELECT DISTINCT cache_key FROM occurrences WHERE job_id = ?`, jobId)
+        .toArray().map(r => r.cache_key).filter(Boolean);
+    } catch { return []; }
   }
 
   async fetch(request) {
@@ -174,6 +196,11 @@ export class OpalReaderCoordinator {
     if (!message || !message.grantId || !message.jobId || !Array.isArray(message.occurrences))
       return json(422, { error: "invalid_grant_message" });
     const cache = await this._cache();
+    // Scoped hydration (G1): the executor's synchronous cache
+    // phase may only touch this message's job — hydrate its
+    // recorded occurrence keys; synthesis keys are primed per
+    // occurrence by the work source, as before.
+    await cache.hydrateKeys(this._jobCacheKeys(message.jobId));
     const coord = new GenerationCoordinator(this.state, hostEnv(this.env, cache));
     const executor = createExecutor({
       coordinator: coord,
@@ -254,12 +281,38 @@ async function fetchHandler(request, env) {
   const instance = request.headers.get("x-opalreader-instance");
   if (instance !== SMOKE_INSTANCE)
     return json(403, { error: "staging_instance_required" }, cors);
+  // G2 operator admission fence (server entry; Rowan re-review
+  // 6354569652): the migration command types are operator-only.
+  // The credential is a DISTINCT secret (OPALREADER_MIGRATION_
+  // OPERATOR_TOKEN), never the client access token — if the two
+  // are configured to the same value the fence treats the operator
+  // credential as not configured at all. Unset means CLOSED: in
+  // every deployment built from the current deploy spec the secret
+  // is absent, so migration commands are unreachable, full stop.
+  // Refusals happen here, before the coordinator namespace is
+  // touched; admission is marked on the forwarded internal request
+  // (overwritten unconditionally below, so a client-supplied mark
+  // is worthless) and re-checked at the API layer.
+  let operatorAdmitted = false;
+  if (request.method === "POST" && url.pathname === "/v2/commands") {
+    let peek = null;
+    try { peek = await request.clone().json(); } catch { peek = null; }
+    if (peek && MIGRATION_COMMAND_TYPES.includes(peek.type)) {
+      const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+      if (!operatorToken || operatorToken === env.OPALREADER_ACCESS_TOKEN)
+        return json(503, { error: "migration_operator_not_configured" }, cors);
+      if (request.headers.get("x-opalreader-operator-token") !== operatorToken)
+        return json(403, { error: "migration_operator_required" }, cors);
+      operatorAdmitted = true;
+    }
+  }
   if (!env.COORDINATOR)
     return json(503, { error: "coordinator_not_bound" }, cors);
   const stub = env.COORDINATOR.get(env.COORDINATOR.idFromName(instance));
   const forwarded = new Request(url.toString(), request);
   forwarded.headers.set(INTERNAL_HEADER, "1");
   forwarded.headers.set("x-opalreader-scope", STAGING_SCOPE);
+  forwarded.headers.set("x-opalreader-operator-admitted", operatorAdmitted ? "1" : "0");
   const response = await stub.fetch(forwarded);
   const headers = new Headers(response.headers);
   for (const [k, v] of Object.entries(cors)) headers.set(k, v);

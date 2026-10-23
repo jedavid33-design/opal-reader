@@ -18,6 +18,7 @@
 //   storage.transactionSync(fn)
 //   storage.setAlarm(msEpoch) / storage.getAlarm() / storage.deleteAlarm()
 import { createHash } from "node:crypto";
+import { APPROVED_FREEZE_MANIFEST } from "./p8/approved-freeze-manifest.mjs";
 
 export const JOB_STATES = [
   "queued", "generating", "paused_quota", "paused_user", "outcome_unknown",
@@ -82,6 +83,17 @@ export const COMMAND_TYPES = [
   "RequestCancel", "RequestSynthesis", "AdoptAudio",
   "ResolveOutcomeUnknown", "SetSettings", "FreezeDirective",
   "SyncPush", "PushPositionEvents", "DeleteBook",
+  "MigrateImportBindings", "MigrateRecordFlipGate",
+];
+
+// The migration command types (G2 correction; Rowan re-review
+// 6354569652). These are OPERATOR-ONLY: the server entry refuses
+// them for ordinary client tokens before the coordinator is ever
+// reached (v2/worker-entry.js + v2/api.mjs admission fence), and
+// the coordinator independently pins what they may carry to the
+// approved freeze (below). A command NAME is not authorization —
+// this list exists so every layer fences the same set.
+export const MIGRATION_COMMAND_TYPES = [
   "MigrateImportBindings", "MigrateRecordFlipGate",
 ];
 
@@ -215,7 +227,8 @@ CREATE TABLE IF NOT EXISTS position_state (
 CREATE TABLE IF NOT EXISTS migration_books (
   book_id TEXT PRIMARY KEY, migration_id TEXT, freeze_digest TEXT,
   row_count INTEGER NOT NULL, rows_json TEXT NOT NULL,
-  rows_sha256 TEXT NOT NULL, imported_at INTEGER NOT NULL);
+  rows_sha256 TEXT NOT NULL, imported_at INTEGER NOT NULL,
+  certificate_sha256 TEXT);
 CREATE TABLE IF NOT EXISTS migration_audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,
   migration_id TEXT, book_id TEXT, occurrence_id TEXT,
@@ -390,8 +403,12 @@ export class GenerationCoordinator {
     // above re-primes nothing. The prepared facts are DATA passed
     // into the synchronous apply step; the transaction stays sync.
     let prepared = null;
-    if (cmd.type === "MigrateImportBindings")
+    if (cmd.type === "MigrateImportBindings" &&
+        !this._migrationManifestError(cmd.payload || {}))
       prepared = await this._prepareMigrationImport(cmd.payload || {});
+    // (G2: an import that fails the pinned-manifest check is never
+    // primed — the apply step re-runs the same check and records the
+    // rejection without touching storage.)
     await this.wake();
     const outcome = this._tx(() => {
       this.sql.exec(
@@ -2130,6 +2147,81 @@ export class GenerationCoordinator {
   // ALWAYS the host's fresh digest over the downloaded bytes; the
   // metadata value rides separately and is never trusted (§3).
 
+  // ---- G2: the pinned approved freeze (Rowan re-review
+  // 6354569652). The authoritative manifest identity lives in code
+  // (v2/p8/approved-freeze-manifest.mjs, derived from Julie's
+  // approved frozen snapshot by tools/derive-approved-freeze-
+  // manifest.mjs): the freeze's corpus digest plus, per book, the
+  // expected binding row set. A deployment/test environment may
+  // supply env.approvedFreezeManifest (deployment configuration,
+  // inside the trust boundary by definition); request data can
+  // NEVER influence which manifest is pinned — caller input may
+  // only match it. A manifest is { snapshotDigest, books:
+  // { [bookId]: { rowSetSha256, rows: [[occurrenceId, revisionKey,
+  // cacheKey, size, format, sha256Prefix, etag], ...] } } }.
+  _approvedFreeze() {
+    return (this.env && this.env.approvedFreezeManifest) || APPROVED_FREEZE_MANIFEST;
+  }
+
+  // The pinned record for one book, normalized: rows as objects
+  // plus an occurrence index. Null when the book is not part of
+  // the approved freeze.
+  _pinnedBook(bookId) {
+    const book = this._approvedFreeze()?.books?.[bookId];
+    if (!book || !Array.isArray(book.rows)) return null;
+    const rows = book.rows.map(t => ({
+      occurrenceId: t[0], revisionKey: t[1], cacheKey: t[2],
+      size: t[3], format: t[4], sha256Prefix: t[5], etag: t[6],
+    }));
+    return { rowSetSha256: book.rowSetSha256 ?? null, rows,
+             byOccurrence: new Map(rows.map(r => [r.occurrenceId, r])) };
+  }
+
+  _pinnedForm(row) {
+    return row.revisionKey === row.cacheKey ? "fingerprinted"
+      : row.revisionKey === `legacy:${row.cacheKey}` ? "legacy-anchor"
+      : "fingerprinted-distinct";
+  }
+
+  // The G2 admission check on an import payload, independent of
+  // primed facts: null when the payload is exactly the approved
+  // freeze's shape for this book, else the rejection. Runs before
+  // priming (handleCommand) and again inside the command
+  // transaction (the apply step) — the same function, so the two
+  // can never drift apart.
+  _migrationManifestError(p) {
+    const bookId = p.bookId || null;
+    const rows = Array.isArray(p.rows) ? p.rows : null;
+    if (!bookId || !rows || rows.length === 0 || !p.migrationId || !p.freezeDigest)
+      return null; // shape errors are the apply step's to name
+    const freeze = this._approvedFreeze();
+    if (!freeze || p.freezeDigest !== freeze.snapshotDigest)
+      return { outcome: "rejected", reason: "migration_freeze_unapproved", bookId };
+    const pinned = this._pinnedBook(bookId);
+    if (!pinned)
+      return { outcome: "rejected", reason: "migration_freeze_unapproved", bookId };
+    if (rows.length !== pinned.rows.length)
+      return { outcome: "rejected", reason: "migration_manifest_mismatch", bookId,
+               occurrenceId: null };
+    const seen = new Set();
+    for (const r of rows) {
+      if (!r || !r.occurrenceId) continue; // shape errors: apply step
+      const want = pinned.byOccurrence.get(r.occurrenceId);
+      if (!want || seen.has(r.occurrenceId))
+        return { outcome: "rejected", reason: "migration_manifest_mismatch", bookId,
+                 occurrenceId: r.occurrenceId };
+      seen.add(r.occurrenceId);
+      if (r.revisionKey !== want.revisionKey || r.cacheKey !== want.cacheKey ||
+          !r.manifest || r.manifest.size !== want.size ||
+          r.manifest.format !== want.format ||
+          typeof r.manifest.sha256 !== "string" ||
+          !r.manifest.sha256.startsWith(want.sha256Prefix))
+        return { outcome: "rejected", reason: "migration_manifest_mismatch", bookId,
+                 occurrenceId: r.occurrenceId };
+    }
+    return null;
+  }
+
   async _prepareMigrationImport(p) {
     const facts = new Map();
     const prime = this.env && this.env.migrationPrime;
@@ -2149,7 +2241,7 @@ export class GenerationCoordinator {
   // exactly the known v1 limitation (no recorded identity anywhere
   // but the cache-key default) — an attestation never rescues a
   // positive foreign identity.
-  _migrationAttestationValid(att, row, fact, freezeDigest) {
+  _migrationAttestationValid(att, row, fact, freezeDigest, pinnedRow = null) {
     if (!att || att.kind !== "freeze_snapshot_attestation") return false;
     if (att.snapshotDigest !== freezeDigest) return false;
     if (att.bookId !== row.bookId || att.occurrenceId !== row.occurrenceId) return false;
@@ -2159,6 +2251,10 @@ export class GenerationCoordinator {
     if (att.format !== fact.format || att.format !== row.manifest.format) return false;
     if (att.r2Key !== fact.objectKey) return false;
     if (fact.etag !== null && fact.etag !== undefined && att.r2Etag !== fact.etag) return false;
+    // G2: the attestation's etag must also be the FREEZE's etag for
+    // this row — an attestation minted against any other listing is
+    // not the approved freeze's paperwork, however self-consistent.
+    if (pinnedRow && att.r2Etag !== pinnedRow.etag) return false;
     if (att.identityLimitation !== "v1_metadata_no_identity") return false;
     return true;
   }
@@ -2180,6 +2276,12 @@ export class GenerationCoordinator {
         return { outcome: "rejected", reason: "duplicate_row", bookId, occurrenceId: r.occurrenceId };
       seenOcc.add(r.occurrenceId);
     }
+    // G2: the payload must be the approved freeze's row set for
+    // this book — pinned in code, matchable but never definable by
+    // the caller (see _migrationManifestError).
+    const manifestError = this._migrationManifestError(p);
+    if (manifestError) return manifestError;
+    const pinned = this._pinnedBook(bookId);
     // Content: carried by the command, or already present. A stored
     // content entity that disagrees with the carried one is a
     // divergence — migration never silently rewrites a book's
@@ -2207,14 +2309,22 @@ export class GenerationCoordinator {
           return { outcome: "rejected", reason: "unknown_occurrence", bookId, occurrenceId: r.occurrenceId };
     }
     // The import record: a re-import under a different row set is a
-    // divergence, never an overwrite.
+    // divergence, never an overwrite. The immutable per-book import
+    // identity (consistency addendum to G2/G3) pins migrationId,
+    // freezeDigest, size and format alongside the four fields the
+    // first version hashed — a re-import redefining ANY pinned
+    // field is rejected, including after a gate record exists (the
+    // gate's own checks are separate; this fence fires at import).
     const canonicalRows = rows
       .map(r => ({ occurrenceId: r.occurrenceId, revisionKey: r.revisionKey,
-                   cacheKey: r.cacheKey, sha256: r.manifest.sha256 }))
+                   cacheKey: r.cacheKey, sha256: r.manifest.sha256,
+                   size: r.manifest.size, format: r.manifest.format }))
       .sort((a, b) => (a.occurrenceId < b.occurrenceId ? -1 : 1));
     const rowsSha256 = sha256HexText(canonicalJson(canonicalRows));
     const priorBook = this._oneOrNull(`SELECT * FROM migration_books WHERE book_id = ?`, bookId);
-    if (priorBook && priorBook.rows_sha256 !== rowsSha256)
+    if (priorBook && (priorBook.rows_sha256 !== rowsSha256 ||
+                      priorBook.migration_id !== p.migrationId ||
+                      priorBook.freeze_digest !== p.freezeDigest))
       return { outcome: "rejected", reason: "migration_book_divergence", bookId };
 
     // ---- validate EVERY row before applying anything (design §1).
@@ -2277,7 +2387,8 @@ export class GenerationCoordinator {
               recorded === r.cacheKey;
             const att = r.provenanceAttestation || null;
             if (att && noPositiveIdentity &&
-                this._migrationAttestationValid(att, { ...r, bookId }, fact, p.freezeDigest)) {
+                this._migrationAttestationValid(att, { ...r, bookId }, fact, p.freezeDigest,
+                                                pinned.byOccurrence.get(r.occurrenceId))) {
               accepted = true; plan.viaProvenance = true;
             } else if (att && noPositiveIdentity) fail("attestation_invalid");
             else fail("identity_mismatch");
@@ -2310,16 +2421,39 @@ export class GenerationCoordinator {
       return { outcome: "rejected", reason: firstBlock, bookId, certificate };
     }
 
+    // G3: the canonical certificate digest, derived HERE from the
+    // verified class-C facts — never accepted from the caller. It
+    // binds every row's import-time verification (object key,
+    // computed + retained-metadata digests, observed etag,
+    // acceptance class) to the freeze, the migration, and the
+    // row-set identity digest. accepted_idempotent normalizes to
+    // "accepted": an idempotent re-import observes the same facts
+    // and must anchor identically; a re-import whose observations
+    // changed under the same rows is a divergence, rejected here —
+    // before anything is applied.
+    const anchorMaterial = { v: 1, bookId, migrationId: p.migrationId,
+      freezeDigest: p.freezeDigest, rowsSha256,
+      rows: plans.map(plan => ({ occurrenceId: plan.row.occurrenceId,
+        revisionKey: plan.row.revisionKey, cacheKey: plan.row.cacheKey,
+        objectKey: plan.cert.objectKey, computedSha256: plan.cert.computedSha256,
+        metadataSha256: plan.cert.metadataSha256, etag: plan.cert.etag,
+        status: plan.viaProvenance ? "accepted_provenance" : "accepted" }))
+        .sort((a, b) => (a.occurrenceId < b.occurrenceId ? -1 : 1)) };
+    const certificateSha256 = sha256HexText(canonicalJson(anchorMaterial));
+    if (priorBook && priorBook.certificate_sha256 !== certificateSha256)
+      return { outcome: "rejected", reason: "migration_book_divergence", bookId };
+    certificate.certificateSha256 = certificateSha256;
+
     // ---- apply: one transaction (the handleCommand transaction),
     // both planes, from the same verified facts.
     if (contentPlan === "insert")
       this._upsertSyncEntity("content", bookId, bookId, p.content);
     if (!priorBook) {
       this.sql.exec(
-        `INSERT INTO migration_books (book_id, migration_id, freeze_digest, row_count, rows_json, rows_sha256, imported_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO migration_books (book_id, migration_id, freeze_digest, row_count, rows_json, rows_sha256, imported_at, certificate_sha256)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         bookId, p.migrationId, p.freezeDigest, canonicalRows.length,
-        canonicalJson(canonicalRows), rowsSha256, this._now());
+        canonicalJson(canonicalRows), rowsSha256, this._now(), certificateSha256);
     }
     for (const plan of plans) {
       const r = plan.row, fact = facts.get(r.cacheKey);
@@ -2372,37 +2506,130 @@ export class GenerationCoordinator {
   // reference set is the manifest row set the book was imported
   // under; completeness is a statement about THAT set (a book may
   // legitimately have occurrences with no audio yet).
+  //
+  // G4 (Rowan re-review 6354569652): completeness is EXACT,
+  // BIDIRECTIONAL set equality, not "at least the expected rows".
+  // Forward: every expected row is present in both planes with
+  // equal book/occurrence/revisionKey/cacheKey/digest/format/size
+  // (and the provenance the pinned row's form demands). Reverse:
+  // neither plane holds anything MORE for this book — no extra
+  // sync entity (a tombstone is state too), no extra SQL binding
+  // for the book's occurrences, no foreign or surplus provenance
+  // audit rows — and each attested row's audit record survives an
+  // integrity recompute against the stored attestation.
   _migrationCompleteness(bookId) {
     const book = this._oneOrNull(`SELECT * FROM migration_books WHERE book_id = ?`, bookId);
     if (!book) return { book: null, complete: false, missing: ["import_record"], divergences: [] };
     const missing = [], divergences = [];
+    const pinned = this._pinnedBook(bookId);
+    const expected = JSON.parse(book.rows_json);
+    const expectedByOcc = new Map(expected.map(r => [r.occurrenceId, r]));
     const content = this._syncEntity("content", bookId);
     if (!content || content.deleted) missing.push("content");
-    for (const row of JSON.parse(book.rows_json)) {
+    const contentOccIds = content && !content.deleted
+      ? new Set((JSON.parse(content.data_json || "{}").occurrenceIds) || []) : new Set();
+    const expectedProvenance = (row) => {
+      const prow = pinned?.byOccurrence.get(row.occurrenceId) || row;
+      return this._pinnedForm(prow) === "fingerprinted-distinct"
+        ? "migration:freeze_snapshot_attestation" : "migration";
+    };
+    const diverge = (occurrenceId, plane, field, expectedV, foundV) =>
+      divergences.push({ occurrenceId, plane, field, expected: expectedV, found: foundV });
+
+    for (const row of expected) {
+      const prov = expectedProvenance(row);
       const b = this._oneOrNull(
         `SELECT * FROM bindings WHERE occurrence_id = ? AND revision_key = ?`,
         row.occurrenceId, row.revisionKey);
       if (!b) missing.push(`sql:${row.occurrenceId}`);
-      else if (b.cache_key !== row.cacheKey)
-        divergences.push({ occurrenceId: row.occurrenceId, plane: "sql",
-                           expected: row.cacheKey, found: b.cache_key });
+      else {
+        if (b.cache_key !== row.cacheKey) diverge(row.occurrenceId, "sql", "cacheKey", row.cacheKey, b.cache_key);
+        if (b.provenance !== prov) diverge(row.occurrenceId, "sql", "provenance", prov, b.provenance);
+      }
       const idx = this._oneOrNull(`SELECT * FROM cache_index WHERE cache_key = ?`, row.cacheKey);
       if (!idx) missing.push(`index:${row.occurrenceId}`);
-      else if (idx.sha256 !== row.sha256)
-        divergences.push({ occurrenceId: row.occurrenceId, plane: "index",
-                           expected: row.sha256, found: idx.sha256 });
+      else {
+        if (idx.sha256 !== row.sha256) diverge(row.occurrenceId, "index", "sha256", row.sha256, idx.sha256);
+        if (idx.format !== row.format) diverge(row.occurrenceId, "index", "format", row.format, idx.format);
+        // The identity the import anchored: the revision key, or
+        // (legacy rows) null. The cache key itself — the v1 default
+        // another honest path may have anchored first — is the one
+        // other consistent value; anything else is foreign.
+        const identityOk = row.revisionKey.startsWith("legacy:")
+          ? (idx.identity === null || idx.identity === row.cacheKey)
+          : idx.identity === row.revisionKey;
+        if (!identityOk) diverge(row.occurrenceId, "index", "identity",
+          row.revisionKey.startsWith("legacy:") ? null : row.revisionKey, idx.identity);
+      }
       const e = this._syncEntity("bindings", `${bookId}:${row.occurrenceId}`);
       if (!e || e.deleted) missing.push(`sync:${row.occurrenceId}`);
       else {
         const d = JSON.parse(e.data_json || "{}");
-        if (d.cacheKey !== row.cacheKey)
-          divergences.push({ occurrenceId: row.occurrenceId, plane: "sync",
-                             expected: row.cacheKey, found: d.cacheKey ?? null });
-        if (d.sha256 !== row.sha256)
-          divergences.push({ occurrenceId: row.occurrenceId, plane: "sync_digest",
-                             expected: row.sha256, found: d.sha256 ?? null });
+        const wantData = { cacheKey: row.cacheKey, revisionKey: row.revisionKey,
+          sha256: row.sha256, format: row.format, size: row.size, provenance: prov };
+        if (canonicalJson(d) !== canonicalJson(wantData))
+          diverge(row.occurrenceId, "sync", "data", wantData, d);
       }
     }
+
+    // ---- reverse direction: nothing extra, in either plane.
+    for (const e of this._all(
+        `SELECT * FROM sync_entities WHERE family = 'bindings' AND book_id = ?`, bookId)) {
+      const occId = e.entity_key.startsWith(`${bookId}:`)
+        ? e.entity_key.slice(bookId.length + 1) : e.entity_key;
+      if (!expectedByOcc.has(occId))
+        diverge(occId, "sync", "unexpected_row", null, e.deleted ? "tombstone" : "live");
+    }
+    // SQL bindings are occurrence-global by design (the table's own
+    // identity model — AdoptAudio binds without a book context); a
+    // row belongs to this book iff its occurrence is one of the
+    // book's content occurrences.
+    for (const occId of contentOccIds) {
+      for (const b of this._all(`SELECT * FROM bindings WHERE occurrence_id = ?`, occId)) {
+        const want = expectedByOcc.get(occId);
+        if (!want || want.revisionKey !== b.revision_key)
+          diverge(occId, "sql", "unexpected_row", want ? want.revisionKey : null, b.revision_key);
+      }
+    }
+    // Provenance audit integrity: exactly one audit row per
+    // attested row, under THIS book's migration, its fingerprint
+    // recomputing over the stored attestation, the attestation
+    // itself field-equal to the approved row (including the
+    // freeze's etag). No audit rows for anything else.
+    const attested = expected.filter(r => expectedProvenance(r) ===
+      "migration:freeze_snapshot_attestation");
+    const auditByOcc = new Map();
+    for (const a of this._all(`SELECT * FROM migration_audit WHERE book_id = ?`, bookId)) {
+      if (a.migration_id !== book.migration_id ||
+          !attested.some(r => r.occurrenceId === a.occurrence_id))
+        diverge(a.occurrence_id, "audit", "unexpected_row", book.migration_id, a.migration_id);
+      else auditByOcc.set(a.occurrence_id,
+        [...(auditByOcc.get(a.occurrence_id) || []), a]);
+    }
+    for (const row of attested) {
+      const list = auditByOcc.get(row.occurrenceId) || [];
+      if (list.length !== 1) {
+        diverge(row.occurrenceId, "audit", "count", 1, list.length);
+        continue;
+      }
+      const a = list[0];
+      let ok = a.revision_key === row.revisionKey && a.cache_key === row.cacheKey &&
+        a.outcome === "accepted_provenance";
+      if (ok) {
+        try {
+          const att = JSON.parse(a.attestation_json);
+          ok = a.attestation_sha256 === sha256HexText(a.attestation_json) &&
+            att.bookId === bookId && att.occurrenceId === row.occurrenceId &&
+            att.revisionKey === row.revisionKey && att.cacheKey === row.cacheKey &&
+            att.sha256 === row.sha256 && att.size === row.size &&
+            att.format === row.format && att.snapshotDigest === book.freeze_digest &&
+            (!pinned || att.r2Etag === pinned.byOccurrence.get(row.occurrenceId)?.etag);
+        } catch { ok = false; }
+      }
+      if (!ok) diverge(row.occurrenceId, "audit", "integrity",
+        "one intact accepted_provenance record", "missing/tampered");
+    }
+
     return { book, complete: missing.length === 0 && divergences.length === 0,
              missing, divergences };
   }
@@ -2421,9 +2648,17 @@ export class GenerationCoordinator {
     if (!chk.complete)
       return { outcome: "rejected", reason: "flip_gate_incomplete", bookId,
                missing: chk.missing, divergences: chk.divergences };
+    // G3: the presented certificate must equal the digest the
+    // coordinator itself derived and anchored at import time.
+    // Anything else — an arbitrary string, another book's
+    // certificate, a certificate minted under another migration —
+    // certifies nothing and is refused. (An existing gate's stored
+    // certificate equals the anchor by construction, so this check
+    // subsumes the old caller-string conflict rule.)
+    if (!chk.book.certificate_sha256 ||
+        p.certificateSha256 !== chk.book.certificate_sha256)
+      return { outcome: "rejected", reason: "flip_gate_certificate_mismatch", bookId };
     const existing = this._oneOrNull(`SELECT * FROM migration_gates WHERE book_id = ?`, bookId);
-    if (existing && existing.certificate_sha256 !== p.certificateSha256)
-      return { outcome: "rejected", reason: "flip_gate_conflict", bookId };
     if (existing)
       return { outcome: "applied", bookId, flipped: true, idempotent: true };
     this.sql.exec(
@@ -2469,7 +2704,11 @@ export class GenerationCoordinator {
         occurrenceIds: (JSON.parse(contentEnt.data_json || "{}").occurrenceIds) || [] } : null,
       importRecord: book ? { migrationId: book.migration_id,
         freezeDigest: book.freeze_digest, rowCount: book.row_count,
-        rowsSha256: book.rows_sha256, importedAt: book.imported_at } : null,
+        rowsSha256: book.rows_sha256, importedAt: book.imported_at,
+        certificateSha256: book.certificate_sha256 ?? null } : null,
+      pinnedFreeze: (() => { const pb = this._pinnedBook(bookId);
+        return pb ? { inApprovedFreeze: true, rowSetSha256: pb.rowSetSha256 }
+                  : { inApprovedFreeze: false, rowSetSha256: null }; })(),
       syncBindings, sqlBindings, cacheAnchors,
       gate: gate ? { flipped: true, migrationId: gate.migration_id,
         certificateSha256: gate.certificate_sha256, flippedAt: gate.flipped_at } : null,

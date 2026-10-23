@@ -15,7 +15,7 @@ import { createR2AudioCache } from "../v2/host/adapters.mjs";
 import { createApi } from "../v2/api.mjs";
 import {
   RecordingBucket, attestationFor, gateCmd, importCmd, makeWorld,
-  seedRow, sha256Hex, syntheticBytes, v1Meta,
+  pinnedEntry, seedRow, sha256Hex, syntheticBytes, v1Meta,
 } from "./helpers/migration-fixtures.mjs";
 
 const MIG = "mig-rehearsal-1";
@@ -36,8 +36,9 @@ const NO_RESIDUE = { bindings: 0, cacheIndex: 0, migrationBooks: 0,
 
 // ---------------------------------------------------------------- I2
 test("I2 cold DO: the migration path binds both planes where the snapshot paths cannot see the object", async () => {
-  const { bucket, cache, harness: h, coord } = makeWorld();
+  const { bucket, cache, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-a", occurrenceId: "o1" });
+  pinBook("book-a", [{ row: s.row, etag: s.etag }]);
   // Genuinely cold: empty index, empty snapshot.
   assert.equal(h.rows("cache_index").length, 0);
   assert.equal(cache.probe.exists(s.cacheKey), false);
@@ -86,13 +87,16 @@ test("I1 contrast: SyncPush still lands a bindings entity with NO byte verificat
 });
 
 test("missing object: the whole book is rejected and leaves zero residue", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const a = seedRow(bucket, { bookId: "book-b", occurrenceId: "o1" });
   const ghostBytes = syntheticBytes("book-b:o2");
   const ghost = { occurrenceId: "o2", revisionKey: sha256Hex(ghostBytes),
     cacheKey: sha256Hex(ghostBytes),
     manifest: { sha256: sha256Hex(ghostBytes), size: ghostBytes.length, format: "mp3" } };
   const c = seedRow(bucket, { bookId: "book-b", occurrenceId: "o3" });
+  pinBook("book-b", [{ row: a.row, etag: a.etag },
+    { row: ghost, etag: `"etag:audio/${ghost.cacheKey}.mp3"` },
+    { row: c.row, etag: c.etag }]);
   const res = await coord.handleCommand(importCmd("miss-1", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-b",
     content: { title: "B", occurrenceIds: ["o1", "o2", "o3"] },
@@ -111,9 +115,10 @@ test("missing object: the whole book is rejected and leaves zero residue", async
 
 // ---------------------------------------------------------------- I3
 test("I3 negative 1: tampered customMetadata (forged sha label, bytes unchanged) is refused", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-c", occurrenceId: "o1",
     meta: { ...v1Meta("mp3"), sha256: "f".repeat(64) } });
+  pinBook("book-c", [{ row: s.row, etag: s.etag }]);
   // The old snapshot path would surface the FORGED value as the hash.
   assert.equal(s.row.manifest.sha256 !== "f".repeat(64), true);
   const res = await coord.handleCommand(importCmd("i3-1", {
@@ -128,9 +133,10 @@ test("I3 negative 1: tampered customMetadata (forged sha label, bytes unchanged)
 });
 
 test("I3 negative 2: swapped bytes under a stale (manifest-matching) metadata label are refused", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-d", occurrenceId: "o1",
     meta: { ...v1Meta("mp3") } });
+  pinBook("book-d", [{ row: s.row, etag: s.etag }]);
   // Another writer's bytes land under the key; the metadata still
   // advertises the ORIGINAL digest (which equals the manifest).
   const swapped = syntheticBytes("book-d:o1:swapped");
@@ -146,13 +152,15 @@ test("I3 negative 2: swapped bytes under a stale (manifest-matching) metadata la
 });
 
 test("honest metadata: a correct recorded sha is accepted alongside the v1 no-sha shape", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const plain = seedRow(bucket, { bookId: "book-e", occurrenceId: "o1" });
   const bytes2 = syntheticBytes("book-e:o2");
   const sha2 = sha256Hex(bytes2);
   bucket.seed(`audio/${sha2}.wav`, bytes2, { ...v1Meta("wav"), sha256: sha2 });
   const honest = { occurrenceId: "o2", revisionKey: sha2, cacheKey: sha2,
     manifest: { sha256: sha2, size: bytes2.length, format: "wav" } };
+  pinBook("book-e", [{ row: plain.row, etag: plain.etag },
+    { row: honest, etag: `"etag:audio/${sha2}.wav"` }]);
   const res = await coord.handleCommand(importCmd("i3-3", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-e",
     content: { title: "E", occurrenceIds: ["o1", "o2"] }, rows: [plain.row, honest],
@@ -163,10 +171,11 @@ test("honest metadata: a correct recorded sha is accepted alongside the v1 no-sh
 
 // ------------------------------------------------------- shared key
 test("shared key: two occurrences bound to one object; one index row, two bindings, both planes agree", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const a = seedRow(bucket, { bookId: "book-f", occurrenceId: "s17" });
   const bRow = { occurrenceId: "s19", revisionKey: a.revisionKey, cacheKey: a.cacheKey,
                  manifest: a.row.manifest };
+  pinBook("book-f", [{ row: a.row, etag: a.etag }, { row: bRow, etag: a.etag }]);
   const res = await coord.handleCommand(importCmd("shared-1", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-f",
     content: { title: "F", occurrenceIds: ["s17", "s19"] }, rows: [a.row, bRow],
@@ -179,8 +188,9 @@ test("shared key: two occurrences bound to one object; one index row, two bindin
 
 // ------------------------------------------------------------- legacy
 test("legacy anchors bind by their own rule; a wrong anchor is refused", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const leg = seedRow(bucket, { bookId: "book-g", occurrenceId: "o1", form: "legacy" });
+  pinBook("book-g", [{ row: leg.row, etag: leg.etag }]);
   const ok = await coord.handleCommand(importCmd("leg-1", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-g",
     content: { title: "G", occurrenceIds: ["o1"] }, rows: [leg.row],
@@ -188,6 +198,7 @@ test("legacy anchors bind by their own rule; a wrong anchor is refused", async (
   assert.equal(ok.outcome, "applied", JSON.stringify(ok));
   const bad = seedRow(bucket, { bookId: "book-h", occurrenceId: "o1", form: "legacy" });
   const badRow = { ...bad.row, revisionKey: "legacy:some-other-key" };
+  pinBook("book-h", [{ row: badRow, etag: bad.etag }]);
   const res = await coord.handleCommand(importCmd("leg-2", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-h",
     content: { title: "H", occurrenceIds: ["o1"] }, rows: [badRow],
@@ -210,8 +221,9 @@ function distinctBook(bucket, bookId, n, { attest = true } = {}) {
 }
 
 test("the 31: provenance acceptance binds all fingerprinted-distinct rows with an auditable trail", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
-  const { rows, content } = distinctBook(bucket, "book-distinct", 31);
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
+  const { seeded, rows, content } = distinctBook(bucket, "book-distinct", 31);
+  pinBook("book-distinct", seeded.map((s, i) => ({ row: rows[i], etag: s.etag })));
   const res = await coord.handleCommand(importCmd("prov-1", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-distinct", content, rows }));
   assert.equal(res.outcome, "applied", JSON.stringify(res.certificate?.rows?.find(r => r.status === "blocked")));
@@ -222,13 +234,15 @@ test("the 31: provenance acceptance binds all fingerprinted-distinct rows with a
     a.recorded_identity === a.cache_key)); // the v1 default is what was recorded
   assert.equal(coord.migrationBookView("book-distinct").completeness.complete, true);
   const gate = await coord.handleCommand(gateCmd("prov-gate", {
-    migrationId: MIG, bookId: "book-distinct", certificateSha256: "cert-distinct" }));
+    migrationId: MIG, bookId: "book-distinct",
+    certificateSha256: res.certificate.certificateSha256 }));
   assert.equal(gate.outcome, "applied");
 });
 
 test("the 31: a missing attestation refuses the whole book as identity_mismatch, zero residue", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
-  const { rows, content } = distinctBook(bucket, "book-noatt", 3, { attest: false });
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
+  const { seeded, rows, content } = distinctBook(bucket, "book-noatt", 3, { attest: false });
+  pinBook("book-noatt", seeded.map((s, i) => ({ row: rows[i], etag: s.etag })));
   const res = await coord.handleCommand(importCmd("prov-2", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-noatt", content, rows }));
   assert.equal(res.outcome, "rejected");
@@ -237,7 +251,7 @@ test("the 31: a missing attestation refuses the whole book as identity_mismatch,
 });
 
 test("the 31: attestation field disagreements are attestation_invalid, never a silent pass", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   for (const [i, mutate] of [
     ["sha", a => { a.sha256 = "0".repeat(64); }],
     ["etag", a => { a.r2Etag = '"etag:forged"'; }],
@@ -246,6 +260,7 @@ test("the 31: attestation field disagreements are attestation_invalid, never a s
   ]) {
     const bookId = `book-att-${i}`;
     const s = seedRow(bucket, { bookId, occurrenceId: "d1", form: "distinct" });
+    pinBook(bookId, [{ row: s.row, etag: s.etag }]);
     const att = attestationFor(s, { bookId, freezeDigest: FREEZE });
     mutate(att);
     const res = await coord.handleCommand(importCmd(`prov-bad-${i}`, {
@@ -259,9 +274,10 @@ test("the 31: attestation field disagreements are attestation_invalid, never a s
 });
 
 test("the 31: a POSITIVE foreign identity in metadata is never rescued by an attestation", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-foreign", occurrenceId: "d1", form: "distinct",
     meta: { ...v1Meta("mp3"), identity: "fp-someone-else" } });
+  pinBook("book-foreign", [{ row: s.row, etag: s.etag }]);
   const res = await coord.handleCommand(importCmd("prov-foreign", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-foreign",
     content: { title: "F", occurrenceIds: ["d1"] },
@@ -285,8 +301,9 @@ test("the 31: AdoptAudio (non-migration) keeps strict refusal of the same rows",
 
 // ------------------------------------------------- idempotency (I4)
 test("idempotency: replay returns the stored receipt; a fresh command id converges with no churn", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-i", occurrenceId: "o1" });
+  pinBook("book-i", [{ row: s.row, etag: s.etag }]);
   const cmd = importCmd("idem-1", { migrationId: MIG, freezeDigest: FREEZE, bookId: "book-i",
     content: { title: "I", occurrenceIds: ["o1"] }, rows: [s.row] });
   const first = await coord.handleCommand(cmd);
@@ -304,7 +321,7 @@ test("idempotency: replay returns the stored receipt; a fresh command id converg
 });
 
 test("abort, crash, resume: an interrupted import never promotes the book; the gate is durable across crashes", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   // Gate before any import: refused.
   const early = await coord.handleCommand(gateCmd("abort-g0", {
     migrationId: MIG, bookId: "book-j", certificateSha256: "cert-j" }));
@@ -314,6 +331,8 @@ test("abort, crash, resume: an interrupted import never promotes the book; the g
   const ghostBytes = syntheticBytes("book-j:o2");
   const ghost = { occurrenceId: "o2", revisionKey: sha256Hex(ghostBytes), cacheKey: sha256Hex(ghostBytes),
     manifest: { sha256: sha256Hex(ghostBytes), size: ghostBytes.length, format: "mp3" } };
+  pinBook("book-j", [{ row: good.row, etag: good.etag },
+    { row: ghost, etag: `"etag:audio/${ghost.cacheKey}.mp3"` }]);
   const payload = { migrationId: MIG, freezeDigest: FREEZE, bookId: "book-j",
     content: { title: "J", occurrenceIds: ["o1", "o2"] }, rows: [good.row, ghost] };
   const aborted = await coord.handleCommand(importCmd("abort-1", payload));
@@ -330,7 +349,8 @@ test("abort, crash, resume: an interrupted import never promotes the book; the g
   assert.equal(h.coord.migrationBookView("book-j").completeness.complete, true);
   assert.equal(h.coord.migrationBookView("book-j").gate, null); // imported, NOT flipped
   const gate = await h.coord.handleCommand(gateCmd("abort-g1", {
-    migrationId: MIG, bookId: "book-j", certificateSha256: "cert-j" }));
+    migrationId: MIG, bookId: "book-j",
+    certificateSha256: resumed.certificate.certificateSha256 }));
   assert.equal(gate.outcome, "applied");
   h.crash();
   assert.equal(h.coord.migrationBookView("book-j").gate.flipped, true);
@@ -338,8 +358,9 @@ test("abort, crash, resume: an interrupted import never promotes the book; the g
 
 // --------------------------------------------------------- the fence
 test("read-back divergence: a deleted SQL row / a tampered sync row blocks the flip gate and shows in the view", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-k", occurrenceId: "o1" });
+  pinBook("book-k", [{ row: s.row, etag: s.etag }]);
   await coord.handleCommand(importCmd("fence-1", { migrationId: MIG, freezeDigest: FREEZE,
     bookId: "book-k", content: { title: "K", occurrenceIds: ["o1"] }, rows: [s.row] }));
   h.db.prepare(`DELETE FROM bindings WHERE occurrence_id = 'o1'`).run();
@@ -351,9 +372,10 @@ test("read-back divergence: a deleted SQL row / a tampered sync row blocks the f
   assert.equal(gate.outcome, "rejected");
   assert.equal(gate.reason, "flip_gate_incomplete");
 
-  const s2 = seedRow(bucket, { bookId: "book-l", occurrenceId: "o1" });
+  const s2 = seedRow(bucket, { bookId: "book-l", occurrenceId: "o1l" });
+  pinBook("book-l", [{ row: s2.row, etag: s2.etag }]);
   await coord.handleCommand(importCmd("fence-2", { migrationId: MIG, freezeDigest: FREEZE,
-    bookId: "book-l", content: { title: "L", occurrenceIds: ["o1"] }, rows: [s2.row] }));
+    bookId: "book-l", content: { title: "L", occurrenceIds: ["o1l"] }, rows: [s2.row] }));
   h.db.prepare(`UPDATE sync_entities SET data_json = ? WHERE family = 'bindings' AND book_id = 'book-l'`)
     .run(JSON.stringify({ cacheKey: "swapped-key", revisionKey: s2.revisionKey, sha256: s2.row.manifest.sha256 }));
   const view2 = coord.migrationBookView("book-l");
@@ -364,42 +386,50 @@ test("read-back divergence: a deleted SQL row / a tampered sync row blocks the f
   assert.equal(gate2.outcome, "rejected");
 });
 
-test("flip gate: same certificate replays idempotently; a different certificate conflicts", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+test("flip gate: the anchored certificate replays idempotently; an arbitrary string is refused (G3)", async () => {
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-m", occurrenceId: "o1" });
-  await coord.handleCommand(importCmd("gc-1", { migrationId: MIG, freezeDigest: FREEZE,
+  pinBook("book-m", [{ row: s.row, etag: s.etag }]);
+  const imp = await coord.handleCommand(importCmd("gc-1", { migrationId: MIG, freezeDigest: FREEZE,
     bookId: "book-m", content: { title: "M", occurrenceIds: ["o1"] }, rows: [s.row] }));
-  const g1 = await coord.handleCommand(gateCmd("gc-g1", { migrationId: MIG, bookId: "book-m", certificateSha256: "cert-A" }));
+  const cert = imp.certificate.certificateSha256;
+  assert.match(cert, /^[0-9a-f]{64}$/);
+  const g1 = await coord.handleCommand(gateCmd("gc-g1", { migrationId: MIG, bookId: "book-m", certificateSha256: cert }));
   assert.equal(g1.outcome, "applied");
-  const g2 = await coord.handleCommand(gateCmd("gc-g2", { migrationId: MIG, bookId: "book-m", certificateSha256: "cert-A" }));
+  const g2 = await coord.handleCommand(gateCmd("gc-g2", { migrationId: MIG, bookId: "book-m", certificateSha256: cert }));
   assert.equal(g2.outcome, "applied");
   assert.equal(g2.idempotent, true);
+  // G3: the pre-correction tests gated with exactly such caller
+  // literals; they no longer certify anything.
   const g3 = await coord.handleCommand(gateCmd("gc-g3", { migrationId: MIG, bookId: "book-m", certificateSha256: "cert-B" }));
   assert.equal(g3.outcome, "rejected");
-  assert.equal(g3.reason, "flip_gate_conflict");
-  const wrongMig = await coord.handleCommand(gateCmd("gc-g4", { migrationId: "mig-other", bookId: "book-m", certificateSha256: "cert-A" }));
+  assert.equal(g3.reason, "flip_gate_certificate_mismatch");
+  const wrongMig = await coord.handleCommand(gateCmd("gc-g4", { migrationId: "mig-other", bookId: "book-m", certificateSha256: cert }));
   assert.equal(wrongMig.outcome, "rejected");
   assert.equal(wrongMig.reason, "flip_gate_incomplete");
 });
 
 // ------------------------------------------------------- fail closed
 test("no prime seam wired: the migration path fails closed and writes nothing", async () => {
-  const h = makeHarness({}); // no migrationPrime, no probe
   const bytes = syntheticBytes("noprim:o1");
   const sha = sha256Hex(bytes);
+  const row = { occurrenceId: "o1", revisionKey: sha, cacheKey: sha,
+    manifest: { sha256: sha, size: bytes.length, format: "mp3" } };
+  // The book IS pinned (G2) so the refusal isolates the prime seam.
+  const h = makeHarness({ extraEnv: { approvedFreezeManifest: {
+    snapshotDigest: FREEZE, books: { "book-np": pinnedEntry([{ row, etag: "etag:noprim" }]) } } } }); // no migrationPrime, no probe
   const res = await h.coord.handleCommand(importCmd("np-1", {
     migrationId: MIG, freezeDigest: FREEZE, bookId: "book-np",
-    content: { title: "NP", occurrenceIds: ["o1"] },
-    rows: [{ occurrenceId: "o1", revisionKey: sha, cacheKey: sha,
-             manifest: { sha256: sha, size: bytes.length, format: "mp3" } }] }));
+    content: { title: "NP", occurrenceIds: ["o1"] }, rows: [row] }));
   assert.equal(res.outcome, "rejected");
   assert.equal(res.reason, "migration_prime_unavailable");
   assert.deepEqual(residue(h), NO_RESIDUE);
 });
 
 test("content divergence and foreign occurrences are refused", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-o", occurrenceId: "o1" });
+  pinBook("book-o", [{ row: s.row, etag: s.etag }]);
   await coord.handleCommand(importCmd("cd-1", { migrationId: MIG, freezeDigest: FREEZE,
     bookId: "book-o", content: { title: "Original", occurrenceIds: ["o1"] }, rows: [s.row] }));
   const diverged = await coord.handleCommand(importCmd("cd-2", { migrationId: MIG, freezeDigest: FREEZE,
@@ -410,7 +440,9 @@ test("content divergence and foreign occurrences are refused", async () => {
     bookId: "book-o", content: { title: "Original", occurrenceIds: ["o1"] },
     rows: [{ occurrenceId: "oX", revisionKey: s.revisionKey, cacheKey: s.cacheKey, manifest: s.row.manifest }] }));
   assert.equal(foreign.outcome, "rejected");
-  assert.equal(foreign.reason, "unknown_occurrence");
+  // G2 fires first (earlier and stronger than the old
+  // unknown_occurrence check): oX is not in the pinned freeze rows.
+  assert.equal(foreign.reason, "migration_manifest_mismatch");
 });
 
 test("staging namespace fence: a smoke-prefixed prime cannot see production-shaped keys", async () => {
@@ -418,7 +450,9 @@ test("staging namespace fence: a smoke-prefixed prime cannot see production-shap
   const s = seedRow(bucket, { bookId: "book-p", occurrenceId: "o1" }); // seeds audio/<key>.mp3
   const smokeCache = createR2AudioCache(bucket, { keyPrefix: "smoke-p8/" });
   assert.equal(await smokeCache.primeForMigration(s.cacheKey), null); // looks under smoke-p8/ only
-  const h = makeHarness({ extraEnv: { migrationPrime: (k) => smokeCache.primeForMigration(k) } });
+  const h = makeHarness({ extraEnv: { migrationPrime: (k) => smokeCache.primeForMigration(k),
+    approvedFreezeManifest: { snapshotDigest: FREEZE,
+      books: { "book-p": pinnedEntry([{ row: s.row, etag: s.etag }]) } } } });
   const res = await h.coord.handleCommand(importCmd("sf-1", { migrationId: MIG, freezeDigest: FREEZE,
     bookId: "book-p", content: { title: "P", occurrenceIds: ["o1"] }, rows: [s.row] }));
   assert.equal(res.outcome, "rejected");
@@ -428,8 +462,9 @@ test("staging namespace fence: a smoke-prefixed prime cannot see production-shap
 
 // ------------------------------------------------------------ facade
 test("read facade: GET /v2/migration/book/<id> serves the both-plane view and writes nothing", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld();
   const s = seedRow(bucket, { bookId: "book-q", occurrenceId: "o1" });
+  pinBook("book-q", [{ row: s.row, etag: s.etag }]);
   await coord.handleCommand(importCmd("fac-1", { migrationId: MIG, freezeDigest: FREEZE,
     bookId: "book-q", content: { title: "Q", occurrenceIds: ["o1"] }, rows: [s.row] }));
   const api = createApi(h.env);

@@ -473,6 +473,13 @@ export function createR2AudioCache(bucket, { keyPrefix = "" } = {}) {
   }
 
   // Hydrate every key the coordinator's cache_index knows about.
+  // NOTE (G1 correction): the Worker request path no longer calls
+  // this — eagerly downloading every indexed object's bytes on
+  // every request is a corpus-scale denial of service against
+  // ourselves (≈5.35 GB at the approved freeze). It remains for
+  // callers that genuinely bound themselves to a whole index (the
+  // direct cache tests); request paths hydrate exactly the keys
+  // they name, via hydrateKey/hydrateKeys below.
   async function hydrateIndex(sql) {
     let rows = [];
     try {
@@ -480,6 +487,26 @@ export function createR2AudioCache(bucket, { keyPrefix = "" } = {}) {
     } catch { rows = []; }
     for (const r of rows) await hydrateKey(r.cache_key);
     return snapshot;
+  }
+
+  // Hydrate exactly the named keys — the lazy, request-scoped read
+  // path (G1). Each key costs at most one bucket GET per extension
+  // tried; a key absent from the bucket is a cached miss.
+  async function hydrateKeys(keys) {
+    for (const k of keys) await hydrateKey(k);
+    return snapshot;
+  }
+
+  // Snapshot occupancy — the resident-bytes observable the G1
+  // stress tests bound. Only entries actually hydrated/put count.
+  function stats() {
+    let entries = 0, residentBytes = 0;
+    for (const e of snapshot.values()) {
+      if (!e) continue;
+      entries++;
+      residentBytes += e.audio ? e.audio.byteLength : 0;
+    }
+    return { entries, residentBytes };
   }
 
   // The executor hands {audio, format, durationSec} through a sync
@@ -634,7 +661,8 @@ export function createR2AudioCache(bucket, { keyPrefix = "" } = {}) {
   }
 
   return {
-    hydrateIndex, hydrateKey, putIfAbsent, get, flush, probe, byteCheck,
+    hydrateIndex, hydrateKey, hydrateKeys, stats,
+    putIfAbsent, get, flush, probe, byteCheck,
     primeForMigration,
     // Prime one fingerprint key from an occurrence payload before the
     // executor's synchronous cache phase (called by the work source).

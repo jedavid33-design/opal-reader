@@ -38,7 +38,12 @@ function buildBook(bucket, spec) {
   const rows = [], listing = [], seededByOcc = new Map();
   let sharedSeeded = null;
   for (let i = 0; i < spec.rows; i++) {
-    const occurrenceId = `seg-${String(i + 1).padStart(3, "0")}`;
+    // Occurrence ids are globally unique in the coordinator's data
+    // model (the bindings table is occurrence-keyed with no book
+    // context; the audited corpus uses UUIDs) — the G4 gate's
+    // bidirectional check relies on exactly that invariant, so the
+    // fixture honors it too.
+    const occurrenceId = `${spec.bookId}-seg-${String(i + 1).padStart(3, "0")}`;
     const form = i < spec.distinct ? "distinct"
       : i < spec.distinct + spec.legacy ? "legacy" : "fingerprinted";
     const format = i % 5 === 4 ? "wav" : "mp3";
@@ -70,7 +75,7 @@ function buildBook(bucket, spec) {
 }
 
 test("scale rehearsal: 1,799 synthetic bindings import cold, certify in three evidence classes, gate — with zero storage writes", async () => {
-  const { bucket, harness: h, coord } = makeWorld();
+  const { bucket, harness: h, coord, pinBook } = makeWorld({ freezeDigest: FREEZE });
   const world = BOOKS.map(spec => ({ spec, ...buildBook(bucket, spec) }));
   const totalRows = world.reduce((n, b) => n + b.rows.length, 0);
   assert.equal(totalRows, 1799);
@@ -82,6 +87,9 @@ test("scale rehearsal: 1,799 synthetic bindings import cold, certify in three ev
   const certificates = [];
   let accepted = 0, provenance = 0;
   for (const [idx, book] of world.entries()) {
+    // G2: the approved freeze pins this book's exact row set.
+    pinBook(book.spec.bookId, book.rows.map(r => ({
+      row: r, etag: book.listing.find(l => l.occurrenceId === r.occurrenceId).etag })));
     const res = await coord.handleCommand(importCmd(`scale-${book.spec.bookId}`, {
       migrationId: MIG, freezeDigest: FREEZE, bookId: book.spec.bookId,
       content: book.content, rows: book.rows }));
@@ -124,9 +132,12 @@ test("scale rehearsal: 1,799 synthetic bindings import cold, certify in three ev
     const view = await viewRes.json();
     assert.equal(view.completeness.complete, true, book.spec.bookId);
     assert.equal(view.gate, null);
-    const certSha = sha256Hex(JSON.stringify(cert.rows.map(r => [r.occurrenceId, r.computedSha256, r.status])));
+    // G3: the gate takes the coordinator's own anchored
+    // certificate digest for this import (the evidence certificate
+    // assembled above stays a distinct artifact of this rehearsal).
     const gate = await coord.handleCommand(gateCmd(`scale-gate-${book.spec.bookId}`, {
-      migrationId: MIG, bookId: book.spec.bookId, certificateSha256: certSha }));
+      migrationId: MIG, bookId: book.spec.bookId,
+      certificateSha256: res.certificate.certificateSha256 }));
     assert.equal(gate.outcome, "applied", book.spec.bookId);
     if (idx === 2) h.crash(); // durability mid-sequence: nothing above is lost
   }

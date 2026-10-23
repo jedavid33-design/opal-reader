@@ -7,7 +7,7 @@
 // no write capability in scope, and the I2 test snapshots the whole
 // store across every GET route to prove it.
 
-import { GenerationCoordinator, deriveChapterState } from "./coordinator.mjs";
+import { GenerationCoordinator, MIGRATION_COMMAND_TYPES, deriveChapterState } from "./coordinator.mjs";
 
 function readOnlyCoordinator(state, env) {
   const guard = sql => ({
@@ -51,6 +51,37 @@ export function createApi(env) {
     try {
       if (request.method === "POST" && path === "/v2/commands") {
         const cmd = await request.json();
+        // G2 admission fence, layer 2 (the DO side): migration
+        // commands are operator-only. The worker entry checks the
+        // operator credential and marks the forwarded (internal)
+        // request; without that mark the command is refused here,
+        // before the coordinator sees it — a client can never reach
+        // this layer directly, and the internal mark cannot be
+        // forged from outside the entry (it overwrites the header
+        // unconditionally). Direct coordinator callers (tests, the
+        // executor host) are inside the trust boundary; the
+        // coordinator's own pinned-freeze checks still apply there.
+        if (cmd && MIGRATION_COMMAND_TYPES.includes(cmd.type) &&
+            request.headers.get("x-opalreader-operator-admitted") !== "1")
+          return json(403, { error: "migration_operator_required" });
+        // G1 scoped hydration: the synchronous probe paths
+        // (AdoptAudio, outcome reconciliation) consult the request
+        // snapshot. Hydrate exactly the keys this command names —
+        // its payload cache key, and the cache keys recorded for
+        // its job's occurrences — never the whole index.
+        if (typeof env.hydrateCacheKey === "function" && cmd) {
+          const keys = new Set();
+          const p = cmd.payload || {};
+          if (typeof p.cacheKey === "string" && p.cacheKey) keys.add(p.cacheKey);
+          if (typeof p.jobId === "string" && p.jobId) {
+            try {
+              for (const r of coordinatorState.storage.sql.exec(
+                  `SELECT cache_key FROM occurrences WHERE job_id = ?`, p.jobId).toArray())
+                if (r.cache_key) keys.add(r.cache_key);
+            } catch { /* schema not yet created: nothing to hydrate */ }
+          }
+          for (const k of keys) await env.hydrateCacheKey(k);
+        }
         const coord = new GenerationCoordinator(coordinatorState, env);
         return json(200, await coord.handleCommand(cmd));
       }
