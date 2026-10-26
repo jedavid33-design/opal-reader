@@ -450,7 +450,7 @@ test("worker and reader canonical JSON agree byte-for-byte", () => {
 test("client submits the saved plan in acknowledged slices, then finalizes", () => {
   const app = readFileSync(new URL("../app-256.js", import.meta.url), "utf8");
   const index = readFileSync(new URL("../index.html", import.meta.url), "utf8");
-  assert.match(index, /app-256\.js/);
+  assert.match(index, /app-258\.js/);
   const helperStart = app.indexOf("const CONTINUE_STAGE_SLICE=");
   assert.ok(helperStart >= 0, "submitContinuePlan helper exists");
   const helper = app.slice(helperStart, app.indexOf("async function continueToQuota(", helperStart));

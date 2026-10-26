@@ -32,5 +32,5 @@ test("chapter and passage preparation yields before submit; confirmation still p
 test("Worker release stays compatible and frontend file gets cache-busted",()=>{
  assert.match(app,/const APP_UI_VERSION="1\.4\.116"/);
  assert.match(app,/const GENERATION_WORKER_VERSION="1\.4\.42"/);
- assert.match(page,/app-256\.js\?v=case4-truthful-status/);
+ assert.match(page,/app-258\.js\?v=q2-adapter/);
 });

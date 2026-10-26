@@ -271,7 +271,7 @@ test("queue entry performs the Worker status lookup before any submission", () =
 });
 
 test("index.html cache-busts the client for this branch", () => {
-  assert.match(indexHtml, /app-256\.js\?v=case4-truthful-status/);
+  assert.match(indexHtml, /app-258\.js\?v=q2-adapter/);
 });
 
 // ---------------------------------------------------------------------

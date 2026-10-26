@@ -185,5 +185,5 @@ test("reader sync errors preserve the server's message instead of the generic gl
 test("generation release compatibility is untouched by the diagnostic patch", () => {
   assert.match(app, /const APP_UI_VERSION="1\.4\.116"/);
   assert.match(app, /const GENERATION_WORKER_VERSION="1\.4\.42"/);
-  assert.match(page, /app-256\.js\?v=case4-truthful-status/);
+  assert.match(page, /app-258\.js\?v=q2-adapter/);
 });
