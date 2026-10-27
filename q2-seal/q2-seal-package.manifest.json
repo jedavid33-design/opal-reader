@@ -1,0 +1,100 @@
+{
+  "format": "opal-q2-seal-package/1",
+  "comparatorPin": "2bdb548ee2f40800deeebc23f563cb2e211feba3",
+  "callerFreezePin": "e26e88d63da1abb780e20ea830cb463a48aecdf4",
+  "sources": {
+    "src/canonical.mjs": {
+      "sha256": "fab0e13f10f1c4bf2726fb9ab5c4ccf3d9aa55913280b31b8eb75cc18ac68671",
+      "bytes": 3862
+    },
+    "src/project.mjs": {
+      "sha256": "3aa53015e4d209f44fe77b55071790665d81d6197cb8c495aad35d1f1f068b1c",
+      "bytes": 8407
+    },
+    "src/observe.mjs": {
+      "sha256": "2281fba0bdf52a9cbb34efad7a2746fdb55746e5c05e550dbcea3846ee3bb6f0",
+      "bytes": 12382
+    },
+    "src/idb.mjs": {
+      "sha256": "5bd885d8d6aec1f19a28ae36d4eae41207e6682ecef8af00072b9469c85e659b",
+      "bytes": 10947
+    },
+    "src/cloud.mjs": {
+      "sha256": "f96378036d8c875eb3a9ad2ff636206ad059fb843d3628d49cfbdf8f7fbe0552",
+      "bytes": 9656
+    },
+    "src/compare.mjs": {
+      "sha256": "8612837885d7965e6bbc3ffda3351f2fb4c3f7d862364d80b9346b72593399aa",
+      "bytes": 15052
+    },
+    "src/comparator.mjs": {
+      "sha256": "a7e3f9ef65c2120a293ca942e62d8f7a5ffafd9ea9b0ecdd00160222b2e45663",
+      "bytes": 19357
+    },
+    "src/index.mjs": {
+      "sha256": "b4aeb4aee8b57244e755426078be55a126b4e38cdb3c8cf1ab9f5a6472180862",
+      "bytes": 1135
+    },
+    "caller/q2-comparator-caller.mjs": {
+      "sha256": "59c8b99fe00ed317ac45d7ab960c236e643a83a56a2016ef5738087ff6afe989",
+      "bytes": 6228
+    }
+  },
+  "sealPackage": {
+    "fileName": "q2-seal-package.mjs",
+    "sha256": "a13bfc37c90e10ae0af7962a0d5272413d8604c5394fb36ee62c7af6f41ef1ea",
+    "bytes": 124474
+  },
+  "buildInputs": [
+    {
+      "file": "src/canonical.mjs",
+      "sha256": "fab0e13f10f1c4bf2726fb9ab5c4ccf3d9aa55913280b31b8eb75cc18ac68671",
+      "bytes": 3862
+    },
+    {
+      "file": "src/project.mjs",
+      "sha256": "3aa53015e4d209f44fe77b55071790665d81d6197cb8c495aad35d1f1f068b1c",
+      "bytes": 8407
+    },
+    {
+      "file": "src/observe.mjs",
+      "sha256": "2281fba0bdf52a9cbb34efad7a2746fdb55746e5c05e550dbcea3846ee3bb6f0",
+      "bytes": 12382
+    },
+    {
+      "file": "src/idb.mjs",
+      "sha256": "5bd885d8d6aec1f19a28ae36d4eae41207e6682ecef8af00072b9469c85e659b",
+      "bytes": 10947
+    },
+    {
+      "file": "src/cloud.mjs",
+      "sha256": "f96378036d8c875eb3a9ad2ff636206ad059fb843d3628d49cfbdf8f7fbe0552",
+      "bytes": 9656
+    },
+    {
+      "file": "src/compare.mjs",
+      "sha256": "8612837885d7965e6bbc3ffda3351f2fb4c3f7d862364d80b9346b72593399aa",
+      "bytes": 15052
+    },
+    {
+      "file": "src/comparator.mjs",
+      "sha256": "a7e3f9ef65c2120a293ca942e62d8f7a5ffafd9ea9b0ecdd00160222b2e45663",
+      "bytes": 19357
+    },
+    {
+      "file": "src/index.mjs",
+      "sha256": "b4aeb4aee8b57244e755426078be55a126b4e38cdb3c8cf1ab9f5a6472180862",
+      "bytes": 1135
+    },
+    {
+      "file": "caller/q2-comparator-caller.mjs",
+      "sha256": "59c8b99fe00ed317ac45d7ab960c236e643a83a56a2016ef5738087ff6afe989",
+      "bytes": 6228
+    }
+  ],
+  "packagingTransformations": [
+    "T1: each input embedded verbatim as base64 of its raw bytes",
+    "T2: at load, import specifiers (\"./x.mjs\", \"/src/x.mjs\") rewritten to Blob URLs of the sibling embedded files; no logic text edited",
+    "T3': bootstrap added — in-page source-hash verification against the release record, Blob wiring, dynamic import of the frozen caller, run wrapper attaching the four identity fields (pins from the manifest; sealPackageSha256 and readerBundleSha256 passed by value from the glue) plus the operator annotation; API exported as a module export, no window global"
+  ]
+}
