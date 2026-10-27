@@ -1,0 +1,4754 @@
+(function(){const c=document.createElement("link").relList;if(c&&c.supports&&c.supports("modulepreload"))return;for(const s of document.querySelectorAll('link[rel="modulepreload"]'))m(s);new MutationObserver(s=>{for(const i of s)if(i.type==="childList")for(const l of i.addedNodes)l.tagName==="LINK"&&l.rel==="modulepreload"&&m(l)}).observe(document,{childList:!0,subtree:!0});function r(s){const i={};return s.integrity&&(i.integrity=s.integrity),s.referrerPolicy&&(i.referrerPolicy=s.referrerPolicy),s.crossOrigin==="use-credentials"?i.credentials="include":s.crossOrigin==="anonymous"?i.credentials="omit":i.credentials="same-origin",i}function m(s){if(s.ep)return;s.ep=!0;const i=r(s);fetch(s.href,i)}})();const Nt="opalreader.v1",Ut=2;let pt;function nt(){return pt||(pt=new Promise((e,c)=>{const r=indexedDB.open(Nt,Ut);r.onupgradeneeded=()=>{for(const m of["books","audio","settings","epubs"])r.result.objectStoreNames.contains(m)||r.result.createObjectStore(m,{keyPath:"id"})},r.onsuccess=()=>{const m=r.result;try{const s=m.transaction(["books","epubs"],"readwrite"),i=s.objectStore("books"),l=s.objectStore("epubs"),o=i.openCursor();o.onsuccess=()=>{const u=o.result;if(!u)return;const _=u.value,k=_?.epub?.blob;if(k){l.put({id:_.id,name:_.epub?.name||k.name||"book.epub",blob:k});_.epub={name:_.epub?.name||k.name||"book.epub"};u.update(_)}u.continue()},s.oncomplete=()=>e(m),s.onerror=()=>e(m),s.onabort=()=>e(m)}catch{e(m)}},r.onerror=()=>c(r.error)}))}async function Be(e){const c=await nt();return new Promise((r,m)=>{const s=c.transaction(e).objectStore(e).getAll();s.onsuccess=()=>r(s.result),s.onerror=()=>m(s.error)})}async function Oe(e,c){const r=await nt();return new Promise((m,s)=>{const i=r.transaction(e).objectStore(e).get(c);i.onsuccess=()=>m(i.result),i.onerror=()=>s(i.error)})}async function ke(e,c){const r=await nt();return new Promise((m,s)=>{const i=r.transaction(e,"readwrite").objectStore(e).put(c);i.onsuccess=()=>m(c),i.onerror=()=>s(i.error)})}async function localEpubPut(e,c,r){const m=await nt();return new Promise((s,i)=>{const l=m.transaction("epubs","readwrite").objectStore("epubs").put({id:e,name:r||c?.name||"book.epub",blob:c});l.onsuccess=()=>s(!0),l.onerror=()=>i(l.error)})}async function localEpubGet(e){const c=await nt();return new Promise((r,m)=>{const s=c.transaction("epubs").objectStore("epubs").get(e);s.onsuccess=()=>r(s.result||null),s.onerror=()=>m(s.error)})}var De=typeof globalThis<"u"?globalThis:typeof window<"u"?window:typeof global<"u"?global:typeof self<"u"?self:{};function Dt(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,"default")?e.default:e}function je(e){throw new Error('Could not dynamically require "'+e+'". Please configure the dynamicRequireTargets or/and ignoreDynamicRequires option of @rollup/plugin-commonjs appropriately for this require call to work.')}var Xe={exports:{}};var mt;function jt(){return mt||(mt=1,(function(e,c){(function(r){e.exports=r()})(function(){return(function r(m,s,i){function l(_,k){if(!s[_]){if(!m[_]){var w=typeof je=="function"&&je;if(!k&&w)return w(_,!0);if(o)return o(_,!0);var S=new Error("Cannot find module '"+_+"'");throw S.code="MODULE_NOT_FOUND",S}var h=s[_]={exports:{}};m[_][0].call(h.exports,function(y){var d=m[_][1][y];return l(d||y)},h,h.exports,r,m,s,i)}return s[_].exports}for(var o=typeof je=="function"&&je,u=0;u<i.length;u++)l(i[u]);return l})({1:[function(r,m,s){var i=r("./utils"),l=r("./support"),o="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";s.encode=function(u){for(var _,k,w,S,h,y,d,g=[],f=0,b=u.length,A=b,z=i.getTypeOf(u)!=="string";f<u.length;)A=b-f,w=z?(_=u[f++],k=f<b?u[f++]:0,f<b?u[f++]:0):(_=u.charCodeAt(f++),k=f<b?u.charCodeAt(f++):0,f<b?u.charCodeAt(f++):0),S=_>>2,h=(3&_)<<4|k>>4,y=1<A?(15&k)<<2|w>>6:64,d=2<A?63&w:64,g.push(o.charAt(S)+o.charAt(h)+o.charAt(y)+o.charAt(d));return g.join("")},s.decode=function(u){var _,k,w,S,h,y,d=0,g=0,f="data:";if(u.substr(0,f.length)===f)throw new Error("Invalid base64 input, it looks like a data url.");var b,A=3*(u=u.replace(/[^A-Za-z0-9+/=]/g,"")).length/4;if(u.charAt(u.length-1)===o.charAt(64)&&A--,u.charAt(u.length-2)===o.charAt(64)&&A--,A%1!=0)throw new Error("Invalid base64 input, bad content length.");for(b=l.uint8array?new Uint8Array(0|A):new Array(0|A);d<u.length;)_=o.indexOf(u.charAt(d++))<<2|(S=o.indexOf(u.charAt(d++)))>>4,k=(15&S)<<4|(h=o.indexOf(u.charAt(d++)))>>2,w=(3&h)<<6|(y=o.indexOf(u.charAt(d++))),b[g++]=_,h!==64&&(b[g++]=k),y!==64&&(b[g++]=w);return b}},{"./support":30,"./utils":32}],2:[function(r,m,s){var i=r("./external"),l=r("./stream/DataWorker"),o=r("./stream/Crc32Probe"),u=r("./stream/DataLengthProbe");function _(k,w,S,h,y){this.compressedSize=k,this.uncompressedSize=w,this.crc32=S,this.compression=h,this.compressedContent=y}_.prototype={getContentWorker:function(){var k=new l(i.Promise.resolve(this.compressedContent)).pipe(this.compression.uncompressWorker()).pipe(new u("data_length")),w=this;return k.on("end",function(){if(this.streamInfo.data_length!==w.uncompressedSize)throw new Error("Bug : uncompressed data size mismatch")}),k},getCompressedWorker:function(){return new l(i.Promise.resolve(this.compressedContent)).withStreamInfo("compressedSize",this.compressedSize).withStreamInfo("uncompressedSize",this.uncompressedSize).withStreamInfo("crc32",this.crc32).withStreamInfo("compression",this.compression)}},_.createWorkerFrom=function(k,w,S){return k.pipe(new o).pipe(new u("uncompressedSize")).pipe(w.compressWorker(S)).pipe(new u("compressedSize")).withStreamInfo("compression",w)},m.exports=_},{"./external":6,"./stream/Crc32Probe":25,"./stream/DataLengthProbe":26,"./stream/DataWorker":27}],3:[function(r,m,s){var i=r("./stream/GenericWorker");s.STORE={magic:"\0\0",compressWorker:function(){return new i("STORE compression")},uncompressWorker:function(){return new i("STORE decompression")}},s.DEFLATE=r("./flate")},{"./flate":7,"./stream/GenericWorker":28}],4:[function(r,m,s){var i=r("./utils"),l=(function(){for(var o,u=[],_=0;_<256;_++){o=_;for(var k=0;k<8;k++)o=1&o?3988292384^o>>>1:o>>>1;u[_]=o}return u})();m.exports=function(o,u){return o!==void 0&&o.length?i.getTypeOf(o)!=="string"?(function(_,k,w,S){var h=l,y=S+w;_^=-1;for(var d=S;d<y;d++)_=_>>>8^h[255&(_^k[d])];return-1^_})(0|u,o,o.length,0):(function(_,k,w,S){var h=l,y=S+w;_^=-1;for(var d=S;d<y;d++)_=_>>>8^h[255&(_^k.charCodeAt(d))];return-1^_})(0|u,o,o.length,0):0}},{"./utils":32}],5:[function(r,m,s){s.base64=!1,s.binary=!1,s.dir=!1,s.createFolders=!0,s.date=null,s.compression=null,s.compressionOptions=null,s.comment=null,s.unixPermissions=null,s.dosPermissions=null},{}],6:[function(r,m,s){var i=null;i=typeof Promise<"u"?Promise:r("lie"),m.exports={Promise:i}},{lie:37}],7:[function(r,m,s){var i=typeof Uint8Array<"u"&&typeof Uint16Array<"u"&&typeof Uint32Array<"u",l=r("pako"),o=r("./utils"),u=r("./stream/GenericWorker"),_=i?"uint8array":"array";function k(w,S){u.call(this,"FlateWorker/"+w),this._pako=null,this._pakoAction=w,this._pakoOptions=S,this.meta={}}s.magic="\b\0",o.inherits(k,u),k.prototype.processChunk=function(w){this.meta=w.meta,this._pako===null&&this._createPako(),this._pako.push(o.transformTo(_,w.data),!1)},k.prototype.flush=function(){u.prototype.flush.call(this),this._pako===null&&this._createPako(),this._pako.push([],!0)},k.prototype.cleanUp=function(){u.prototype.cleanUp.call(this),this._pako=null},k.prototype._createPako=function(){this._pako=new l[this._pakoAction]({raw:!0,level:this._pakoOptions.level||-1});var w=this;this._pako.onData=function(S){w.push({data:S,meta:w.meta})}},s.compressWorker=function(w){return new k("Deflate",w)},s.uncompressWorker=function(){return new k("Inflate",{})}},{"./stream/GenericWorker":28,"./utils":32,pako:38}],8:[function(r,m,s){function i(h,y){var d,g="";for(d=0;d<y;d++)g+=String.fromCharCode(255&h),h>>>=8;return g}function l(h,y,d,g,f,b){var A,z,E=h.file,N=h.compression,P=b!==_.utf8encode,F=o.transformTo("string",b(E.name)),I=o.transformTo("string",_.utf8encode(E.name)),q=E.comment,X=o.transformTo("string",b(q)),C=o.transformTo("string",_.utf8encode(q)),$=I.length!==E.name.length,n=C.length!==q.length,U="",te="",M="",re=E.dir,W=E.date,Q={crc32:0,compressedSize:0,uncompressedSize:0};y&&!d||(Q.crc32=h.crc32,Q.compressedSize=h.compressedSize,Q.uncompressedSize=h.uncompressedSize);var B=0;y&&(B|=8),P||!$&&!n||(B|=2048);var R=0,J=0;re&&(R|=16),f==="UNIX"?(J=798,R|=(function(K,ce){var fe=K;return K||(fe=ce?16893:33204),(65535&fe)<<16})(E.unixPermissions,re)):(J=20,R|=(function(K){return 63&(K||0)})(E.dosPermissions)),A=W.getUTCHours(),A<<=6,A|=W.getUTCMinutes(),A<<=5,A|=W.getUTCSeconds()/2,z=W.getUTCFullYear()-1980,z<<=4,z|=W.getUTCMonth()+1,z<<=5,z|=W.getUTCDate(),$&&(te=i(1,1)+i(k(F),4)+I,U+="up"+i(te.length,2)+te),n&&(M=i(1,1)+i(k(X),4)+C,U+="uc"+i(M.length,2)+M);var H="";return H+=`
+\0`,H+=i(B,2),H+=N.magic,H+=i(A,2),H+=i(z,2),H+=i(Q.crc32,4),H+=i(Q.compressedSize,4),H+=i(Q.uncompressedSize,4),H+=i(F.length,2),H+=i(U.length,2),{fileRecord:w.LOCAL_FILE_HEADER+H+F+U,dirRecord:w.CENTRAL_FILE_HEADER+i(J,2)+H+i(X.length,2)+"\0\0\0\0"+i(R,4)+i(g,4)+F+U+X}}var o=r("../utils"),u=r("../stream/GenericWorker"),_=r("../utf8"),k=r("../crc32"),w=r("../signature");function S(h,y,d,g){u.call(this,"ZipFileWorker"),this.bytesWritten=0,this.zipComment=y,this.zipPlatform=d,this.encodeFileName=g,this.streamFiles=h,this.accumulate=!1,this.contentBuffer=[],this.dirRecords=[],this.currentSourceOffset=0,this.entriesCount=0,this.currentFile=null,this._sources=[]}o.inherits(S,u),S.prototype.push=function(h){var y=h.meta.percent||0,d=this.entriesCount,g=this._sources.length;this.accumulate?this.contentBuffer.push(h):(this.bytesWritten+=h.data.length,u.prototype.push.call(this,{data:h.data,meta:{currentFile:this.currentFile,percent:d?(y+100*(d-g-1))/d:100}}))},S.prototype.openedSource=function(h){this.currentSourceOffset=this.bytesWritten,this.currentFile=h.file.name;var y=this.streamFiles&&!h.file.dir;if(y){var d=l(h,y,!1,this.currentSourceOffset,this.zipPlatform,this.encodeFileName);this.push({data:d.fileRecord,meta:{percent:0}})}else this.accumulate=!0},S.prototype.closedSource=function(h){this.accumulate=!1;var y=this.streamFiles&&!h.file.dir,d=l(h,y,!0,this.currentSourceOffset,this.zipPlatform,this.encodeFileName);if(this.dirRecords.push(d.dirRecord),y)this.push({data:(function(g){return w.DATA_DESCRIPTOR+i(g.crc32,4)+i(g.compressedSize,4)+i(g.uncompressedSize,4)})(h),meta:{percent:100}});else for(this.push({data:d.fileRecord,meta:{percent:0}});this.contentBuffer.length;)this.push(this.contentBuffer.shift());this.currentFile=null},S.prototype.flush=function(){for(var h=this.bytesWritten,y=0;y<this.dirRecords.length;y++)this.push({data:this.dirRecords[y],meta:{percent:100}});var d=this.bytesWritten-h,g=(function(f,b,A,z,E){var N=o.transformTo("string",E(z));return w.CENTRAL_DIRECTORY_END+"\0\0\0\0"+i(f,2)+i(f,2)+i(b,4)+i(A,4)+i(N.length,2)+N})(this.dirRecords.length,d,h,this.zipComment,this.encodeFileName);this.push({data:g,meta:{percent:100}})},S.prototype.prepareNextSource=function(){this.previous=this._sources.shift(),this.openedSource(this.previous.streamInfo),this.isPaused?this.previous.pause():this.previous.resume()},S.prototype.registerPrevious=function(h){this._sources.push(h);var y=this;return h.on("data",function(d){y.processChunk(d)}),h.on("end",function(){y.closedSource(y.previous.streamInfo),y._sources.length?y.prepareNextSource():y.end()}),h.on("error",function(d){y.error(d)}),this},S.prototype.resume=function(){return!!u.prototype.resume.call(this)&&(!this.previous&&this._sources.length?(this.prepareNextSource(),!0):this.previous||this._sources.length||this.generatedError?void 0:(this.end(),!0))},S.prototype.error=function(h){var y=this._sources;if(!u.prototype.error.call(this,h))return!1;for(var d=0;d<y.length;d++)try{y[d].error(h)}catch{}return!0},S.prototype.lock=function(){u.prototype.lock.call(this);for(var h=this._sources,y=0;y<h.length;y++)h[y].lock()},m.exports=S},{"../crc32":4,"../signature":23,"../stream/GenericWorker":28,"../utf8":31,"../utils":32}],9:[function(r,m,s){var i=r("../compressions"),l=r("./ZipFileWorker");s.generateWorker=function(o,u,_){var k=new l(u.streamFiles,_,u.platform,u.encodeFileName),w=0;try{o.forEach(function(S,h){w++;var y=(function(b,A){var z=b||A,E=i[z];if(!E)throw new Error(z+" is not a valid compression method !");return E})(h.options.compression,u.compression),d=h.options.compressionOptions||u.compressionOptions||{},g=h.dir,f=h.date;h._compressWorker(y,d).withStreamInfo("file",{name:S,dir:g,date:f,comment:h.comment||"",unixPermissions:h.unixPermissions,dosPermissions:h.dosPermissions}).pipe(k)}),k.entriesCount=w}catch(S){k.error(S)}return k}},{"../compressions":3,"./ZipFileWorker":8}],10:[function(r,m,s){function i(){if(!(this instanceof i))return new i;if(arguments.length)throw new Error("The constructor with parameters has been removed in JSZip 3.0, please check the upgrade guide.");this.files=Object.create(null),this.comment=null,this.root="",this.clone=function(){var l=new i;for(var o in this)typeof this[o]!="function"&&(l[o]=this[o]);return l}}(i.prototype=r("./object")).loadAsync=r("./load"),i.support=r("./support"),i.defaults=r("./defaults"),i.version="3.10.1",i.loadAsync=function(l,o){return new i().loadAsync(l,o)},i.external=r("./external"),m.exports=i},{"./defaults":5,"./external":6,"./load":11,"./object":15,"./support":30}],11:[function(r,m,s){var i=r("./utils"),l=r("./external"),o=r("./utf8"),u=r("./zipEntries"),_=r("./stream/Crc32Probe"),k=r("./nodejsUtils");function w(S){return new l.Promise(function(h,y){var d=S.decompressed.getContentWorker().pipe(new _);d.on("error",function(g){y(g)}).on("end",function(){d.streamInfo.crc32!==S.decompressed.crc32?y(new Error("Corrupted zip : CRC32 mismatch")):h()}).resume()})}m.exports=function(S,h){var y=this;return h=i.extend(h||{},{base64:!1,checkCRC32:!1,optimizedBinaryString:!1,createFolders:!1,decodeFileName:o.utf8decode}),k.isNode&&k.isStream(S)?l.Promise.reject(new Error("JSZip can't accept a stream when loading a zip file.")):i.prepareContent("the loaded zip file",S,!0,h.optimizedBinaryString,h.base64).then(function(d){var g=new u(h);return g.load(d),g}).then(function(d){var g=[l.Promise.resolve(d)],f=d.files;if(h.checkCRC32)for(var b=0;b<f.length;b++)g.push(w(f[b]));return l.Promise.all(g)}).then(function(d){for(var g=d.shift(),f=g.files,b=0;b<f.length;b++){var A=f[b],z=A.fileNameStr,E=i.resolve(A.fileNameStr);y.file(E,A.decompressed,{binary:!0,optimizedBinaryString:!0,date:A.date,dir:A.dir,comment:A.fileCommentStr.length?A.fileCommentStr:null,unixPermissions:A.unixPermissions,dosPermissions:A.dosPermissions,createFolders:h.createFolders}),A.dir||(y.file(E).unsafeOriginalName=z)}return g.zipComment.length&&(y.comment=g.zipComment),y})}},{"./external":6,"./nodejsUtils":14,"./stream/Crc32Probe":25,"./utf8":31,"./utils":32,"./zipEntries":33}],12:[function(r,m,s){var i=r("../utils"),l=r("../stream/GenericWorker");function o(u,_){l.call(this,"Nodejs stream input adapter for "+u),this._upstreamEnded=!1,this._bindStream(_)}i.inherits(o,l),o.prototype._bindStream=function(u){var _=this;(this._stream=u).pause(),u.on("data",function(k){_.push({data:k,meta:{percent:0}})}).on("error",function(k){_.isPaused?this.generatedError=k:_.error(k)}).on("end",function(){_.isPaused?_._upstreamEnded=!0:_.end()})},o.prototype.pause=function(){return!!l.prototype.pause.call(this)&&(this._stream.pause(),!0)},o.prototype.resume=function(){return!!l.prototype.resume.call(this)&&(this._upstreamEnded?this.end():this._stream.resume(),!0)},m.exports=o},{"../stream/GenericWorker":28,"../utils":32}],13:[function(r,m,s){var i=r("readable-stream").Readable;function l(o,u,_){i.call(this,u),this._helper=o;var k=this;o.on("data",function(w,S){k.push(w)||k._helper.pause(),_&&_(S)}).on("error",function(w){k.emit("error",w)}).on("end",function(){k.push(null)})}r("../utils").inherits(l,i),l.prototype._read=function(){this._helper.resume()},m.exports=l},{"../utils":32,"readable-stream":16}],14:[function(r,m,s){m.exports={isNode:typeof Buffer<"u",newBufferFrom:function(i,l){if(Buffer.from&&Buffer.from!==Uint8Array.from)return Buffer.from(i,l);if(typeof i=="number")throw new Error('The "data" argument must not be a number');return new Buffer(i,l)},allocBuffer:function(i){if(Buffer.alloc)return Buffer.alloc(i);var l=new Buffer(i);return l.fill(0),l},isBuffer:function(i){return Buffer.isBuffer(i)},isStream:function(i){return i&&typeof i.on=="function"&&typeof i.pause=="function"&&typeof i.resume=="function"}}},{}],15:[function(r,m,s){function i(E,N,P){var F,I=o.getTypeOf(N),q=o.extend(P||{},k);q.date=q.date||new Date,q.compression!==null&&(q.compression=q.compression.toUpperCase()),typeof q.unixPermissions=="string"&&(q.unixPermissions=parseInt(q.unixPermissions,8)),q.unixPermissions&&16384&q.unixPermissions&&(q.dir=!0),q.dosPermissions&&16&q.dosPermissions&&(q.dir=!0),q.dir&&(E=f(E)),q.createFolders&&(F=g(E))&&b.call(this,F,!0);var X=I==="string"&&q.binary===!1&&q.base64===!1;P&&P.binary!==void 0||(q.binary=!X),(N instanceof w&&N.uncompressedSize===0||q.dir||!N||N.length===0)&&(q.base64=!1,q.binary=!0,N="",q.compression="STORE",I="string");var C=null;C=N instanceof w||N instanceof u?N:y.isNode&&y.isStream(N)?new d(E,N):o.prepareContent(E,N,q.binary,q.optimizedBinaryString,q.base64);var $=new S(E,C,q);this.files[E]=$}var l=r("./utf8"),o=r("./utils"),u=r("./stream/GenericWorker"),_=r("./stream/StreamHelper"),k=r("./defaults"),w=r("./compressedObject"),S=r("./zipObject"),h=r("./generate"),y=r("./nodejsUtils"),d=r("./nodejs/NodejsStreamInputAdapter"),g=function(E){E.slice(-1)==="/"&&(E=E.substring(0,E.length-1));var N=E.lastIndexOf("/");return 0<N?E.substring(0,N):""},f=function(E){return E.slice(-1)!=="/"&&(E+="/"),E},b=function(E,N){return N=N!==void 0?N:k.createFolders,E=f(E),this.files[E]||i.call(this,E,null,{dir:!0,createFolders:N}),this.files[E]};function A(E){return Object.prototype.toString.call(E)==="[object RegExp]"}var z={load:function(){throw new Error("This method has been removed in JSZip 3.0, please check the upgrade guide.")},forEach:function(E){var N,P,F;for(N in this.files)F=this.files[N],(P=N.slice(this.root.length,N.length))&&N.slice(0,this.root.length)===this.root&&E(P,F)},filter:function(E){var N=[];return this.forEach(function(P,F){E(P,F)&&N.push(F)}),N},file:function(E,N,P){if(arguments.length!==1)return E=this.root+E,i.call(this,E,N,P),this;if(A(E)){var F=E;return this.filter(function(q,X){return!X.dir&&F.test(q)})}var I=this.files[this.root+E];return I&&!I.dir?I:null},folder:function(E){if(!E)return this;if(A(E))return this.filter(function(I,q){return q.dir&&E.test(I)});var N=this.root+E,P=b.call(this,N),F=this.clone();return F.root=P.name,F},remove:function(E){E=this.root+E;var N=this.files[E];if(N||(E.slice(-1)!=="/"&&(E+="/"),N=this.files[E]),N&&!N.dir)delete this.files[E];else for(var P=this.filter(function(I,q){return q.name.slice(0,E.length)===E}),F=0;F<P.length;F++)delete this.files[P[F].name];return this},generate:function(){throw new Error("This method has been removed in JSZip 3.0, please check the upgrade guide.")},generateInternalStream:function(E){var N,P={};try{if((P=o.extend(E||{},{streamFiles:!1,compression:"STORE",compressionOptions:null,type:"",platform:"DOS",comment:null,mimeType:"application/zip",encodeFileName:l.utf8encode})).type=P.type.toLowerCase(),P.compression=P.compression.toUpperCase(),P.type==="binarystring"&&(P.type="string"),!P.type)throw new Error("No output type specified.");o.checkSupport(P.type),P.platform!=="darwin"&&P.platform!=="freebsd"&&P.platform!=="linux"&&P.platform!=="sunos"||(P.platform="UNIX"),P.platform==="win32"&&(P.platform="DOS");var F=P.comment||this.comment||"";N=h.generateWorker(this,P,F)}catch(I){(N=new u("error")).error(I)}return new _(N,P.type||"string",P.mimeType)},generateAsync:function(E,N){return this.generateInternalStream(E).accumulate(N)},generateNodeStream:function(E,N){return(E=E||{}).type||(E.type="nodebuffer"),this.generateInternalStream(E).toNodejsStream(N)}};m.exports=z},{"./compressedObject":2,"./defaults":5,"./generate":9,"./nodejs/NodejsStreamInputAdapter":12,"./nodejsUtils":14,"./stream/GenericWorker":28,"./stream/StreamHelper":29,"./utf8":31,"./utils":32,"./zipObject":35}],16:[function(r,m,s){m.exports=r("stream")},{stream:void 0}],17:[function(r,m,s){var i=r("./DataReader");function l(o){i.call(this,o);for(var u=0;u<this.data.length;u++)o[u]=255&o[u]}r("../utils").inherits(l,i),l.prototype.byteAt=function(o){return this.data[this.zero+o]},l.prototype.lastIndexOfSignature=function(o){for(var u=o.charCodeAt(0),_=o.charCodeAt(1),k=o.charCodeAt(2),w=o.charCodeAt(3),S=this.length-4;0<=S;--S)if(this.data[S]===u&&this.data[S+1]===_&&this.data[S+2]===k&&this.data[S+3]===w)return S-this.zero;return-1},l.prototype.readAndCheckSignature=function(o){var u=o.charCodeAt(0),_=o.charCodeAt(1),k=o.charCodeAt(2),w=o.charCodeAt(3),S=this.readData(4);return u===S[0]&&_===S[1]&&k===S[2]&&w===S[3]},l.prototype.readData=function(o){if(this.checkOffset(o),o===0)return[];var u=this.data.slice(this.zero+this.index,this.zero+this.index+o);return this.index+=o,u},m.exports=l},{"../utils":32,"./DataReader":18}],18:[function(r,m,s){var i=r("../utils");function l(o){this.data=o,this.length=o.length,this.index=0,this.zero=0}l.prototype={checkOffset:function(o){this.checkIndex(this.index+o)},checkIndex:function(o){if(this.length<this.zero+o||o<0)throw new Error("End of data reached (data length = "+this.length+", asked index = "+o+"). Corrupted zip ?")},setIndex:function(o){this.checkIndex(o),this.index=o},skip:function(o){this.setIndex(this.index+o)},byteAt:function(){},readInt:function(o){var u,_=0;for(this.checkOffset(o),u=this.index+o-1;u>=this.index;u--)_=(_<<8)+this.byteAt(u);return this.index+=o,_},readString:function(o){return i.transformTo("string",this.readData(o))},readData:function(){},lastIndexOfSignature:function(){},readAndCheckSignature:function(){},readDate:function(){var o=this.readInt(4);return new Date(Date.UTC(1980+(o>>25&127),(o>>21&15)-1,o>>16&31,o>>11&31,o>>5&63,(31&o)<<1))}},m.exports=l},{"../utils":32}],19:[function(r,m,s){var i=r("./Uint8ArrayReader");function l(o){i.call(this,o)}r("../utils").inherits(l,i),l.prototype.readData=function(o){this.checkOffset(o);var u=this.data.slice(this.zero+this.index,this.zero+this.index+o);return this.index+=o,u},m.exports=l},{"../utils":32,"./Uint8ArrayReader":21}],20:[function(r,m,s){var i=r("./DataReader");function l(o){i.call(this,o)}r("../utils").inherits(l,i),l.prototype.byteAt=function(o){return this.data.charCodeAt(this.zero+o)},l.prototype.lastIndexOfSignature=function(o){return this.data.lastIndexOf(o)-this.zero},l.prototype.readAndCheckSignature=function(o){return o===this.readData(4)},l.prototype.readData=function(o){this.checkOffset(o);var u=this.data.slice(this.zero+this.index,this.zero+this.index+o);return this.index+=o,u},m.exports=l},{"../utils":32,"./DataReader":18}],21:[function(r,m,s){var i=r("./ArrayReader");function l(o){i.call(this,o)}r("../utils").inherits(l,i),l.prototype.readData=function(o){if(this.checkOffset(o),o===0)return new Uint8Array(0);var u=this.data.subarray(this.zero+this.index,this.zero+this.index+o);return this.index+=o,u},m.exports=l},{"../utils":32,"./ArrayReader":17}],22:[function(r,m,s){var i=r("../utils"),l=r("../support"),o=r("./ArrayReader"),u=r("./StringReader"),_=r("./NodeBufferReader"),k=r("./Uint8ArrayReader");m.exports=function(w){var S=i.getTypeOf(w);return i.checkSupport(S),S!=="string"||l.uint8array?S==="nodebuffer"?new _(w):l.uint8array?new k(i.transformTo("uint8array",w)):new o(i.transformTo("array",w)):new u(w)}},{"../support":30,"../utils":32,"./ArrayReader":17,"./NodeBufferReader":19,"./StringReader":20,"./Uint8ArrayReader":21}],23:[function(r,m,s){s.LOCAL_FILE_HEADER="PK",s.CENTRAL_FILE_HEADER="PK",s.CENTRAL_DIRECTORY_END="PK",s.ZIP64_CENTRAL_DIRECTORY_LOCATOR="PK\x07",s.ZIP64_CENTRAL_DIRECTORY_END="PK",s.DATA_DESCRIPTOR="PK\x07\b"},{}],24:[function(r,m,s){var i=r("./GenericWorker"),l=r("../utils");function o(u){i.call(this,"ConvertWorker to "+u),this.destType=u}l.inherits(o,i),o.prototype.processChunk=function(u){this.push({data:l.transformTo(this.destType,u.data),meta:u.meta})},m.exports=o},{"../utils":32,"./GenericWorker":28}],25:[function(r,m,s){var i=r("./GenericWorker"),l=r("../crc32");function o(){i.call(this,"Crc32Probe"),this.withStreamInfo("crc32",0)}r("../utils").inherits(o,i),o.prototype.processChunk=function(u){this.streamInfo.crc32=l(u.data,this.streamInfo.crc32||0),this.push(u)},m.exports=o},{"../crc32":4,"../utils":32,"./GenericWorker":28}],26:[function(r,m,s){var i=r("../utils"),l=r("./GenericWorker");function o(u){l.call(this,"DataLengthProbe for "+u),this.propName=u,this.withStreamInfo(u,0)}i.inherits(o,l),o.prototype.processChunk=function(u){if(u){var _=this.streamInfo[this.propName]||0;this.streamInfo[this.propName]=_+u.data.length}l.prototype.processChunk.call(this,u)},m.exports=o},{"../utils":32,"./GenericWorker":28}],27:[function(r,m,s){var i=r("../utils"),l=r("./GenericWorker");function o(u){l.call(this,"DataWorker");var _=this;this.dataIsReady=!1,this.index=0,this.max=0,this.data=null,this.type="",this._tickScheduled=!1,u.then(function(k){_.dataIsReady=!0,_.data=k,_.max=k&&k.length||0,_.type=i.getTypeOf(k),_.isPaused||_._tickAndRepeat()},function(k){_.error(k)})}i.inherits(o,l),o.prototype.cleanUp=function(){l.prototype.cleanUp.call(this),this.data=null},o.prototype.resume=function(){return!!l.prototype.resume.call(this)&&(!this._tickScheduled&&this.dataIsReady&&(this._tickScheduled=!0,i.delay(this._tickAndRepeat,[],this)),!0)},o.prototype._tickAndRepeat=function(){this._tickScheduled=!1,this.isPaused||this.isFinished||(this._tick(),this.isFinished||(i.delay(this._tickAndRepeat,[],this),this._tickScheduled=!0))},o.prototype._tick=function(){if(this.isPaused||this.isFinished)return!1;var u=null,_=Math.min(this.max,this.index+16384);if(this.index>=this.max)return this.end();switch(this.type){case"string":u=this.data.substring(this.index,_);break;case"uint8array":u=this.data.subarray(this.index,_);break;case"array":case"nodebuffer":u=this.data.slice(this.index,_)}return this.index=_,this.push({data:u,meta:{percent:this.max?this.index/this.max*100:0}})},m.exports=o},{"../utils":32,"./GenericWorker":28}],28:[function(r,m,s){function i(l){this.name=l||"default",this.streamInfo={},this.generatedError=null,this.extraStreamInfo={},this.isPaused=!0,this.isFinished=!1,this.isLocked=!1,this._listeners={data:[],end:[],error:[]},this.previous=null}i.prototype={push:function(l){this.emit("data",l)},end:function(){if(this.isFinished)return!1;this.flush();try{this.emit("end"),this.cleanUp(),this.isFinished=!0}catch(l){this.emit("error",l)}return!0},error:function(l){return!this.isFinished&&(this.isPaused?this.generatedError=l:(this.isFinished=!0,this.emit("error",l),this.previous&&this.previous.error(l),this.cleanUp()),!0)},on:function(l,o){return this._listeners[l].push(o),this},cleanUp:function(){this.streamInfo=this.generatedError=this.extraStreamInfo=null,this._listeners=[]},emit:function(l,o){if(this._listeners[l])for(var u=0;u<this._listeners[l].length;u++)this._listeners[l][u].call(this,o)},pipe:function(l){return l.registerPrevious(this)},registerPrevious:function(l){if(this.isLocked)throw new Error("The stream '"+this+"' has already been used.");this.streamInfo=l.streamInfo,this.mergeStreamInfo(),this.previous=l;var o=this;return l.on("data",function(u){o.processChunk(u)}),l.on("end",function(){o.end()}),l.on("error",function(u){o.error(u)}),this},pause:function(){return!this.isPaused&&!this.isFinished&&(this.isPaused=!0,this.previous&&this.previous.pause(),!0)},resume:function(){if(!this.isPaused||this.isFinished)return!1;var l=this.isPaused=!1;return this.generatedError&&(this.error(this.generatedError),l=!0),this.previous&&this.previous.resume(),!l},flush:function(){},processChunk:function(l){this.push(l)},withStreamInfo:function(l,o){return this.extraStreamInfo[l]=o,this.mergeStreamInfo(),this},mergeStreamInfo:function(){for(var l in this.extraStreamInfo)Object.prototype.hasOwnProperty.call(this.extraStreamInfo,l)&&(this.streamInfo[l]=this.extraStreamInfo[l])},lock:function(){if(this.isLocked)throw new Error("The stream '"+this+"' has already been used.");this.isLocked=!0,this.previous&&this.previous.lock()},toString:function(){var l="Worker "+this.name;return this.previous?this.previous+" -> "+l:l}},m.exports=i},{}],29:[function(r,m,s){var i=r("../utils"),l=r("./ConvertWorker"),o=r("./GenericWorker"),u=r("../base64"),_=r("../support"),k=r("../external"),w=null;if(_.nodestream)try{w=r("../nodejs/NodejsStreamOutputAdapter")}catch{}function S(y,d){return new k.Promise(function(g,f){var b=[],A=y._internalType,z=y._outputType,E=y._mimeType;y.on("data",function(N,P){b.push(N),d&&d(P)}).on("error",function(N){b=[],f(N)}).on("end",function(){try{var N=(function(P,F,I){switch(P){case"blob":return i.newBlob(i.transformTo("arraybuffer",F),I);case"base64":return u.encode(F);default:return i.transformTo(P,F)}})(z,(function(P,F){var I,q=0,X=null,C=0;for(I=0;I<F.length;I++)C+=F[I].length;switch(P){case"string":return F.join("");case"array":return Array.prototype.concat.apply([],F);case"uint8array":for(X=new Uint8Array(C),I=0;I<F.length;I++)X.set(F[I],q),q+=F[I].length;return X;case"nodebuffer":return Buffer.concat(F);default:throw new Error("concat : unsupported type '"+P+"'")}})(A,b),E);g(N)}catch(P){f(P)}b=[]}).resume()})}function h(y,d,g){var f=d;switch(d){case"blob":case"arraybuffer":f="uint8array";break;case"base64":f="string"}try{this._internalType=f,this._outputType=d,this._mimeType=g,i.checkSupport(f),this._worker=y.pipe(new l(f)),y.lock()}catch(b){this._worker=new o("error"),this._worker.error(b)}}h.prototype={accumulate:function(y){return S(this,y)},on:function(y,d){var g=this;return y==="data"?this._worker.on(y,function(f){d.call(g,f.data,f.meta)}):this._worker.on(y,function(){i.delay(d,arguments,g)}),this},resume:function(){return i.delay(this._worker.resume,[],this._worker),this},pause:function(){return this._worker.pause(),this},toNodejsStream:function(y){if(i.checkSupport("nodestream"),this._outputType!=="nodebuffer")throw new Error(this._outputType+" is not supported by this method");return new w(this,{objectMode:this._outputType!=="nodebuffer"},y)}},m.exports=h},{"../base64":1,"../external":6,"../nodejs/NodejsStreamOutputAdapter":13,"../support":30,"../utils":32,"./ConvertWorker":24,"./GenericWorker":28}],30:[function(r,m,s){if(s.base64=!0,s.array=!0,s.string=!0,s.arraybuffer=typeof ArrayBuffer<"u"&&typeof Uint8Array<"u",s.nodebuffer=typeof Buffer<"u",s.uint8array=typeof Uint8Array<"u",typeof ArrayBuffer>"u")s.blob=!1;else{var i=new ArrayBuffer(0);try{s.blob=new Blob([i],{type:"application/zip"}).size===0}catch{try{var l=new(self.BlobBuilder||self.WebKitBlobBuilder||self.MozBlobBuilder||self.MSBlobBuilder);l.append(i),s.blob=l.getBlob("application/zip").size===0}catch{s.blob=!1}}}try{s.nodestream=!!r("readable-stream").Readable}catch{s.nodestream=!1}},{"readable-stream":16}],31:[function(r,m,s){for(var i=r("./utils"),l=r("./support"),o=r("./nodejsUtils"),u=r("./stream/GenericWorker"),_=new Array(256),k=0;k<256;k++)_[k]=252<=k?6:248<=k?5:240<=k?4:224<=k?3:192<=k?2:1;_[254]=_[254]=1;function w(){u.call(this,"utf-8 decode"),this.leftOver=null}function S(){u.call(this,"utf-8 encode")}s.utf8encode=function(h){return l.nodebuffer?o.newBufferFrom(h,"utf-8"):(function(y){var d,g,f,b,A,z=y.length,E=0;for(b=0;b<z;b++)(64512&(g=y.charCodeAt(b)))==55296&&b+1<z&&(64512&(f=y.charCodeAt(b+1)))==56320&&(g=65536+(g-55296<<10)+(f-56320),b++),E+=g<128?1:g<2048?2:g<65536?3:4;for(d=l.uint8array?new Uint8Array(E):new Array(E),b=A=0;A<E;b++)(64512&(g=y.charCodeAt(b)))==55296&&b+1<z&&(64512&(f=y.charCodeAt(b+1)))==56320&&(g=65536+(g-55296<<10)+(f-56320),b++),g<128?d[A++]=g:(g<2048?d[A++]=192|g>>>6:(g<65536?d[A++]=224|g>>>12:(d[A++]=240|g>>>18,d[A++]=128|g>>>12&63),d[A++]=128|g>>>6&63),d[A++]=128|63&g);return d})(h)},s.utf8decode=function(h){return l.nodebuffer?i.transformTo("nodebuffer",h).toString("utf-8"):(function(y){var d,g,f,b,A=y.length,z=new Array(2*A);for(d=g=0;d<A;)if((f=y[d++])<128)z[g++]=f;else if(4<(b=_[f]))z[g++]=65533,d+=b-1;else{for(f&=b===2?31:b===3?15:7;1<b&&d<A;)f=f<<6|63&y[d++],b--;1<b?z[g++]=65533:f<65536?z[g++]=f:(f-=65536,z[g++]=55296|f>>10&1023,z[g++]=56320|1023&f)}return z.length!==g&&(z.subarray?z=z.subarray(0,g):z.length=g),i.applyFromCharCode(z)})(h=i.transformTo(l.uint8array?"uint8array":"array",h))},i.inherits(w,u),w.prototype.processChunk=function(h){var y=i.transformTo(l.uint8array?"uint8array":"array",h.data);if(this.leftOver&&this.leftOver.length){if(l.uint8array){var d=y;(y=new Uint8Array(d.length+this.leftOver.length)).set(this.leftOver,0),y.set(d,this.leftOver.length)}else y=this.leftOver.concat(y);this.leftOver=null}var g=(function(b,A){var z;for((A=A||b.length)>b.length&&(A=b.length),z=A-1;0<=z&&(192&b[z])==128;)z--;return z<0||z===0?A:z+_[b[z]]>A?z:A})(y),f=y;g!==y.length&&(l.uint8array?(f=y.subarray(0,g),this.leftOver=y.subarray(g,y.length)):(f=y.slice(0,g),this.leftOver=y.slice(g,y.length))),this.push({data:s.utf8decode(f),meta:h.meta})},w.prototype.flush=function(){this.leftOver&&this.leftOver.length&&(this.push({data:s.utf8decode(this.leftOver),meta:{}}),this.leftOver=null)},s.Utf8DecodeWorker=w,i.inherits(S,u),S.prototype.processChunk=function(h){this.push({data:s.utf8encode(h.data),meta:h.meta})},s.Utf8EncodeWorker=S},{"./nodejsUtils":14,"./stream/GenericWorker":28,"./support":30,"./utils":32}],32:[function(r,m,s){var i=r("./support"),l=r("./base64"),o=r("./nodejsUtils"),u=r("./external");function _(d){return d}function k(d,g){for(var f=0;f<d.length;++f)g[f]=255&d.charCodeAt(f);return g}r("setimmediate"),s.newBlob=function(d,g){s.checkSupport("blob");try{return new Blob([d],{type:g})}catch{try{var f=new(self.BlobBuilder||self.WebKitBlobBuilder||self.MozBlobBuilder||self.MSBlobBuilder);return f.append(d),f.getBlob(g)}catch{throw new Error("Bug : can't construct the Blob.")}}};var w={stringifyByChunk:function(d,g,f){var b=[],A=0,z=d.length;if(z<=f)return String.fromCharCode.apply(null,d);for(;A<z;)g==="array"||g==="nodebuffer"?b.push(String.fromCharCode.apply(null,d.slice(A,Math.min(A+f,z)))):b.push(String.fromCharCode.apply(null,d.subarray(A,Math.min(A+f,z)))),A+=f;return b.join("")},stringifyByChar:function(d){for(var g="",f=0;f<d.length;f++)g+=String.fromCharCode(d[f]);return g},applyCanBeUsed:{uint8array:(function(){try{return i.uint8array&&String.fromCharCode.apply(null,new Uint8Array(1)).length===1}catch{return!1}})(),nodebuffer:(function(){try{return i.nodebuffer&&String.fromCharCode.apply(null,o.allocBuffer(1)).length===1}catch{return!1}})()}};function S(d){var g=65536,f=s.getTypeOf(d),b=!0;if(f==="uint8array"?b=w.applyCanBeUsed.uint8array:f==="nodebuffer"&&(b=w.applyCanBeUsed.nodebuffer),b)for(;1<g;)try{return w.stringifyByChunk(d,f,g)}catch{g=Math.floor(g/2)}return w.stringifyByChar(d)}function h(d,g){for(var f=0;f<d.length;f++)g[f]=d[f];return g}s.applyFromCharCode=S;var y={};y.string={string:_,array:function(d){return k(d,new Array(d.length))},arraybuffer:function(d){return y.string.uint8array(d).buffer},uint8array:function(d){return k(d,new Uint8Array(d.length))},nodebuffer:function(d){return k(d,o.allocBuffer(d.length))}},y.array={string:S,array:_,arraybuffer:function(d){return new Uint8Array(d).buffer},uint8array:function(d){return new Uint8Array(d)},nodebuffer:function(d){return o.newBufferFrom(d)}},y.arraybuffer={string:function(d){return S(new Uint8Array(d))},array:function(d){return h(new Uint8Array(d),new Array(d.byteLength))},arraybuffer:_,uint8array:function(d){return new Uint8Array(d)},nodebuffer:function(d){return o.newBufferFrom(new Uint8Array(d))}},y.uint8array={string:S,array:function(d){return h(d,new Array(d.length))},arraybuffer:function(d){return d.buffer},uint8array:_,nodebuffer:function(d){return o.newBufferFrom(d)}},y.nodebuffer={string:S,array:function(d){return h(d,new Array(d.length))},arraybuffer:function(d){return y.nodebuffer.uint8array(d).buffer},uint8array:function(d){return h(d,new Uint8Array(d.length))},nodebuffer:_},s.transformTo=function(d,g){if(g=g||"",!d)return g;s.checkSupport(d);var f=s.getTypeOf(g);return y[f][d](g)},s.resolve=function(d){for(var g=d.split("/"),f=[],b=0;b<g.length;b++){var A=g[b];A==="."||A===""&&b!==0&&b!==g.length-1||(A===".."?f.pop():f.push(A))}return f.join("/")},s.getTypeOf=function(d){return typeof d=="string"?"string":Object.prototype.toString.call(d)==="[object Array]"?"array":i.nodebuffer&&o.isBuffer(d)?"nodebuffer":i.uint8array&&d instanceof Uint8Array?"uint8array":i.arraybuffer&&d instanceof ArrayBuffer?"arraybuffer":void 0},s.checkSupport=function(d){if(!i[d.toLowerCase()])throw new Error(d+" is not supported by this platform")},s.MAX_VALUE_16BITS=65535,s.MAX_VALUE_32BITS=-1,s.pretty=function(d){var g,f,b="";for(f=0;f<(d||"").length;f++)b+="\\x"+((g=d.charCodeAt(f))<16?"0":"")+g.toString(16).toUpperCase();return b},s.delay=function(d,g,f){setImmediate(function(){d.apply(f||null,g||[])})},s.inherits=function(d,g){function f(){}f.prototype=g.prototype,d.prototype=new f},s.extend=function(){var d,g,f={};for(d=0;d<arguments.length;d++)for(g in arguments[d])Object.prototype.hasOwnProperty.call(arguments[d],g)&&f[g]===void 0&&(f[g]=arguments[d][g]);return f},s.prepareContent=function(d,g,f,b,A){return u.Promise.resolve(g).then(function(z){return i.blob&&(z instanceof Blob||["[object File]","[object Blob]"].indexOf(Object.prototype.toString.call(z))!==-1)&&typeof FileReader<"u"?new u.Promise(function(E,N){var P=new FileReader;P.onload=function(F){E(F.target.result)},P.onerror=function(F){N(F.target.error)},P.readAsArrayBuffer(z)}):z}).then(function(z){var E=s.getTypeOf(z);return E?(E==="arraybuffer"?z=s.transformTo("uint8array",z):E==="string"&&(A?z=l.decode(z):f&&b!==!0&&(z=(function(N){return k(N,i.uint8array?new Uint8Array(N.length):new Array(N.length))})(z))),z):u.Promise.reject(new Error("Can't read the data of '"+d+"'. Is it in a supported JavaScript type (String, Blob, ArrayBuffer, etc) ?"))})}},{"./base64":1,"./external":6,"./nodejsUtils":14,"./support":30,setimmediate:54}],33:[function(r,m,s){var i=r("./reader/readerFor"),l=r("./utils"),o=r("./signature"),u=r("./zipEntry"),_=r("./support");function k(w){this.files=[],this.loadOptions=w}k.prototype={checkSignature:function(w){if(!this.reader.readAndCheckSignature(w)){this.reader.index-=4;var S=this.reader.readString(4);throw new Error("Corrupted zip or bug: unexpected signature ("+l.pretty(S)+", expected "+l.pretty(w)+")")}},isSignature:function(w,S){var h=this.reader.index;this.reader.setIndex(w);var y=this.reader.readString(4)===S;return this.reader.setIndex(h),y},readBlockEndOfCentral:function(){this.diskNumber=this.reader.readInt(2),this.diskWithCentralDirStart=this.reader.readInt(2),this.centralDirRecordsOnThisDisk=this.reader.readInt(2),this.centralDirRecords=this.reader.readInt(2),this.centralDirSize=this.reader.readInt(4),this.centralDirOffset=this.reader.readInt(4),this.zipCommentLength=this.reader.readInt(2);var w=this.reader.readData(this.zipCommentLength),S=_.uint8array?"uint8array":"array",h=l.transformTo(S,w);this.zipComment=this.loadOptions.decodeFileName(h)},readBlockZip64EndOfCentral:function(){this.zip64EndOfCentralSize=this.reader.readInt(8),this.reader.skip(4),this.diskNumber=this.reader.readInt(4),this.diskWithCentralDirStart=this.reader.readInt(4),this.centralDirRecordsOnThisDisk=this.reader.readInt(8),this.centralDirRecords=this.reader.readInt(8),this.centralDirSize=this.reader.readInt(8),this.centralDirOffset=this.reader.readInt(8),this.zip64ExtensibleData={};for(var w,S,h,y=this.zip64EndOfCentralSize-44;0<y;)w=this.reader.readInt(2),S=this.reader.readInt(4),h=this.reader.readData(S),this.zip64ExtensibleData[w]={id:w,length:S,value:h}},readBlockZip64EndOfCentralLocator:function(){if(this.diskWithZip64CentralDirStart=this.reader.readInt(4),this.relativeOffsetEndOfZip64CentralDir=this.reader.readInt(8),this.disksCount=this.reader.readInt(4),1<this.disksCount)throw new Error("Multi-volumes zip are not supported")},readLocalFiles:function(){var w,S;for(w=0;w<this.files.length;w++)S=this.files[w],this.reader.setIndex(S.localHeaderOffset),this.checkSignature(o.LOCAL_FILE_HEADER),S.readLocalPart(this.reader),S.handleUTF8(),S.processAttributes()},readCentralDir:function(){var w;for(this.reader.setIndex(this.centralDirOffset);this.reader.readAndCheckSignature(o.CENTRAL_FILE_HEADER);)(w=new u({zip64:this.zip64},this.loadOptions)).readCentralPart(this.reader),this.files.push(w);if(this.centralDirRecords!==this.files.length&&this.centralDirRecords!==0&&this.files.length===0)throw new Error("Corrupted zip or bug: expected "+this.centralDirRecords+" records in central dir, got "+this.files.length)},readEndOfCentral:function(){var w=this.reader.lastIndexOfSignature(o.CENTRAL_DIRECTORY_END);if(w<0)throw this.isSignature(0,o.LOCAL_FILE_HEADER)?new Error("Corrupted zip: can't find end of central directory"):new Error("Can't find end of central directory : is this a zip file ? If it is, see https://stuk.github.io/jszip/documentation/howto/read_zip.html");this.reader.setIndex(w);var S=w;if(this.checkSignature(o.CENTRAL_DIRECTORY_END),this.readBlockEndOfCentral(),this.diskNumber===l.MAX_VALUE_16BITS||this.diskWithCentralDirStart===l.MAX_VALUE_16BITS||this.centralDirRecordsOnThisDisk===l.MAX_VALUE_16BITS||this.centralDirRecords===l.MAX_VALUE_16BITS||this.centralDirSize===l.MAX_VALUE_32BITS||this.centralDirOffset===l.MAX_VALUE_32BITS){if(this.zip64=!0,(w=this.reader.lastIndexOfSignature(o.ZIP64_CENTRAL_DIRECTORY_LOCATOR))<0)throw new Error("Corrupted zip: can't find the ZIP64 end of central directory locator");if(this.reader.setIndex(w),this.checkSignature(o.ZIP64_CENTRAL_DIRECTORY_LOCATOR),this.readBlockZip64EndOfCentralLocator(),!this.isSignature(this.relativeOffsetEndOfZip64CentralDir,o.ZIP64_CENTRAL_DIRECTORY_END)&&(this.relativeOffsetEndOfZip64CentralDir=this.reader.lastIndexOfSignature(o.ZIP64_CENTRAL_DIRECTORY_END),this.relativeOffsetEndOfZip64CentralDir<0))throw new Error("Corrupted zip: can't find the ZIP64 end of central directory");this.reader.setIndex(this.relativeOffsetEndOfZip64CentralDir),this.checkSignature(o.ZIP64_CENTRAL_DIRECTORY_END),this.readBlockZip64EndOfCentral()}var h=this.centralDirOffset+this.centralDirSize;this.zip64&&(h+=20,h+=12+this.zip64EndOfCentralSize);var y=S-h;if(0<y)this.isSignature(S,o.CENTRAL_FILE_HEADER)||(this.reader.zero=y);else if(y<0)throw new Error("Corrupted zip: missing "+Math.abs(y)+" bytes.")},prepareReader:function(w){this.reader=i(w)},load:function(w){this.prepareReader(w),this.readEndOfCentral(),this.readCentralDir(),this.readLocalFiles()}},m.exports=k},{"./reader/readerFor":22,"./signature":23,"./support":30,"./utils":32,"./zipEntry":34}],34:[function(r,m,s){var i=r("./reader/readerFor"),l=r("./utils"),o=r("./compressedObject"),u=r("./crc32"),_=r("./utf8"),k=r("./compressions"),w=r("./support");function S(h,y){this.options=h,this.loadOptions=y}S.prototype={isEncrypted:function(){return(1&this.bitFlag)==1},useUTF8:function(){return(2048&this.bitFlag)==2048},readLocalPart:function(h){var y,d;if(h.skip(22),this.fileNameLength=h.readInt(2),d=h.readInt(2),this.fileName=h.readData(this.fileNameLength),h.skip(d),this.compressedSize===-1||this.uncompressedSize===-1)throw new Error("Bug or corrupted zip : didn't get enough information from the central directory (compressedSize === -1 || uncompressedSize === -1)");if((y=(function(g){for(var f in k)if(Object.prototype.hasOwnProperty.call(k,f)&&k[f].magic===g)return k[f];return null})(this.compressionMethod))===null)throw new Error("Corrupted zip : compression "+l.pretty(this.compressionMethod)+" unknown (inner file : "+l.transformTo("string",this.fileName)+")");this.decompressed=new o(this.compressedSize,this.uncompressedSize,this.crc32,y,h.readData(this.compressedSize))},readCentralPart:function(h){this.versionMadeBy=h.readInt(2),h.skip(2),this.bitFlag=h.readInt(2),this.compressionMethod=h.readString(2),this.date=h.readDate(),this.crc32=h.readInt(4),this.compressedSize=h.readInt(4),this.uncompressedSize=h.readInt(4);var y=h.readInt(2);if(this.extraFieldsLength=h.readInt(2),this.fileCommentLength=h.readInt(2),this.diskNumberStart=h.readInt(2),this.internalFileAttributes=h.readInt(2),this.externalFileAttributes=h.readInt(4),this.localHeaderOffset=h.readInt(4),this.isEncrypted())throw new Error("Encrypted zip are not supported");h.skip(y),this.readExtraFields(h),this.parseZIP64ExtraField(h),this.fileComment=h.readData(this.fileCommentLength)},processAttributes:function(){this.unixPermissions=null,this.dosPermissions=null;var h=this.versionMadeBy>>8;this.dir=!!(16&this.externalFileAttributes),h==0&&(this.dosPermissions=63&this.externalFileAttributes),h==3&&(this.unixPermissions=this.externalFileAttributes>>16&65535),this.dir||this.fileNameStr.slice(-1)!=="/"||(this.dir=!0)},parseZIP64ExtraField:function(){if(this.extraFields[1]){var h=i(this.extraFields[1].value);this.uncompressedSize===l.MAX_VALUE_32BITS&&(this.uncompressedSize=h.readInt(8)),this.compressedSize===l.MAX_VALUE_32BITS&&(this.compressedSize=h.readInt(8)),this.localHeaderOffset===l.MAX_VALUE_32BITS&&(this.localHeaderOffset=h.readInt(8)),this.diskNumberStart===l.MAX_VALUE_32BITS&&(this.diskNumberStart=h.readInt(4))}},readExtraFields:function(h){var y,d,g,f=h.index+this.extraFieldsLength;for(this.extraFields||(this.extraFields={});h.index+4<f;)y=h.readInt(2),d=h.readInt(2),g=h.readData(d),this.extraFields[y]={id:y,length:d,value:g};h.setIndex(f)},handleUTF8:function(){var h=w.uint8array?"uint8array":"array";if(this.useUTF8())this.fileNameStr=_.utf8decode(this.fileName),this.fileCommentStr=_.utf8decode(this.fileComment);else{var y=this.findExtraFieldUnicodePath();if(y!==null)this.fileNameStr=y;else{var d=l.transformTo(h,this.fileName);this.fileNameStr=this.loadOptions.decodeFileName(d)}var g=this.findExtraFieldUnicodeComment();if(g!==null)this.fileCommentStr=g;else{var f=l.transformTo(h,this.fileComment);this.fileCommentStr=this.loadOptions.decodeFileName(f)}}},findExtraFieldUnicodePath:function(){var h=this.extraFields[28789];if(h){var y=i(h.value);return y.readInt(1)!==1||u(this.fileName)!==y.readInt(4)?null:_.utf8decode(y.readData(h.length-5))}return null},findExtraFieldUnicodeComment:function(){var h=this.extraFields[25461];if(h){var y=i(h.value);return y.readInt(1)!==1||u(this.fileComment)!==y.readInt(4)?null:_.utf8decode(y.readData(h.length-5))}return null}},m.exports=S},{"./compressedObject":2,"./compressions":3,"./crc32":4,"./reader/readerFor":22,"./support":30,"./utf8":31,"./utils":32}],35:[function(r,m,s){function i(y,d,g){this.name=y,this.dir=g.dir,this.date=g.date,this.comment=g.comment,this.unixPermissions=g.unixPermissions,this.dosPermissions=g.dosPermissions,this._data=d,this._dataBinary=g.binary,this.options={compression:g.compression,compressionOptions:g.compressionOptions}}var l=r("./stream/StreamHelper"),o=r("./stream/DataWorker"),u=r("./utf8"),_=r("./compressedObject"),k=r("./stream/GenericWorker");i.prototype={internalStream:function(y){var d=null,g="string";try{if(!y)throw new Error("No output type specified.");var f=(g=y.toLowerCase())==="string"||g==="text";g!=="binarystring"&&g!=="text"||(g="string"),d=this._decompressWorker();var b=!this._dataBinary;b&&!f&&(d=d.pipe(new u.Utf8EncodeWorker)),!b&&f&&(d=d.pipe(new u.Utf8DecodeWorker))}catch(A){(d=new k("error")).error(A)}return new l(d,g,"")},async:function(y,d){return this.internalStream(y).accumulate(d)},nodeStream:function(y,d){return this.internalStream(y||"nodebuffer").toNodejsStream(d)},_compressWorker:function(y,d){if(this._data instanceof _&&this._data.compression.magic===y.magic)return this._data.getCompressedWorker();var g=this._decompressWorker();return this._dataBinary||(g=g.pipe(new u.Utf8EncodeWorker)),_.createWorkerFrom(g,y,d)},_decompressWorker:function(){return this._data instanceof _?this._data.getContentWorker():this._data instanceof k?this._data:new o(this._data)}};for(var w=["asText","asBinary","asNodeBuffer","asUint8Array","asArrayBuffer"],S=function(){throw new Error("This method has been removed in JSZip 3.0, please check the upgrade guide.")},h=0;h<w.length;h++)i.prototype[w[h]]=S;m.exports=i},{"./compressedObject":2,"./stream/DataWorker":27,"./stream/GenericWorker":28,"./stream/StreamHelper":29,"./utf8":31}],36:[function(r,m,s){(function(i){var l,o,u=i.MutationObserver||i.WebKitMutationObserver;if(u){var _=0,k=new u(y),w=i.document.createTextNode("");k.observe(w,{characterData:!0}),l=function(){w.data=_=++_%2}}else if(i.setImmediate||i.MessageChannel===void 0)l="document"in i&&"onreadystatechange"in i.document.createElement("script")?function(){var d=i.document.createElement("script");d.onreadystatechange=function(){y(),d.onreadystatechange=null,d.parentNode.removeChild(d),d=null},i.document.documentElement.appendChild(d)}:function(){setTimeout(y,0)};else{var S=new i.MessageChannel;S.port1.onmessage=y,l=function(){S.port2.postMessage(0)}}var h=[];function y(){var d,g;o=!0;for(var f=h.length;f;){for(g=h,h=[],d=-1;++d<f;)g[d]();f=h.length}o=!1}m.exports=function(d){h.push(d)!==1||o||l()}}).call(this,typeof De<"u"?De:typeof self<"u"?self:typeof window<"u"?window:{})},{}],37:[function(r,m,s){var i=r("immediate");function l(){}var o={},u=["REJECTED"],_=["FULFILLED"],k=["PENDING"];function w(f){if(typeof f!="function")throw new TypeError("resolver must be a function");this.state=k,this.queue=[],this.outcome=void 0,f!==l&&d(this,f)}function S(f,b,A){this.promise=f,typeof b=="function"&&(this.onFulfilled=b,this.callFulfilled=this.otherCallFulfilled),typeof A=="function"&&(this.onRejected=A,this.callRejected=this.otherCallRejected)}function h(f,b,A){i(function(){var z;try{z=b(A)}catch(E){return o.reject(f,E)}z===f?o.reject(f,new TypeError("Cannot resolve promise with itself")):o.resolve(f,z)})}function y(f){var b=f&&f.then;if(f&&(typeof f=="object"||typeof f=="function")&&typeof b=="function")return function(){b.apply(f,arguments)}}function d(f,b){var A=!1;function z(P){A||(A=!0,o.reject(f,P))}function E(P){A||(A=!0,o.resolve(f,P))}var N=g(function(){b(E,z)});N.status==="error"&&z(N.value)}function g(f,b){var A={};try{A.value=f(b),A.status="success"}catch(z){A.status="error",A.value=z}return A}(m.exports=w).prototype.finally=function(f){if(typeof f!="function")return this;var b=this.constructor;return this.then(function(A){return b.resolve(f()).then(function(){return A})},function(A){return b.resolve(f()).then(function(){throw A})})},w.prototype.catch=function(f){return this.then(null,f)},w.prototype.then=function(f,b){if(typeof f!="function"&&this.state===_||typeof b!="function"&&this.state===u)return this;var A=new this.constructor(l);return this.state!==k?h(A,this.state===_?f:b,this.outcome):this.queue.push(new S(A,f,b)),A},S.prototype.callFulfilled=function(f){o.resolve(this.promise,f)},S.prototype.otherCallFulfilled=function(f){h(this.promise,this.onFulfilled,f)},S.prototype.callRejected=function(f){o.reject(this.promise,f)},S.prototype.otherCallRejected=function(f){h(this.promise,this.onRejected,f)},o.resolve=function(f,b){var A=g(y,b);if(A.status==="error")return o.reject(f,A.value);var z=A.value;if(z)d(f,z);else{f.state=_,f.outcome=b;for(var E=-1,N=f.queue.length;++E<N;)f.queue[E].callFulfilled(b)}return f},o.reject=function(f,b){f.state=u,f.outcome=b;for(var A=-1,z=f.queue.length;++A<z;)f.queue[A].callRejected(b);return f},w.resolve=function(f){return f instanceof this?f:o.resolve(new this(l),f)},w.reject=function(f){var b=new this(l);return o.reject(b,f)},w.all=function(f){var b=this;if(Object.prototype.toString.call(f)!=="[object Array]")return this.reject(new TypeError("must be an array"));var A=f.length,z=!1;if(!A)return this.resolve([]);for(var E=new Array(A),N=0,P=-1,F=new this(l);++P<A;)I(f[P],P);return F;function I(q,X){b.resolve(q).then(function(C){E[X]=C,++N!==A||z||(z=!0,o.resolve(F,E))},function(C){z||(z=!0,o.reject(F,C))})}},w.race=function(f){var b=this;if(Object.prototype.toString.call(f)!=="[object Array]")return this.reject(new TypeError("must be an array"));var A=f.length,z=!1;if(!A)return this.resolve([]);for(var E=-1,N=new this(l);++E<A;)P=f[E],b.resolve(P).then(function(F){z||(z=!0,o.resolve(N,F))},function(F){z||(z=!0,o.reject(N,F))});var P;return N}},{immediate:36}],38:[function(r,m,s){var i={};(0,r("./lib/utils/common").assign)(i,r("./lib/deflate"),r("./lib/inflate"),r("./lib/zlib/constants")),m.exports=i},{"./lib/deflate":39,"./lib/inflate":40,"./lib/utils/common":41,"./lib/zlib/constants":44}],39:[function(r,m,s){var i=r("./zlib/deflate"),l=r("./utils/common"),o=r("./utils/strings"),u=r("./zlib/messages"),_=r("./zlib/zstream"),k=Object.prototype.toString,w=0,S=-1,h=0,y=8;function d(f){if(!(this instanceof d))return new d(f);this.options=l.assign({level:S,method:y,chunkSize:16384,windowBits:15,memLevel:8,strategy:h,to:""},f||{});var b=this.options;b.raw&&0<b.windowBits?b.windowBits=-b.windowBits:b.gzip&&0<b.windowBits&&b.windowBits<16&&(b.windowBits+=16),this.err=0,this.msg="",this.ended=!1,this.chunks=[],this.strm=new _,this.strm.avail_out=0;var A=i.deflateInit2(this.strm,b.level,b.method,b.windowBits,b.memLevel,b.strategy);if(A!==w)throw new Error(u[A]);if(b.header&&i.deflateSetHeader(this.strm,b.header),b.dictionary){var z;if(z=typeof b.dictionary=="string"?o.string2buf(b.dictionary):k.call(b.dictionary)==="[object ArrayBuffer]"?new Uint8Array(b.dictionary):b.dictionary,(A=i.deflateSetDictionary(this.strm,z))!==w)throw new Error(u[A]);this._dict_set=!0}}function g(f,b){var A=new d(b);if(A.push(f,!0),A.err)throw A.msg||u[A.err];return A.result}d.prototype.push=function(f,b){var A,z,E=this.strm,N=this.options.chunkSize;if(this.ended)return!1;z=b===~~b?b:b===!0?4:0,typeof f=="string"?E.input=o.string2buf(f):k.call(f)==="[object ArrayBuffer]"?E.input=new Uint8Array(f):E.input=f,E.next_in=0,E.avail_in=E.input.length;do{if(E.avail_out===0&&(E.output=new l.Buf8(N),E.next_out=0,E.avail_out=N),(A=i.deflate(E,z))!==1&&A!==w)return this.onEnd(A),!(this.ended=!0);E.avail_out!==0&&(E.avail_in!==0||z!==4&&z!==2)||(this.options.to==="string"?this.onData(o.buf2binstring(l.shrinkBuf(E.output,E.next_out))):this.onData(l.shrinkBuf(E.output,E.next_out)))}while((0<E.avail_in||E.avail_out===0)&&A!==1);return z===4?(A=i.deflateEnd(this.strm),this.onEnd(A),this.ended=!0,A===w):z!==2||(this.onEnd(w),!(E.avail_out=0))},d.prototype.onData=function(f){this.chunks.push(f)},d.prototype.onEnd=function(f){f===w&&(this.options.to==="string"?this.result=this.chunks.join(""):this.result=l.flattenChunks(this.chunks)),this.chunks=[],this.err=f,this.msg=this.strm.msg},s.Deflate=d,s.deflate=g,s.deflateRaw=function(f,b){return(b=b||{}).raw=!0,g(f,b)},s.gzip=function(f,b){return(b=b||{}).gzip=!0,g(f,b)}},{"./utils/common":41,"./utils/strings":42,"./zlib/deflate":46,"./zlib/messages":51,"./zlib/zstream":53}],40:[function(r,m,s){var i=r("./zlib/inflate"),l=r("./utils/common"),o=r("./utils/strings"),u=r("./zlib/constants"),_=r("./zlib/messages"),k=r("./zlib/zstream"),w=r("./zlib/gzheader"),S=Object.prototype.toString;function h(d){if(!(this instanceof h))return new h(d);this.options=l.assign({chunkSize:16384,windowBits:0,to:""},d||{});var g=this.options;g.raw&&0<=g.windowBits&&g.windowBits<16&&(g.windowBits=-g.windowBits,g.windowBits===0&&(g.windowBits=-15)),!(0<=g.windowBits&&g.windowBits<16)||d&&d.windowBits||(g.windowBits+=32),15<g.windowBits&&g.windowBits<48&&(15&g.windowBits)==0&&(g.windowBits|=15),this.err=0,this.msg="",this.ended=!1,this.chunks=[],this.strm=new k,this.strm.avail_out=0;var f=i.inflateInit2(this.strm,g.windowBits);if(f!==u.Z_OK)throw new Error(_[f]);this.header=new w,i.inflateGetHeader(this.strm,this.header)}function y(d,g){var f=new h(g);if(f.push(d,!0),f.err)throw f.msg||_[f.err];return f.result}h.prototype.push=function(d,g){var f,b,A,z,E,N,P=this.strm,F=this.options.chunkSize,I=this.options.dictionary,q=!1;if(this.ended)return!1;b=g===~~g?g:g===!0?u.Z_FINISH:u.Z_NO_FLUSH,typeof d=="string"?P.input=o.binstring2buf(d):S.call(d)==="[object ArrayBuffer]"?P.input=new Uint8Array(d):P.input=d,P.next_in=0,P.avail_in=P.input.length;do{if(P.avail_out===0&&(P.output=new l.Buf8(F),P.next_out=0,P.avail_out=F),(f=i.inflate(P,u.Z_NO_FLUSH))===u.Z_NEED_DICT&&I&&(N=typeof I=="string"?o.string2buf(I):S.call(I)==="[object ArrayBuffer]"?new Uint8Array(I):I,f=i.inflateSetDictionary(this.strm,N)),f===u.Z_BUF_ERROR&&q===!0&&(f=u.Z_OK,q=!1),f!==u.Z_STREAM_END&&f!==u.Z_OK)return this.onEnd(f),!(this.ended=!0);P.next_out&&(P.avail_out!==0&&f!==u.Z_STREAM_END&&(P.avail_in!==0||b!==u.Z_FINISH&&b!==u.Z_SYNC_FLUSH)||(this.options.to==="string"?(A=o.utf8border(P.output,P.next_out),z=P.next_out-A,E=o.buf2string(P.output,A),P.next_out=z,P.avail_out=F-z,z&&l.arraySet(P.output,P.output,A,z,0),this.onData(E)):this.onData(l.shrinkBuf(P.output,P.next_out)))),P.avail_in===0&&P.avail_out===0&&(q=!0)}while((0<P.avail_in||P.avail_out===0)&&f!==u.Z_STREAM_END);return f===u.Z_STREAM_END&&(b=u.Z_FINISH),b===u.Z_FINISH?(f=i.inflateEnd(this.strm),this.onEnd(f),this.ended=!0,f===u.Z_OK):b!==u.Z_SYNC_FLUSH||(this.onEnd(u.Z_OK),!(P.avail_out=0))},h.prototype.onData=function(d){this.chunks.push(d)},h.prototype.onEnd=function(d){d===u.Z_OK&&(this.options.to==="string"?this.result=this.chunks.join(""):this.result=l.flattenChunks(this.chunks)),this.chunks=[],this.err=d,this.msg=this.strm.msg},s.Inflate=h,s.inflate=y,s.inflateRaw=function(d,g){return(g=g||{}).raw=!0,y(d,g)},s.ungzip=y},{"./utils/common":41,"./utils/strings":42,"./zlib/constants":44,"./zlib/gzheader":47,"./zlib/inflate":49,"./zlib/messages":51,"./zlib/zstream":53}],41:[function(r,m,s){var i=typeof Uint8Array<"u"&&typeof Uint16Array<"u"&&typeof Int32Array<"u";s.assign=function(u){for(var _=Array.prototype.slice.call(arguments,1);_.length;){var k=_.shift();if(k){if(typeof k!="object")throw new TypeError(k+"must be non-object");for(var w in k)k.hasOwnProperty(w)&&(u[w]=k[w])}}return u},s.shrinkBuf=function(u,_){return u.length===_?u:u.subarray?u.subarray(0,_):(u.length=_,u)};var l={arraySet:function(u,_,k,w,S){if(_.subarray&&u.subarray)u.set(_.subarray(k,k+w),S);else for(var h=0;h<w;h++)u[S+h]=_[k+h]},flattenChunks:function(u){var _,k,w,S,h,y;for(_=w=0,k=u.length;_<k;_++)w+=u[_].length;for(y=new Uint8Array(w),_=S=0,k=u.length;_<k;_++)h=u[_],y.set(h,S),S+=h.length;return y}},o={arraySet:function(u,_,k,w,S){for(var h=0;h<w;h++)u[S+h]=_[k+h]},flattenChunks:function(u){return[].concat.apply([],u)}};s.setTyped=function(u){u?(s.Buf8=Uint8Array,s.Buf16=Uint16Array,s.Buf32=Int32Array,s.assign(s,l)):(s.Buf8=Array,s.Buf16=Array,s.Buf32=Array,s.assign(s,o))},s.setTyped(i)},{}],42:[function(r,m,s){var i=r("./common"),l=!0,o=!0;try{String.fromCharCode.apply(null,[0])}catch{l=!1}try{String.fromCharCode.apply(null,new Uint8Array(1))}catch{o=!1}for(var u=new i.Buf8(256),_=0;_<256;_++)u[_]=252<=_?6:248<=_?5:240<=_?4:224<=_?3:192<=_?2:1;function k(w,S){if(S<65537&&(w.subarray&&o||!w.subarray&&l))return String.fromCharCode.apply(null,i.shrinkBuf(w,S));for(var h="",y=0;y<S;y++)h+=String.fromCharCode(w[y]);return h}u[254]=u[254]=1,s.string2buf=function(w){var S,h,y,d,g,f=w.length,b=0;for(d=0;d<f;d++)(64512&(h=w.charCodeAt(d)))==55296&&d+1<f&&(64512&(y=w.charCodeAt(d+1)))==56320&&(h=65536+(h-55296<<10)+(y-56320),d++),b+=h<128?1:h<2048?2:h<65536?3:4;for(S=new i.Buf8(b),d=g=0;g<b;d++)(64512&(h=w.charCodeAt(d)))==55296&&d+1<f&&(64512&(y=w.charCodeAt(d+1)))==56320&&(h=65536+(h-55296<<10)+(y-56320),d++),h<128?S[g++]=h:(h<2048?S[g++]=192|h>>>6:(h<65536?S[g++]=224|h>>>12:(S[g++]=240|h>>>18,S[g++]=128|h>>>12&63),S[g++]=128|h>>>6&63),S[g++]=128|63&h);return S},s.buf2binstring=function(w){return k(w,w.length)},s.binstring2buf=function(w){for(var S=new i.Buf8(w.length),h=0,y=S.length;h<y;h++)S[h]=w.charCodeAt(h);return S},s.buf2string=function(w,S){var h,y,d,g,f=S||w.length,b=new Array(2*f);for(h=y=0;h<f;)if((d=w[h++])<128)b[y++]=d;else if(4<(g=u[d]))b[y++]=65533,h+=g-1;else{for(d&=g===2?31:g===3?15:7;1<g&&h<f;)d=d<<6|63&w[h++],g--;1<g?b[y++]=65533:d<65536?b[y++]=d:(d-=65536,b[y++]=55296|d>>10&1023,b[y++]=56320|1023&d)}return k(b,y)},s.utf8border=function(w,S){var h;for((S=S||w.length)>w.length&&(S=w.length),h=S-1;0<=h&&(192&w[h])==128;)h--;return h<0||h===0?S:h+u[w[h]]>S?h:S}},{"./common":41}],43:[function(r,m,s){m.exports=function(i,l,o,u){for(var _=65535&i|0,k=i>>>16&65535|0,w=0;o!==0;){for(o-=w=2e3<o?2e3:o;k=k+(_=_+l[u++]|0)|0,--w;);_%=65521,k%=65521}return _|k<<16|0}},{}],44:[function(r,m,s){m.exports={Z_NO_FLUSH:0,Z_PARTIAL_FLUSH:1,Z_SYNC_FLUSH:2,Z_FULL_FLUSH:3,Z_FINISH:4,Z_BLOCK:5,Z_TREES:6,Z_OK:0,Z_STREAM_END:1,Z_NEED_DICT:2,Z_ERRNO:-1,Z_STREAM_ERROR:-2,Z_DATA_ERROR:-3,Z_BUF_ERROR:-5,Z_NO_COMPRESSION:0,Z_BEST_SPEED:1,Z_BEST_COMPRESSION:9,Z_DEFAULT_COMPRESSION:-1,Z_FILTERED:1,Z_HUFFMAN_ONLY:2,Z_RLE:3,Z_FIXED:4,Z_DEFAULT_STRATEGY:0,Z_BINARY:0,Z_TEXT:1,Z_UNKNOWN:2,Z_DEFLATED:8}},{}],45:[function(r,m,s){var i=(function(){for(var l,o=[],u=0;u<256;u++){l=u;for(var _=0;_<8;_++)l=1&l?3988292384^l>>>1:l>>>1;o[u]=l}return o})();m.exports=function(l,o,u,_){var k=i,w=_+u;l^=-1;for(var S=_;S<w;S++)l=l>>>8^k[255&(l^o[S])];return-1^l}},{}],46:[function(r,m,s){var i,l=r("../utils/common"),o=r("./trees"),u=r("./adler32"),_=r("./crc32"),k=r("./messages"),w=0,S=4,h=0,y=-2,d=-1,g=4,f=2,b=8,A=9,z=286,E=30,N=19,P=2*z+1,F=15,I=3,q=258,X=q+I+1,C=42,$=113,n=1,U=2,te=3,M=4;function re(t,L){return t.msg=k[L],L}function W(t){return(t<<1)-(4<t?9:0)}function Q(t){for(var L=t.length;0<=--L;)t[L]=0}function B(t){var L=t.state,O=L.pending;O>t.avail_out&&(O=t.avail_out),O!==0&&(l.arraySet(t.output,L.pending_buf,L.pending_out,O,t.next_out),t.next_out+=O,L.pending_out+=O,t.total_out+=O,t.avail_out-=O,L.pending-=O,L.pending===0&&(L.pending_out=0))}function R(t,L){o._tr_flush_block(t,0<=t.block_start?t.block_start:-1,t.strstart-t.block_start,L),t.block_start=t.strstart,B(t.strm)}function J(t,L){t.pending_buf[t.pending++]=L}function H(t,L){t.pending_buf[t.pending++]=L>>>8&255,t.pending_buf[t.pending++]=255&L}function K(t,L){var O,v,p=t.max_chain_length,x=t.strstart,D=t.prev_length,j=t.nice_match,T=t.strstart>t.w_size-X?t.strstart-(t.w_size-X):0,Z=t.window,V=t.w_mask,G=t.prev,Y=t.strstart+q,le=Z[x+D-1],ae=Z[x+D];t.prev_length>=t.good_match&&(p>>=2),j>t.lookahead&&(j=t.lookahead);do if(Z[(O=L)+D]===ae&&Z[O+D-1]===le&&Z[O]===Z[x]&&Z[++O]===Z[x+1]){x+=2,O++;do;while(Z[++x]===Z[++O]&&Z[++x]===Z[++O]&&Z[++x]===Z[++O]&&Z[++x]===Z[++O]&&Z[++x]===Z[++O]&&Z[++x]===Z[++O]&&Z[++x]===Z[++O]&&Z[++x]===Z[++O]&&x<Y);if(v=q-(Y-x),x=Y-q,D<v){if(t.match_start=L,j<=(D=v))break;le=Z[x+D-1],ae=Z[x+D]}}while((L=G[L&V])>T&&--p!=0);return D<=t.lookahead?D:t.lookahead}function ce(t){var L,O,v,p,x,D,j,T,Z,V,G=t.w_size;do{if(p=t.window_size-t.lookahead-t.strstart,t.strstart>=G+(G-X)){for(l.arraySet(t.window,t.window,G,G,0),t.match_start-=G,t.strstart-=G,t.block_start-=G,L=O=t.hash_size;v=t.head[--L],t.head[L]=G<=v?v-G:0,--O;);for(L=O=G;v=t.prev[--L],t.prev[L]=G<=v?v-G:0,--O;);p+=G}if(t.strm.avail_in===0)break;if(D=t.strm,j=t.window,T=t.strstart+t.lookahead,Z=p,V=void 0,V=D.avail_in,Z<V&&(V=Z),O=V===0?0:(D.avail_in-=V,l.arraySet(j,D.input,D.next_in,V,T),D.state.wrap===1?D.adler=u(D.adler,j,V,T):D.state.wrap===2&&(D.adler=_(D.adler,j,V,T)),D.next_in+=V,D.total_in+=V,V),t.lookahead+=O,t.lookahead+t.insert>=I)for(x=t.strstart-t.insert,t.ins_h=t.window[x],t.ins_h=(t.ins_h<<t.hash_shift^t.window[x+1])&t.hash_mask;t.insert&&(t.ins_h=(t.ins_h<<t.hash_shift^t.window[x+I-1])&t.hash_mask,t.prev[x&t.w_mask]=t.head[t.ins_h],t.head[t.ins_h]=x,x++,t.insert--,!(t.lookahead+t.insert<I)););}while(t.lookahead<X&&t.strm.avail_in!==0)}function fe(t,L){for(var O,v;;){if(t.lookahead<X){if(ce(t),t.lookahead<X&&L===w)return n;if(t.lookahead===0)break}if(O=0,t.lookahead>=I&&(t.ins_h=(t.ins_h<<t.hash_shift^t.window[t.strstart+I-1])&t.hash_mask,O=t.prev[t.strstart&t.w_mask]=t.head[t.ins_h],t.head[t.ins_h]=t.strstart),O!==0&&t.strstart-O<=t.w_size-X&&(t.match_length=K(t,O)),t.match_length>=I)if(v=o._tr_tally(t,t.strstart-t.match_start,t.match_length-I),t.lookahead-=t.match_length,t.match_length<=t.max_lazy_match&&t.lookahead>=I){for(t.match_length--;t.strstart++,t.ins_h=(t.ins_h<<t.hash_shift^t.window[t.strstart+I-1])&t.hash_mask,O=t.prev[t.strstart&t.w_mask]=t.head[t.ins_h],t.head[t.ins_h]=t.strstart,--t.match_length!=0;);t.strstart++}else t.strstart+=t.match_length,t.match_length=0,t.ins_h=t.window[t.strstart],t.ins_h=(t.ins_h<<t.hash_shift^t.window[t.strstart+1])&t.hash_mask;else v=o._tr_tally(t,0,t.window[t.strstart]),t.lookahead--,t.strstart++;if(v&&(R(t,!1),t.strm.avail_out===0))return n}return t.insert=t.strstart<I-1?t.strstart:I-1,L===S?(R(t,!0),t.strm.avail_out===0?te:M):t.last_lit&&(R(t,!1),t.strm.avail_out===0)?n:U}function ne(t,L){for(var O,v,p;;){if(t.lookahead<X){if(ce(t),t.lookahead<X&&L===w)return n;if(t.lookahead===0)break}if(O=0,t.lookahead>=I&&(t.ins_h=(t.ins_h<<t.hash_shift^t.window[t.strstart+I-1])&t.hash_mask,O=t.prev[t.strstart&t.w_mask]=t.head[t.ins_h],t.head[t.ins_h]=t.strstart),t.prev_length=t.match_length,t.prev_match=t.match_start,t.match_length=I-1,O!==0&&t.prev_length<t.max_lazy_match&&t.strstart-O<=t.w_size-X&&(t.match_length=K(t,O),t.match_length<=5&&(t.strategy===1||t.match_length===I&&4096<t.strstart-t.match_start)&&(t.match_length=I-1)),t.prev_length>=I&&t.match_length<=t.prev_length){for(p=t.strstart+t.lookahead-I,v=o._tr_tally(t,t.strstart-1-t.prev_match,t.prev_length-I),t.lookahead-=t.prev_length-1,t.prev_length-=2;++t.strstart<=p&&(t.ins_h=(t.ins_h<<t.hash_shift^t.window[t.strstart+I-1])&t.hash_mask,O=t.prev[t.strstart&t.w_mask]=t.head[t.ins_h],t.head[t.ins_h]=t.strstart),--t.prev_length!=0;);if(t.match_available=0,t.match_length=I-1,t.strstart++,v&&(R(t,!1),t.strm.avail_out===0))return n}else if(t.match_available){if((v=o._tr_tally(t,0,t.window[t.strstart-1]))&&R(t,!1),t.strstart++,t.lookahead--,t.strm.avail_out===0)return n}else t.match_available=1,t.strstart++,t.lookahead--}return t.match_available&&(v=o._tr_tally(t,0,t.window[t.strstart-1]),t.match_available=0),t.insert=t.strstart<I-1?t.strstart:I-1,L===S?(R(t,!0),t.strm.avail_out===0?te:M):t.last_lit&&(R(t,!1),t.strm.avail_out===0)?n:U}function oe(t,L,O,v,p){this.good_length=t,this.max_lazy=L,this.nice_length=O,this.max_chain=v,this.func=p}function he(){this.strm=null,this.status=0,this.pending_buf=null,this.pending_buf_size=0,this.pending_out=0,this.pending=0,this.wrap=0,this.gzhead=null,this.gzindex=0,this.method=b,this.last_flush=-1,this.w_size=0,this.w_bits=0,this.w_mask=0,this.window=null,this.window_size=0,this.prev=null,this.head=null,this.ins_h=0,this.hash_size=0,this.hash_bits=0,this.hash_mask=0,this.hash_shift=0,this.block_start=0,this.match_length=0,this.prev_match=0,this.match_available=0,this.strstart=0,this.match_start=0,this.lookahead=0,this.prev_length=0,this.max_chain_length=0,this.max_lazy_match=0,this.level=0,this.strategy=0,this.good_match=0,this.nice_match=0,this.dyn_ltree=new l.Buf16(2*P),this.dyn_dtree=new l.Buf16(2*(2*E+1)),this.bl_tree=new l.Buf16(2*(2*N+1)),Q(this.dyn_ltree),Q(this.dyn_dtree),Q(this.bl_tree),this.l_desc=null,this.d_desc=null,this.bl_desc=null,this.bl_count=new l.Buf16(F+1),this.heap=new l.Buf16(2*z+1),Q(this.heap),this.heap_len=0,this.heap_max=0,this.depth=new l.Buf16(2*z+1),Q(this.depth),this.l_buf=0,this.lit_bufsize=0,this.last_lit=0,this.d_buf=0,this.opt_len=0,this.static_len=0,this.matches=0,this.insert=0,this.bi_buf=0,this.bi_valid=0}function ue(t){var L;return t&&t.state?(t.total_in=t.total_out=0,t.data_type=f,(L=t.state).pending=0,L.pending_out=0,L.wrap<0&&(L.wrap=-L.wrap),L.status=L.wrap?C:$,t.adler=L.wrap===2?0:1,L.last_flush=w,o._tr_init(L),h):re(t,y)}function ye(t){var L=ue(t);return L===h&&(function(O){O.window_size=2*O.w_size,Q(O.head),O.max_lazy_match=i[O.level].max_lazy,O.good_match=i[O.level].good_length,O.nice_match=i[O.level].nice_length,O.max_chain_length=i[O.level].max_chain,O.strstart=0,O.block_start=0,O.lookahead=0,O.insert=0,O.match_length=O.prev_length=I-1,O.match_available=0,O.ins_h=0})(t.state),L}function ve(t,L,O,v,p,x){if(!t)return y;var D=1;if(L===d&&(L=6),v<0?(D=0,v=-v):15<v&&(D=2,v-=16),p<1||A<p||O!==b||v<8||15<v||L<0||9<L||x<0||g<x)return re(t,y);v===8&&(v=9);var j=new he;return(t.state=j).strm=t,j.wrap=D,j.gzhead=null,j.w_bits=v,j.w_size=1<<j.w_bits,j.w_mask=j.w_size-1,j.hash_bits=p+7,j.hash_size=1<<j.hash_bits,j.hash_mask=j.hash_size-1,j.hash_shift=~~((j.hash_bits+I-1)/I),j.window=new l.Buf8(2*j.w_size),j.head=new l.Buf16(j.hash_size),j.prev=new l.Buf16(j.w_size),j.lit_bufsize=1<<p+6,j.pending_buf_size=4*j.lit_bufsize,j.pending_buf=new l.Buf8(j.pending_buf_size),j.d_buf=1*j.lit_bufsize,j.l_buf=3*j.lit_bufsize,j.level=L,j.strategy=x,j.method=O,ye(t)}i=[new oe(0,0,0,0,function(t,L){var O=65535;for(O>t.pending_buf_size-5&&(O=t.pending_buf_size-5);;){if(t.lookahead<=1){if(ce(t),t.lookahead===0&&L===w)return n;if(t.lookahead===0)break}t.strstart+=t.lookahead,t.lookahead=0;var v=t.block_start+O;if((t.strstart===0||t.strstart>=v)&&(t.lookahead=t.strstart-v,t.strstart=v,R(t,!1),t.strm.avail_out===0)||t.strstart-t.block_start>=t.w_size-X&&(R(t,!1),t.strm.avail_out===0))return n}return t.insert=0,L===S?(R(t,!0),t.strm.avail_out===0?te:M):(t.strstart>t.block_start&&(R(t,!1),t.strm.avail_out),n)}),new oe(4,4,8,4,fe),new oe(4,5,16,8,fe),new oe(4,6,32,32,fe),new oe(4,4,16,16,ne),new oe(8,16,32,32,ne),new oe(8,16,128,128,ne),new oe(8,32,128,256,ne),new oe(32,128,258,1024,ne),new oe(32,258,258,4096,ne)],s.deflateInit=function(t,L){return ve(t,L,b,15,8,0)},s.deflateInit2=ve,s.deflateReset=ye,s.deflateResetKeep=ue,s.deflateSetHeader=function(t,L){return t&&t.state?t.state.wrap!==2?y:(t.state.gzhead=L,h):y},s.deflate=function(t,L){var O,v,p,x;if(!t||!t.state||5<L||L<0)return t?re(t,y):y;if(v=t.state,!t.output||!t.input&&t.avail_in!==0||v.status===666&&L!==S)return re(t,t.avail_out===0?-5:y);if(v.strm=t,O=v.last_flush,v.last_flush=L,v.status===C)if(v.wrap===2)t.adler=0,J(v,31),J(v,139),J(v,8),v.gzhead?(J(v,(v.gzhead.text?1:0)+(v.gzhead.hcrc?2:0)+(v.gzhead.extra?4:0)+(v.gzhead.name?8:0)+(v.gzhead.comment?16:0)),J(v,255&v.gzhead.time),J(v,v.gzhead.time>>8&255),J(v,v.gzhead.time>>16&255),J(v,v.gzhead.time>>24&255),J(v,v.level===9?2:2<=v.strategy||v.level<2?4:0),J(v,255&v.gzhead.os),v.gzhead.extra&&v.gzhead.extra.length&&(J(v,255&v.gzhead.extra.length),J(v,v.gzhead.extra.length>>8&255)),v.gzhead.hcrc&&(t.adler=_(t.adler,v.pending_buf,v.pending,0)),v.gzindex=0,v.status=69):(J(v,0),J(v,0),J(v,0),J(v,0),J(v,0),J(v,v.level===9?2:2<=v.strategy||v.level<2?4:0),J(v,3),v.status=$);else{var D=b+(v.w_bits-8<<4)<<8;D|=(2<=v.strategy||v.level<2?0:v.level<6?1:v.level===6?2:3)<<6,v.strstart!==0&&(D|=32),D+=31-D%31,v.status=$,H(v,D),v.strstart!==0&&(H(v,t.adler>>>16),H(v,65535&t.adler)),t.adler=1}if(v.status===69)if(v.gzhead.extra){for(p=v.pending;v.gzindex<(65535&v.gzhead.extra.length)&&(v.pending!==v.pending_buf_size||(v.gzhead.hcrc&&v.pending>p&&(t.adler=_(t.adler,v.pending_buf,v.pending-p,p)),B(t),p=v.pending,v.pending!==v.pending_buf_size));)J(v,255&v.gzhead.extra[v.gzindex]),v.gzindex++;v.gzhead.hcrc&&v.pending>p&&(t.adler=_(t.adler,v.pending_buf,v.pending-p,p)),v.gzindex===v.gzhead.extra.length&&(v.gzindex=0,v.status=73)}else v.status=73;if(v.status===73)if(v.gzhead.name){p=v.pending;do{if(v.pending===v.pending_buf_size&&(v.gzhead.hcrc&&v.pending>p&&(t.adler=_(t.adler,v.pending_buf,v.pending-p,p)),B(t),p=v.pending,v.pending===v.pending_buf_size)){x=1;break}x=v.gzindex<v.gzhead.name.length?255&v.gzhead.name.charCodeAt(v.gzindex++):0,J(v,x)}while(x!==0);v.gzhead.hcrc&&v.pending>p&&(t.adler=_(t.adler,v.pending_buf,v.pending-p,p)),x===0&&(v.gzindex=0,v.status=91)}else v.status=91;if(v.status===91)if(v.gzhead.comment){p=v.pending;do{if(v.pending===v.pending_buf_size&&(v.gzhead.hcrc&&v.pending>p&&(t.adler=_(t.adler,v.pending_buf,v.pending-p,p)),B(t),p=v.pending,v.pending===v.pending_buf_size)){x=1;break}x=v.gzindex<v.gzhead.comment.length?255&v.gzhead.comment.charCodeAt(v.gzindex++):0,J(v,x)}while(x!==0);v.gzhead.hcrc&&v.pending>p&&(t.adler=_(t.adler,v.pending_buf,v.pending-p,p)),x===0&&(v.status=103)}else v.status=103;if(v.status===103&&(v.gzhead.hcrc?(v.pending+2>v.pending_buf_size&&B(t),v.pending+2<=v.pending_buf_size&&(J(v,255&t.adler),J(v,t.adler>>8&255),t.adler=0,v.status=$)):v.status=$),v.pending!==0){if(B(t),t.avail_out===0)return v.last_flush=-1,h}else if(t.avail_in===0&&W(L)<=W(O)&&L!==S)return re(t,-5);if(v.status===666&&t.avail_in!==0)return re(t,-5);if(t.avail_in!==0||v.lookahead!==0||L!==w&&v.status!==666){var j=v.strategy===2?(function(T,Z){for(var V;;){if(T.lookahead===0&&(ce(T),T.lookahead===0)){if(Z===w)return n;break}if(T.match_length=0,V=o._tr_tally(T,0,T.window[T.strstart]),T.lookahead--,T.strstart++,V&&(R(T,!1),T.strm.avail_out===0))return n}return T.insert=0,Z===S?(R(T,!0),T.strm.avail_out===0?te:M):T.last_lit&&(R(T,!1),T.strm.avail_out===0)?n:U})(v,L):v.strategy===3?(function(T,Z){for(var V,G,Y,le,ae=T.window;;){if(T.lookahead<=q){if(ce(T),T.lookahead<=q&&Z===w)return n;if(T.lookahead===0)break}if(T.match_length=0,T.lookahead>=I&&0<T.strstart&&(G=ae[Y=T.strstart-1])===ae[++Y]&&G===ae[++Y]&&G===ae[++Y]){le=T.strstart+q;do;while(G===ae[++Y]&&G===ae[++Y]&&G===ae[++Y]&&G===ae[++Y]&&G===ae[++Y]&&G===ae[++Y]&&G===ae[++Y]&&G===ae[++Y]&&Y<le);T.match_length=q-(le-Y),T.match_length>T.lookahead&&(T.match_length=T.lookahead)}if(T.match_length>=I?(V=o._tr_tally(T,1,T.match_length-I),T.lookahead-=T.match_length,T.strstart+=T.match_length,T.match_length=0):(V=o._tr_tally(T,0,T.window[T.strstart]),T.lookahead--,T.strstart++),V&&(R(T,!1),T.strm.avail_out===0))return n}return T.insert=0,Z===S?(R(T,!0),T.strm.avail_out===0?te:M):T.last_lit&&(R(T,!1),T.strm.avail_out===0)?n:U})(v,L):i[v.level].func(v,L);if(j!==te&&j!==M||(v.status=666),j===n||j===te)return t.avail_out===0&&(v.last_flush=-1),h;if(j===U&&(L===1?o._tr_align(v):L!==5&&(o._tr_stored_block(v,0,0,!1),L===3&&(Q(v.head),v.lookahead===0&&(v.strstart=0,v.block_start=0,v.insert=0))),B(t),t.avail_out===0))return v.last_flush=-1,h}return L!==S?h:v.wrap<=0?1:(v.wrap===2?(J(v,255&t.adler),J(v,t.adler>>8&255),J(v,t.adler>>16&255),J(v,t.adler>>24&255),J(v,255&t.total_in),J(v,t.total_in>>8&255),J(v,t.total_in>>16&255),J(v,t.total_in>>24&255)):(H(v,t.adler>>>16),H(v,65535&t.adler)),B(t),0<v.wrap&&(v.wrap=-v.wrap),v.pending!==0?h:1)},s.deflateEnd=function(t){var L;return t&&t.state?(L=t.state.status)!==C&&L!==69&&L!==73&&L!==91&&L!==103&&L!==$&&L!==666?re(t,y):(t.state=null,L===$?re(t,-3):h):y},s.deflateSetDictionary=function(t,L){var O,v,p,x,D,j,T,Z,V=L.length;if(!t||!t.state||(x=(O=t.state).wrap)===2||x===1&&O.status!==C||O.lookahead)return y;for(x===1&&(t.adler=u(t.adler,L,V,0)),O.wrap=0,V>=O.w_size&&(x===0&&(Q(O.head),O.strstart=0,O.block_start=0,O.insert=0),Z=new l.Buf8(O.w_size),l.arraySet(Z,L,V-O.w_size,O.w_size,0),L=Z,V=O.w_size),D=t.avail_in,j=t.next_in,T=t.input,t.avail_in=V,t.next_in=0,t.input=L,ce(O);O.lookahead>=I;){for(v=O.strstart,p=O.lookahead-(I-1);O.ins_h=(O.ins_h<<O.hash_shift^O.window[v+I-1])&O.hash_mask,O.prev[v&O.w_mask]=O.head[O.ins_h],O.head[O.ins_h]=v,v++,--p;);O.strstart=v,O.lookahead=I-1,ce(O)}return O.strstart+=O.lookahead,O.block_start=O.strstart,O.insert=O.lookahead,O.lookahead=0,O.match_length=O.prev_length=I-1,O.match_available=0,t.next_in=j,t.input=T,t.avail_in=D,O.wrap=x,h},s.deflateInfo="pako deflate (from Nodeca project)"},{"../utils/common":41,"./adler32":43,"./crc32":45,"./messages":51,"./trees":52}],47:[function(r,m,s){m.exports=function(){this.text=0,this.time=0,this.xflags=0,this.os=0,this.extra=null,this.extra_len=0,this.name="",this.comment="",this.hcrc=0,this.done=!1}},{}],48:[function(r,m,s){m.exports=function(i,l){var o,u,_,k,w,S,h,y,d,g,f,b,A,z,E,N,P,F,I,q,X,C,$,n,U;o=i.state,u=i.next_in,n=i.input,_=u+(i.avail_in-5),k=i.next_out,U=i.output,w=k-(l-i.avail_out),S=k+(i.avail_out-257),h=o.dmax,y=o.wsize,d=o.whave,g=o.wnext,f=o.window,b=o.hold,A=o.bits,z=o.lencode,E=o.distcode,N=(1<<o.lenbits)-1,P=(1<<o.distbits)-1;e:do{A<15&&(b+=n[u++]<<A,A+=8,b+=n[u++]<<A,A+=8),F=z[b&N];t:for(;;){if(b>>>=I=F>>>24,A-=I,(I=F>>>16&255)===0)U[k++]=65535&F;else{if(!(16&I)){if((64&I)==0){F=z[(65535&F)+(b&(1<<I)-1)];continue t}if(32&I){o.mode=12;break e}i.msg="invalid literal/length code",o.mode=30;break e}q=65535&F,(I&=15)&&(A<I&&(b+=n[u++]<<A,A+=8),q+=b&(1<<I)-1,b>>>=I,A-=I),A<15&&(b+=n[u++]<<A,A+=8,b+=n[u++]<<A,A+=8),F=E[b&P];r:for(;;){if(b>>>=I=F>>>24,A-=I,!(16&(I=F>>>16&255))){if((64&I)==0){F=E[(65535&F)+(b&(1<<I)-1)];continue r}i.msg="invalid distance code",o.mode=30;break e}if(X=65535&F,A<(I&=15)&&(b+=n[u++]<<A,(A+=8)<I&&(b+=n[u++]<<A,A+=8)),h<(X+=b&(1<<I)-1)){i.msg="invalid distance too far back",o.mode=30;break e}if(b>>>=I,A-=I,(I=k-w)<X){if(d<(I=X-I)&&o.sane){i.msg="invalid distance too far back",o.mode=30;break e}if($=f,(C=0)===g){if(C+=y-I,I<q){for(q-=I;U[k++]=f[C++],--I;);C=k-X,$=U}}else if(g<I){if(C+=y+g-I,(I-=g)<q){for(q-=I;U[k++]=f[C++],--I;);if(C=0,g<q){for(q-=I=g;U[k++]=f[C++],--I;);C=k-X,$=U}}}else if(C+=g-I,I<q){for(q-=I;U[k++]=f[C++],--I;);C=k-X,$=U}for(;2<q;)U[k++]=$[C++],U[k++]=$[C++],U[k++]=$[C++],q-=3;q&&(U[k++]=$[C++],1<q&&(U[k++]=$[C++]))}else{for(C=k-X;U[k++]=U[C++],U[k++]=U[C++],U[k++]=U[C++],2<(q-=3););q&&(U[k++]=U[C++],1<q&&(U[k++]=U[C++]))}break}}break}}while(u<_&&k<S);u-=q=A>>3,b&=(1<<(A-=q<<3))-1,i.next_in=u,i.next_out=k,i.avail_in=u<_?_-u+5:5-(u-_),i.avail_out=k<S?S-k+257:257-(k-S),o.hold=b,o.bits=A}},{}],49:[function(r,m,s){var i=r("../utils/common"),l=r("./adler32"),o=r("./crc32"),u=r("./inffast"),_=r("./inftrees"),k=1,w=2,S=0,h=-2,y=1,d=852,g=592;function f(C){return(C>>>24&255)+(C>>>8&65280)+((65280&C)<<8)+((255&C)<<24)}function b(){this.mode=0,this.last=!1,this.wrap=0,this.havedict=!1,this.flags=0,this.dmax=0,this.check=0,this.total=0,this.head=null,this.wbits=0,this.wsize=0,this.whave=0,this.wnext=0,this.window=null,this.hold=0,this.bits=0,this.length=0,this.offset=0,this.extra=0,this.lencode=null,this.distcode=null,this.lenbits=0,this.distbits=0,this.ncode=0,this.nlen=0,this.ndist=0,this.have=0,this.next=null,this.lens=new i.Buf16(320),this.work=new i.Buf16(288),this.lendyn=null,this.distdyn=null,this.sane=0,this.back=0,this.was=0}function A(C){var $;return C&&C.state?($=C.state,C.total_in=C.total_out=$.total=0,C.msg="",$.wrap&&(C.adler=1&$.wrap),$.mode=y,$.last=0,$.havedict=0,$.dmax=32768,$.head=null,$.hold=0,$.bits=0,$.lencode=$.lendyn=new i.Buf32(d),$.distcode=$.distdyn=new i.Buf32(g),$.sane=1,$.back=-1,S):h}function z(C){var $;return C&&C.state?(($=C.state).wsize=0,$.whave=0,$.wnext=0,A(C)):h}function E(C,$){var n,U;return C&&C.state?(U=C.state,$<0?(n=0,$=-$):(n=1+($>>4),$<48&&($&=15)),$&&($<8||15<$)?h:(U.window!==null&&U.wbits!==$&&(U.window=null),U.wrap=n,U.wbits=$,z(C))):h}function N(C,$){var n,U;return C?(U=new b,(C.state=U).window=null,(n=E(C,$))!==S&&(C.state=null),n):h}var P,F,I=!0;function q(C){if(I){var $;for(P=new i.Buf32(512),F=new i.Buf32(32),$=0;$<144;)C.lens[$++]=8;for(;$<256;)C.lens[$++]=9;for(;$<280;)C.lens[$++]=7;for(;$<288;)C.lens[$++]=8;for(_(k,C.lens,0,288,P,0,C.work,{bits:9}),$=0;$<32;)C.lens[$++]=5;_(w,C.lens,0,32,F,0,C.work,{bits:5}),I=!1}C.lencode=P,C.lenbits=9,C.distcode=F,C.distbits=5}function X(C,$,n,U){var te,M=C.state;return M.window===null&&(M.wsize=1<<M.wbits,M.wnext=0,M.whave=0,M.window=new i.Buf8(M.wsize)),U>=M.wsize?(i.arraySet(M.window,$,n-M.wsize,M.wsize,0),M.wnext=0,M.whave=M.wsize):(U<(te=M.wsize-M.wnext)&&(te=U),i.arraySet(M.window,$,n-U,te,M.wnext),(U-=te)?(i.arraySet(M.window,$,n-U,U,0),M.wnext=U,M.whave=M.wsize):(M.wnext+=te,M.wnext===M.wsize&&(M.wnext=0),M.whave<M.wsize&&(M.whave+=te))),0}s.inflateReset=z,s.inflateReset2=E,s.inflateResetKeep=A,s.inflateInit=function(C){return N(C,15)},s.inflateInit2=N,s.inflate=function(C,$){var n,U,te,M,re,W,Q,B,R,J,H,K,ce,fe,ne,oe,he,ue,ye,ve,t,L,O,v,p=0,x=new i.Buf8(4),D=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];if(!C||!C.state||!C.output||!C.input&&C.avail_in!==0)return h;(n=C.state).mode===12&&(n.mode=13),re=C.next_out,te=C.output,Q=C.avail_out,M=C.next_in,U=C.input,W=C.avail_in,B=n.hold,R=n.bits,J=W,H=Q,L=S;e:for(;;)switch(n.mode){case y:if(n.wrap===0){n.mode=13;break}for(;R<16;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if(2&n.wrap&&B===35615){x[n.check=0]=255&B,x[1]=B>>>8&255,n.check=o(n.check,x,2,0),R=B=0,n.mode=2;break}if(n.flags=0,n.head&&(n.head.done=!1),!(1&n.wrap)||(((255&B)<<8)+(B>>8))%31){C.msg="incorrect header check",n.mode=30;break}if((15&B)!=8){C.msg="unknown compression method",n.mode=30;break}if(R-=4,t=8+(15&(B>>>=4)),n.wbits===0)n.wbits=t;else if(t>n.wbits){C.msg="invalid window size",n.mode=30;break}n.dmax=1<<t,C.adler=n.check=1,n.mode=512&B?10:12,R=B=0;break;case 2:for(;R<16;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if(n.flags=B,(255&n.flags)!=8){C.msg="unknown compression method",n.mode=30;break}if(57344&n.flags){C.msg="unknown header flags set",n.mode=30;break}n.head&&(n.head.text=B>>8&1),512&n.flags&&(x[0]=255&B,x[1]=B>>>8&255,n.check=o(n.check,x,2,0)),R=B=0,n.mode=3;case 3:for(;R<32;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}n.head&&(n.head.time=B),512&n.flags&&(x[0]=255&B,x[1]=B>>>8&255,x[2]=B>>>16&255,x[3]=B>>>24&255,n.check=o(n.check,x,4,0)),R=B=0,n.mode=4;case 4:for(;R<16;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}n.head&&(n.head.xflags=255&B,n.head.os=B>>8),512&n.flags&&(x[0]=255&B,x[1]=B>>>8&255,n.check=o(n.check,x,2,0)),R=B=0,n.mode=5;case 5:if(1024&n.flags){for(;R<16;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}n.length=B,n.head&&(n.head.extra_len=B),512&n.flags&&(x[0]=255&B,x[1]=B>>>8&255,n.check=o(n.check,x,2,0)),R=B=0}else n.head&&(n.head.extra=null);n.mode=6;case 6:if(1024&n.flags&&(W<(K=n.length)&&(K=W),K&&(n.head&&(t=n.head.extra_len-n.length,n.head.extra||(n.head.extra=new Array(n.head.extra_len)),i.arraySet(n.head.extra,U,M,K,t)),512&n.flags&&(n.check=o(n.check,U,K,M)),W-=K,M+=K,n.length-=K),n.length))break e;n.length=0,n.mode=7;case 7:if(2048&n.flags){if(W===0)break e;for(K=0;t=U[M+K++],n.head&&t&&n.length<65536&&(n.head.name+=String.fromCharCode(t)),t&&K<W;);if(512&n.flags&&(n.check=o(n.check,U,K,M)),W-=K,M+=K,t)break e}else n.head&&(n.head.name=null);n.length=0,n.mode=8;case 8:if(4096&n.flags){if(W===0)break e;for(K=0;t=U[M+K++],n.head&&t&&n.length<65536&&(n.head.comment+=String.fromCharCode(t)),t&&K<W;);if(512&n.flags&&(n.check=o(n.check,U,K,M)),W-=K,M+=K,t)break e}else n.head&&(n.head.comment=null);n.mode=9;case 9:if(512&n.flags){for(;R<16;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if(B!==(65535&n.check)){C.msg="header crc mismatch",n.mode=30;break}R=B=0}n.head&&(n.head.hcrc=n.flags>>9&1,n.head.done=!0),C.adler=n.check=0,n.mode=12;break;case 10:for(;R<32;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}C.adler=n.check=f(B),R=B=0,n.mode=11;case 11:if(n.havedict===0)return C.next_out=re,C.avail_out=Q,C.next_in=M,C.avail_in=W,n.hold=B,n.bits=R,2;C.adler=n.check=1,n.mode=12;case 12:if($===5||$===6)break e;case 13:if(n.last){B>>>=7&R,R-=7&R,n.mode=27;break}for(;R<3;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}switch(n.last=1&B,R-=1,3&(B>>>=1)){case 0:n.mode=14;break;case 1:if(q(n),n.mode=20,$!==6)break;B>>>=2,R-=2;break e;case 2:n.mode=17;break;case 3:C.msg="invalid block type",n.mode=30}B>>>=2,R-=2;break;case 14:for(B>>>=7&R,R-=7&R;R<32;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if((65535&B)!=(B>>>16^65535)){C.msg="invalid stored block lengths",n.mode=30;break}if(n.length=65535&B,R=B=0,n.mode=15,$===6)break e;case 15:n.mode=16;case 16:if(K=n.length){if(W<K&&(K=W),Q<K&&(K=Q),K===0)break e;i.arraySet(te,U,M,K,re),W-=K,M+=K,Q-=K,re+=K,n.length-=K;break}n.mode=12;break;case 17:for(;R<14;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if(n.nlen=257+(31&B),B>>>=5,R-=5,n.ndist=1+(31&B),B>>>=5,R-=5,n.ncode=4+(15&B),B>>>=4,R-=4,286<n.nlen||30<n.ndist){C.msg="too many length or distance symbols",n.mode=30;break}n.have=0,n.mode=18;case 18:for(;n.have<n.ncode;){for(;R<3;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}n.lens[D[n.have++]]=7&B,B>>>=3,R-=3}for(;n.have<19;)n.lens[D[n.have++]]=0;if(n.lencode=n.lendyn,n.lenbits=7,O={bits:n.lenbits},L=_(0,n.lens,0,19,n.lencode,0,n.work,O),n.lenbits=O.bits,L){C.msg="invalid code lengths set",n.mode=30;break}n.have=0,n.mode=19;case 19:for(;n.have<n.nlen+n.ndist;){for(;oe=(p=n.lencode[B&(1<<n.lenbits)-1])>>>16&255,he=65535&p,!((ne=p>>>24)<=R);){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if(he<16)B>>>=ne,R-=ne,n.lens[n.have++]=he;else{if(he===16){for(v=ne+2;R<v;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if(B>>>=ne,R-=ne,n.have===0){C.msg="invalid bit length repeat",n.mode=30;break}t=n.lens[n.have-1],K=3+(3&B),B>>>=2,R-=2}else if(he===17){for(v=ne+3;R<v;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}R-=ne,t=0,K=3+(7&(B>>>=ne)),B>>>=3,R-=3}else{for(v=ne+7;R<v;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}R-=ne,t=0,K=11+(127&(B>>>=ne)),B>>>=7,R-=7}if(n.have+K>n.nlen+n.ndist){C.msg="invalid bit length repeat",n.mode=30;break}for(;K--;)n.lens[n.have++]=t}}if(n.mode===30)break;if(n.lens[256]===0){C.msg="invalid code -- missing end-of-block",n.mode=30;break}if(n.lenbits=9,O={bits:n.lenbits},L=_(k,n.lens,0,n.nlen,n.lencode,0,n.work,O),n.lenbits=O.bits,L){C.msg="invalid literal/lengths set",n.mode=30;break}if(n.distbits=6,n.distcode=n.distdyn,O={bits:n.distbits},L=_(w,n.lens,n.nlen,n.ndist,n.distcode,0,n.work,O),n.distbits=O.bits,L){C.msg="invalid distances set",n.mode=30;break}if(n.mode=20,$===6)break e;case 20:n.mode=21;case 21:if(6<=W&&258<=Q){C.next_out=re,C.avail_out=Q,C.next_in=M,C.avail_in=W,n.hold=B,n.bits=R,u(C,H),re=C.next_out,te=C.output,Q=C.avail_out,M=C.next_in,U=C.input,W=C.avail_in,B=n.hold,R=n.bits,n.mode===12&&(n.back=-1);break}for(n.back=0;oe=(p=n.lencode[B&(1<<n.lenbits)-1])>>>16&255,he=65535&p,!((ne=p>>>24)<=R);){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if(oe&&(240&oe)==0){for(ue=ne,ye=oe,ve=he;oe=(p=n.lencode[ve+((B&(1<<ue+ye)-1)>>ue)])>>>16&255,he=65535&p,!(ue+(ne=p>>>24)<=R);){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}B>>>=ue,R-=ue,n.back+=ue}if(B>>>=ne,R-=ne,n.back+=ne,n.length=he,oe===0){n.mode=26;break}if(32&oe){n.back=-1,n.mode=12;break}if(64&oe){C.msg="invalid literal/length code",n.mode=30;break}n.extra=15&oe,n.mode=22;case 22:if(n.extra){for(v=n.extra;R<v;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}n.length+=B&(1<<n.extra)-1,B>>>=n.extra,R-=n.extra,n.back+=n.extra}n.was=n.length,n.mode=23;case 23:for(;oe=(p=n.distcode[B&(1<<n.distbits)-1])>>>16&255,he=65535&p,!((ne=p>>>24)<=R);){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if((240&oe)==0){for(ue=ne,ye=oe,ve=he;oe=(p=n.distcode[ve+((B&(1<<ue+ye)-1)>>ue)])>>>16&255,he=65535&p,!(ue+(ne=p>>>24)<=R);){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}B>>>=ue,R-=ue,n.back+=ue}if(B>>>=ne,R-=ne,n.back+=ne,64&oe){C.msg="invalid distance code",n.mode=30;break}n.offset=he,n.extra=15&oe,n.mode=24;case 24:if(n.extra){for(v=n.extra;R<v;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}n.offset+=B&(1<<n.extra)-1,B>>>=n.extra,R-=n.extra,n.back+=n.extra}if(n.offset>n.dmax){C.msg="invalid distance too far back",n.mode=30;break}n.mode=25;case 25:if(Q===0)break e;if(K=H-Q,n.offset>K){if((K=n.offset-K)>n.whave&&n.sane){C.msg="invalid distance too far back",n.mode=30;break}ce=K>n.wnext?(K-=n.wnext,n.wsize-K):n.wnext-K,K>n.length&&(K=n.length),fe=n.window}else fe=te,ce=re-n.offset,K=n.length;for(Q<K&&(K=Q),Q-=K,n.length-=K;te[re++]=fe[ce++],--K;);n.length===0&&(n.mode=21);break;case 26:if(Q===0)break e;te[re++]=n.length,Q--,n.mode=21;break;case 27:if(n.wrap){for(;R<32;){if(W===0)break e;W--,B|=U[M++]<<R,R+=8}if(H-=Q,C.total_out+=H,n.total+=H,H&&(C.adler=n.check=n.flags?o(n.check,te,H,re-H):l(n.check,te,H,re-H)),H=Q,(n.flags?B:f(B))!==n.check){C.msg="incorrect data check",n.mode=30;break}R=B=0}n.mode=28;case 28:if(n.wrap&&n.flags){for(;R<32;){if(W===0)break e;W--,B+=U[M++]<<R,R+=8}if(B!==(4294967295&n.total)){C.msg="incorrect length check",n.mode=30;break}R=B=0}n.mode=29;case 29:L=1;break e;case 30:L=-3;break e;case 31:return-4;default:return h}return C.next_out=re,C.avail_out=Q,C.next_in=M,C.avail_in=W,n.hold=B,n.bits=R,(n.wsize||H!==C.avail_out&&n.mode<30&&(n.mode<27||$!==4))&&X(C,C.output,C.next_out,H-C.avail_out)?(n.mode=31,-4):(J-=C.avail_in,H-=C.avail_out,C.total_in+=J,C.total_out+=H,n.total+=H,n.wrap&&H&&(C.adler=n.check=n.flags?o(n.check,te,H,C.next_out-H):l(n.check,te,H,C.next_out-H)),C.data_type=n.bits+(n.last?64:0)+(n.mode===12?128:0)+(n.mode===20||n.mode===15?256:0),(J==0&&H===0||$===4)&&L===S&&(L=-5),L)},s.inflateEnd=function(C){if(!C||!C.state)return h;var $=C.state;return $.window&&($.window=null),C.state=null,S},s.inflateGetHeader=function(C,$){var n;return C&&C.state?(2&(n=C.state).wrap)==0?h:((n.head=$).done=!1,S):h},s.inflateSetDictionary=function(C,$){var n,U=$.length;return C&&C.state?(n=C.state).wrap!==0&&n.mode!==11?h:n.mode===11&&l(1,$,U,0)!==n.check?-3:X(C,$,U,U)?(n.mode=31,-4):(n.havedict=1,S):h},s.inflateInfo="pako inflate (from Nodeca project)"},{"../utils/common":41,"./adler32":43,"./crc32":45,"./inffast":48,"./inftrees":50}],50:[function(r,m,s){var i=r("../utils/common"),l=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258,0,0],o=[16,16,16,16,16,16,16,16,17,17,17,17,18,18,18,18,19,19,19,19,20,20,20,20,21,21,21,21,16,72,78],u=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577,0,0],_=[16,16,16,16,17,17,18,18,19,19,20,20,21,21,22,22,23,23,24,24,25,25,26,26,27,27,28,28,29,29,64,64];m.exports=function(k,w,S,h,y,d,g,f){var b,A,z,E,N,P,F,I,q,X=f.bits,C=0,$=0,n=0,U=0,te=0,M=0,re=0,W=0,Q=0,B=0,R=null,J=0,H=new i.Buf16(16),K=new i.Buf16(16),ce=null,fe=0;for(C=0;C<=15;C++)H[C]=0;for($=0;$<h;$++)H[w[S+$]]++;for(te=X,U=15;1<=U&&H[U]===0;U--);if(U<te&&(te=U),U===0)return y[d++]=20971520,y[d++]=20971520,f.bits=1,0;for(n=1;n<U&&H[n]===0;n++);for(te<n&&(te=n),C=W=1;C<=15;C++)if(W<<=1,(W-=H[C])<0)return-1;if(0<W&&(k===0||U!==1))return-1;for(K[1]=0,C=1;C<15;C++)K[C+1]=K[C]+H[C];for($=0;$<h;$++)w[S+$]!==0&&(g[K[w[S+$]]++]=$);if(P=k===0?(R=ce=g,19):k===1?(R=l,J-=257,ce=o,fe-=257,256):(R=u,ce=_,-1),C=n,N=d,re=$=B=0,z=-1,E=(Q=1<<(M=te))-1,k===1&&852<Q||k===2&&592<Q)return 1;for(;;){for(F=C-re,q=g[$]<P?(I=0,g[$]):g[$]>P?(I=ce[fe+g[$]],R[J+g[$]]):(I=96,0),b=1<<C-re,n=A=1<<M;y[N+(B>>re)+(A-=b)]=F<<24|I<<16|q|0,A!==0;);for(b=1<<C-1;B&b;)b>>=1;if(b!==0?(B&=b-1,B+=b):B=0,$++,--H[C]==0){if(C===U)break;C=w[S+g[$]]}if(te<C&&(B&E)!==z){for(re===0&&(re=te),N+=n,W=1<<(M=C-re);M+re<U&&!((W-=H[M+re])<=0);)M++,W<<=1;if(Q+=1<<M,k===1&&852<Q||k===2&&592<Q)return 1;y[z=B&E]=te<<24|M<<16|N-d|0}}return B!==0&&(y[N+B]=C-re<<24|64<<16|0),f.bits=te,0}},{"../utils/common":41}],51:[function(r,m,s){m.exports={2:"need dictionary",1:"stream end",0:"","-1":"file error","-2":"stream error","-3":"data error","-4":"insufficient memory","-5":"buffer error","-6":"incompatible version"}},{}],52:[function(r,m,s){var i=r("../utils/common"),l=0,o=1;function u(p){for(var x=p.length;0<=--x;)p[x]=0}var _=0,k=29,w=256,S=w+1+k,h=30,y=19,d=2*S+1,g=15,f=16,b=7,A=256,z=16,E=17,N=18,P=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0],F=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13],I=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,3,7],q=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15],X=new Array(2*(S+2));u(X);var C=new Array(2*h);u(C);var $=new Array(512);u($);var n=new Array(256);u(n);var U=new Array(k);u(U);var te,M,re,W=new Array(h);function Q(p,x,D,j,T){this.static_tree=p,this.extra_bits=x,this.extra_base=D,this.elems=j,this.max_length=T,this.has_stree=p&&p.length}function B(p,x){this.dyn_tree=p,this.max_code=0,this.stat_desc=x}function R(p){return p<256?$[p]:$[256+(p>>>7)]}function J(p,x){p.pending_buf[p.pending++]=255&x,p.pending_buf[p.pending++]=x>>>8&255}function H(p,x,D){p.bi_valid>f-D?(p.bi_buf|=x<<p.bi_valid&65535,J(p,p.bi_buf),p.bi_buf=x>>f-p.bi_valid,p.bi_valid+=D-f):(p.bi_buf|=x<<p.bi_valid&65535,p.bi_valid+=D)}function K(p,x,D){H(p,D[2*x],D[2*x+1])}function ce(p,x){for(var D=0;D|=1&p,p>>>=1,D<<=1,0<--x;);return D>>>1}function fe(p,x,D){var j,T,Z=new Array(g+1),V=0;for(j=1;j<=g;j++)Z[j]=V=V+D[j-1]<<1;for(T=0;T<=x;T++){var G=p[2*T+1];G!==0&&(p[2*T]=ce(Z[G]++,G))}}function ne(p){var x;for(x=0;x<S;x++)p.dyn_ltree[2*x]=0;for(x=0;x<h;x++)p.dyn_dtree[2*x]=0;for(x=0;x<y;x++)p.bl_tree[2*x]=0;p.dyn_ltree[2*A]=1,p.opt_len=p.static_len=0,p.last_lit=p.matches=0}function oe(p){8<p.bi_valid?J(p,p.bi_buf):0<p.bi_valid&&(p.pending_buf[p.pending++]=p.bi_buf),p.bi_buf=0,p.bi_valid=0}function he(p,x,D,j){var T=2*x,Z=2*D;return p[T]<p[Z]||p[T]===p[Z]&&j[x]<=j[D]}function ue(p,x,D){for(var j=p.heap[D],T=D<<1;T<=p.heap_len&&(T<p.heap_len&&he(x,p.heap[T+1],p.heap[T],p.depth)&&T++,!he(x,j,p.heap[T],p.depth));)p.heap[D]=p.heap[T],D=T,T<<=1;p.heap[D]=j}function ye(p,x,D){var j,T,Z,V,G=0;if(p.last_lit!==0)for(;j=p.pending_buf[p.d_buf+2*G]<<8|p.pending_buf[p.d_buf+2*G+1],T=p.pending_buf[p.l_buf+G],G++,j===0?K(p,T,x):(K(p,(Z=n[T])+w+1,x),(V=P[Z])!==0&&H(p,T-=U[Z],V),K(p,Z=R(--j),D),(V=F[Z])!==0&&H(p,j-=W[Z],V)),G<p.last_lit;);K(p,A,x)}function ve(p,x){var D,j,T,Z=x.dyn_tree,V=x.stat_desc.static_tree,G=x.stat_desc.has_stree,Y=x.stat_desc.elems,le=-1;for(p.heap_len=0,p.heap_max=d,D=0;D<Y;D++)Z[2*D]!==0?(p.heap[++p.heap_len]=le=D,p.depth[D]=0):Z[2*D+1]=0;for(;p.heap_len<2;)Z[2*(T=p.heap[++p.heap_len]=le<2?++le:0)]=1,p.depth[T]=0,p.opt_len--,G&&(p.static_len-=V[2*T+1]);for(x.max_code=le,D=p.heap_len>>1;1<=D;D--)ue(p,Z,D);for(T=Y;D=p.heap[1],p.heap[1]=p.heap[p.heap_len--],ue(p,Z,1),j=p.heap[1],p.heap[--p.heap_max]=D,p.heap[--p.heap_max]=j,Z[2*T]=Z[2*D]+Z[2*j],p.depth[T]=(p.depth[D]>=p.depth[j]?p.depth[D]:p.depth[j])+1,Z[2*D+1]=Z[2*j+1]=T,p.heap[1]=T++,ue(p,Z,1),2<=p.heap_len;);p.heap[--p.heap_max]=p.heap[1],(function(ae,ge){var ze,_e,Te,de,Ne,Je,we=ge.dyn_tree,ht=ge.max_code,Pt=ge.stat_desc.static_tree,$t=ge.stat_desc.has_stree,Lt=ge.stat_desc.extra_bits,ft=ge.stat_desc.extra_base,Re=ge.stat_desc.max_length,Ue=0;for(de=0;de<=g;de++)ae.bl_count[de]=0;for(we[2*ae.heap[ae.heap_max]+1]=0,ze=ae.heap_max+1;ze<d;ze++)Re<(de=we[2*we[2*(_e=ae.heap[ze])+1]+1]+1)&&(de=Re,Ue++),we[2*_e+1]=de,ht<_e||(ae.bl_count[de]++,Ne=0,ft<=_e&&(Ne=Lt[_e-ft]),Je=we[2*_e],ae.opt_len+=Je*(de+Ne),$t&&(ae.static_len+=Je*(Pt[2*_e+1]+Ne)));if(Ue!==0){do{for(de=Re-1;ae.bl_count[de]===0;)de--;ae.bl_count[de]--,ae.bl_count[de+1]+=2,ae.bl_count[Re]--,Ue-=2}while(0<Ue);for(de=Re;de!==0;de--)for(_e=ae.bl_count[de];_e!==0;)ht<(Te=ae.heap[--ze])||(we[2*Te+1]!==de&&(ae.opt_len+=(de-we[2*Te+1])*we[2*Te],we[2*Te+1]=de),_e--)}})(p,x),fe(Z,le,p.bl_count)}function t(p,x,D){var j,T,Z=-1,V=x[1],G=0,Y=7,le=4;for(V===0&&(Y=138,le=3),x[2*(D+1)+1]=65535,j=0;j<=D;j++)T=V,V=x[2*(j+1)+1],++G<Y&&T===V||(G<le?p.bl_tree[2*T]+=G:T!==0?(T!==Z&&p.bl_tree[2*T]++,p.bl_tree[2*z]++):G<=10?p.bl_tree[2*E]++:p.bl_tree[2*N]++,Z=T,le=(G=0)===V?(Y=138,3):T===V?(Y=6,3):(Y=7,4))}function L(p,x,D){var j,T,Z=-1,V=x[1],G=0,Y=7,le=4;for(V===0&&(Y=138,le=3),j=0;j<=D;j++)if(T=V,V=x[2*(j+1)+1],!(++G<Y&&T===V)){if(G<le)for(;K(p,T,p.bl_tree),--G!=0;);else T!==0?(T!==Z&&(K(p,T,p.bl_tree),G--),K(p,z,p.bl_tree),H(p,G-3,2)):G<=10?(K(p,E,p.bl_tree),H(p,G-3,3)):(K(p,N,p.bl_tree),H(p,G-11,7));Z=T,le=(G=0)===V?(Y=138,3):T===V?(Y=6,3):(Y=7,4)}}u(W);var O=!1;function v(p,x,D,j){H(p,(_<<1)+(j?1:0),3),(function(T,Z,V,G){oe(T),J(T,V),J(T,~V),i.arraySet(T.pending_buf,T.window,Z,V,T.pending),T.pending+=V})(p,x,D)}s._tr_init=function(p){O||((function(){var x,D,j,T,Z,V=new Array(g+1);for(T=j=0;T<k-1;T++)for(U[T]=j,x=0;x<1<<P[T];x++)n[j++]=T;for(n[j-1]=T,T=Z=0;T<16;T++)for(W[T]=Z,x=0;x<1<<F[T];x++)$[Z++]=T;for(Z>>=7;T<h;T++)for(W[T]=Z<<7,x=0;x<1<<F[T]-7;x++)$[256+Z++]=T;for(D=0;D<=g;D++)V[D]=0;for(x=0;x<=143;)X[2*x+1]=8,x++,V[8]++;for(;x<=255;)X[2*x+1]=9,x++,V[9]++;for(;x<=279;)X[2*x+1]=7,x++,V[7]++;for(;x<=287;)X[2*x+1]=8,x++,V[8]++;for(fe(X,S+1,V),x=0;x<h;x++)C[2*x+1]=5,C[2*x]=ce(x,5);te=new Q(X,P,w+1,S,g),M=new Q(C,F,0,h,g),re=new Q(new Array(0),I,0,y,b)})(),O=!0),p.l_desc=new B(p.dyn_ltree,te),p.d_desc=new B(p.dyn_dtree,M),p.bl_desc=new B(p.bl_tree,re),p.bi_buf=0,p.bi_valid=0,ne(p)},s._tr_stored_block=v,s._tr_flush_block=function(p,x,D,j){var T,Z,V=0;0<p.level?(p.strm.data_type===2&&(p.strm.data_type=(function(G){var Y,le=4093624447;for(Y=0;Y<=31;Y++,le>>>=1)if(1&le&&G.dyn_ltree[2*Y]!==0)return l;if(G.dyn_ltree[18]!==0||G.dyn_ltree[20]!==0||G.dyn_ltree[26]!==0)return o;for(Y=32;Y<w;Y++)if(G.dyn_ltree[2*Y]!==0)return o;return l})(p)),ve(p,p.l_desc),ve(p,p.d_desc),V=(function(G){var Y;for(t(G,G.dyn_ltree,G.l_desc.max_code),t(G,G.dyn_dtree,G.d_desc.max_code),ve(G,G.bl_desc),Y=y-1;3<=Y&&G.bl_tree[2*q[Y]+1]===0;Y--);return G.opt_len+=3*(Y+1)+5+5+4,Y})(p),T=p.opt_len+3+7>>>3,(Z=p.static_len+3+7>>>3)<=T&&(T=Z)):T=Z=D+5,D+4<=T&&x!==-1?v(p,x,D,j):p.strategy===4||Z===T?(H(p,2+(j?1:0),3),ye(p,X,C)):(H(p,4+(j?1:0),3),(function(G,Y,le,ae){var ge;for(H(G,Y-257,5),H(G,le-1,5),H(G,ae-4,4),ge=0;ge<ae;ge++)H(G,G.bl_tree[2*q[ge]+1],3);L(G,G.dyn_ltree,Y-1),L(G,G.dyn_dtree,le-1)})(p,p.l_desc.max_code+1,p.d_desc.max_code+1,V+1),ye(p,p.dyn_ltree,p.dyn_dtree)),ne(p),j&&oe(p)},s._tr_tally=function(p,x,D){return p.pending_buf[p.d_buf+2*p.last_lit]=x>>>8&255,p.pending_buf[p.d_buf+2*p.last_lit+1]=255&x,p.pending_buf[p.l_buf+p.last_lit]=255&D,p.last_lit++,x===0?p.dyn_ltree[2*D]++:(p.matches++,x--,p.dyn_ltree[2*(n[D]+w+1)]++,p.dyn_dtree[2*R(x)]++),p.last_lit===p.lit_bufsize-1},s._tr_align=function(p){H(p,2,3),K(p,A,X),(function(x){x.bi_valid===16?(J(x,x.bi_buf),x.bi_buf=0,x.bi_valid=0):8<=x.bi_valid&&(x.pending_buf[x.pending++]=255&x.bi_buf,x.bi_buf>>=8,x.bi_valid-=8)})(p)}},{"../utils/common":41}],53:[function(r,m,s){m.exports=function(){this.input=null,this.next_in=0,this.avail_in=0,this.total_in=0,this.output=null,this.next_out=0,this.avail_out=0,this.total_out=0,this.msg="",this.state=null,this.data_type=2,this.adler=0}},{}],54:[function(r,m,s){(function(i){(function(l,o){if(!l.setImmediate){var u,_,k,w,S=1,h={},y=!1,d=l.document,g=Object.getPrototypeOf&&Object.getPrototypeOf(l);g=g&&g.setTimeout?g:l,u={}.toString.call(l.process)==="[object process]"?function(z){process.nextTick(function(){b(z)})}:(function(){if(l.postMessage&&!l.importScripts){var z=!0,E=l.onmessage;return l.onmessage=function(){z=!1},l.postMessage("","*"),l.onmessage=E,z}})()?(w="setImmediate$"+Math.random()+"$",l.addEventListener?l.addEventListener("message",A,!1):l.attachEvent("onmessage",A),function(z){l.postMessage(w+z,"*")}):l.MessageChannel?((k=new MessageChannel).port1.onmessage=function(z){b(z.data)},function(z){k.port2.postMessage(z)}):d&&"onreadystatechange"in d.createElement("script")?(_=d.documentElement,function(z){var E=d.createElement("script");E.onreadystatechange=function(){b(z),E.onreadystatechange=null,_.removeChild(E),E=null},_.appendChild(E)}):function(z){setTimeout(b,0,z)},g.setImmediate=function(z){typeof z!="function"&&(z=new Function(""+z));for(var E=new Array(arguments.length-1),N=0;N<E.length;N++)E[N]=arguments[N+1];var P={callback:z,args:E};return h[S]=P,u(S),S++},g.clearImmediate=f}function f(z){delete h[z]}function b(z){if(y)setTimeout(b,0,z);else{var E=h[z];if(E){y=!0;try{(function(N){var P=N.callback,F=N.args;switch(F.length){case 0:P();break;case 1:P(F[0]);break;case 2:P(F[0],F[1]);break;case 3:P(F[0],F[1],F[2]);break;default:P.apply(o,F)}})(E)}finally{f(z),y=!1}}}}function A(z){z.source===l&&typeof z.data=="string"&&z.data.indexOf(w)===0&&b(+z.data.slice(w.length))}})(typeof self>"u"?i===void 0?this:i:self)}).call(this,typeof De<"u"?De:typeof self<"u"?self:typeof window<"u"?window:{})},{}]},{},[10])(10)})})(Xe)),Xe.exports}var Ft=jt();const Mt=Dt(Ft),Ge=e=>(e||"").replace(/\s+/g," ").trim(),Qe=(e,c)=>Ge(e.querySelector(c)?.textContent),plainSpeech=e=>String(e||"").replace(/<\/?emphasis>/gi,""),semanticText=e=>{const walk=n=>{if(n.nodeType===Node.TEXT_NODE)return n.nodeValue||"";if(n.nodeType!==Node.ELEMENT_NODE)return"";const tag=n.tagName.toLowerCase(),inner=[...n.childNodes].map(walk).join("");if(tag==="em"||tag==="i"||tag==="emphasis")return`<emphasis>${inner}</emphasis>`;if(tag==="br")return"\n";return inner};return Ge(walk(e))},Wt=e=>e.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()),bt=e=>{const c=Ge(e).replace(/^(chapter|part)\s+[\divxlcdm-]+\s*[:—-]?\s*/i,"").trim();return/^[A-Z][A-Z .'-]{1,28}$/.test(c)&&!/^(CHAPTER|PROLOGUE|EPILOGUE|PART)$/i.test(c)?Wt(c):null};function Zt(e,c){for(const r of[e,...(c||"").split(/\n+/).map(Ge).filter(Boolean).slice(0,5)]){const m=bt(r);if(m)return m}return null}const qt=(e,c=1.5e3)=>{const r=e.split(/\n\n+/),m=[];let s="";for(const i of r){if((s+`
+
+`+i).length<=c){s+=(s?`
+
+`:"")+i;continue}if(s&&m.push(s),s="",i.length<=c){s=i;continue}const l=i.match(/[^.!?]+[.!?]+|[^.!?]+$/g)||[i];for(const o of l)(s+" "+o).length>c&&s&&(m.push(s.trim()),s=""),s+=(s?" ":"")+o.trim()}return s&&m.push(s),m};function Gt(e,c,r=[],n=!1){const m=new Map(r.map(u=>[u.toLowerCase(),u])),s=[];let i=c||null,l=[],scenePending=false;const o=()=>{const u=l.join(`
+
+`).trim();for(const _ of qt(u)){s.push({id:crypto.randomUUID(),pov:i,text:plainSpeech(_),speechText:_,manualPov:!1,audioKey:null,audioStale:!1,sceneBreakBefore:scenePending});scenePending=false}l=[]};for(const u of e){if(u?.sceneBreak){l.length&&o();scenePending=true;continue}if(!n){const _=bt(u),k=_&&m.get(_.toLowerCase());if(k){l.length&&o(),i=k;continue}}/^\s*(chapter|part)\s+[\divxlcdm-]+\s*$/i.test(u)||l.push(u)}return o(),s.length?s:[{id:crypto.randomUUID(),pov:c||null,text:plainSpeech(e.filter(u=>typeof u==="string").join(`
+
+`)),speechText:e.filter(u=>typeof u==="string").join(`
+
+`),manualPov:!1,audioKey:null,audioStale:!1}]}async function Kt(e){const c=await Mt.loadAsync(e),r=new DOMParser,m=r.parseFromString(await c.file("META-INF/container.xml").async("text"),"application/xml"),s=m.querySelector("rootfile")?.getAttribute("full-path");if(!s)throw new Error("This EPUB has no readable package file.");const i=r.parseFromString(await c.file(s).async("text"),"application/xml"),l=s.includes("/")?s.slice(0,s.lastIndexOf("/")+1):"",o=f=>{const b=[];for(const A of(l+f).split("/"))A===".."?b.pop():A!=="."&&b.push(A);return b.join("/")},u=new Map([...i.querySelectorAll("manifest item")].map(f=>[f.getAttribute("id"),{href:f.getAttribute("href"),type:f.getAttribute("media-type"),props:f.getAttribute("properties")||""}])),_=Qe(i,"metadata title")||e.name.replace(/\.epub$/i,""),k=Qe(i,"metadata creator");let w=null,S=[...u.values()].find(f=>f.props.includes("cover-image"))||u.get(i.querySelector('metadata meta[name="cover"]')?.getAttribute("content"));if(S){const f=c.file(o(S.href));if(f){const b=await f.async("blob");w=await new Promise((A,z)=>{const E=new FileReader;E.onload=()=>A(E.result),E.onerror=()=>z(E.error),E.readAsDataURL(b)})}}const h=[];for(const f of i.querySelectorAll("spine itemref")){const b=u.get(f.getAttribute("idref"));if(!b||!/xhtml|html/i.test(b.type||""))continue;const A=c.file(o(decodeURIComponent(b.href.split("#")[0])));if(!A)continue;const z=r.parseFromString(await A.async("text"),"text/html");z.querySelectorAll("script,style,nav").forEach(F=>F.remove());z.querySelectorAll('[data-opal-narration="skip"]').forEach(F=>F.remove());[...z.querySelectorAll("*")].filter(F=>(F.getAttribute("epub:type")||"").split(/\\s+/).includes("titlepage")).forEach(F=>F.remove());const O=Ge(z.querySelector("section[data-opal-pov]")?.getAttribute("data-opal-pov")||""),R=O&&/^[A-Z][A-Z .'-]{1,40}$/.test(O)?Wt(O):O||null,E=Qe(z,'h1,h2,h3,[epub\\:type="title"]'),N=[...z.body.querySelectorAll("h1,h2,h3,p,blockquote,[data-opal-scene-break]")].map(F=>F.hasAttribute("data-opal-scene-break")?{sceneBreak:true}:semanticText(F)).filter(F=>F?.sceneBreak||!!F),P=N.filter(F=>typeof F==="string").map(plainSpeech).join(`
+
+`);P.length>=20&&h.push({heading:E,blocks:N,text:P,pov:R||Zt(E,P),opalPov:!!R})}if(!h.length)throw new Error("No readable chapters were found in this EPUB.");const y=[...new Set(h.map(f=>f.pov).filter(Boolean))],d=h.map((f,b)=>{const A=Gt(f.blocks,f.pov,y,!!f.opalPov);return{id:crypto.randomUUID(),index:b,title:f.heading||`Chapter ${b+1}`,text:A.map(z=>z.text).join(`
+
+`),pov:A[0]?.pov||f.pov,segments:A,manualPov:!1,audioKey:null,audioStale:!1}}),g=y.map(f=>({id:crypto.randomUUID(),name:f,voice:null})),id=crypto.randomUUID();await localEpubPut(id,e,e.name);return{id,title:_,author:k,cover:w,importedAt:Date.now(),chapters:d,povs:g,defaultVoice:null,currentChapter:0,currentSegment:0,position:0,completed:!1,epub:{name:e.name}}}const Ht=/chirp(?:[\s-]*3)?[\s-]*hd/i;function Vt(e){return/^[a-z]{2,3}-[A-Z]{2}(?:-[A-Za-z0-9]+)+$/.test(e||"")}function yt(e){return Ht.test(e||"")?"Chirp 3 HD":/studio/i.test(e||"")?"Studio":/neural[\s-]*2|polyglot/i.test(e||"")?"Neural2":/wave[\s-]*net/i.test(e||"")?"WaveNet":"Standard"}function Yt(e){const c=yt(e);return c==="Chirp 3 HD"?30:c==="Studio"?160:c==="Neural2"?16:4}function Xt(e){return/^en-[A-Z]{2}-.+Neural$/i.test(e?.ShortName||"")&&e?.Status!=="Deprecated"}function Qt(e){return/DragonHDFlash/i.test(e||"")?"Neural HD Flash":/DragonHD/i.test(e||"")?"Neural HD":/MultilingualNeural/i.test(e||"")?"Multilingual Neural":"Neural"}function er(e){return/DragonHD(?!Flash)/i.test(e||"")?30:15}function tr(e){return(e.voices||[]).filter(Xt).map(c=>({provider:"azure",voice_id:c.ShortName,name:c.DisplayName||c.LocalName||c.ShortName,locale:c.Locale,gender:c.Gender,traits:[Qt(c.ShortName),...c.StyleList||[]],raw:c}))}const Ke=Object.freeze({segment:0,position:0,started:!1,completed:!1});// v1.4.87: exact per-chunk playback bookmarks, plus a synchronous
+// device-local emergency checkpoint for iOS process suspension.
+// No narration or API credentials are stored in the emergency checkpoint.
+const READER_BOOKMARK_KEY="opalreader.playbackCheckpoint.v187";
+function latestReaderBookmark(){
+  try{
+    const item=JSON.parse(localStorage.getItem(READER_BOOKMARK_KEY)||"null");
+    return item&&typeof item==="object"&&typeof item.bookId==="string"?item:null;
+  }catch(_){return null}
+}
+function writeReaderBookmark(book,ch,segment,position,chunk=null,force=false){
+  if(!book?.id||!book.chapters?.[ch])return;
+  const now=Date.now();
+  // Synchronous checkpoint at least once a second, and on pause/pagehide.
+  if(!force&&now-(writeReaderBookmark.lastAt||0)<850)return;
+  const value={bookId:book.id,chapter:ch,segment,
+    position:Math.max(0,Number(position)||0),
+    savedAt:now,chunk:chunk?{start:chunk.start,end:chunk.end,keys:[...chunk.keys]}:null};
+  try{localStorage.setItem(READER_BOOKMARK_KEY,JSON.stringify(value));
+    writeReaderBookmark.lastAt=now;
+  }catch(_){}
+}
+function clearCompletedReaderBookmark(bookId,ch){
+  const v=latestReaderBookmark();
+  if(v?.bookId===bookId&&v.chapter===ch){
+    try{localStorage.removeItem(READER_BOOKMARK_KEY)}catch(_){}
+  }
+}
+function validReaderChunk(ch,chunk){
+  if(!ch||!chunk)return false;
+  const start=chunk.start,end=chunk.end;
+  return Number.isInteger(start)&&Number.isInteger(end)&&
+    start>=0&&end<=ch.segments.length&&end-start>1&&
+    Array.isArray(chunk.keys)&&chunk.keys.length===end-start&&
+    ch.segments.slice(start,end).every((seg,i)=>
+      seg?.audioKey===chunk.keys[i]&&!seg.audioStale&&!seg.systemVoiceFallback);
+}
+function restoreReaderBookmark(book){
+  const v=latestReaderBookmark();
+  if(v?.bookId!==book?.id||!Number.isInteger(v.chapter)||
+    v.chapter<0||v.chapter>=book.chapters.length||
+    !Number.isInteger(v.segment)||v.segment<0||
+    v.segment>=book.chapters[v.chapter].segments.length||
+    !Number.isFinite(v.position)||v.position<0||
+    !Number.isFinite(v.savedAt)||v.savedAt<=0)return book;
+  const ch=book.chapters[v.chapter],prior=ch.playback||{};
+  // A local emergency bookmark must be newer than the ACTIVE cloud chapter,
+  // not merely newer than the old chapter where this bookmark was captured.
+  const activeIndex=Math.min(Math.max(0,Number(book.currentChapter)||0),book.chapters.length-1);
+  const activeAt=Math.max(Number(book.lastPlayedAt)||0,
+    Number(book.chapters[activeIndex]?.playback?.updatedAt)||0,
+    Number(prior.updatedAt)||0);
+  if(v.savedAt<activeAt)return book;
+  const chunk=validReaderChunk(ch,v.chunk)&&v.chunk.start===v.segment
+    ?v.chunk:null;
+  // A saved composite timestamp is only meaningful for precisely the same
+  // underlying group of audio keys; never seek that timestamp into a segment.
+  if(v.chunk&&!chunk)return book;
+  if(!chunk&&(!ch.segments[v.segment]?.audioKey||
+    ch.segments[v.segment]?.audioStale))return book;
+  ch.playback={...prior,segment:v.segment,position:v.position,
+    started:true,completed:false,updatedAt:v.savedAt};
+  if(chunk)ch.playback.composite={...chunk};
+  else delete ch.playback.composite;
+  book.currentChapter=v.chapter;book.currentSegment=v.segment;book.position=v.position;
+  return book;
+}
+function checkpointReaderPlayback(force=false){
+  if(!a.book||!ee._chapterPlayback||ee._restoringPosition||
+    ee._scenePauseTarget||ee._singleSegmentPreview||ee._systemSpeechActive)return false;
+  const book=a.book,ch=book.currentChapter||0;
+  const source=book.chapters?.[ch];
+  if(!source)return false;
+  const start=ee._compositePlayback?(ee._compositeStartSegment||0)
+    :(book.currentSegment||0);
+  const position=Number(ee.currentTime);
+  if(!Number.isFinite(position)||position<0)return false;
+  const end=ee._compositePlayback?(ee._compositeEndSegment||0):0;
+  const chunk=ee._compositePlayback&&end>start+1?{
+    start,end,keys:source.segments.slice(start,end).map(s=>s.audioKey)
+  }:null;
+  at(book,ch,start,position);
+  if(chunk&&validReaderChunk(source,chunk))source.playback.composite=chunk;
+  else delete source.playback.composite;
+  writeReaderBookmark(book,ch,start,position,chunk,force);
+  return true;
+}
+function rr(e){const c=Math.max(0,Number(e.currentChapter)||0);for(const[r,m]of e.chapters.entries()){const s=m.playback;m.playback={...Ke,...s||{}},!s&&r===c&&((Number(e.currentSegment)||0)>0||(Number(e.position)||0)>0)&&(m.playback.segment=Math.max(0,Number(e.currentSegment)||0),m.playback.position=Math.max(0,Number(e.position)||0),m.playback.started=!0);normalizeCompletedChapterStatus(m)}return restoreReaderBookmark(e)}function nr(e,c){const r=e.chapters[c],m=r?.playback||Ke;return!m.started||m.completed?{segment:0,position:0}:{segment:Math.min(Math.max(0,Number(m.segment)||0),Math.max(0,(r?.segments.length||1)-1)),position:Math.max(0,Number(m.position)||0)}}function at(e,c,r,m){const s=e.chapters[c];s&&(s.playback={...s.playback||Ke,segment:Math.max(0,Number(r)||0),position:Math.max(0,Number(m)||0),started:!0,completed:!1,updatedAt:Date.now()},delete s.playback.composite,e.currentChapter=c,e.currentSegment=s.playback.segment,e.position=s.playback.position,e.lastPlayedAt=Date.now())}function ar(e,c){const r=e.chapters[c];r&&(r.playback={...r.playback||Ke,position:0,completed:!0,started:!0,updatedAt:Date.now()},delete r.playback.composite,clearCompletedReaderBookmark(e.id,c))}function Ie(e){const c=Number(e);return[.75,1,1.25,1.5,1.75,2].includes(c)?c:1}function _t(e){const c=e?.generation||{},r=Math.max(0,Number(c.total)||e?.segments?.length||0),m=Math.min(r,Math.max(0,Number(c.completed)||0));return{state:c.state||"not_generated",completed:m,total:r,percent:r?Math.round(m/r*100):0}}function _p(u){if(!u||!u.total||!(u.playable>0||u.blocked>0||u.generating||u.quotaPaused||u.complete))return"";const pct=Math.round(u.playable/u.total*100);return'<div class="chapter-progress" role="status"><span>'+(u.complete?"Complete":u.quotaPaused?"Paused for Gemini quota · manual restart":u.generating?"Generating":u.playable>0?"Partial":"Not started")+'</span><span class="progress-track" aria-hidden="true"><span style="width:'+pct+'%"></span></span><strong>'+u.playable+'/'+u.total+'</strong>'+(u.blocked?' · '+u.blocked+' blocked':"")+'</div>'}function ir(e){const c=e?.segments||[];return!!c.length&&c.every(i=>i.audioKey)}function sr(e,c){const r=c?.segments||[];return c?.state==="ready"&&Number(c.completed)===e.segments.length&&Number(c.total)===e.segments.length&&r.length===e.segments.length&&r.every(m=>m.state==="ready"&&m.cache_key)}
+// v1.4.92: Recover older Gemini "Input blocked" HTTP 400 jobs without
+// resending the entire chapter. Only map an unmistakable policy refusal
+// to the exact unfinished passage from saved Queue membership.
+function isLegacyGeminiInputBlock(error){
+  const message=String(error||"");
+  return /Gemini error\s*\(400\)/i.test(message)&&
+    /input\s+blocked|prompt\s+contains\s+sensitive\s+words|generative\s+ai\s+prohibited\s+use\s+policy/i.test(message);
+}
+function recoverLegacyGeminiInputBlock(ch,status,localJob=status){
+  if(status?.state!=="failed"||!isLegacyGeminiInputBlock(status.error))return false;
+  const items=Array.isArray(status.segments)?status.segments:[];
+  const pending=items.findIndex(item=>item&&!["ready","blocked","provider_failed"].includes(item.state));
+  if(pending<0)return false;
+  const keys=Array.isArray(localJob?.segmentKeys)&&localJob.segmentKeys.length===items.length?localJob.segmentKeys:null;
+  const indices=Array.isArray(localJob?.segmentIndices)&&localJob.segmentIndices.length===items.length?localJob.segmentIndices:null;
+  let idx=-1;
+  if(indices){
+    const n=indices[pending];
+    if(Number.isInteger(n)&&n>=0&&n<ch.segments.length&&(!keys||segIdentity(ch.segments[n],ch.pov)===keys[pending]))idx=n;
+  }else if(keys){
+    if(items.length===ch.segments.length&&ch.segments.every((seg,i)=>segIdentity(seg,ch.pov)===keys[i])){
+      idx=pending;
+    }else{
+      const matches=ch.segments.map((seg,i)=>segIdentity(seg,ch.pov)===keys[pending]?i:-1).filter(i=>i>=0);
+      if(matches.length===1)idx=matches[0];
+    }
+  }else if(items.length===ch.segments.length){
+    idx=pending;
+  }
+  const seg=idx>=0?ch.segments[idx]:null;
+  if(!seg||seg.audioKey&&!seg.audioStale||seg.systemVoiceFallback||seg.generationBlocked||seg.generationFailure)return false;
+  seg.generationBlocked={
+    error:status.error,blockReason:"POLICY_BLOCK",finishReason:"HTTP_400",
+    model:null,jobId:status.job_id||status.jobId||localJob?.jobId||null
+  };
+  recordGeminiFailure(ch,seg,seg.generationBlocked,"policy_block");
+  return true;
+}
+function or(e,c,{replacement:r=!1,recordedCost:m=0}={}){const s=r?"replacementGeneration":"generation",i=e[s]||{},l={...i,...c,jobId:c.job_id||c.jobId,recordedCost:m};
+// Case #4 §4.2: for the SAME jobId, merged progress is monotonic — a
+// stale or partial status merge may never move completed/total
+// backwards in the UI. (A different job may still replace the slot; the
+// slot is only a display cache now, chapter truth comes from segments.)
+if(i.jobId&&l.jobId===i.jobId){if(Number(i.completed)>Number(l.completed))l.completed=i.completed;if(Number(i.total)>Number(l.total))l.total=i.total}
+const _ap=(u,o,src=u)=>{const t=e.segments[u];if(!t)return;if(o?.state==="ready"&&o.cache_key){t.audioKey=o.cache_key;t.audioStale=!1;const fp=i.segmentFingerprints?.[src];t.generationFingerprint=fp||t.generationFingerprint||o.cache_key;o.provider_request_id&&(t.providerRequestId=o.provider_request_id);o.model&&(t.generatedModel=o.model);delete t.generationBlocked;delete t.generationFailure}else if(o?.state==="blocked"){t.generationBlocked={error:o.error||"Gemini blocked this segment.",blockReason:o.block_reason||"PROHIBITED_CONTENT",finishReason:o.finish_reason||"UNKNOWN",model:o.model||null,jobId:l.jobId||null};delete t.generationFailure;recordGeminiFailure(e,t,{...t.generationBlocked}, "policy_block")}else if(o?.state==="provider_failed"||o?.provider_internal){t.generationFailure={error:o.error||"Gemini internal error.",kind:"provider_internal",model:o.model||null,jobId:l.jobId||null};delete t.generationBlocked;recordGeminiFailure(e,t,{...t.generationFailure},"provider_internal")}};
+const keys=Array.isArray(i.segmentKeys)&&i.segmentKeys.length?i.segmentKeys:null,legacy=keys&&keys.every(k=>/^[a-f0-9]{64}$/.test(k||""));
+const exactIndices=Array.isArray(i.segmentIndices)&&i.segmentIndices.length===(c?.segments||[]).length;
+// Case #4 final integration (Rowan): an inline-split status whose tree
+// has NOT been applied to the chapter yet (mapping not aligned to the
+// full, grown status array). Such a status must never be merged
+// through the job's original root mapping by status position — the
+// array has shifted underneath it.
+const inlinePending=c?.inline_split===true&&!exactIndices;
+
+if(i.scope==="background_repair"||c.adaptive_repair){ /* mapped by verified repair roots */ }
+else if(exactIndices){
+  c.segments.forEach((o,u)=>{
+    const idx=i.segmentIndices[u];
+    if(!Number.isInteger(idx)||idx<0||idx>=e.segments.length)return;
+    // A split-only status must never be mapped to another chapter segment.
+    if(keys&&segIdentity(e.segments[idx],e.pov)!==keys[u])return;
+    if(["ready","blocked","provider_failed"].includes(o?.state)||o?.provider_internal)_ap(idx,o,u);
+  });
+}
+else if(inlinePending){
+  // Tree pending: split parents and ALL their children are deferred —
+  // a child's audio belongs to a chapter piece that does not exist
+  // until applyInlineSplits expands the tree at ready/partial, and the
+  // child's cache key stays on the job status (and in R2) until then,
+  // so a quota park mid-tree loses nothing and Resume re-derives the
+  // finished tree from the same status. Only roots that never split
+  // merge here, each resolved by JOB ORDER (the k-th root entry ↔ the
+  // k-th staged root), never by its shifted status position, and
+  // double-checked against the staged identity when keys exist.
+  // Case #4 re-review (Rowan): segIdentity is text+POV only — it has
+  // no unique segment ID — so with identical twin passages an identity
+  // match does not say WHICH twin a root belongs to, and consuming
+  // matches in chapter order would guess the earliest twin. A root
+  // therefore merges only when its occurrence is FORCED: staged
+  // segmentIndices (a root whose own repair_source_index anchor
+  // contradicts them is deferred), or the unique resolution
+  // resolveIndicesFromKeys computes from the staged keys. An
+  // ambiguous root is deferred — never guessed onto a twin.
+  const isChild=o=>typeof o?.repair_path==="string"&&o.repair_path.length>0;
+  const rootEntries=(c.segments||[]).filter(o=>!isChild(o));
+  let resolved=null;
+  if(Array.isArray(i.segmentIndices)&&i.segmentIndices.length===rootEntries.length){
+    resolved=rootEntries.map((o,k)=>{
+      const anchor=Number.isInteger(o?.repair_source_index)&&o.repair_source_index>=0?o.repair_source_index:null;
+      return anchor!=null&&i.segmentIndices[k]!==anchor?null:i.segmentIndices[k];
+    });
+  }else if(keys&&keys.length===rootEntries.length&&typeof resolveIndicesFromKeys==="function"){
+    resolved=resolveIndicesFromKeys(e,keys,rootEntries);
+  }
+  let rootPos=-1;
+  (c.segments||[]).forEach(o=>{
+    if(isChild(o))return;
+    rootPos++;
+    if(o?.state==="split")return;
+    if(!["ready","blocked","provider_failed"].includes(o?.state)&&!o?.provider_internal)return;
+    const idx=resolved?resolved[rootPos]:null;
+    if(!Number.isInteger(idx)||idx<0||idx>=e.segments.length)return;
+    if(keys&&segIdentity(e.segments[idx],e.pov)!==keys[rootPos])return;
+    _ap(idx,o,rootPos);
+  });
+}
+else if(legacy||!keys){if((c?.segments||[]).length===(e.segments||[]).length)c.segments.forEach((o,u)=>_ap(u,o,u))}
+else{const byId=new Map();e.segments.forEach((t,u)=>{if(t==null)return;const k=segIdentity(t,e.pov),q=byId.get(k)||[];q.push(u);byId.set(k,q)});c.segments.forEach((o,u)=>{if(!["ready","blocked","provider_failed"].includes(o?.state)&&!o?.provider_internal)return;const q=byId.get(keys[u]),idx=q?.shift();if(idx!=null)_ap(idx,o,u)})}
+// Legacy pre-v1.4.21 failed jobs did not tag the segment. Recover the first
+// unfinished job member from the stored segment keys when the chapter error
+// itself clearly says Gemini 500/internal error.
+if(!inlinePending&&c?.state==="failed"&&/Gemini error \(500\)|internal error has occurred/i.test(String(c?.error||""))&&!e.segments.some(x=>x.generationFailure)){
+  const pending=(c?.segments||[]).findIndex(o=>!["ready","blocked"].includes(o?.state));
+  if(pending>=0){
+    if(keys&&!legacy){
+      const match=e.segments.findIndex(t=>segIdentity(t,e.pov)===keys[pending]);
+      if(match>=0)e.segments[match].generationFailure={error:c.error||"Gemini internal error.",kind:"provider_internal",jobId:l.jobId||null}
+    }else if((c?.segments||[]).length===(e.segments||[]).length&&e.segments[pending]){
+      e.segments[pending].generationFailure={error:c.error||"Gemini internal error.",kind:"provider_internal",jobId:l.jobId||null}
+    }
+  }
+}
+recoverLegacyGeminiInputBlock(e,c,i);
+if(l.scope==="blocked_split"&&c?.state==="ready"&&!chapterPlaybackReady(e)){
+  l.state="partial";l.error="Split complete. Other unresolved segments were left untouched.";
+}
+if(!r&&chapterPlaybackReady(e)&&!["queued","generating"].includes(l.state)){
+  l.state=e.segments.some(seg=>seg.systemVoiceFallback&&!seg.audioKey)?"ready_with_device_fallback":"ready";
+  l.error=null;
+}
+return sr(e,c)?(e.generation=l,e.audioKey=null,r&&delete e.replacementGeneration,!0):(e[s]=l,!1)}function ur(e){return{...e,traits:[...e.traits||[]],raw:e.raw?{...e.raw}:e.raw}}function dr(e,c,r){const m=ur(r);if(c==="default")e.defaultVoice=m;else{const s=e.povs.find(i=>i.id===c);if(!s)throw new Error("That cast role could not be found.");s.voice=m}return m}const hr=[.75,1,1.25,1.5,1.75,2];function fr(e){const c=Ie(e);return hr.map(r=>({rate:r,value:String(r),label:`${r}×`,selected:r===c}))}function pr(e,c){const r=Ie(c);return e.defaultPlaybackRate=r,e.playbackRate=r,r}function mr(e,c="Request failed"){const r=new Set;function m(s){if(typeof s=="string")return s.trim();if(!s||typeof s!="object"||r.has(s))return"";if(r.add(s),Array.isArray(s))return s.map(m).filter(Boolean).join("; ");for(const i of["message","error","detail","reason","description","statusText"]){const l=m(s[i]);if(l)return l}return typeof s.status=="string"?s.status.replaceAll("_"," ").toLowerCase():""}return m(e)||c}async function be(e,c,r,m={}){const s=(e||"").replace(/\/$/,"")+r,i=await fetch(s,{...m,headers:{"Content-Type":"application/json",...c?{"X-OpalReader-Token":c}:{},...m.headers||{}}});if(!i.ok){let l=`Request failed (${i.status})`;try{const o=await i.text();if(o.trim())try{l=mr(JSON.parse(o),l)}catch{l=o.trim()}}catch{}const err=new Error(l);err.status=i.status;throw err}return i}const gr=e=>new URLSearchParams(Object.entries(e).filter(([,c])=>c!==""&&c!=null));async function vr(e,c,r,m={}){return(await be(e,c,`/api/providers/${encodeURIComponent(r)}/voices?${gr(m)}`)).json()}
+// Case #4 (Rowan S3): gt() is the direct speech call. Its ONLY callers
+// are explicit user taps — the voice audition and the prosody compare —
+// one tap, one call, no loop anywhere (audited). That is why Gemini
+// calls through here carry the labeled one-call quota override: during
+// a Worker quota park they may make exactly one test call. Automatic
+// code must NEVER call gt() — generation goes through the Queue.
+async function gt(e,c,r,m){const s=await be(e,c,`/api/providers/${encodeURIComponent(r)}/speech`,{method:"POST",body:JSON.stringify(r==="gemini"?{...m,quota_override:"explicit_single"}:m)}),i=await s.blob(),cost=s.headers.get("X-OpalReader-Cost"),it=s.headers.get("X-OpalReader-Input-Tokens"),ot=s.headers.get("X-OpalReader-Output-Tokens");return i.opalCache=s.headers.get("X-OpalReader-Cache"),i.opalCost=cost==null?null:Number(cost),i.opalInputTokens=it==null?null:Number(it),i.opalOutputTokens=ot==null?null:Number(ot),i}async function br(e,c){return(await be(e,c,"/api/providers/status")).json()}async function yr(e,c){
+  let manifest;
+  try{manifest=await(await be(e,c,"/api/sync/manifest")).json()}
+  catch(err){
+    // Older Worker installations still provide the legacy endpoint.
+    if(err?.status===404)return(await be(e,c,"/api/sync/library")).json();
+    throw err;
+  }
+  if(!Array.isArray(manifest?.ids)||!Array.isArray(manifest?.deleted))
+    throw new Error("The cloud library manifest is invalid.");
+  const books=[];
+  for(const id of manifest.ids){
+    if(typeof id!=="string")throw new Error("Invalid book identifier in cloud manifest.");
+    const result=await(await be(e,c,`/api/sync/book/${encodeURIComponent(id)}`)).json();
+    if(!result?.book||result.book.id!==id)
+      throw new Error("A cloud book response did not match the requested book.");
+    books.push(result.book);
+  }
+  return{books,deleted:manifest.deleted};
+}async function _r(e,c,r,m={}){return(await be(e,c,`/api/sync/book/${encodeURIComponent(r.id)}`,{method:"PUT",body:JSON.stringify(r),...m})).json()}async function wr(e,c){return(await be(e,c,"/api/sync/settings")).json()}async function St(e,c,r){return(await be(e,c,"/api/sync/settings",{method:"PUT",body:JSON.stringify(r)})).json()}async function Ct(e,c,r,m){return(await be(e,c,`/api/sync/epub/${encodeURIComponent(r)}`,{method:"PUT",body:m,headers:{"Content-Type":"application/epub+zip"}})).json()}async function At(e,c,r){const m=await fetch(`${(e||"").replace(/\/$/,"")}/api/sync/audio/${encodeURIComponent(r)}`,{headers:c?{"X-OpalReader-Token":c}:{}});if(m.status===404||m.status===503)return null;if(!m.ok)throw new Error("Cloud audio could not be loaded.");return m.blob()}async function recoverFreshAudio(e,c,r,m=8,s=1500){let i=!1,l=null;for(let o=0;o<m;o++){o&&await new Promise(u=>setTimeout(u,s));try{const u=await At(e,c,r);i=!0;if(u&&u.size>1024)return{ready:!0,reachable:!0}}catch(u){l=u}}return{ready:!1,reachable:i,error:l}}async function chapterComposite(e,c,r,m,startSegment=0,endSegment=null){const st=Math.max(0,Number(startSegment)||0),en=endSegment==null?r.chapters[m].segments.length:Math.max(st,Number(endSegment)||st),keys=r.chapters[m].segments.slice(st,en).map(i=>i.audioKey);if(!keys.length)throw new Error("No chapter audio is available from that point.");const resp=await be(e,c,"/api/playback/chapter",{method:"POST",body:JSON.stringify({book_id:r.id,chapter_index:m,audio_keys:keys})});return resp.blob()}async function xt(e,c,r){
+  const h=await(await be(e,c,"/health")).json();
+  if(h?.version!==GENERATION_WORKER_VERSION)throw Error("Worker update needed. Deploy "+GENERATION_WORKER_VERSION+" before starting new generation.");
+  return (await be(e,c,"/api/generation/jobs",{method:"POST",body:JSON.stringify({...r,...generationReleaseStamp()})})).json();
+}async function kr(e,c,r){return(await be(e,c,`/api/generation/jobs/${encodeURIComponent(r)}`)).json()}const APP_UI_VERSION="1.4.121";
+const GENERATION_WORKER_VERSION="1.4.43";
+const GENERATION_RELEASE_ID=GENERATION_WORKER_VERSION+"/"+APP_UI_VERSION;
+const generationReleaseStamp=()=>({client_version:APP_UI_VERSION,generation_release:GENERATION_RELEASE_ID});
+// v1.4.72: Shelf listening outbox now uses stable idempotency keys, never mutates an already-attempted item, flushes without clobbering checkpoints queued mid-request, recovers legacy overlap retries when safely splittable, and shows manual-send errors/re-link guidance.\n// v1.4.71: fully generated cloud-audio chapters use continuous chapter playback again so iOS screen lock cannot suspend JavaScript between TTS segments; partial/device-fallback chapters still use per-segment playback.\n// v1.4.70: header Gemini badge restores last-known values immediately after reload and shows the last successful book generation.\n// v1.4.69: always-visible header badge shows rolling Gemini request count plus next request drop-off; refreshes automatically.\n// v1.4.68: Gemini request tracker now shows a rolling 24-hour window and the next request expiry.\n// v1.4.67: Segment Review pins chapter generation progress under the segment currently holding the Queue.\n// v1.4.66: Gemini generation migrates to 3.8 Flash TTS by default while preserving cast voices/style notes; setup pricing and forecasts are updated.\n// v1.4.65: Gemini 500 failures are isolated per segment, offer retry/device/alternate-cloud recovery, and no longer block later chapter segments.\n// v1.4.64: quota failures are recognized explicitly so failed Queue jobs do not offer an immediate new paid synthesis while Gemini quota is still exhausted.\n// v1.4.63: Segment Review marks only segments actually included in an active chapter job as working; previously every segment inherited the chapter-level busy label.\n// v1.4.62: reverts the unintended compact Segment Review action layout; omission bug is handled by Worker v1.4.17.\n// v1.4.61: compacts Segment Review generation controls so Generate/Regenerate segment and Generate rest sit side-by-side on mobile.\n// v1.4.60: whole-chapter generation/regeneration preserves queued jobs when Safari loses the submit acknowledgement instead of surfacing a false Load failed.\n// v1.4.59: removes chapter-composite/continuous playback; all chapters advance segment-by-segment while -15/+30 seeking still crosses segment and chapter boundaries.\n// v1.4.58: free device/system fallback speech always uses 1.0x, independent of the audiobook playback-speed setting.\n// v1.4.57: hardens iOS device-voice handoff so an auto-start failure stays on the fallback segment and the next Play tap starts it explicitly instead of skipping ahead.\n// v1.4.56: removed the redundant chapter-level provider override and added a Clear error action for failed chapter/non-chapter generation cards.\n// v1.4.55: Segment Review adds Generate rest of chapter, queueing only missing/stale segments from this point forward while preserving current cached audio.\n// v1.4.54: exhausted blocked-segment splits now offer a free device/system voice fallback or a one-segment cloud-voice fallback; device fallback is playable without provider billing.\n// v1.4.53: Gemini PROHIBITED_CONTENT can strand one segment while whole-chapter Queue generation continues; blocked segments can be split at a natural boundary and regenerated without changing text or redoing cached audio.\n// v1.4.52: EPUB import ignores explicit data-opal-narration="skip" regions and native EPUB titlepage regions, preventing OCR Studio title/author pages from becoming TTS chapters.\n// v1.4.51: individual segment generation now uses the durable Cloudflare Queue instead of holding an iOS/Safari request open; adds current-cast full-book and remaining-generation cost forecasts.\n// v1.4.50: direct segment generation recovers completed R2 audio after iOS/network response loss and never blindly resends an ambiguous paid request; true zero cost displays as $0.00.\n// v1.4.49: Gemini TTS billing meter uses provider token usage; pricing labels corrected; Worker ledger separates token-metered cost from legacy estimates; direct TTS calls carry metered cost.
+// v1.4.48: fresh-key force regeneration, 1.5K import segments, provider-override reset/validation, duplicate-text identity matching, Pacific-midnight Gemini usage display, and source-of-truth cleanup.
+// v1.4.47: Setup TTS report added Gemini usage visibility.
+// v1.4.46: segment modal — per-segment Generate button even before audio exists (voice auditioning) + generation progress below the segment list via _p().
+// v1.4.45: Ye() poller no longer kills jobs after ~5 fast failures — 404 still means expired, other failures get 10 min of patience with a truthful "lost contact" message; success clears the failure window.
+// v1.4.44: A4 or() matches by segmentKeys identity (never index); A1/A5 Ye() counts poll failures (~5 consecutive or a 404 marks the job failed locally); A6 Ot() surfaces narration errors via alert; STEP 4 per-chapter provider override picker.
+/* ===== Opal Shelf listening-time sync (v1.4.42) =====
+   Wall-clock listening minutes are accumulated while the audio element is
+   actually playing (play->pause/ended/error boundaries) and pushed as reading
+   sessions to the Opal Shelf worker. Never audio-file duration: speed changes
+   don't affect it because only real elapsed time is counted. Progress is left
+   to Julie (no progress sync). Queued in localStorage when offline. */
+const SHELF_DEFAULT_API="https://opal-shelf.4d8v7jw78c.workers.dev";
+let shelfListenWallStart=0,shelfListenBookId=null,shelfListenReadId=null,shelfListenTimer=null,shelfFlushing=false;
+function shelfActive(){return a.shelfLogEnabled!==!1&&(a.shelfApiBase||"").trim()&&a.book&&a.book.shelfReadId&&!ee._singleSegmentPreview;}
+let shelfPauseTimer=null,shelfPauseAt=0,shelfLastPauseAt=0,shelfFlushTimer=null;
+function shelfListenStart(){
+  if(shelfPauseTimer){clearTimeout(shelfPauseTimer);shelfPauseTimer=null;shelfPauseAt=0;}
+  else if(shelfFlushTimer&&Date.now()-shelfLastPauseAt<90000){clearTimeout(shelfFlushTimer);shelfFlushTimer=null;}
+  if(!shelfActive()){shelfListenStop();return;}
+  if(shelfListenWallStart)return;
+  shelfListenWallStart=Date.now();shelfListenBookId=a.book.id;shelfListenReadId=a.book.shelfReadId;
+  if(shelfListenTimer)clearInterval(shelfListenTimer);
+  shelfListenTimer=setInterval(shelfListenCheckpoint,30000);
+}
+function shelfListenCheckpoint(){
+  if(!shelfListenWallStart||shelfPauseTimer)return;
+  const now=Date.now(),secs=Math.max(0,Math.round((now-shelfListenWallStart)/1000));
+  const readId=shelfListenReadId;
+  shelfListenWallStart=now;
+  if(secs>=5&&readId)shelfQueue(readId,now-secs*1000,secs);
+}
+function shelfListenPaused(){
+  if(!shelfListenWallStart||shelfPauseTimer)return;
+  shelfPauseAt=Date.now();
+  shelfPauseTimer=setTimeout(shelfListenStopConfirmed,4000);
+}
+function shelfListenStopConfirmed(){
+  shelfPauseTimer=null;
+  const pauseAt=shelfLastPauseAt=shelfPauseAt||Date.now();shelfPauseAt=0;
+  if(shelfListenTimer){clearInterval(shelfListenTimer);shelfListenTimer=null;}
+  if(shelfListenWallStart){
+    const secs=Math.max(0,Math.round((pauseAt-shelfListenWallStart)/1000));
+    const readId=shelfListenReadId;
+    shelfListenWallStart=0;shelfListenBookId=null;shelfListenReadId=null;
+    if(secs>=5&&readId)shelfQueue(readId,pauseAt-secs*1000,secs);
+  }
+  if(shelfFlushTimer)clearTimeout(shelfFlushTimer);
+  shelfFlushTimer=setTimeout(()=>{shelfFlushTimer=null;shelfFlush();},95000);
+}
+function shelfListenStop(){
+  if(shelfPauseTimer){clearTimeout(shelfPauseTimer);shelfPauseTimer=null;}
+  if(shelfFlushTimer){clearTimeout(shelfFlushTimer);shelfFlushTimer=null;}
+  shelfPauseAt=0;
+  if(shelfListenTimer){clearInterval(shelfListenTimer);shelfListenTimer=null;}
+  if(!shelfListenWallStart)return;
+  const now=Date.now(),secs=Math.max(0,Math.round((now-shelfListenWallStart)/1000));
+  const readId=shelfListenReadId;
+  shelfListenWallStart=0;shelfListenBookId=null;shelfListenReadId=null;
+  if(secs>=5&&readId){shelfQueue(readId,now-secs*1000,secs);shelfFlush();}
+}
+function shelfNewQueueId(readId,startedMs){
+  const rand=globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)+Date.now().toString(36);
+  return "shelf_"+String(readId||"read").replace(/[^a-zA-Z0-9_-]/g,"").slice(-48)+"_"+Math.max(0,Number(startedMs)||Date.now())+"_"+rand
+}
+function shelfOutbox(){
+  try{
+    const q=JSON.parse(localStorage.getItem("opalreader.shelfOutbox.v1")||"[]");
+    if(!Array.isArray(q))return[];
+    let dirty=!1;
+    for(const it of q){
+      if(!it.queueId){it.queueId=it.clientSessionId||("legacy_"+Math.random().toString(36).slice(2)+Date.now().toString(36));dirty=!0}
+    }
+    if(dirty)localStorage.setItem("opalreader.shelfOutbox.v1",JSON.stringify(q.slice(-300)));
+    return q
+  }catch(_){return[]}
+}
+function shelfOutboxSave(q){try{localStorage.setItem("opalreader.shelfOutbox.v1",JSON.stringify(q.slice(-300)))}catch(_){}}
+let shelfActiveQueueId=null;
+function shelfQueue(readId,startedMs,secs){
+  const q=shelfOutbox(),last=q[q.length-1];
+  if(last&&last.readId===readId&&(last.attempts||0)===0&&last.queueId!==shelfActiveQueueId){
+    const lastEnd=new Date(last.startedAt).getTime()+Number(last.duration_seconds||0)*1000;
+    if(Math.abs(startedMs-lastEnd)<90000){
+      last.duration_seconds=Number(last.duration_seconds||0)+secs;
+      shelfOutboxSave(q);
+      return
+    }
+  }
+  const id=shelfNewQueueId(readId,startedMs);
+  q.push({queueId:id,clientSessionId:id,readId,startedAt:new Date(startedMs).toISOString(),duration_seconds:secs,attempts:0});
+  shelfOutboxSave(q)
+}
+function shelfLocalDate(iso){const d=new Date(iso);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function shelfErrorMessage(data,status){return String(data?.error||data?.message||("Shelf "+status))}
+// A Shelf 409 overlap means this item wasn't accepted under its idempotency key.
+// Carve out only unsaved wall-clock intervals and give each remainder a NEW key.
+// Apply to both legacy key-less and current keyed Reader outbox entries.
+function shelfOverlapParts(it,message){
+  const m=String(message||"").match(/overlaps an existing session \((.+?)\s+[–—-]\s+(.+?)\)/i);
+  if(!m)return null;
+  const start=new Date(it.startedAt).getTime(),end=start+Math.max(0,Number(it.duration_seconds)||0)*1000;
+  const os=new Date(m[1]).getTime(),oe=new Date(m[2]).getTime();
+  if(!Number.isFinite(start)||!Number.isFinite(end)||!Number.isFinite(os)||!Number.isFinite(oe)||end<=start||oe<=os)return null;
+  const a=Math.max(start,os),b=Math.min(end,oe);
+  if(b<=a)return null;
+  if(a<=start&&b>=end)return[];
+  const parts=[];
+  const add=(ps,pe)=>{
+    // Shelf stores whole-second durations. Rounding UP can recreate the same
+    // fractional-millisecond overlap on the next POST and trap the queue.
+    // Flooring ensures every replacement lies strictly outside saved time.
+    const secs=Math.floor((pe-ps)/1000);
+    if(secs<1)return;
+    const id=shelfNewQueueId(it.readId,ps);
+    parts.push({queueId:id,clientSessionId:id,readId:it.readId,startedAt:new Date(ps).toISOString(),duration_seconds:secs,attempts:0})
+  };
+  if(start<a)add(start,a);
+  if(b<end)add(b,end);
+  return parts
+}
+function shelfReplaceQueueItem(queueId,replacements){
+  const q=shelfOutbox(),idx=q.findIndex(x=>x.queueId===queueId);
+  if(idx<0)return;
+  q.splice(idx,1,...replacements);
+  shelfOutboxSave(q)
+}
+function shelfRemoveQueueItem(queueId){
+  const q=shelfOutbox(),next=q.filter(x=>x.queueId!==queueId);
+  if(next.length!==q.length)shelfOutboxSave(next)
+}
+let shelfFlushAgain=false;
+async function shelfFlush({manual=!1}={}){
+  if(shelfFlushing){shelfFlushAgain=true;return{busy:!0,pending:shelfOutbox().length,sent:0,error:null,relinkNeeded:!1}}
+  const base=(a.shelfApiBase||"").replace(/\/+$/,"");
+  if(!base)return{pending:shelfOutbox().length,sent:0,error:"Shelf worker URL is missing.",relinkNeeded:!1};
+  shelfFlushing=true;
+  let sent=0,covered=0,error=null,relinkNeeded=!1,guard=0;
+  try{
+    do{
+      shelfFlushAgain=false;
+      while(guard++<400){
+        const q=shelfOutbox();
+        if(!q.length)break;
+        const it=q[0];
+        shelfActiveQueueId=it.queueId;
+        it.attempts=(Number(it.attempts)||0)+1;
+        delete it.lastError;delete it.lastStatus;
+        shelfOutboxSave(q);
+        let r=null,data=null;
+        try{
+          const payload={read_id:it.readId,local_date:shelfLocalDate(it.startedAt),started_at:it.startedAt,duration_seconds:it.duration_seconds};
+          if(it.clientSessionId)payload.client_session_id=it.clientSessionId;
+          r=await fetch(base+"/api/sessions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+          try{data=await r.json()}catch(_){data=null}
+          if(r.ok){
+            shelfRemoveQueueItem(it.queueId);
+            sent++;
+            continue
+          }
+          const msg=shelfErrorMessage(data,r.status);
+          // The Shelf Worker checks client_session_id replay BEFORE checking
+          // overlap. A 409 overlap here is truly unsaved by this key, so it is
+          // safe to replace it with uncovered intervals using new stable IDs.
+          if(r.status===409){
+            const parts=shelfOverlapParts(it,msg);
+            if(parts){
+              shelfReplaceQueueItem(it.queueId,parts);
+              if(parts.length===0)covered++;
+              continue
+            }
+          }
+          const nowQ=shelfOutbox(),cur=nowQ.find(x=>x.queueId===it.queueId);
+          if(cur){cur.lastStatus=r.status;cur.lastError=msg;shelfOutboxSave(nowQ)}
+          error=msg;
+          if(r.status===404&&/read-through not found|active read-through not found/i.test(msg))relinkNeeded=!0;
+          break
+        }catch(e){
+          const msg=e?.message||"Could not reach Opal Shelf.";
+          const nowQ=shelfOutbox(),cur=nowQ.find(x=>x.queueId===it.queueId);
+          if(cur){cur.lastStatus=0;cur.lastError=msg;shelfOutboxSave(nowQ)}
+          error=msg;
+          break
+        }finally{shelfActiveQueueId=null}
+      }
+    }while(shelfFlushAgain&&!error);
+  }finally{shelfActiveQueueId=null;shelfFlushing=false}
+  return{pending:shelfOutbox().length,sent,covered,error,relinkNeeded}
+}
+/* ── Q2 Option A: observation-only sync & Shelf readout (added in app-257) ──
+   Purpose (D5-C Q2, design §5.2 / packet §6.5): let Julie evidence, on each
+   device, what v1 still has waiting to send — without changing any behaviour.
+   This block only READS state the shipped client already records:
+     - the Shelf outbox in localStorage ("opalreader.shelfOutbox.v1");
+     - the Shelf delivery state held in memory (shelfFlushing,
+       shelfFlushAgain, shelfActiveQueueId, the session and flush timers);
+     - the deleted-book tombstones in localStorage
+       ("opalreader.deletedBooks.v1");
+     - the global sync status / last full-sync error held in `a`;
+     - the debounced-upload timers Er() arms on book objects.
+   It must never write, flush, upload, or schedule anything:
+     - It parses the stored keys directly and NEVER calls shelfOutbox():
+       that helper backfills missing queueIds and SAVES when it finds any,
+       which would make merely opening Setup mutate storage. It likewise
+       never calls dtRead(), which swallows a corrupt tombstone record into
+       an empty one and would hide unreadable state behind a false zero.
+     - Er()'s _syncTimer is read, never created, cleared, or fired here.
+   Queued, in-flight, and scheduled work are reported SEPARATELY (Rowan's
+   Q2 constraints, review comment 6392336367):
+     - Shelf: the stored queue is the queued work; the item whose queueId
+       equals shelfActiveQueueId is the in-flight one and is marked
+       "Sending now", never counted as merely waiting; shelfFlushAgain and
+       the post-stop flush timer are scheduled work; an open listening
+       session is gathered work that has not reached the queue yet.
+     - Sync: timer-armed books are the scheduled work; a full sync in
+       flight is the recorded status string; per-book uploads in flight
+       are NOT recorded anywhere (see UNKNOWN list below).
+   Derivation for stored Shelf items: shelfFlush() deletes lastStatus and
+   lastError when an attempt starts and rewrites them when that attempt
+   fails (HTTP status, or 0 for a network-level failure). Presence of
+   either field therefore means "attempted; the last attempt failed";
+   absence means "not attempted yet" — except for the in-flight item,
+   whose fields are deleted while its attempt runs; it is identified by
+   shelfActiveQueueId instead.
+   Predicates the shipped state CANNOT establish are displayed as UNKNOWN
+   on the readout itself, never smoothed over (Rowan's rule):
+     - per-book uploads in flight (the timer callback deletes _syncTimer
+       BEFORE the upload runs, and no other marker exists; uploads begun
+       from the page-hide path are equally unrecorded);
+     - per-book failed/unacknowledged uploads (recorded only as the
+       global status; one book's success can set "Synced" over another
+       book's unretried failure — idle is not synchronized);
+     - shared-settings divergence between full syncs (settings upload
+       only inside a full sync; local edits are recorded nowhere);
+     - per-book EPUB cloud-copy state between full syncs (the stored
+       flag cannot distinguish "no EPUB on this device" from "not yet
+       uploaded" without a storage read this render does not perform);
+     - any last-sync timestamp (none is recorded).
+   The 423 position is unchanged: a fence refusal is visible ONLY when
+   the full sync recorded it in a.syncError.reason. Refusals of the
+   per-book debounced upload record no status anywhere, so the absence
+   of a 423 line does NOT prove no refusal happened. */
+function q2ShelfOutboxRead(){
+  let raw=null;
+  try{raw=localStorage.getItem("opalreader.shelfOutbox.v1")}catch(_){return{readable:!1,reason:"storage",items:[]}}
+  if(raw==null)return{readable:!0,reason:"ok",items:[]};
+  try{const q=JSON.parse(raw);return Array.isArray(q)?{readable:!0,reason:"ok",items:q}:{readable:!1,reason:"invalid",items:[]}}catch(_){return{readable:!1,reason:"invalid",items:[]}}
+}
+function q2ShelfItemState(it){
+  if(it&&(it.lastStatus!==void 0||it.lastError!==void 0)){
+    return{attempted:!0,status:Number(it.lastStatus)||0,error:String(it.lastError||"")};
+  }
+  return{attempted:!1,status:null,error:""};
+}
+function q2ShelfWorkRead(items){
+  let flushing=!1,again=!1,flushTimer=!1,activeId=null,session=null;
+  try{flushing=!!shelfFlushing}catch(_){}
+  try{again=!!shelfFlushAgain}catch(_){}
+  try{flushTimer=!!shelfFlushTimer}catch(_){}
+  try{activeId=shelfActiveQueueId||null}catch(_){}
+  try{
+    if(shelfListenWallStart>0||shelfPauseTimer){
+      let title="";
+      const sb=(Array.isArray(a.books)?a.books:[]).find(b=>b&&b.id===shelfListenBookId);
+      if(sb)title=String(sb.title||"");
+      else if(a.book&&a.book.id===shelfListenBookId)title=String(a.book.title||"");
+      session={pauseConfirm:!!shelfPauseTimer,title};
+    }
+  }catch(_){}
+  const activeIndex=activeId?items.findIndex(it=>it&&it.queueId===activeId):-1;
+  return{flushing,again,flushTimer,activeId,activeIndex,session};
+}
+function q2DeletedRead(){
+  let raw=null;
+  try{raw=localStorage.getItem("opalreader.deletedBooks.v1")}catch(_){return{readable:!1,count:0}}
+  if(raw==null)return{readable:!0,count:0};
+  try{const m=JSON.parse(raw);return m&&typeof m==="object"&&!Array.isArray(m)?{readable:!0,count:Object.keys(m).length}:{readable:!1,count:0}}catch(_){return{readable:!1,count:0}}
+}
+function q2SyncPendingRead(){
+  const scheduled=[],seen=new Set();
+  // The same book id can exist as several object instances (pe() refreshes
+  // a.books from IndexedDB while Er() arms the timer on a.book), so every
+  // instance is checked; the id is only marked seen once an armed one is
+  // found. An unarmed copy must never mask an armed one.
+  const consider=b=>{
+    if(!b||b.id==null||seen.has(b.id))return;
+    if(b._syncTimer){seen.add(b.id);scheduled.push({title:String(b.title||"Untitled book"),updatedAt:Number(b.updatedAt)||0})}
+  };
+  (Array.isArray(a.books)?a.books:[]).forEach(consider);
+  consider(a.book);
+  const status=String(a.syncStatus||"");
+  const error=a.syncError?{phase:String(a.syncError.phase||""),reason:String(a.syncError.reason||"")}:null;
+  return{
+    status,
+    error,
+    inFlight:status==="Syncing…",
+    settingsPending:status==="Books synced · settings pending"||!!(error&&(error.phase==="updating shared settings"||error.phase==="uploading shared settings")),
+    scheduled
+  };
+}
+function q2ReadoutMarkup(){
+  const shelf=q2ShelfOutboxRead(),work=q2ShelfWorkRead(shelf.items),sync=q2SyncPendingRead(),deleted=q2DeletedRead();
+  const fmtT=ms=>{const d=new Date(ms);return Number.isFinite(d.getTime())?d.toLocaleString():""};
+  let h=`<h2>Sync &amp; Shelf status</h2><p class="muted tiny">Read-only: opening Setup never sends, uploads, or changes anything. This section only reports what this device has already recorded.</p>`;
+  h+=`<div class="provider-note"><strong>Shelf listening waiting to send</strong><span>${shelf.readable?shelf.items.length+" session"+(shelf.items.length===1?"":"s"):'Could not be read'}</span></div>`;
+  if(!shelf.readable)h+=`<p class="muted tiny">${shelf.reason==="storage"?"The Shelf queue could not be read (storage access failed)":"The stored Shelf queue is not readable as a queue (invalid data)"}, so its waiting count is unknown — not zero.</p>`;
+  if(work.flushing){
+    if(work.activeIndex>=0)h+=`<p class="muted tiny">A Shelf send is in progress right now. The session marked “Sending now” is the one in flight; the others are still waiting.</p>`;
+    else if(work.activeId)h+=`<p class="muted tiny">A Shelf send is in progress right now, but the session it is sending is no longer in the stored queue.</p>`;
+    else h+=`<p class="muted tiny">A Shelf send is in progress right now.</p>`;
+  }
+  if(work.again)h+=`<p class="muted tiny">A further send pass was requested while one is running; it runs when the current pass finishes.</p>`;
+  if(work.flushTimer)h+=`<p class="muted tiny">A Shelf send is scheduled: the app sends on its own about 95 seconds after listening stops.</p>`;
+  if(work.session)h+=`<p class="muted tiny">Listening time is still being gathered on this device${work.session.title?` for ${ie(work.session.title)}`:""} and is not in the queue yet: it joins the queue at the next checkpoint (about every 30 seconds while listening) or when listening stops. Pieces under 5 seconds are never queued — the app discards them itself.${work.session.pauseConfirm?" Playback is paused; the app is deciding whether the session has ended.":""}</p>`;
+  if(shelf.readable&&shelf.items.length){
+    h+=shelf.items.map((it,i)=>{
+      const when=it&&it.startedAt?fmtT(new Date(it.startedAt).getTime()):"";
+      const mins=Math.max(0,Math.round((Number(it&&it.duration_seconds)||0)/60));
+      const attempts=Number(it&&it.attempts)||0;
+      let state;
+      if(i===work.activeIndex)state="Sending now";
+      else{
+        const st=q2ShelfItemState(it||{});
+        state=!st.attempted?"Not sent yet":`Last try failed${st.status?` (HTTP ${st.status})`:" (connection problem)"}${st.error?": "+st.error:""}`;
+      }
+      return `<div class="muted tiny">${i+1}. ${when?ie(when)+" · ":""}${mins} min · ${ie(state)}${attempts>0?` · ${attempts} attempt${attempts===1?"":"s"}`:""}</div>`;
+    }).join("");
+  }
+  h+=`<div class="provider-note"><strong>Book &amp; position sync</strong><span>${ie(sync.status||"—")}</span></div>`;
+  if(sync.error)h+=`<p class="muted tiny">Last sync stopped while ${ie(sync.error.phase)}. ${ie(sync.error.reason)}</p>`;
+  if(sync.error&&/^HTTP 423\b/.test(sync.error.reason))h+=`<p class="muted tiny">HTTP 423 means the server refused the write — the v1 server is frozen, so refused work stays saved on this device. (Refusals of the automatic 3-minute uploads are not recorded here; see the limits note below.)</p>`;
+  if(sync.inFlight)h+=`<p class="muted tiny">A sync is running right now.</p>`;
+  if(sync.settingsPending)h+=`<p class="muted tiny">Shared settings are part of the waiting work: the last full sync recorded that the settings upload did not complete.</p>`;
+  h+=`<div class="provider-note"><strong>Books waiting to upload</strong><span>${sync.scheduled.length?sync.scheduled.length+" book"+(sync.scheduled.length===1?"":"s"):"None scheduled"}</span></div>`;
+  for(const b of sync.scheduled)h+=`<div class="muted tiny">${ie(b.title)} — changes saved on this device; upload scheduled (the app waits about 3 minutes after the last change before uploading).</div>`;
+  h+=`<div class="provider-note"><strong>Deleted books awaiting cloud confirmation</strong><span>${deleted.readable?deleted.count+" book"+(deleted.count===1?"":"s"):"Unknown"}</span></div>`;
+  if(!deleted.readable)h+=`<p class="muted tiny">The deleted-books record could not be read, so its count is unknown — not zero.</p>`;
+  h+=`<p class="muted tiny"><strong>What this page cannot establish (UNKNOWN):</strong></p>`;
+  h+=`<div class="muted tiny">• Uploads in flight — UNKNOWN. Outside a full sync, the app records no marker for a book upload that has begun. A book leaves the scheduled list the moment its 3-minute timer fires, while its upload is still running; an upload begun as the app is hidden or closed is likewise unrecorded, and if the app is closed during one, nothing on the device shows whether it landed — only the next full sync's result speaks to it.</div>`;
+  h+=`<div class="muted tiny">• Failed uploads, book by book — UNKNOWN. A failed book upload is recorded only as the global status above, never against the book. One book's successful upload sets the status to “Synced” even when another book's upload failed earlier and was never retried, so a quiet status with an empty scheduled list does not prove every book is synchronized. Idle is not the same as synchronized: a difference between this device and the cloud — including a write the frozen server refused — can stand behind a quiet status.</div>`;
+  h+=`<div class="muted tiny">• Shared settings between full syncs — UNKNOWN. Settings are uploaded only inside a full sync; a settings change made since the last full sync is recorded nowhere.</div>`;
+  h+=`<div class="muted tiny">• EPUB cloud copies, book by book — UNKNOWN between full syncs. The stored flag cannot tell “no EPUB file on this device” from “EPUB not yet uploaded”.</div>`;
+  h+=`<div class="muted tiny">• Last sync time — not recorded. The app keeps no timestamp for when a sync last finished. The scheduled, sending, and session lines describe the app as it stands open right now; that state is held in memory only and is gone after a restart. The durable records are the Shelf queue and the deleted-books list.</div>`;
+  return h;
+}
+
+/* ── Q2 comparator surface adapter (added in app-258) ──
+   Purpose: supply the Q2 Route 1 comparator (design §3.1/§5.1) with its
+   L6 observable surface, read from the REAL app state this bundle
+   holds — the same state the readout above renders, but transported
+   under the comparator's fail-closed contract instead of display
+   rules:
+     - Values are transported VERBATIM. Nothing is coerced for display:
+       a.syncStatus is passed exactly as held (never String(x||"")), and
+       a value the comparator cannot interpret is left for its
+       validation to reject, never smoothed into a calm one here.
+     - A field this adapter cannot obtain faithfully is OMITTED, which
+       the comparator's validation treats as missing evidence and VOIDs
+       the run. Omission — never a default — is the unreadable signal.
+     - The one conversion owned here is a.syncError: the app holds null
+       (or, before the first sync attempt, no property at all — every
+       shipped consumer reads both as "no error recorded") or an object
+       {phase, reason} built at the single sync-failure site. The null
+       form passes through; the object converts to "<phase>. <reason>",
+       the same two strings the app itself renders in the sync-issue
+       line. Any other shape — extra keys, a missing or non-string
+       field, a bare string — cannot be represented faithfully and is
+       omitted as unreadable.
+     - Books are enumerated completely: every a.books instance, plus
+       a.book as the distinct open-book instance (the same instance
+       split the readout documents: pe() refreshes a.books while Er()
+       arms the timer on a.book, so either copy can carry the armed
+       timer). An instance with no usable id makes the whole books
+       field unreadable rather than silently dropped; duplicate ids
+       pass through for the comparator's validation to judge.
+     - The Shelf count comes from q2ShelfOutboxRead() — the readout's
+       direct storage parse — never the legacy outbox helper, whose
+       queueId backfill would make reading the surface mutate storage.
+     - Session gathering is the app's own open-session state:
+       shelfListenWallStart > 0. The lifecycle functions keep it
+       positive from listen start (including the pause-confirmation
+       window, where the tail is still unqueued) and zero it exactly
+       when the session closes and its tail is queued; a non-numeric
+       or negative value is not an app state and is omitted.
+   Nothing in the app calls this function; it is the surface provider
+   the comparator's host invokes at window time. It never writes,
+   flushes, uploads, or schedules anything.
+   Invocation: the provider is registered once, at module evaluation,
+   as the window-global named in the registration statement at the end
+   of this block. The registration is the smallest same-instance
+   bridge: the module is loaded by a bare script tag (its exports
+   would have no consumer, and importing the module again would
+   evaluate a SECOND instance with its own state), the function's
+   module-private bindings are unreachable from any outside context,
+   and a message listener would expose the provider cross-window.
+   A named window property reaches exactly the callers already
+   executing in this page — contexts that already hold full access
+   to this origin's storage — and nothing else. The registration is
+   first-wins and immutable (non-writable, non-configurable,
+   non-enumerable): if the name is already taken, the adapter does
+   not seize it, and no later script can replace or remove the
+   provider. Immutability alone, however, does not prove THIS
+   module installed whatever a caller finds under the name: a
+   callable claimed earlier by other code would survive the
+   first-wins guard unchanged and be indistinguishable from the
+   genuine provider by shape. Registration therefore also stamps
+   the ownership proof the caller requires before it may use the
+   provider at all: a symbol-keyed brand on the provider function
+   itself — the global-registry symbol named in the registration
+   statement, carrying the contract id
+   "opal-q2-comparator-surface/1" as a non-writable,
+   non-configurable, non-enumerable own property — and a second
+   locked window record, "__opalQ2ComparatorSurfaceRecord": a
+   frozen object naming the same contract id and the same function
+   reference. The caller accepts the provider only when the brand
+   matches exactly AND the record's function reference is identical
+   to the one resolved under the provider name; an absent,
+   non-callable, unbranded, or record-mismatched value is refused
+   as unowned and the comparison VOIDs. The contract defends
+   against accidental collisions and stale providers installed by
+   other code or older builds — the integration failure it exists
+   to catch. It is not a defence against arbitrary malicious
+   same-origin code, which could look the brand symbol up in the
+   global registry and forge the marks; such code already holds
+   full access to this origin's storage and is outside the
+   bridge's threat model. The registered
+   value is the provider function itself and nothing more: it
+   returns a fresh surface of book ids, timer flags, sync status and
+   error strings, and Shelf/session indicators — metadata the app
+   itself renders — and exposes no state object, no mutator, and no
+   other app function. Registering it runs no app behaviour: module
+   evaluation happens once per load, and resolving the property
+   afterwards neither re-evaluates the module nor repeats any part
+   of startup. */
+function q2ComparatorSyncErrorRead(){
+  const e=a.syncError;
+  if(e===null||e===void 0)return{readable:!0,value:null};
+  if(typeof e!=="object"||Array.isArray(e))return{readable:!1,value:null};
+  const keys=Object.keys(e);
+  if(keys.length!==2||typeof e.phase!=="string"||e.phase.length===0||typeof e.reason!=="string"||e.reason.length===0)return{readable:!1,value:null};
+  return{readable:!0,value:e.phase+". "+e.reason};
+}
+function q2ComparatorSurface(){
+  const s={};
+  try{
+    if(Array.isArray(a.books)){
+      const list=[];let ok=!0;
+      for(const b of a.books){
+        if(!b||typeof b!=="object"||typeof b.id!=="string"||b.id.length===0){ok=!1;break}
+        list.push({key:b.id,syncTimerArmed:!!b._syncTimer});
+      }
+      if(ok)s.books=list;
+    }
+  }catch(_){}
+  try{
+    if(a.book===null)s.currentBook=null;
+    else if(a.book&&typeof a.book==="object"&&typeof a.book.id==="string"&&a.book.id.length>0)s.currentBook={key:a.book.id,syncTimerArmed:!!a.book._syncTimer};
+  }catch(_){}
+  try{if(a&&typeof a==="object"&&"syncStatus" in a)s.syncStatus=a.syncStatus}catch(_){}
+  try{const r=q2ComparatorSyncErrorRead();if(r.readable)s.syncError=r.value}catch(_){}
+  try{const o=q2ShelfOutboxRead();if(o.readable)s.shelfOutboxCount=o.items.length}catch(_){}
+  const shelf={};
+  try{shelf.flushing=shelfFlushing}catch(_){}
+  try{shelf.flushAgain=shelfFlushAgain}catch(_){}
+  try{shelf.activeQueueId=shelfActiveQueueId}catch(_){}
+  try{shelf.flushTimerArmed=shelfFlushTimer!==null&&shelfFlushTimer!==void 0}catch(_){}
+  s.shelf=shelf;
+  const session={};
+  try{if(typeof shelfListenWallStart==="number"&&Number.isFinite(shelfListenWallStart)&&shelfListenWallStart>=0)session.gathering=shelfListenWallStart>0}catch(_){}
+  s.session=session;
+  return s;
+}
+/* Same-instance invocation bridge (see the block header): register the
+   provider under one deliberate window-global name, first-wins and
+   immutable, and stamp the ownership proof the caller requires — a
+   symbol-keyed brand on the provider function itself, plus a second
+   locked registration record naming the same function. A failed or
+   pre-claimed registration leaves the provider unreachable or
+   unprovable, which the caller's contract treats as missing evidence
+   and VOIDs — never as a calm surface. */
+try{
+  if(typeof window!=="undefined"&&window){
+    Object.defineProperty(q2ComparatorSurface,Symbol.for("__opalQ2ComparatorSurface.brand"),{value:"opal-q2-comparator-surface/1",writable:!1,configurable:!1,enumerable:!1});
+    if(!("__opalQ2ComparatorSurface" in window))
+      Object.defineProperty(window,"__opalQ2ComparatorSurface",{value:q2ComparatorSurface,writable:!1,configurable:!1,enumerable:!1});
+    if(!("__opalQ2ComparatorSurfaceRecord" in window))
+      Object.defineProperty(window,"__opalQ2ComparatorSurfaceRecord",{value:Object.freeze({contract:"opal-q2-comparator-surface/1",provider:q2ComparatorSurface}),writable:!1,configurable:!1,enumerable:!1});
+  }
+}catch(_){}
+
+/* ── Q2 in-app seal entry (added in app-260) ──
+   Setup/Diagnostics entry for the Q2 comparison (design R2 §1.5/§1.6).
+   One contiguous block: removing it and reverting the version token
+   reproduces the released app-258.js byte-for-byte. It patches no
+   shipped function and edits no shipped block: it composes its daily-
+   use section after the released readout section's markup, and opens
+   its entry screen as an overlay panel on top of the running app.
+   The glue performs NO storage reads or writes (its rendering follows
+   the readout's direct-parse discipline — the section renders from
+   nothing but its own constants), makes exactly two network requests
+   per page load (the package fetch and the bundle fetch, both at
+   entry open, both with cache:"no-store"), never invokes the
+   comparator provider (the pre-check reads descriptors only), and
+   installs no window global of any kind. All run state lives in
+   this block's module scope.
+   Baked constants (__Q2_SEAL_*__) are substituted by the bundle
+   builder; they are never edited by hand. */
+const Q2_SEAL_SOURCE_PIN = "2bdb548ee2f40800deeebc23f563cb2e211feba3";
+const Q2_SEAL_CALLER_FREEZE_PIN = "e26e88d63da1abb780e20ea830cb463a48aecdf4";
+const Q2_SEAL_PACKAGE_SHA256 = "a13bfc37c90e10ae0af7962a0d5272413d8604c5394fb36ee62c7af6f41ef1ea";
+const Q2_SEAL_PACKAGE_URL = "./q2-seal/q2-seal-package.mjs";
+const Q2_SEAL_CONTRACT = "opal-q2-comparator-surface/1";
+const Q2_SEAL_STATE = { phase: "idle", measured: null, packageBlobUrl: null, api: null, precheck: null, label: null, annotation: "", running: false, consumed: false, record: null, stopLines: null, timer: null };
+async function q2SealSha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+function q2SealShort(h) { return typeof h === "string" ? h.slice(0, 12) + "…" : "—"; }
+// Read-only ownership pre-check (design R2 §1.5 step 2): reads the
+// provider descriptor, the symbol brand, and the locked record — and
+// nothing else. The provider function is NEVER invoked here.
+function q2SealOwnershipPrecheck() {
+  const p = window.__opalQ2ComparatorSurface;
+  if (typeof p !== "function") return { state: "STOP", problem: "surface-provider-missing" };
+  let brand;
+  try { brand = Object.getOwnPropertyDescriptor(p, Symbol.for("__opalQ2ComparatorSurface.brand")); } catch { brand = undefined; }
+  const branded = !!brand && brand.value === Q2_SEAL_CONTRACT && brand.writable === false && brand.configurable === false && brand.enumerable === false;
+  let rec;
+  try { rec = window.__opalQ2ComparatorSurfaceRecord; } catch { rec = undefined; }
+  const recorded = !!rec && typeof rec === "object" && rec.contract === Q2_SEAL_CONTRACT && rec.provider === p && Object.isFrozen(rec);
+  if (!branded || !recorded) return { state: "STOP", problem: "surface-provider-not-owned" };
+  return { state: "OWNED" };
+}
+function q2SealEntrySectionMarkup() {
+  return `<div class="q2-seal-entry"><h2>Q2 comparison (window diagnostic)</h2><p class="muted">Run the read-only Q2 comparison of this device against the cloud, for the migration window. It reads only — it changes nothing — and takes about three minutes.</p><div class="row"><button id="q2SealOpen" type="button" class="secondary">Run Q2 comparison</button></div></div>`;
+}
+const q2SealReadoutMarkupBase = q2ReadoutMarkup;
+q2ReadoutMarkup = function () { return q2SealReadoutMarkupBase() + q2SealEntrySectionMarkup(); };
+function q2SealPanel() { return document.getElementById("q2SealPanel"); }
+function q2SealBody() { return document.getElementById("q2SealBody"); }
+function q2SealAlive() { return !!q2SealBody(); }
+function q2SealOpenPanel() {
+  let panel = q2SealPanel();
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "q2SealPanel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Q2 comparison");
+    panel.style.cssText = "position:fixed;inset:0;z-index:9999;overflow:auto;background:#fff;color:#222;padding:1rem;font:16px/1.55 -apple-system,BlinkMacSystemFont,sans-serif";
+    panel.innerHTML = `<div class="q2seal-head" style="display:flex;justify-content:space-between;align-items:center;gap:1rem"><strong>Q2 comparison (window diagnostic)</strong><span id="q2SealCloseSlot"></span></div><div id="q2SealBody"></div>`;
+    document.body.appendChild(panel);
+  }
+  return panel;
+}
+function q2SealCloseButton() { return `<button id="q2SealClose" type="button" class="secondary">Close</button>`; }
+function q2SealClosePanel() {
+  if (Q2_SEAL_STATE.timer) { clearInterval(Q2_SEAL_STATE.timer); Q2_SEAL_STATE.timer = null; }
+  q2SealPanel()?.remove();
+  // Closing the panel never discards the load's held measurement and
+  // never re-arms anything: an armed entry disarms back to ready (the
+  // label is re-tapped on the re-rendered screen), a ready entry stays
+  // ready, and a stopped/done entry keeps its outcome for re-display.
+  if (Q2_SEAL_STATE.phase === "armed") Q2_SEAL_STATE.phase = "ready";
+}
+function q2SealRenderStop(lines) {
+  if (!q2SealAlive()) return;
+  document.getElementById("q2SealCloseSlot").innerHTML = q2SealCloseButton();
+  q2SealBody().innerHTML = `<div role="status" style="background:#f8d7da;padding:1rem;margin-top:1rem"><strong>⛔ STOP</strong><div>${lines.map((l) => `<div>${ie(l)}</div>`).join("")}</div></div>`;
+}
+function q2SealRenderReady() {
+  if (!q2SealAlive()) return;
+  const m = Q2_SEAL_STATE.measured, pre = Q2_SEAL_STATE.precheck;
+  document.getElementById("q2SealCloseSlot").innerHTML = q2SealCloseButton();
+  const body = q2SealBody();
+  body.innerHTML = `<div style="margin-top:1rem"><p>This device runs UI <strong>1.4.120</strong>. The identities below were measured live in this page load, once, when the entry opened — reopening the entry does not re-measure.</p><div class="muted"><div>App bundle SHA-256: <span id="q2SealBundleHash"></span></div><div>Seal package SHA-256: <span id="q2SealPackageHash"></span></div><div>Comparator source pin: <span id="q2SealPin"></span></div><div>Caller freeze pin: <span id="q2SealCallerPin"></span></div><div>Provider pre-check: <strong>${pre.state === "OWNED" ? "OWNED" : "⛔ STOP — " + pre.problem}</strong></div></div><div style="margin-top:1rem"><div><strong>Which device is this?</strong></div><label style="margin-right:1rem"><input type="radio" name="q2SealLabel" value="iPhone"> iPhone</label><label><input type="radio" name="q2SealLabel" value="iPad"> iPad</label></div><div style="margin-top:1rem"><label>Window ID / note (optional)<input id="q2SealAnnotation" class="field" maxlength="120" placeholder="e.g. D5-C window, iPhone"></label><p class="muted tiny">Runs without a convened window ID are rehearsal-class, never window evidence.</p></div><div class="row" style="margin-top:1rem"><button id="q2SealArm" type="button" class="primary" disabled>Arm</button></div></div>`;
+  body.querySelector("#q2SealBundleHash").textContent = m.bundleSha256;
+  body.querySelector("#q2SealPackageHash").textContent = m.packageSha256;
+  body.querySelector("#q2SealPin").textContent = Q2_SEAL_SOURCE_PIN;
+  body.querySelector("#q2SealCallerPin").textContent = Q2_SEAL_CALLER_FREEZE_PIN;
+}
+function q2SealRenderArmed() {
+  if (!q2SealAlive()) return;
+  document.getElementById("q2SealCloseSlot").innerHTML = q2SealCloseButton();
+  const body = q2SealBody();
+  body.innerHTML = `<div style="margin-top:1rem"><p>Armed for <strong id="q2SealArmedLabel"></strong>. Starting runs the full comparison — about three minutes of read-only observation. Nothing is changed.</p><div class="row"><button id="q2SealStart" type="button" class="primary">Start</button></div></div>`;
+  body.querySelector("#q2SealArmedLabel").textContent = Q2_SEAL_STATE.label;
+}
+function q2SealRenderRunning() {
+  if (!q2SealAlive()) return;
+  document.getElementById("q2SealCloseSlot").innerHTML = "";
+  const started = Date.now();
+  q2SealBody().innerHTML = `<div style="margin-top:1rem"><p><strong>RUNNING…</strong></p><p class="muted"><span id="q2SealElapsed">Elapsed 0 s</span> · full drain ≈ 180 s · read-only; do not navigate away.</p></div>`;
+  Q2_SEAL_STATE.timer = setInterval(() => {
+    const el = document.getElementById("q2SealElapsed");
+    if (el) el.textContent = "Elapsed " + Math.floor((Date.now() - started) / 1000) + " s";
+  }, 1000);
+}
+// Presenter: reproduces loader v3's verdict discipline exactly.
+// Evaluation order: evidence-presence gate → structural identity
+// check → verdict. The positive headline is the single site where the
+// word below appears in this presenter.
+function q2SealIdentityProblems(record) {
+  const probs = [];
+  const id = record && record.identity;
+  if (!id || typeof id !== "object") return ["identity"];
+  for (const f of ["comparatorPin", "callerFreezePin", "readerBundleSha256", "sealPackageSha256"])
+    if (typeof id[f] !== "string" || !id[f]) probs.push("identity." + f);
+  if (!probs.includes("identity.comparatorPin") && id.comparatorPin !== Q2_SEAL_SOURCE_PIN) probs.push("identity.comparatorPin");
+  if (!probs.includes("identity.callerFreezePin") && id.callerFreezePin !== Q2_SEAL_CALLER_FREEZE_PIN) probs.push("identity.callerFreezePin");
+  if (Q2_SEAL_STATE.measured && !probs.includes("identity.readerBundleSha256") && id.readerBundleSha256 !== Q2_SEAL_STATE.measured.bundleSha256) probs.push("identity.readerBundleSha256");
+  if (Q2_SEAL_STATE.measured && !probs.includes("identity.sealPackageSha256") && id.sealPackageSha256 !== Q2_SEAL_STATE.measured.packageSha256) probs.push("identity.sealPackageSha256");
+  if (record.deviceLabel !== Q2_SEAL_STATE.label) probs.push("deviceLabel");
+  // The returned comparator source pin is positive identity evidence:
+  // it must be PRESENT, not merely consistent when present (design R2
+  // §1.6 gate 2 — the S8 missing-evidence fail-closed rule). Absence of
+  // the comparator object, or a missing/null/non-string pin, is a
+  // defect on its own, never a pass.
+  const cmp = record.comparator;
+  if (!cmp || typeof cmp !== "object" || Array.isArray(cmp)) probs.push("comparator");
+  else if (typeof cmp.sourcePin !== "string" || !cmp.sourcePin) probs.push("comparator.sourcePin");
+  else if (cmp.sourcePin !== id.comparatorPin || cmp.sourcePin !== Q2_SEAL_SOURCE_PIN) probs.push("comparator.sourcePin");
+  return probs;
+}
+function q2SealPresent(record) {
+  const r = (record && record.result) || {};
+  if (r.state === "P_PRIME_ESTABLISHED" && r.sealEligible === true) {
+    const incomplete = [];
+    if (!record || !record.comparison || typeof record.comparison !== "object") incomplete.push("comparison");
+    else {
+      if (!Array.isArray(record.comparison.diff)) incomplete.push("comparison.diff");
+      if (!Array.isArray(record.comparison.unknowns)) incomplete.push("comparison.unknowns");
+    }
+    if (incomplete.length)
+      return { headline: "⛔ STOP — record incomplete", body: "The run reported a nominal positive result, but its comparison evidence is incomplete: " + incomplete.join(", ") + " is missing or not an array.\nAbsence of a diff/unknowns ledger is not a proved empty ledger. This is not a positive result. Send this screen and the record to Wren.", invalid: "⛔ This record is INVALID as evidence — incomplete comparison evidence: " + incomplete.join(", ") };
+    const cmp = record.comparison;
+    const sealProbs = [];
+    if (r.diffCount !== 0 || cmp.diff.length !== 0) sealProbs.push("comparison.diff");
+    if (r.unknownCount !== 0 || cmp.unknowns.length !== 0) sealProbs.push("comparison.unknowns");
+    const idProbs = q2SealIdentityProblems(record);
+    if (!sealProbs.length && !idProbs.length)
+      return { headline: "✅ SEALED — P′ established (P_PRIME_ESTABLISHED). No differences, no unknowns.", body: "The device and the cloud agree on every compared family, with no unknowns.", invalid: null };
+    if (idProbs.length)
+      return { headline: "⛔ STOP — identity evidence invalid", body: "The run reported a nominal positive result, but its identity evidence is defective: " + idProbs.join(", ") + ".\nThis is not a positive result. Send this screen and the record to Wren.", invalid: "⛔ This record is INVALID as evidence — identity check failed: " + idProbs.join(", ") };
+    return { headline: "⛔ STOP — positive evidence inconsistent", body: "The run reported a nominal positive result, but the comparison evidence disagrees: " + sealProbs.join(", ") + ".\nThis is not a positive result. Send this screen and the record to Wren.", invalid: "⛔ This record is INVALID as evidence — comparison evidence inconsistent: " + sealProbs.join(", ") };
+  }
+  if (r.state === "DIVERGED") {
+    const diff = (record.comparison && Array.isArray(record.comparison.diff)) ? record.comparison.diff : [];
+    return { headline: "⛔ DIVERGENCE — the states differ. This is a stop.", body: "Differences (" + diff.length + "):\n" + diff.map((d) => JSON.stringify(d)).join("\n") + "\nThe full run record is below. Send it to Wren.", invalid: null };
+  }
+  if (r.state === "NOT_ESTABLISHED") {
+    const unknowns = (record.comparison && Array.isArray(record.comparison.unknowns)) ? record.comparison.unknowns : [];
+    return { headline: "⚠️ NOT ESTABLISHED — the comparison could not be completed.", body: "Reason: " + (r.reason || "unknown") + "\nUnknowns (" + unknowns.length + "):\n" + unknowns.map((u) => JSON.stringify(u)).join("\n"), invalid: null };
+  }
+  if (r.state === "VOID")
+    return { headline: "⛔ STOP (VOID)", body: "The run was voided before it could establish anything. Reason: " + (r.reason || "unknown") + (r.detail ? "\nDetail: " + r.detail : "") + "\nA voided run is not a window failure — it is evidence the channel could not run. Send this screen and the record to Wren.", invalid: null };
+  return { headline: "⛔ STOP — run error", body: "The run did not complete with a verdict. " + (record && record.error ? String(record.error) : "No result was returned."), invalid: null };
+}
+function q2SealRenderDone(record) {
+  if (!q2SealAlive()) return;
+  if (Q2_SEAL_STATE.timer) { clearInterval(Q2_SEAL_STATE.timer); Q2_SEAL_STATE.timer = null; }
+  document.getElementById("q2SealCloseSlot").innerHTML = q2SealCloseButton();
+  const out = q2SealPresent(record);
+  const body = q2SealBody();
+  const bg = out.headline.startsWith("✅") ? "#d4edda" : (out.headline.startsWith("⚠️") ? "#fff3cd" : "#f8d7da");
+  body.innerHTML = `<div role="status" style="background:${bg};padding:1rem;margin-top:1rem"><strong id="q2SealVerdict"></strong><div id="q2SealVerdictBody" style="white-space:pre-wrap;margin-top:.5rem"></div>${out.invalid ? `<div id="q2SealInvalid" style="margin-top:.5rem"></div>` : ""}</div><div style="margin-top:1rem"><div class="row"><button id="q2SealCopy" type="button" class="secondary">Copy record</button>${typeof navigator.share === "function" ? `<button id="q2SealShare" type="button" class="secondary">Share…</button>` : ""}</div><pre id="q2SealRecord" style="white-space:pre-wrap;word-break:break-word;background:#f6f6f6;padding:1rem;margin-top:1rem"></pre></div>`;
+  body.querySelector("#q2SealVerdict").textContent = out.headline;
+  body.querySelector("#q2SealVerdictBody").textContent = out.body;
+  if (out.invalid) body.querySelector("#q2SealInvalid").textContent = out.invalid;
+  body.querySelector("#q2SealRecord").textContent = JSON.stringify(record, null, 2);
+}
+async function q2SealOpenEntry() {
+  q2SealOpenPanel();
+  if (Q2_SEAL_STATE.phase === "done" && Q2_SEAL_STATE.record) { q2SealRenderDone(Q2_SEAL_STATE.record); return; }
+  if (Q2_SEAL_STATE.phase === "ready" || Q2_SEAL_STATE.phase === "armed") {
+    if (Q2_SEAL_STATE.phase === "ready") q2SealRenderReady();
+    else q2SealRenderArmed();
+    return;
+  }
+  if (Q2_SEAL_STATE.phase === "stopped" && Q2_SEAL_STATE.stopLines) { q2SealRenderStop(Q2_SEAL_STATE.stopLines); return; }
+  // Entry open: the load's single measurement pair — package first,
+  // then bundle. No other phase fetches anything.
+  document.getElementById("q2SealCloseSlot").innerHTML = q2SealCloseButton();
+  q2SealBody().innerHTML = `<div style="margin-top:1rem"><p>Measuring this app and the seal package…</p></div>`;
+  let packageBytes;
+  try {
+    const res = await fetch(Q2_SEAL_PACKAGE_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("package fetch failed: HTTP " + res.status);
+    packageBytes = await res.arrayBuffer();
+  } catch (e) {
+    Q2_SEAL_STATE.phase = "stopped";
+    Q2_SEAL_STATE.stopLines = ["The seal package could not be fetched.", "Reason: " + String((e && e.message) || e), "No run was started."];
+    q2SealRenderStop(Q2_SEAL_STATE.stopLines);
+    return;
+  }
+  const packageSha256 = await q2SealSha256Hex(packageBytes);
+  if (packageSha256 !== Q2_SEAL_PACKAGE_SHA256) {
+    Q2_SEAL_STATE.phase = "stopped";
+    Q2_SEAL_STATE.stopLines = ["Package identity mismatch — the fetched seal package does not match the build-baked identity.", "Expected: " + Q2_SEAL_PACKAGE_SHA256 + " (" + q2SealShort(Q2_SEAL_PACKAGE_SHA256) + ")", "Actual: " + packageSha256 + " (" + q2SealShort(packageSha256) + ")", "The package was not imported and no run was started."];
+    q2SealRenderStop(Q2_SEAL_STATE.stopLines);
+    return;
+  }
+  let api;
+  try {
+    const blobUrl = URL.createObjectURL(new Blob([packageBytes], { type: "text/javascript" }));
+    Q2_SEAL_STATE.packageBlobUrl = blobUrl;
+    const mod = await import(blobUrl);
+    api = mod.Q2_SEAL_PACKAGE || mod.default;
+    if (!api) throw new Error("package exports no Q2_SEAL_PACKAGE API object");
+    await api.ready;
+  } catch (e) {
+    Q2_SEAL_STATE.phase = "stopped";
+    const failures = (api && api.verification && api.verification.failures) ? api.verification.failures.map((f) => f.file + ": " + f.problem).join(", ") : String((e && e.message) || e);
+    Q2_SEAL_STATE.stopLines = ["The seal package refused itself.", "Failures: " + failures, "No run was started."];
+    q2SealRenderStop(Q2_SEAL_STATE.stopLines);
+    return;
+  }
+  if (api.manifest.comparatorPin !== Q2_SEAL_SOURCE_PIN) {
+    Q2_SEAL_STATE.phase = "stopped";
+    Q2_SEAL_STATE.stopLines = ["Package comparator pin mismatch — the package's manifest does not name the build-baked source pin.", "Manifest pin: " + String(api.manifest.comparatorPin), "Build-baked pin: " + Q2_SEAL_SOURCE_PIN, "Start was never armed."];
+    q2SealRenderStop(Q2_SEAL_STATE.stopLines);
+    return;
+  }
+  const el = [...document.scripts].find((s) => /\/app-260\.js($|\?)/.test(s.src || ""));
+  if (!el) {
+    Q2_SEAL_STATE.phase = "stopped";
+    Q2_SEAL_STATE.stopLines = ["The app bundle script element (app-260.js) was not found in this page.", "No run was started."];
+    q2SealRenderStop(Q2_SEAL_STATE.stopLines);
+    return;
+  }
+  let bundleSha256;
+  try {
+    const res = await fetch(el.src, { cache: "no-store" });
+    if (!res.ok) throw new Error("bundle fetch failed: HTTP " + res.status);
+    bundleSha256 = await q2SealSha256Hex(await res.arrayBuffer());
+  } catch (e) {
+    Q2_SEAL_STATE.phase = "stopped";
+    Q2_SEAL_STATE.stopLines = ["The app bundle could not be measured.", "Reason: " + String((e && e.message) || e), "No run was started."];
+    q2SealRenderStop(Q2_SEAL_STATE.stopLines);
+    return;
+  }
+  const precheck = q2SealOwnershipPrecheck();
+  Q2_SEAL_STATE.measured = { packageSha256, bundleSha256 };
+  Q2_SEAL_STATE.api = api;
+  Q2_SEAL_STATE.precheck = precheck;
+  if (precheck.state !== "OWNED") {
+    Q2_SEAL_STATE.phase = "stopped";
+    Q2_SEAL_STATE.stopLines = ["Provider pre-check failed: " + precheck.problem, "The comparator surface is not the one this app instance installed, so no run can be trusted from it.", "Arm was never offered."];
+    q2SealRenderStop(Q2_SEAL_STATE.stopLines);
+    return;
+  }
+  Q2_SEAL_STATE.phase = "ready";
+  q2SealRenderReady();
+}
+async function q2SealStartRun() {
+  if (Q2_SEAL_STATE.running || Q2_SEAL_STATE.consumed) return;
+  Q2_SEAL_STATE.running = true;
+  Q2_SEAL_STATE.consumed = true;
+  q2SealRenderRunning();
+  let record;
+  try {
+    record = await Q2_SEAL_STATE.api.runQ2Comparison({
+      deviceLabel: Q2_SEAL_STATE.label,
+      sourcePin: Q2_SEAL_SOURCE_PIN,
+      sealPackageSha256: Q2_SEAL_STATE.measured.packageSha256,
+      readerBundleSha256: Q2_SEAL_STATE.measured.bundleSha256,
+      annotation: Q2_SEAL_STATE.annotation || null,
+    });
+  } catch (e) {
+    record = { recordType: "q2-route1-comparison-run", runId: "glue-run-error", deviceLabel: Q2_SEAL_STATE.label, comparator: { sourcePin: Q2_SEAL_SOURCE_PIN }, result: { state: "VOID", reason: "run-error", detail: String((e && e.stack) || e) }, error: String((e && e.message) || e) };
+  }
+  Q2_SEAL_STATE.running = false;
+  Q2_SEAL_STATE.record = record;
+  Q2_SEAL_STATE.phase = "done";
+  q2SealRenderDone(record);
+}
+document.addEventListener("click", (e) => {
+  const t = e.target && e.target.closest ? e.target.closest("button") : null;
+  if (!t) return;
+  if (t.id === "q2SealOpen") { e.preventDefault(); q2SealOpenEntry(); return; }
+  if (t.id === "q2SealClose") { q2SealClosePanel(); return; }
+  if (t.id === "q2SealArm") {
+    const sel = document.querySelector('input[name="q2SealLabel"]:checked');
+    if (!sel) return;
+    Q2_SEAL_STATE.label = sel.value;
+    Q2_SEAL_STATE.annotation = (document.getElementById("q2SealAnnotation")?.value || "").trim();
+    Q2_SEAL_STATE.phase = "armed";
+    q2SealRenderArmed();
+    return;
+  }
+  if (t.id === "q2SealStart") { q2SealStartRun(); return; }
+  if (t.id === "q2SealCopy") {
+    const txt = document.getElementById("q2SealRecord")?.textContent || "";
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => { t.textContent = "Copied ✓"; }).catch(() => { t.textContent = "Copy failed — select the record manually"; });
+    return;
+  }
+  if (t.id === "q2SealShare") {
+    const txt = document.getElementById("q2SealRecord")?.textContent || "";
+    if (navigator.share) navigator.share({ title: "Q2 comparison record", text: txt }).catch(() => {});
+    return;
+  }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (t && t.name === "q2SealLabel") {
+    const arm = document.getElementById("q2SealArm");
+    if (arm) arm.disabled = false;
+  }
+});
+/* ── end Q2 in-app seal entry ── */
+/* ── Device state backup entry (added in app-261) ──
+   Setup entry for the device-backup mechanism (design DB-1..DB-6 +
+   Addendum 1 A1/A2/A3/A4). One contiguous block: removing it and
+   reverting the version token reproduces the released app-260.js
+   byte-for-byte. It patches no shipped function and edits no shipped
+   block: it composes its daily-use section after the Q2 comparison
+   section's markup (by wrapping the readout markup function the seal
+   glue already wrapped), and opens its entry screen as an overlay
+   panel on top of the running app.
+   Capture performs NO storage writes (readonly transaction + raw
+   localStorage reads, bracketed). Restore writes ONLY through the
+   designed step sequence (one readwrite transaction per IDB store,
+   then the three localStorage families), only after the A1 five-step
+   verification has passed, and only in the armed two-step flow.
+   The live access token and every secret-class/unclassifiable
+   settings key are excluded from every package (name-and-presence
+   inventory only — no values, no value hashes). All run state lives
+   in this block's module scope; the block installs no window global. */
+const Q2_BK_FORMAT = "opal-reader-device-backup/1";
+const Q2_BK_DB_NAME = "opalreader.v1";
+const Q2_BK_STORES = ["books", "settings", "epubs", "audio"];
+const Q2_BK_PAYLOAD_STORES = ["books", "settings", "epubs"];
+const Q2_BK_TOMBSTONE_KEY = "opalreader.deletedBooks.v1";
+const Q2_BK_OUTBOX_KEY = "opalreader.shelfOutbox.v1";
+// Third raw localStorage family (DB-G4 bounded correction, Julie's
+// final four-key disposition): the system-voice fallback prefs are
+// PRESERVED in scope; the other three out-of-scope keys
+// (playbackCheckpoint, geminiQuotaBadge, playdbg) stay excluded.
+const Q2_BK_VOICE_PREFS_KEY = "opalreader.systemVoicePrefs.v1";
+const Q2_BK_LS_FAMILIES = ["tombstones", "shelfOutbox", "systemVoicePrefs"];
+const Q2_BK_LS_KEYS = { tombstones: Q2_BK_TOMBSTONE_KEY, shelfOutbox: Q2_BK_OUTBOX_KEY, systemVoicePrefs: Q2_BK_VOICE_PREFS_KEY };
+const Q2_BK_SETTINGS_SHARED = ["voiceProfiles", "monthlyCap", "usage", "fishModel", "openaiModel", "geminiModel", "geminiLane", "playbackRate", "shelfApiBase", "shelfLogEnabled"];
+const Q2_BK_SETTINGS_LOCAL_ONLY = ["apiBase", "accessToken"];
+const Q2_BK_SECRET_KEY_PATTERN = /token|secret|password|passwd|api[-_]?key|credential/i;
+const Q2_BK_BLOB_REF_KEY = "$opal.blobRef";
+const Q2_BK_BLOB_MARKER_KEY = "$opal.blob";
+const Q2_BK_STATE = { phase: "idle", mode: "backup", measured: null, label: null, context: "device", readout: null, running: false, record: null, pkg: null, lastCapture: null, intake: null, partial: null };
+async function q2BkSha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function q2BkSha256HexOfString(s) { return q2BkSha256Hex(new TextEncoder().encode(s)); }
+function q2BkShort(h) { return typeof h === "string" ? h.slice(0, 12) + "…" : "—"; }
+// ── Canonical form: the comparator's own method (canonical.mjs),
+// vendored so backup digests and comparator digests agree: object
+// keys sorted (UTF-16 code-unit order), arrays in order, undefined-
+// valued keys dropped; every Blob first measured (byte length +
+// SHA-256) and replaced by its marker before canonicalisation. ──
+async function q2BkMeasureValue(value) {
+  if (value instanceof Blob) {
+    const bytes = new Uint8Array(await value.arrayBuffer());
+    return { [Q2_BK_BLOB_MARKER_KEY]: [bytes.byteLength, await q2BkSha256Hex(bytes)] };
+  }
+  if (Array.isArray(value)) {
+    const out = [];
+    for (const item of value) out.push(await q2BkMeasureValue(item));
+    return out;
+  }
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const key of Object.keys(value)) out[key] = await q2BkMeasureValue(value[key]);
+    return out;
+  }
+  return value;
+}
+function q2BkCanonicalString(measured) {
+  if (measured === null) return "null";
+  const t = typeof measured;
+  if (t === "number" || t === "boolean") return JSON.stringify(measured);
+  if (t === "string") return JSON.stringify(measured);
+  if (Array.isArray(measured)) return "[" + measured.map((v) => (v === undefined ? "null" : q2BkCanonicalString(v))).join(",") + "]";
+  if (t === "object") {
+    const keys = Object.keys(measured).filter((k) => measured[k] !== undefined).sort();
+    return "{" + keys.map((k) => JSON.stringify(k) + ":" + q2BkCanonicalString(measured[k])).join(",") + "}";
+  }
+  return "null";
+}
+function q2BkKeyOrder(a, b) {
+  const ca = q2BkCanonicalString(a), cb = q2BkCanonicalString(b);
+  return ca < cb ? -1 : ca > cb ? 1 : 0;
+}
+function q2BkSortEntries(entries) { return [...entries].sort((x, y) => q2BkKeyOrder(x[0], y[0])); }
+// ── Serializability walk (design §3.2): JSON types + Blob only.
+// Anything else refuses by named state; nothing is silently degraded. ──
+class Q2BkUnserializable extends Error {
+  constructor(store, key, kind) { super("capture-unserializable-value"); this.refusal = "capture-unserializable-value"; this.store = store; this.key = key; this.kind = kind; }
+}
+function q2BkIsPlainObject(v) {
+  if (!v || typeof v !== "object") return false;
+  const p = Object.getPrototypeOf(v);
+  return p === Object.prototype || p === null;
+}
+async function q2BkBlobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  const CHUNK = 32768;
+  for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  return { base64: btoa(bin), bytes };
+}
+function q2BkBase64ToBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+// Serialize one live value into the package form: Blobs become
+// {"$opal.blobRef": n} references into binTable (each distinct Blob
+// once, by content hash + type); throws Q2BkUnserializable otherwise.
+async function q2BkSerializeValue(value, binTable, store, key) {
+  if (value instanceof Blob) {
+    const { base64, bytes } = await q2BkBlobToBase64(value);
+    const sha256 = await q2BkSha256Hex(bytes);
+    const type = typeof value.type === "string" ? value.type : "";
+    let idx = binTable.findIndex((e) => e.sha256 === sha256 && e.type === type);
+    if (idx < 0) { binTable.push({ base64, length: bytes.byteLength, sha256, type }); idx = binTable.length - 1; }
+    return { [Q2_BK_BLOB_REF_KEY]: idx };
+  }
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Q2BkUnserializable(store, key, "non-finite-number");
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const out = [];
+    for (const item of value) out.push(await q2BkSerializeValue(item, binTable, store, key));
+    return out;
+  }
+  if (q2BkIsPlainObject(value)) {
+    const keys = Object.keys(value);
+    if (keys.length === 1 && keys[0] === Q2_BK_BLOB_REF_KEY) throw new Q2BkUnserializable(store, key, "blobref-marker-collision");
+    const out = {};
+    for (const k of keys) {
+      if (value[k] === undefined) continue; // JSON semantics: undefined-valued keys drop (the comparator's canonical form agrees)
+      out[k] = await q2BkSerializeValue(value[k], binTable, store, key);
+    }
+    return out;
+  }
+  throw new Q2BkUnserializable(store, key, value && value.constructor ? value.constructor.name : typeof value);
+}
+function q2BkResolveRefs(value, binTable) {
+  if (Array.isArray(value)) return value.map((v) => q2BkResolveRefs(v, binTable));
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value);
+    if (keys.length === 1 && keys[0] === Q2_BK_BLOB_REF_KEY && typeof value[Q2_BK_BLOB_REF_KEY] === "number") {
+      const e = binTable[value[Q2_BK_BLOB_REF_KEY]];
+      return { [Q2_BK_BLOB_MARKER_KEY]: [e.length, e.sha256] };
+    }
+    const out = {};
+    for (const k of keys) out[k] = q2BkResolveRefs(value[k], binTable);
+    return out;
+  }
+  return value;
+}
+function q2BkDeserializeValue(value, binTable) {
+  if (Array.isArray(value)) return value.map((v) => q2BkDeserializeValue(v, binTable));
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value);
+    if (keys.length === 1 && keys[0] === Q2_BK_BLOB_REF_KEY && typeof value[Q2_BK_BLOB_REF_KEY] === "number") {
+      const e = binTable[value[Q2_BK_BLOB_REF_KEY]];
+      return new Blob([q2BkBase64ToBytes(e.base64)], { type: e.type || "" });
+    }
+    const out = {};
+    for (const k of keys) out[k] = q2BkDeserializeValue(value[k], binTable);
+    return out;
+  }
+  return value;
+}
+async function q2BkSectionDigest(serializedEntries, binTable) {
+  const measured = q2BkSortEntries(serializedEntries).map(([k, v]) => [k, q2BkResolveRefs(v, binTable)]);
+  return q2BkSha256HexOfString(q2BkCanonicalString(measured));
+}
+async function q2BkKeysDigest(serializedEntries) {
+  const keys = q2BkSortEntries(serializedEntries).map(([k]) => k);
+  return q2BkSha256HexOfString(q2BkCanonicalString(keys));
+}
+async function q2BkPayloadDigest(payload) {
+  const binTable = payload.binaryTable.map((e) => ({ base64: e.base64, length: e.length, sha256: e.sha256, type: e.type }));
+  const sections = {};
+  for (const store of Q2_BK_PAYLOAD_STORES)
+    sections[store] = q2BkSortEntries(payload.sections[store]).map(([k, v]) => [k, q2BkResolveRefs(v, payload.binaryTable)]);
+  const input = { sections, localStorage: { tombstones: payload.localStorage.tombstones ?? null, shelfOutbox: payload.localStorage.shelfOutbox ?? null, systemVoicePrefs: payload.localStorage.systemVoicePrefs ?? null }, binaryTable: binTable };
+  return q2BkSha256HexOfString(q2BkCanonicalString(input));
+}
+// ── Settings classification (the comparator's project.mjs rule):
+// only the record key, the ten shared fields, and sharedUpdatedAt
+// enter the payload. Everything else — the two named local-only keys,
+// any secret-class key, any unclassifiable key — is excluded by
+// default and inventoried by name and presence only. ──
+function q2BkIsSecretClassKey(key) { return Q2_BK_SETTINGS_LOCAL_ONLY.includes(key) || Q2_BK_SECRET_KEY_PATTERN.test(key); }
+function q2BkClassifySettings(record) {
+  const inventory = [];
+  const sanitized = {};
+  for (const key of Object.keys(record ?? {})) {
+    let cls;
+    if (key === "id") cls = "record-key";
+    else if (Q2_BK_SETTINGS_SHARED.includes(key)) cls = "shared";
+    else if (key === "sharedUpdatedAt") cls = "shared-timestamp";
+    else if (Q2_BK_SETTINGS_LOCAL_ONLY.includes(key)) cls = "local-only-named";
+    else cls = "unclassifiable";
+    const included = cls === "record-key" || cls === "shared" || cls === "shared-timestamp";
+    inventory.push({ key, class: cls, secretClass: q2BkIsSecretClassKey(key), disposition: included ? "included" : "excluded" });
+    if (included && record[key] !== undefined) sanitized[key] = record[key];
+  }
+  inventory.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return { inventory, sanitized };
+}
+// ── Shelf outbox readout (design §6 + A4): DIRECT parse only, never
+// the app's shelfOutbox() (whose legacy backfill would fabricate
+// identifiers at read time). Identity fields incl. queueId. ──
+function q2BkParseOutbox(raw) {
+  if (raw === null || raw === undefined) return { present: false, parseOk: true, items: [] };
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { return { present: true, parseOk: false, items: [], reason: "outbox-value-unparseable" }; }
+  if (!Array.isArray(parsed)) return { present: true, parseOk: false, items: [], reason: "outbox-value-not-an-array" };
+  const items = parsed.map((it) => {
+    const o = it && typeof it === "object" ? it : {};
+    return {
+      queueId: typeof o.queueId === "string" ? o.queueId : null,
+      readId: typeof o.readId === "string" ? o.readId : null,
+      startedAt: typeof o.startedAt === "string" ? o.startedAt : null,
+      duration_seconds: typeof o.duration_seconds === "number" ? o.duration_seconds : null,
+      attempts: typeof o.attempts === "number" ? o.attempts : null,
+      lastStatus: typeof o.lastStatus === "string" ? o.lastStatus : null,
+      hasLastError: o.lastError !== undefined && o.lastError !== null,
+    };
+  });
+  return { present: true, parseOk: true, items };
+}
+function q2BkSameShelfIdentity(a, b) {
+  if (!a || !b) return false;
+  if (a.present !== b.present || a.parseOk !== b.parseOk) return false;
+  if (a.items.length !== b.items.length) return false;
+  for (let i = 0; i < a.items.length; i++) {
+    const x = a.items[i], y = b.items[i];
+    for (const f of ["queueId", "readId", "startedAt", "duration_seconds", "attempts", "lastStatus", "hasLastError"])
+      if (x[f] !== y[f]) return false;
+  }
+  return true;
+}
+// ── Fail-closed database open (the comparator's discipline): no
+// version argument, an upgrade attempt aborts and refuses, a missing
+// store refuses. The app's own opening helper is never called. ──
+class Q2BkDbError extends Error { constructor(code) { super(code); this.code = code; } }
+function q2BkOpenDb() {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (code) => { if (!settled) { settled = true; reject(new Q2BkDbError(code)); } };
+    let req;
+    try { req = indexedDB.open(Q2_BK_DB_NAME); } catch { fail("capture-db-open-failed"); return; }
+    req.onupgradeneeded = () => { try { req.transaction?.abort(); } catch { /* the open fails either way */ } fail("capture-db-upgrade-attempted"); };
+    req.onblocked = () => fail("capture-db-blocked");
+    req.onerror = () => fail("capture-db-open-failed");
+    req.onsuccess = () => {
+      if (settled) { try { req.result?.close(); } catch { /* ignore */ } return; }
+      const db = req.result;
+      const missing = Q2_BK_STORES.filter((s) => !db.objectStoreNames.contains(s));
+      if (missing.length) { try { db.close(); } catch { /* ignore */ } fail("capture-store-missing"); return; }
+      settled = true;
+      resolve(db);
+    };
+  });
+}
+function q2BkReqPromise(req) {
+  return new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error ?? new Error("idb request failed")); });
+}
+function q2BkCursorEntries(store) {
+  return new Promise((resolve, reject) => {
+    const out = [];
+    const req = store.openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) { resolve(out); return; }
+      out.push([cursor.key, cursor.value]);
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error ?? new Error("cursor failed"));
+  });
+}
+// ── Activity posture (design §4 item 3): the comparator surface's
+// readings, reused. Capture never races a live writer. ──
+function q2BkPostureReading() {
+  const p = window.__opalQ2ComparatorSurface;
+  if (typeof p !== "function") return { readable: false };
+  let s;
+  try { s = p(); } catch { return { readable: false }; }
+  if (!s || typeof s !== "object") return { readable: false };
+  const timers = [];
+  if (Array.isArray(s.books)) for (const b of s.books) timers.push(!!b.syncTimerArmed);
+  else return { readable: false };
+  if (s.currentBook === undefined) return { readable: false };
+  if (s.currentBook) timers.push(!!s.currentBook.syncTimerArmed);
+  return {
+    readable: true,
+    anySyncTimerArmed: timers.some(Boolean),
+    syncInFlight: s.syncStatus === "Syncing…",
+    syncStatus: typeof s.syncStatus === "string" ? s.syncStatus : null,
+    shelfFlushing: s.shelf?.flushing === true,
+    shelfFlushAgain: s.shelf?.flushAgain === true,
+    sessionGathering: s.session?.gathering === true,
+  };
+}
+function q2BkPostureSettled(r) {
+  return r.readable && !r.anySyncTimerArmed && !r.syncInFlight && !r.shelfFlushing && !r.shelfFlushAgain && !r.sessionGathering;
+}
+async function q2BkWaitPosture(timeoutMs) {
+  const t0 = Date.now();
+  let last = q2BkPostureReading();
+  while (!q2BkPostureSettled(last)) {
+    if (Date.now() - t0 > timeoutMs) return { settled: false, reading: last };
+    await new Promise((r) => setTimeout(r, 400));
+    last = q2BkPostureReading();
+  }
+  return { settled: true, reading: last };
+}
+// ── Capture (design §§1/3/4 + A4). Zero writes, proven by battery
+// instrumentation. Refusals emit records, never partial packages. ──
+function q2BkNewRunId() { return "bk-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1e6).toString(36); }
+async function q2BkRunCapture() {
+  const startedAt = new Date().toISOString();
+  const record = {
+    recordType: "opal-device-backup-capture", runId: q2BkNewRunId(), deviceLabel: Q2_BK_STATE.label,
+    startedAt, finishedAt: null,
+    app: { uiVersion: "1.4.121", bundleName: "app-261.js", bundleSha256: Q2_BK_STATE.measured?.bundleSha256 ?? null },
+    result: null, shelfReadout: Q2_BK_STATE.readout, manifest: null, packageFile: null, export: null,
+  };
+  const refuse = (refusal, detail) => { record.result = { state: "REFUSED", refusal, ...(detail ? { detail } : {}) }; record.finishedAt = new Date().toISOString(); return record; };
+  // §4 item 3: posture must settle before any capture read.
+  const posture = await q2BkWaitPosture(10000);
+  if (!posture.settled) return refuse("capture-state-unstable", { stage: "posture", reading: posture.reading });
+  // Bracket A + readout-vs-capture identity (A4: identity, not count).
+  const bracketA = { tombstones: localStorage.getItem(Q2_BK_TOMBSTONE_KEY), shelfOutbox: localStorage.getItem(Q2_BK_OUTBOX_KEY), systemVoicePrefs: localStorage.getItem(Q2_BK_VOICE_PREFS_KEY) };
+  const readoutNow = q2BkParseOutbox(bracketA.shelfOutbox);
+  if (!q2BkSameShelfIdentity(Q2_BK_STATE.readout, readoutNow))
+    return refuse("capture-shelf-state-changed", { stage: "readout-vs-capture", readoutAtArm: Q2_BK_STATE.readout, readoutAtCapture: readoutNow });
+  let db;
+  try { db = await q2BkOpenDb(); } catch (e) { return refuse(e.code ?? "capture-db-open-failed"); }
+  let live;
+  try {
+    const tx = db.transaction(Q2_BK_STORES, "readonly");
+    const txDone = new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(new Error("tx-aborted")); tx.onerror = () => reject(tx.error ?? new Error("tx-failed")); });
+    const schema = Q2_BK_STORES.map((name) => {
+      const os = tx.objectStore(name);
+      return { store: name, keyPath: os.keyPath ?? null, autoIncrement: os.autoIncrement === true };
+    });
+    const booksP = q2BkCursorEntries(tx.objectStore("books"));
+    const settingsP = q2BkReqPromise(tx.objectStore("settings").get("main"));
+    const epubsP = q2BkCursorEntries(tx.objectStore("epubs"));
+    const audioP = q2BkCursorEntries(tx.objectStore("audio"));
+    const [booksRaw, settingsRaw, epubsRaw, audioRaw] = await Promise.all([booksP, settingsP, epubsP, audioP]);
+    await txDone;
+    let audioBytes = 0, audioBlobs = 0;
+    const sumBlobs = (v) => {
+      if (v instanceof Blob) { audioBytes += v.size; audioBlobs++; return; }
+      if (Array.isArray(v)) { for (const x of v) sumBlobs(x); return; }
+      if (v && typeof v === "object") for (const k of Object.keys(v)) sumBlobs(v[k]);
+    };
+    for (const [, v] of audioRaw) sumBlobs(v);
+    live = { schema, booksRaw, settingsRaw, epubsRaw, audio: { present: db.objectStoreNames.contains("audio"), rowCount: audioRaw.length, aggregateBytes: audioBytes, blobCount: audioBlobs }, dbVersion: db.version };
+  } catch (e) {
+    return refuse("capture-incomplete", { stage: "idb-read", error: String((e && e.message) || e) });
+  } finally { try { db.close(); } catch { /* ignore */ } }
+  const bracketB = { tombstones: localStorage.getItem(Q2_BK_TOMBSTONE_KEY), shelfOutbox: localStorage.getItem(Q2_BK_OUTBOX_KEY), systemVoicePrefs: localStorage.getItem(Q2_BK_VOICE_PREFS_KEY) };
+  if (bracketA.tombstones !== bracketB.tombstones || bracketA.shelfOutbox !== bracketB.shelfOutbox || bracketA.systemVoicePrefs !== bracketB.systemVoicePrefs)
+    return refuse("capture-state-unstable", { stage: "bracket" });
+  // Serialize + digest (outside the transaction).
+  const binTable = [];
+  let payload;
+  try {
+    const ser = async (entries, store) => {
+      const out = [];
+      for (const [k, v] of entries) out.push([k, await q2BkSerializeValue(v, binTable, store, k)]);
+      return q2BkSortEntries(out);
+    };
+    const booksSer = await ser(live.booksRaw, "books");
+    const epubsSer = await ser(live.epubsRaw, "epubs");
+    let settingsSer = [], settingsInventory = [];
+    if (live.settingsRaw !== undefined && live.settingsRaw !== null) {
+      if (!q2BkIsPlainObject(live.settingsRaw)) return refuse("capture-incomplete", { stage: "settings-shape" });
+      const { inventory, sanitized } = q2BkClassifySettings(live.settingsRaw);
+      settingsInventory = inventory;
+      settingsSer = [["main", await q2BkSerializeValue(sanitized, binTable, "settings", "main")]];
+    }
+    payload = {
+      sections: { books: booksSer, settings: settingsSer, epubs: epubsSer },
+      localStorage: { tombstones: bracketA.tombstones, shelfOutbox: bracketA.shelfOutbox, systemVoicePrefs: bracketA.systemVoicePrefs },
+      binaryTable: binTable,
+    };
+    const sections = {};
+    for (const store of Q2_BK_PAYLOAD_STORES) {
+      sections[store] = {
+        rowCount: payload.sections[store].length,
+        keysDigest: await q2BkKeysDigest(payload.sections[store]),
+        digest: await q2BkSectionDigest(payload.sections[store], binTable),
+      };
+    }
+    sections.settings.present = settingsSer.length > 0;
+    const lsSection = async (raw) => raw === null ? { present: false, digest: null } : { present: true, digest: await q2BkSha256HexOfString(raw) };
+    const manifest = {
+      format: Q2_BK_FORMAT, deviceLabel: Q2_BK_STATE.label, capturedAt: new Date().toISOString(), clock: "device-asserted",
+      app: record.app, database: { name: Q2_BK_DB_NAME, version: live.dbVersion },
+      storeSchema: live.schema, sections,
+      localStorage: { tombstones: await lsSection(bracketA.tombstones), shelfOutbox: await lsSection(bracketA.shelfOutbox), systemVoicePrefs: await lsSection(bracketA.systemVoicePrefs) },
+      audioInventory: live.audio, settingsKeyInventory: settingsInventory,
+      shelfReadout: Q2_BK_STATE.readout, payloadDigest: await q2BkPayloadDigest(payload),
+    };
+    const pkg = { format: Q2_BK_FORMAT, manifest, payload };
+    const packageText = JSON.stringify(pkg);
+    const fileBytes = new TextEncoder().encode(packageText);
+    const fileSha256 = await q2BkSha256Hex(fileBytes);
+    // A1 self-verification: the emitted package must pass the same
+    // five-step sequence a restore will run, against its own anchor.
+    const selfCheck = await q2BkVerifyPackageBytes(fileBytes, fileSha256);
+    if (!selfCheck.ok) return refuse("capture-incomplete", { stage: "self-verify", step: selfCheck.step });
+    const fileName = "opal-reader-backup-" + Q2_BK_STATE.label + "-" + manifest.capturedAt.replace(/[:.]/g, "-") + ".json";
+    record.manifest = manifest;
+    record.packageFile = { fileName, bytes: fileBytes.byteLength, sha256: fileSha256 };
+    record.result = { state: "CAPTURED" };
+    record.finishedAt = new Date().toISOString();
+    const file = new File([packageText], fileName, { type: "application/json" });
+    if (!q2BkCanShareFiles(file)) {
+      record.result = { state: "REFUSED", refusal: "backup-export-unavailable", detail: { stage: "export", note: "package built and verified in memory; share-with-files is unavailable in this context, so it was not delivered by any lesser channel" } };
+      record.export = { state: "backup-export-unavailable" };
+      return record;
+    }
+    record.export = { state: "offered" };
+    Q2_BK_STATE.pkg = { packageText, fileSha256, fileName, file, verified: true, exportState: "offered" };
+    return record;
+  } catch (e) {
+    if (e instanceof Q2BkUnserializable) return refuse(e.refusal, { store: e.store, key: String(e.key), kind: e.kind });
+    return refuse("capture-incomplete", { stage: "serialize", error: String((e && e.message) || e) });
+  }
+}
+function q2BkCanShareFiles(file) {
+  try {
+    if (typeof navigator.share !== "function") return false;
+    if (typeof navigator.canShare === "function") return navigator.canShare({ files: [file] }) === true;
+    return true;
+  } catch { return false; }
+}
+// ── A1 verification: five steps, all before any write anywhere. ──
+async function q2BkVerifyPackageBytes(bytes, expectedFileSha256) {
+  if (!expectedFileSha256 || typeof expectedFileSha256 !== "string")
+    return { ok: false, refusal: "restore-package-invalid", step: "external-anchor-missing" };
+  const actualSha = await q2BkSha256Hex(bytes); // (i) file SHA-256 = externally recorded value
+  if (actualSha !== expectedFileSha256.toLowerCase()) return { ok: false, refusal: "restore-package-invalid", step: "file-sha256" };
+  let pkg;
+  try { pkg = JSON.parse(new TextDecoder().decode(bytes)); } catch { return { ok: false, refusal: "restore-package-invalid", step: "parse" }; }
+  if (!pkg || pkg.format !== Q2_BK_FORMAT || !pkg.manifest || !pkg.payload) // (ii) parse + format id
+    return { ok: false, refusal: "restore-package-invalid", step: "format" };
+  const { manifest, payload } = pkg;
+  const payloadDigest = await q2BkPayloadDigest(payload); // (iii) whole-payload digest
+  if (payloadDigest !== manifest.payloadDigest) return { ok: false, refusal: "restore-package-invalid", step: "payload-digest" };
+  for (const store of Q2_BK_PAYLOAD_STORES) { // (iv) per-section digests + counts
+    const entries = payload.sections?.[store];
+    if (!Array.isArray(entries)) return { ok: false, refusal: "restore-package-invalid", step: "section-missing:" + store };
+    const digest = await q2BkSectionDigest(entries, payload.binaryTable);
+    const keysDigest = await q2BkKeysDigest(entries);
+    const m = manifest.sections?.[store];
+    if (!m || m.digest !== digest || m.keysDigest !== keysDigest || m.rowCount !== entries.length)
+      return { ok: false, refusal: "restore-package-invalid", step: "section-digest:" + store };
+  }
+  for (const fam of Q2_BK_LS_FAMILIES) {
+    const raw = payload.localStorage?.[fam];
+    const m = manifest.localStorage?.[fam];
+    if (!m) return { ok: false, refusal: "restore-package-invalid", step: "section-missing:localStorage." + fam };
+    if (raw === null || raw === undefined) { if (m.present !== false) return { ok: false, refusal: "restore-package-invalid", step: "section-digest:localStorage." + fam }; }
+    else if (m.present !== true || m.digest !== await q2BkSha256HexOfString(raw))
+      return { ok: false, refusal: "restore-package-invalid", step: "section-digest:localStorage." + fam };
+  }
+  // (v) binary-reference completeness: every referenced Blob present,
+  // decoded length + content SHA-256 equal to its table entry.
+  const table = payload.binaryTable;
+  if (!Array.isArray(table)) return { ok: false, refusal: "restore-package-invalid", step: "binary-table" };
+  const referenced = new Set();
+  const collectRefs = (v) => {
+    if (Array.isArray(v)) { for (const x of v) collectRefs(x); return; }
+    if (v && typeof v === "object") {
+      const keys = Object.keys(v);
+      if (keys.length === 1 && keys[0] === Q2_BK_BLOB_REF_KEY && typeof v[Q2_BK_BLOB_REF_KEY] === "number") { referenced.add(v[Q2_BK_BLOB_REF_KEY]); return; }
+      for (const k of keys) collectRefs(v[k]);
+    }
+  };
+  for (const store of Q2_BK_PAYLOAD_STORES) for (const [, v] of payload.sections[store]) collectRefs(v);
+  for (const idx of referenced) {
+    const e = table[idx];
+    if (!e) return { ok: false, refusal: "restore-package-invalid", step: "binary-reference-missing:" + idx };
+    let decoded;
+    try { decoded = q2BkBase64ToBytes(e.base64); } catch { return { ok: false, refusal: "restore-package-invalid", step: "binary-undecodable:" + idx }; }
+    if (decoded.byteLength !== e.length || await q2BkSha256Hex(decoded) !== e.sha256)
+      return { ok: false, refusal: "restore-package-invalid", step: "binary-content:" + idx };
+  }
+  return { ok: true, manifest, payload };
+}
+// ── Restore (design §5 + A1 + A2). Per-store atomic steps; the
+// sequence is NOT atomic and never claims to be: a mid-sequence
+// failure leaves the context PARTIALLY MODIFIED, recorded as such,
+// with exactly two recoveries (re-run, or restore the pre-restore
+// capture). Writes use put(value) with NO explicit key argument —
+// every store has inline keyPath "id" (A2). ──
+async function q2BkVerifyRestoredState(manifest, payload) {
+  let db;
+  try { db = await q2BkOpenDb(); } catch { return { ok: false, stage: "verify-open" }; }
+  try {
+    const tx = db.transaction(Q2_BK_PAYLOAD_STORES, "readonly");
+    const txDone = new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(new Error("tx-aborted")); tx.onerror = () => reject(tx.error ?? new Error("tx-failed")); });
+    const reads = {};
+    for (const store of Q2_BK_PAYLOAD_STORES) reads[store] = q2BkCursorEntries(tx.objectStore(store));
+    const live = {};
+    for (const store of Q2_BK_PAYLOAD_STORES) live[store] = await reads[store];
+    await txDone;
+    const binTable = [];
+    for (const store of Q2_BK_PAYLOAD_STORES) {
+      const ser = [];
+      for (const [k, v] of live[store]) ser.push([k, await q2BkSerializeValue(v, binTable, store, k)]);
+      const digest = await q2BkSectionDigest(q2BkSortEntries(ser), binTable);
+      if (digest !== manifest.sections[store].digest) return { ok: false, stage: "digest:" + store };
+      if (ser.length !== manifest.sections[store].rowCount) return { ok: false, stage: "count:" + store };
+    }
+    for (const fam of Q2_BK_LS_FAMILIES) {
+      const key = Q2_BK_LS_KEYS[fam];
+      const raw = localStorage.getItem(key);
+      const m = manifest.localStorage[fam];
+      if (raw === null) { if (m.present !== false) return { ok: false, stage: "localStorage:" + fam }; }
+      else if (m.present !== true || m.digest !== await q2BkSha256HexOfString(raw)) return { ok: false, stage: "localStorage:" + fam };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, stage: "verify-read", error: String((e && e.message) || e) };
+  } finally { try { db.close(); } catch { /* ignore */ } }
+}
+async function q2BkExecuteRestore(pkg) {
+  const { manifest, payload } = pkg;
+  const steps = [
+    ...Q2_BK_PAYLOAD_STORES.map((store) => ({ id: "idb:" + store, kind: "idb", store })),
+    { id: "localStorage:tombstones", kind: "ls", fam: "tombstones", key: Q2_BK_TOMBSTONE_KEY },
+    { id: "localStorage:shelfOutbox", kind: "ls", fam: "shelfOutbox", key: Q2_BK_OUTBOX_KEY },
+    { id: "localStorage:systemVoicePrefs", kind: "ls", fam: "systemVoicePrefs", key: Q2_BK_VOICE_PREFS_KEY },
+  ];
+  const completed = [];
+  let db;
+  try { db = await q2BkOpenDb(); } catch (e) {
+    return { outcome: "failed", refusal: "restore-write-failed", failedStep: "database-open", completed, pending: steps.map((s) => s.id), detail: { code: e.code ?? "capture-db-open-failed" } };
+  }
+  const partial = async (failedStep, error) => {
+    try { db.close(); } catch { /* ignore */ }
+    return { outcome: "partial", state: "PARTIALLY MODIFIED", failedStep, completed: [...completed], pending: steps.map((s) => s.id).filter((id) => !completed.includes(id) && id !== failedStep), detail: { error: String((error && error.message) || error) } };
+  };
+  for (const step of steps) {
+    try {
+      if (step.kind === "idb") {
+        const values = payload.sections[step.store].map(([, v]) => q2BkDeserializeValue(v, payload.binaryTable));
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction([step.store], "readwrite");
+          tx.oncomplete = resolve;
+          tx.onabort = () => reject(tx.error ?? new Error("tx-aborted"));
+          tx.onerror = () => reject(tx.error ?? new Error("tx-failed"));
+          const os = tx.objectStore(step.store);
+          os.clear();
+          for (const v of values) os.put(v); // A2: NO explicit key argument (inline keyPath "id")
+        });
+      } else {
+        const raw = payload.localStorage[step.fam];
+        if (raw === null || raw === undefined) localStorage.removeItem(step.key);
+        else localStorage.setItem(step.key, raw);
+      }
+      completed.push(step.id);
+    } catch (e) {
+      return partial(step.id, e);
+    }
+  }
+  try { db.close(); } catch { /* ignore */ }
+  const verification = await q2BkVerifyRestoredState(manifest, payload);
+  if (!verification.ok) return { outcome: "failed", refusal: "restore-verification-failed", completed, detail: verification };
+  return { outcome: "restored", completed, verification: { digestsEqual: true } };
+}
+// ── Panel / presenter ──
+function q2BkSectionMarkup() {
+  return `<div class="q2-backup-entry"><h2>Device state backup (cutover prep)</h2><p class="muted">Back up this device's Reader state for the migration cutover, or restore a backup. Backups never contain your access token — you re-enter it by hand after a restore. Capture reads only; restore writes only through its confirmed steps.</p><div class="row"><button id="q2BkOpen" type="button" class="secondary">Open device backup</button></div></div>`;
+}
+const q2BkReadoutMarkupBase = q2ReadoutMarkup;
+q2ReadoutMarkup = function () { return q2BkReadoutMarkupBase() + q2BkSectionMarkup(); };
+function q2BkPanel() { return document.getElementById("q2BkPanel"); }
+function q2BkBody() { return document.getElementById("q2BkBody"); }
+function q2BkAlive() { return !!q2BkBody(); }
+function q2BkOpenPanel() {
+  let panel = q2BkPanel();
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "q2BkPanel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Device state backup");
+    panel.style.cssText = "position:fixed;inset:0;z-index:9999;overflow:auto;background:#fff;color:#222;padding:1rem;font:16px/1.55 -apple-system,BlinkMacSystemFont,sans-serif";
+    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:1rem"><strong>Device state backup (cutover prep)</strong><span id="q2BkCloseSlot"></span></div><div id="q2BkBody"></div>`;
+    document.body.appendChild(panel);
+  }
+  return panel;
+}
+function q2BkCloseButton() { return `<button id="q2BkClose" type="button" class="secondary">Close</button>`; }
+function q2BkClosePanel() { if (Q2_BK_STATE.running) return; q2BkPanel()?.remove(); if (Q2_BK_STATE.phase === "armed") Q2_BK_STATE.phase = "ready"; }
+function q2BkSetClose() { const s = document.getElementById("q2BkCloseSlot"); if (s) s.innerHTML = Q2_BK_STATE.running ? "" : q2BkCloseButton(); }
+function q2BkEsc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+function q2BkRenderRecord(record, headline, bg, extraButtons) {
+  if (!q2BkAlive()) return;
+  q2BkSetClose();
+  const body = q2BkBody();
+  body.innerHTML = `<div role="status" style="background:${bg};padding:1rem;margin-top:1rem"><strong id="q2BkVerdict"></strong></div><div style="margin-top:1rem"><div class="row"><button id="q2BkCopy" type="button" class="secondary">Copy record</button>${extraButtons ?? ""}<button id="q2BkAgain" type="button" class="secondary">Back to the start screen</button></div><pre id="q2BkRecord" style="white-space:pre-wrap;word-break:break-word;background:#f6f6f6;padding:1rem;margin-top:1rem"></pre></div>`;
+  body.querySelector("#q2BkVerdict").textContent = headline;
+  body.querySelector("#q2BkRecord").textContent = JSON.stringify(record, null, 2);
+}
+function q2BkRenderRefusal(record) {
+  const r = record.result?.refusal ?? "capture-incomplete";
+  q2BkRenderRecord(record, "⛔ REFUSED — " + r, "#f8d7da");
+}
+function q2BkRenderHome() {
+  if (!q2BkAlive()) return;
+  q2BkSetClose();
+  const m = Q2_BK_STATE.measured;
+  const mode = Q2_BK_STATE.mode;
+  const body = q2BkBody();
+  let html = `<div style="margin-top:1rem"><p>This device runs UI <strong>1.4.121</strong>. App bundle SHA-256 (measured live in this page load, once, when the entry opened): <span id="q2BkBundleHash"></span></p>`;
+  html += `<div><strong>What do you want to do?</strong></div><label style="margin-right:1rem"><input type="radio" name="q2BkMode" value="backup" ${mode === "backup" ? "checked" : ""}> Back up this device</label><label><input type="radio" name="q2BkMode" value="restore" ${mode === "restore" ? "checked" : ""}> Restore this device</label></div>`;
+  html += `<div style="margin-top:1rem"><div><strong>Which device is this?</strong></div><label style="margin-right:1rem"><input type="radio" name="q2BkLabel" value="iPhone" ${Q2_BK_STATE.label === "iPhone" ? "checked" : ""}> iPhone</label><label><input type="radio" name="q2BkLabel" value="iPad" ${Q2_BK_STATE.label === "iPad" ? "checked" : ""}> iPad</label></div>`;
+  if (mode === "backup") {
+    html += `<div class="row" style="margin-top:1rem"><button id="q2BkArm" type="button" class="primary" ${Q2_BK_STATE.label ? "" : "disabled"}>Arm backup</button></div><p class="muted tiny">Arming first reads the Shelf outbox (readout only) — that readout is compared with the state capture actually sees; any change stops the capture.</p>`;
+  } else {
+    html += `<div style="margin-top:1rem"><div><strong>Restore into:</strong></div><label style="margin-right:1rem"><input type="radio" name="q2BkContext" value="device" ${Q2_BK_STATE.context === "device" ? "checked" : ""}> This device (rollback — needs a verified pre-restore backup from this session)</label><label><input type="radio" name="q2BkContext" value="scratch" ${Q2_BK_STATE.context === "scratch" ? "checked" : ""}> Scratch proof context (disposable — nothing here is the device state)</label></div>`;
+    html += `<div style="margin-top:1rem"><label>Backup package file<input id="q2BkFile" type="file" accept="application/json,.json" class="field"></label></div><div style="margin-top:.5rem"><label>Package SHA-256 from the backup record<input id="q2BkAnchor" class="field" maxlength="64" placeholder="64 hex characters"></label></div><div id="q2BkIntake" style="margin-top:.5rem"></div>`;
+    html += `<div class="row" style="margin-top:1rem"><button id="q2BkArm" type="button" class="primary" disabled>Arm restore</button></div>`;
+  }
+  body.innerHTML = html;
+  body.querySelector("#q2BkBundleHash").textContent = m?.bundleSha256 ?? "—";
+}
+function q2BkRenderArmedBackup() {
+  if (!q2BkAlive()) return;
+  q2BkSetClose();
+  const ro = Q2_BK_STATE.readout;
+  const body = q2BkBody();
+  body.innerHTML = `<div style="margin-top:1rem"><p>Armed for <strong id="q2BkArmedLabel"></strong>. Shelf readout frozen at Arm:</p><pre id="q2BkReadoutView" style="white-space:pre-wrap;word-break:break-word;background:#f6f6f6;padding:1rem"></pre><p>Starting captures the device's Reader state (books, settings without credentials, EPUB files, all three local lists; the audio cache is inventoried only, never exported). Capture reads only — it writes nothing.</p><div class="row"><button id="q2BkStart" type="button" class="primary">Start backup</button></div></div>`;
+  body.querySelector("#q2BkArmedLabel").textContent = Q2_BK_STATE.label;
+  body.querySelector("#q2BkReadoutView").textContent = JSON.stringify(ro, null, 2);
+}
+function q2BkRenderArmedRestore() {
+  if (!q2BkAlive()) return;
+  q2BkSetClose();
+  const { manifest } = Q2_BK_STATE.intake;
+  const body = q2BkBody();
+  body.innerHTML = `<div style="margin-top:1rem"><p>Armed to restore the verified package for <strong id="q2BkArmedLabel"></strong> (captured <span id="q2BkArmedCapturedAt"></span>) into the <strong>${Q2_BK_STATE.context}</strong> context.</p><p>This will overwrite: the books, settings and EPUB stores and all three local lists. It will <strong>not</strong> touch: the audio cache, the app shell cache, or any credentials — restored settings arrive without them, and the app boots “Local only” until they are re-entered by hand.</p><div class="row"><button id="q2BkStart" type="button" class="primary">Restore</button></div></div>`;
+  body.querySelector("#q2BkArmedLabel").textContent = manifest.deviceLabel;
+  body.querySelector("#q2BkArmedCapturedAt").textContent = manifest.capturedAt;
+}
+function q2BkRenderRunning(what) {
+  if (!q2BkAlive()) return;
+  q2BkSetClose();
+  q2BkBody().innerHTML = `<div style="margin-top:1rem"><p><strong id="q2BkRunningLabel"></strong></p><p class="muted">Do not navigate away.</p></div>`;
+  q2BkBody().querySelector("#q2BkRunningLabel").textContent = what;
+}
+async function q2BkMeasureBundle() {
+  if (Q2_BK_STATE.measured) return Q2_BK_STATE.measured;
+  const el = [...document.scripts].find((s) => /\/app-261\.js($|\?)/.test(s.src || ""));
+  if (!el) return null;
+  const res = await fetch(el.src, { cache: "no-store" });
+  if (!res.ok) return null;
+  const bundleSha256 = await q2BkSha256Hex(await res.arrayBuffer());
+  Q2_BK_STATE.measured = { bundleSha256 };
+  return Q2_BK_STATE.measured;
+}
+async function q2BkOpenEntry() {
+  q2BkOpenPanel();
+  if (Q2_BK_STATE.phase === "done" && Q2_BK_STATE.record) { q2BkRenderDoneRecord(); return; }
+  if (Q2_BK_STATE.phase === "armed") { Q2_BK_STATE.mode === "backup" ? q2BkRenderArmedBackup() : q2BkRenderArmedRestore(); return; }
+  q2BkSetClose();
+  q2BkBody().innerHTML = `<div style="margin-top:1rem"><p>Measuring this app…</p></div>`;
+  const m = await q2BkMeasureBundle();
+  if (!m) {
+    q2BkBody().innerHTML = `<div role="status" style="background:#f8d7da;padding:1rem;margin-top:1rem"><strong>⛔ STOP</strong><div>The app bundle (app-261.js) could not be measured in this page. No backup or restore was started.</div></div>`;
+    return;
+  }
+  Q2_BK_STATE.phase = "ready";
+  q2BkRenderHome();
+}
+function q2BkRenderDoneRecord() {
+  const record = Q2_BK_STATE.record;
+  if (!record) return;
+  if (record.recordType === "opal-device-backup-capture") {
+    if (record.result?.state === "CAPTURED") {
+      const canExport = Q2_BK_STATE.pkg && Q2_BK_STATE.pkg.exportState !== "shared";
+      q2BkRenderRecord(record, "✅ BACKUP CAPTURED — package verified and ready.", "#d4edda",
+        canExport ? `<button id="q2BkExport" type="button" class="primary">Export package (share)…</button>` : "");
+      if (Q2_BK_STATE.pkg?.exportState === "shared") {
+        const v = document.getElementById("q2BkVerdict");
+        if (v) v.textContent = "✅ BACKUP EXPORTED — confirm it in Files, under On My iPhone / On My iPad (not iCloud), with the name and size in this record.";
+      }
+    } else q2BkRenderRefusal(record);
+    return;
+  }
+  if (record.result?.state === "RESTORED") { q2BkRenderRecord(record, "✅ RESTORED — post-restore digests match the package.", "#d4edda"); return; }
+  if (record.result?.state === "PARTIALLY MODIFIED") {
+    q2BkRenderRecord(record, "⛔ RESTORE STOPPED — state PARTIALLY MODIFIED. Recovery: re-run the restore from the same verified package, or restore the pre-restore capture. Nothing continues silently.", "#f8d7da",
+      `<button id="q2BkRerun" type="button" class="primary">Re-run restore from this package</button><button id="q2BkRecoverPre" type="button" class="secondary">Restore the pre-restore capture instead</button>`);
+    return;
+  }
+  if (record.result?.state === "RESTORED-UNVERIFIED") {
+    q2BkRenderRecord(record, "⛔ RESTORE UNVERIFIED — the writes completed, but post-restore digests do not match the package (restore-verification-failed). No success is declared.", "#f8d7da");
+    return;
+  }
+  q2BkRenderRefusal(record);
+}
+async function q2BkStartCapture() {
+  if (Q2_BK_STATE.running) return;
+  Q2_BK_STATE.running = true;
+  q2BkSetClose();
+  q2BkRenderRunning("RUNNING — capturing device state (read-only)…");
+  const record = await q2BkRunCapture();
+  Q2_BK_STATE.running = false;
+  Q2_BK_STATE.record = record;
+  Q2_BK_STATE.phase = "done";
+  if (record.result?.state === "CAPTURED" && Q2_BK_STATE.pkg) {
+    Q2_BK_STATE.lastCapture = { packageText: Q2_BK_STATE.pkg.packageText, fileSha256: Q2_BK_STATE.pkg.fileSha256, verified: Q2_BK_STATE.pkg.verified === true, exportState: Q2_BK_STATE.pkg.exportState };
+    Q2_BK_STATE.partial = null;
+  }
+  q2BkRenderDoneRecord();
+}
+async function q2BkDoExport() {
+  const pkg = Q2_BK_STATE.pkg;
+  if (!pkg || pkg.exportState === "shared") return;
+  try {
+    await navigator.share({ files: [pkg.file], title: pkg.fileName });
+    pkg.exportState = "shared";
+    if (Q2_BK_STATE.lastCapture) Q2_BK_STATE.lastCapture.exportState = "shared";
+    if (Q2_BK_STATE.record) Q2_BK_STATE.record.export = { state: "shared", fileName: pkg.fileName, bytes: pkg.file.size, sha256: pkg.fileSha256 };
+  } catch (e) {
+    pkg.exportState = "backup-export-failed";
+    if (Q2_BK_STATE.record) Q2_BK_STATE.record.export = { state: "backup-export-failed", error: String((e && e.name) || e) };
+  }
+  q2BkRenderDoneRecord();
+}
+async function q2BkIntakeFile(file) {
+  const intakeEl = document.getElementById("q2BkIntake");
+  // The verified intake is replaced atomically when the new check
+  // completes — never nulled up front, and Arm is disabled only once a
+  // real verification is about to run. Blurring the anchor field after
+  // typing re-fires this handler with the SAME file and anchor (the
+  // blur is caused by the operator's Arm tap itself); that unchanged
+  // re-entry must be a complete no-op — if it disabled Arm or nulled
+  // the intake, the tap that caused it would be silently swallowed.
+  if (!file) { if (intakeEl) intakeEl.textContent = ""; return; }
+  const anchor = (document.getElementById("q2BkAnchor")?.value || "").trim();
+  if (!anchor) {
+    // Not yet an intake attempt: the operator picked the file before
+    // pasting the anchor. Show the next step instead of refusing —
+    // the anchor field's change event re-enters this handler once the
+    // anchor is typed, and verification runs then.
+    if (intakeEl) intakeEl.innerHTML = `<p class="muted">Now paste the package's SHA-256 anchor from the backup record — verification runs automatically.</p>`;
+    return;
+  }
+  const intakeKey = `${file.name}:${file.size}:${file.lastModified}:${anchor.toLowerCase()}`;
+  if (Q2_BK_STATE.intake && Q2_BK_STATE.intakeKey === intakeKey) return; // unchanged re-entry: the verified intake stands, Arm stays enabled
+  const arm = document.getElementById("q2BkArm");
+  if (arm) arm.disabled = true;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const check = await q2BkVerifyPackageBytes(bytes, anchor);
+  if (!check.ok) {
+    const record = { recordType: "opal-device-backup-restore", runId: q2BkNewRunId(), deviceLabel: Q2_BK_STATE.label, context: Q2_BK_STATE.context, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), app: { uiVersion: "1.4.121", bundleName: "app-261.js", bundleSha256: Q2_BK_STATE.measured?.bundleSha256 ?? null }, result: { state: "REFUSED", refusal: check.refusal, detail: { step: check.step } }, writesPerformed: 0 };
+    Q2_BK_STATE.intake = null;
+    Q2_BK_STATE.record = record;
+    Q2_BK_STATE.phase = "done";
+    q2BkRenderRefusal(record);
+    return;
+  }
+  if (check.manifest.deviceLabel !== Q2_BK_STATE.label) {
+    const record = { recordType: "opal-device-backup-restore", runId: q2BkNewRunId(), deviceLabel: Q2_BK_STATE.label, context: Q2_BK_STATE.context, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), app: { uiVersion: "1.4.121", bundleName: "app-261.js", bundleSha256: Q2_BK_STATE.measured?.bundleSha256 ?? null }, result: { state: "REFUSED", refusal: "restore-label-mismatch", detail: { packageLabel: check.manifest.deviceLabel, selectedLabel: Q2_BK_STATE.label } }, writesPerformed: 0 };
+    Q2_BK_STATE.intake = null;
+    Q2_BK_STATE.record = record;
+    Q2_BK_STATE.phase = "done";
+    q2BkRenderRefusal(record);
+    return;
+  }
+  // Schema guard (A2): live store schema must equal the manifest's.
+  let liveSchema = null;
+  try {
+    const db = await q2BkOpenDb();
+    try {
+      const tx = db.transaction(Q2_BK_STORES, "readonly");
+      liveSchema = Q2_BK_STORES.map((name) => { const os = tx.objectStore(name); return { store: name, keyPath: os.keyPath ?? null, autoIncrement: os.autoIncrement === true }; });
+      await new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(new Error("tx-aborted")); tx.onerror = () => reject(tx.error ?? new Error("tx-failed")); });
+    } finally { try { db.close(); } catch { /* ignore */ } }
+  } catch (e) {
+    const record = { recordType: "opal-device-backup-restore", runId: q2BkNewRunId(), deviceLabel: Q2_BK_STATE.label, context: Q2_BK_STATE.context, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), app: { uiVersion: "1.4.121", bundleName: "app-261.js", bundleSha256: Q2_BK_STATE.measured?.bundleSha256 ?? null }, result: { state: "REFUSED", refusal: "restore-write-failed", detail: { stage: "schema-check-open", code: e.code ?? "capture-db-open-failed" } }, writesPerformed: 0 };
+    Q2_BK_STATE.intake = null;
+    Q2_BK_STATE.record = record;
+    Q2_BK_STATE.phase = "done";
+    q2BkRenderRefusal(record);
+    return;
+  }
+  const schemaOf = (list, store) => (Array.isArray(list) ? list.find((x) => x.store === store) : null);
+  const mismatch = Q2_BK_STORES.filter((store) => {
+    const m = schemaOf(check.manifest.storeSchema, store), l = schemaOf(liveSchema, store);
+    return !m || !l || m.keyPath !== l.keyPath || m.autoIncrement !== l.autoIncrement;
+  });
+  if (mismatch.length) {
+    const record = { recordType: "opal-device-backup-restore", runId: q2BkNewRunId(), deviceLabel: Q2_BK_STATE.label, context: Q2_BK_STATE.context, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), app: { uiVersion: "1.4.121", bundleName: "app-261.js", bundleSha256: Q2_BK_STATE.measured?.bundleSha256 ?? null }, result: { state: "REFUSED", refusal: "restore-schema-mismatch", detail: { stores: mismatch } }, writesPerformed: 0 };
+    Q2_BK_STATE.intake = null;
+    Q2_BK_STATE.record = record;
+    Q2_BK_STATE.phase = "done";
+    q2BkRenderRefusal(record);
+    return;
+  }
+  Q2_BK_STATE.intake = { manifest: check.manifest, payload: check.payload, fileSha256: anchor.toLowerCase() };
+  Q2_BK_STATE.intakeKey = intakeKey;
+  if (intakeEl) intakeEl.innerHTML = `<p class="muted">Package verified (all five checks passed): label <strong>${q2BkEsc(check.manifest.deviceLabel)}</strong>, captured ${q2BkEsc(check.manifest.capturedAt)}, payload digest ${q2BkEsc(q2BkShort(check.manifest.payloadDigest))}. Schema matches this device. You may arm the restore.</p>`;
+  if (arm) arm.disabled = false;
+}
+async function q2BkExecuteAndRecord(pkg, sourceNote) {
+  Q2_BK_STATE.running = true;
+  q2BkSetClose();
+  q2BkRenderRunning("RUNNING — restoring (writes confined to the designed steps)…");
+  const startedAt = new Date().toISOString();
+  const out = await q2BkExecuteRestore(pkg);
+  Q2_BK_STATE.running = false;
+  const record = {
+    recordType: "opal-device-backup-restore", runId: q2BkNewRunId(), deviceLabel: Q2_BK_STATE.label, context: Q2_BK_STATE.context,
+    startedAt, finishedAt: new Date().toISOString(),
+    app: { uiVersion: "1.4.121", bundleName: "app-261.js", bundleSha256: Q2_BK_STATE.measured?.bundleSha256 ?? null },
+    package: { deviceLabel: pkg.manifest.deviceLabel, capturedAt: pkg.manifest.capturedAt, payloadDigest: pkg.manifest.payloadDigest, fileSha256: pkg.fileSha256 ?? null },
+    source: sourceNote,
+    result: null,
+  };
+  if (out.outcome === "restored") {
+    record.result = { state: "RESTORED", steps: out.completed, verification: out.verification, audioCacheNote: "the audio cache was not touched by the restore and was not part of the package (inventoried only)" };
+    Q2_BK_STATE.partial = null;
+  } else if (out.outcome === "partial") {
+    record.result = { state: "PARTIALLY MODIFIED", failedStep: out.failedStep, completedSteps: out.completed, pendingSteps: out.pending, detail: out.detail };
+    Q2_BK_STATE.partial = { pkg };
+  } else {
+    record.result = { state: out.refusal === "restore-verification-failed" ? "RESTORED-UNVERIFIED" : "REFUSED", refusal: out.refusal, detail: out.detail ?? null, completedSteps: out.completed ?? [] };
+    Q2_BK_STATE.partial = null;
+  }
+  Q2_BK_STATE.record = record;
+  Q2_BK_STATE.phase = "done";
+  q2BkRenderDoneRecord();
+}
+async function q2BkStartRestore() {
+  if (Q2_BK_STATE.running || !Q2_BK_STATE.intake) return;
+  await q2BkExecuteAndRecord(Q2_BK_STATE.intake, "file-intake");
+}
+document.addEventListener("click", (e) => {
+  const t = e.target && e.target.closest ? e.target.closest("button") : null;
+  if (!t) return;
+  if (t.id === "q2BkOpen") { e.preventDefault(); q2BkOpenEntry(); return; }
+  if (t.id === "q2BkClose") { q2BkClosePanel(); return; }
+  if (t.id === "q2BkArm") {
+    if (Q2_BK_STATE.mode === "backup") {
+      if (!Q2_BK_STATE.label) return;
+      // §4 item 1 / A4: Shelf readout FIRST, frozen at Arm.
+      Q2_BK_STATE.readout = q2BkParseOutbox(localStorage.getItem(Q2_BK_OUTBOX_KEY));
+      Q2_BK_STATE.phase = "armed";
+      q2BkRenderArmedBackup();
+      return;
+    }
+    if (!Q2_BK_STATE.intake) return;
+    if (Q2_BK_STATE.context === "device") {
+      const lc = Q2_BK_STATE.lastCapture;
+      if (!lc || lc.verified !== true || lc.exportState !== "shared") {
+        const record = { recordType: "opal-device-backup-restore", runId: q2BkNewRunId(), deviceLabel: Q2_BK_STATE.label, context: "device", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), app: { uiVersion: "1.4.121", bundleName: "app-261.js", bundleSha256: Q2_BK_STATE.measured?.bundleSha256 ?? null }, result: { state: "REFUSED", refusal: "restore-precondition-missing", detail: { requirement: "a verified pre-restore capture, exported in this same session, must exist before a device restore may arm" } }, writesPerformed: 0 };
+        Q2_BK_STATE.record = record;
+        Q2_BK_STATE.phase = "done";
+        q2BkRenderRefusal(record);
+        return;
+      }
+    }
+    Q2_BK_STATE.phase = "armed";
+    q2BkRenderArmedRestore();
+    return;
+  }
+  if (t.id === "q2BkStart") {
+    if (Q2_BK_STATE.mode === "backup") { q2BkStartCapture(); return; }
+    q2BkStartRestore();
+    return;
+  }
+  if (t.id === "q2BkExport") { q2BkDoExport(); return; }
+  if (t.id === "q2BkAgain") { Q2_BK_STATE.intake = null; Q2_BK_STATE.phase = "ready"; q2BkRenderHome(); return; }
+  if (t.id === "q2BkRerun") {
+    if (Q2_BK_STATE.partial?.pkg) q2BkExecuteAndRecord(Q2_BK_STATE.partial.pkg, "re-run-after-partial");
+    return;
+  }
+  if (t.id === "q2BkRecoverPre") {
+    const lc = Q2_BK_STATE.lastCapture;
+    if (!lc) return;
+    (async () => {
+      const bytes = new TextEncoder().encode(lc.packageText);
+      const check = await q2BkVerifyPackageBytes(bytes, lc.fileSha256);
+      if (!check.ok) return;
+      await q2BkExecuteAndRecord({ manifest: check.manifest, payload: check.payload }, "pre-restore-capture");
+    })();
+    return;
+  }
+  if (t.id === "q2BkCopy") {
+    const txt = document.getElementById("q2BkRecord")?.textContent || "";
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => { t.textContent = "Copied ✓"; }).catch(() => { t.textContent = "Copy failed — select the record manually"; });
+    return;
+  }
+});
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (!t) return;
+  if (t.name === "q2BkMode") { Q2_BK_STATE.mode = t.value; Q2_BK_STATE.intake = null; q2BkRenderHome(); return; }
+  if (t.name === "q2BkLabel") {
+    Q2_BK_STATE.label = t.value;
+    if (Q2_BK_STATE.mode === "backup") q2BkRenderHome();
+    else { Q2_BK_STATE.intake = null; q2BkRenderHome(); }
+    return;
+  }
+  if (t.name === "q2BkContext") { Q2_BK_STATE.context = t.value; return; }
+  if (t.id === "q2BkFile") { const f = t.files && t.files[0]; if (f) q2BkIntakeFile(f); return; }
+  if (t.id === "q2BkAnchor") { const f = document.getElementById("q2BkFile")?.files?.[0]; if (f) q2BkIntakeFile(f); return; }
+});
+/* ── end Device state backup entry ── */
+function shelfLinkOpen(){
+  if(!a.book)return;
+  if(!(a.shelfApiBase||"").trim()){alert("Set your Opal Shelf worker URL in Setup first.");return;}
+  document.querySelector("#shelfLinkModal")?.remove();
+  const back=document.createElement("div");
+  back.className="modal-back";back.id="shelfLinkModal";
+  back.innerHTML=`<section class="modal"><div class="modal-title"><div><h2>Opal Shelf link</h2><p class="muted">${ie(a.book.title)}</p></div><button id="shelfLinkClose" class="ghost">\u2715</button></div><div id="shelfLinkBody"></div></section>`;
+  document.body.appendChild(back);
+  back.querySelector("#shelfLinkClose").onclick=()=>back.remove();
+  back.addEventListener("click",e=>{if(e.target===back)back.remove();});
+  shelfLinkRender();
+}
+let shelfBootCache=null,shelfBootAt=0;
+async function shelfBootstrap(){
+  const now=Date.now();
+  if(shelfBootCache&&now-shelfBootAt<120000)return shelfBootCache;
+  const base=(a.shelfApiBase||"").replace(/\/+$/,"");
+  const r=await fetch(base+"/api/bootstrap");
+  if(!r.ok)throw new Error("Could not reach Shelf ("+r.status+")");
+  shelfBootCache=await r.json();shelfBootAt=now;
+  return shelfBootCache;
+}
+function shelfNorm(t){return String(t||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();}
+function shelfFindBooks(books,q){
+  const nq=shelfNorm(q),words=nq.split(" ").filter(w=>w.length>1),out=[];
+  for(const b of books||[]){
+    const t=shelfNorm(b.title),au=shelfNorm((b.authors||[]).join(" "));
+    let score=0;
+    if(t===nq)score+=100;
+    if(t.startsWith(nq))score+=50;
+    if(t.includes(nq))score+=30;
+    for(const w of words){if(t.includes(w))score+=5;if(au.includes(w))score+=3;}
+    if(score>0)out.push({b,score});
+  }
+  out.sort((x,y)=>y.score-x.score);
+  return out.slice(0,20).map(x=>x.b);
+}
+function shelfLinkRender(){
+  const body=document.querySelector("#shelfLinkBody");if(!body)return;
+  if(a.book.shelfReadId){
+    body.innerHTML=`<p>Listening time is being logged to <strong>${ie(a.book.shelfBookTitle||"your Shelf read-through")}</strong>.</p><div class="row"><button id="shelfUnlink" class="secondary">Unlink</button><button id="shelfFlushNow" class="secondary">Send pending now</button></div><p class="muted tiny">Waiting to send: <span id="shelfPendingCount">${shelfOutbox().length}</span></p>`;
+    body.querySelector("#shelfUnlink").onclick=async()=>{shelfListenStop();delete a.book.shelfReadId;delete a.book.shelfBookId;delete a.book.shelfBookTitle;await pe();document.querySelector("#shelfLinkModal")?.remove();se();};
+    body.querySelector("#shelfFlushNow").onclick=async()=>{const btn=body.querySelector("#shelfFlushNow"),old=btn?.textContent||"Send pending now";if(btn){btn.disabled=!0;btn.textContent="Sending…"}let status=body.querySelector("#shelfSendStatus");if(!status){status=document.createElement("p");status.id="shelfSendStatus";status.className="muted tiny";body.appendChild(status)}const result=await shelfFlush({manual:!0});const c=document.querySelector("#shelfPendingCount");if(c)c.textContent=result.pending;if(result.relinkNeeded)status.textContent="Shelf no longer has this read-through. Tap Unlink, then link this book to its active Shelf read-through again.";else if(result.error)status.textContent="Couldn’t send: "+result.error;else status.textContent=result.pending?"Sent "+result.sent+(result.covered?" · "+result.covered+" already logged":"")+"; "+result.pending+" still waiting.":result.covered?"Synced ✓ · "+result.sent+" sent, "+result.covered+" already logged.":"Sent ✓";if(btn){btn.disabled=!1;btn.textContent=old}};
+    return;
+  }
+  body.innerHTML='<p class="muted">Loading your actively-reading books\u2026</p>';
+  (async()=>{
+    try{
+      const boot=await shelfBootstrap();
+      const activeIds=new Set((boot.reads||[]).filter(r=>r.state==="active").map(r=>r.book_id));
+      const books=(boot.books||[]).filter(b=>activeIds.has(b.id)).sort((x,y)=>String(x.title||"").localeCompare(String(y.title||"")));
+      body.innerHTML=books.length?'<p class="muted">Choose the book to log listening time to:</p>'+books.map((b,i)=>`<div class="row"><div><strong>${ie(b.title)}</strong><div class="muted tiny">${ie((b.authors||[]).join(", "))}</div></div><button class="secondary" data-shelf-pick="${i}">Link</button></div>`).join(""):'<p class="muted">You have no actively-reading books in Shelf right now.</p>';
+      body.querySelectorAll("[data-shelf-pick]").forEach(btn=>btn.onclick=()=>shelfLinkPick(books[+btn.dataset.shelfPick]));
+    }catch(e){body.innerHTML=`<p class="muted">${ie(e.message||"Could not load your Shelf books.")}</p>`;}
+  })();
+}
+async function shelfLinkPick(b){
+  const base=(a.shelfApiBase||"").replace(/\/+$/,"");
+  const body=document.querySelector("#shelfLinkBody");
+  try{
+    if(body)body.innerHTML='<p class="muted">Linking\u2026</p>';
+    let boot=await shelfBootstrap();
+    let read=(boot.reads||[]).find(r=>r.book_id===b.id&&r.state==="active");
+    if(!read){
+      const r=await fetch(base+"/api/reads",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({book_id:b.id,format:"ebook",start_date:shelfLocalDate(new Date().toISOString())})});
+      if(r.status===409){shelfBootCache=null;boot=await shelfBootstrap();read=(boot.reads||[]).find(x=>x.book_id===b.id&&x.state==="active");}
+      else{if(!r.ok)throw new Error("Could not start a Shelf read-through ("+r.status+")");read=await r.json();}
+    }
+    if(!read)throw new Error("No active Shelf read-through found.");
+    a.book.shelfReadId=read.id;a.book.shelfBookId=b.id;a.book.shelfBookTitle=b.title;
+    await pe();
+    document.querySelector("#shelfLinkModal")?.remove();se();
+    if(!ee.paused)shelfListenStart();
+  }catch(e){
+    if(body){body.innerHTML=`<p class="muted">${ie(e.message||"Link failed.")}</p><div class="row"><button class="secondary" id="shelfRetry">Back</button></div>`;body.querySelector("#shelfRetry").onclick=shelfLinkRender;}
+  }
+}
+/* ===== end Shelf listening-time sync ===== */
+const DL=[];function dl(m){try{const t=new Date().toISOString().slice(11,23);DL.push(t+" "+m);if(DL.length>80)DL.shift();try{localStorage.setItem("opalreader.playdbg.v1",JSON.stringify(DL))}catch(_){}}catch(_){}};try{const p=JSON.parse(localStorage.getItem("opalreader.playdbg.v1")||"[]");if(Array.isArray(p))for(const x of p.slice(-40))DL.push(x)}catch(_){};window.addEventListener("unhandledrejection",e=>{dl("UNHANDLED REJECTION: "+(e.reason&&e.reason.message||e.reason))});const Sr=document.querySelector("#app"),Se=new Audio;
+let ee=new Audio,silentRecoveryChapter=null;
+function traceAudioState(player){
+  for(const type of ["stalled","waiting","suspend","playing","error","emptied"])
+    player.addEventListener(type,()=>{
+      if(ee!==player)return;
+      dl("audio "+type+" t="+(Number(player.currentTime)||0).toFixed(1)+
+        " ready="+player.readyState+" net="+player.networkState+" paused="+player.paused);
+    });
+}
+traceAudioState(ee);
+const QUOTA_BADGE_CACHE_KEY="opalreader.geminiQuotaBadge.v2";
+function readQuotaBadgeCache(){try{const v=JSON.parse(localStorage.getItem(QUOTA_BADGE_CACHE_KEY)||"null");return v&&typeof v==="object"?v:null}catch(_){return null}}
+function writeQuotaBadgeCache(v){try{if(v&&typeof v==="object")localStorage.setItem(QUOTA_BADGE_CACHE_KEY,JSON.stringify(v))}catch(_){}}
+let a={view:"library",books:[],book:null,modal:null,apiBase:"",accessToken:"",provider:"gemini",providers:{azure:!1,fish:!1,openai:!1,gemini:!1,sync:!1,generation:!1},syncStatus:"Local only",voiceTarget:null,voiceList:[],search:"",locale:"en-US",voiceGender:"",voicePage:0,voiceHasMore:!1,auditioningVoice:null,voiceProfiles:{},monthlyCap:15,usage:{month:"",spent:0},fishModel:"s2.1-pro",openaiModel:"gpt-4o-mini-tts",geminiModel:"gemini-3.8-flash-tts",geminiLane:"batch",playbackRate:1,shelfApiBase:"",shelfLogEnabled:!0,currentSegment:0,generationPoll:null,usageReport:null,quotaReport:readQuotaBadgeCache()};function me(){if(ee._scenePauseTarget){ee.playbackRate=1;return a.playbackRate}return a.playbackRate=pr(ee,a.playbackRate),a.playbackRate}function updatePlayerTimeline(){const e=document.querySelector("#seek"),c=document.querySelector("#elapsed"),r=document.querySelector("#duration");e&&(e.max=Number.isFinite(ee.duration)&&ee.duration>0?ee.duration:1,e.value=ee.currentTime||0),c&&(c.textContent=vt(ee.currentTime)),r&&(r.textContent=vt(ee.duration))}const ie=e=>String(e??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]),vt=e=>isFinite(e)?`${Math.floor(e/60)}:${String(Math.floor(e%60)).padStart(2,"0")}`:"0:00",Pe=e=>e<=0?"$0.00":e<.01?"<$0.01":`${e.toFixed(2)}`,tt=async e=>crypto.subtle.digest("SHA-256",new TextEncoder().encode(e)).then(c=>[...new Uint8Array(c)].map(r=>r.toString(16).padStart(2,"0")).join("")),Et=e=>e==="azure"?"Azure Speech":e==="fish"?"Fish Audio":e==="openai"?"OpenAI":e==="gemini"?"Gemini":"TTS provider";function xe(e){e.currentSegment??=0,e.updatedAt??=e.importedAt||Date.now();for(const c of e.chapters){c.segments??=[{id:crypto.randomUUID(),pov:c.pov||null,text:c.text,manualPov:!1,audioKey:c.audioKey||null,audioStale:c.audioStale||!1}],c.generation??={state:c.segments.every(r=>r.audioKey&&!r.audioStale)?"ready":"not_generated"};delete c.providerOverride;delete c.providerVoices;
+for(const seg of c.segments){
+  if(seg.generationBlocked)recordGeminiFailure(c,seg,seg.generationBlocked,"policy_block",true);
+  if(seg.generationFailure)recordGeminiFailure(c,seg,seg.generationFailure,"provider_internal",true);
+}
+const g=c.generation||{},keys=Array.isArray(g.segmentKeys)?g.segmentKeys:null;if(g.state==="failed"&&/Gemini error \(500\)|internal error has occurred/i.test(String(g.error||""))&&!c.segments.some(s=>s.generationFailure)){const pending=(g.segments||[]).findIndex(s=>!["ready","blocked"].includes(s?.state));if(pending>=0){let idx=-1;if(keys?.length)idx=c.segments.findIndex(s=>segIdentity(s,c.pov)===keys[pending]);else if((g.segments||[]).length===c.segments.length)idx=pending;if(idx>=0)c.segments[idx].generationFailure={error:g.error||"Gemini internal error.",kind:"provider_internal",jobId:g.jobId||g.job_id||null}}}recoverLegacyGeminiInputBlock(c,g,g);}return rr(e)}function st(e){return a.book?.povs.find(c=>c.name===e)?.voice||a.book?.defaultVoice||null}
+function segIdentity(t,pov){return`${t?.speechText||t?.text||""}\u241f${t?.pov||pov||""}`}
+function chVoice(ch,pov){return st(pov)}
+function segmentVoice(ch,seg){return seg?.fallbackVoice||chVoice(ch,seg?.pov)}
+function segmentPlayable(seg){return!!(seg?.audioKey||seg?.systemVoiceFallback)}
+/* Local-only diagnostic counters. Never save narration text, API keys, or
+   full provider responses in diagnostics. Historical records are undated. */
+function geminiRootInfo(ch,seg){
+  if(!ch||!seg)return null;
+  const rootId=seg.blockRootId||seg.id;
+  if(!rootId)return null;
+  seg.blockRootId=rootId;
+  ch.geminiBlockHistory??={};
+  ch.geminiBlockHistory[rootId]??={splits:0,failures:[]};
+  return ch.geminiBlockHistory[rootId];
+}
+function recordGeminiFailure(ch,seg,info,kind="policy_block",historical=false){
+  const data=geminiRootInfo(ch,seg);if(!data)return false;
+  const jobId=String(info?.jobId||info?.job_id||seg.generationBlocked?.jobId||seg.generationFailure?.jobId||"unknown");
+  const key=[kind,jobId,seg.id||"unnamed"].join("|");
+  if(data.failures.some(item=>item.key===key))return false;
+  const raw=String(info?.error||"");
+  const finishReason=String(info?.finishReason||info?.finish_reason||"").slice(0,75);
+  const blockReason=String(info?.blockReason||info?.block_reason||"").slice(0,75);
+  const parsed=raw.match(/(?:Gemini error \(|HTTP[_ ]|status\s)(\d{3})/i);
+  const httpStatus=(finishReason.match(/HTTP[_ ](\d{3})/i)||[])[1]||parsed?.[1]||null;
+  const model=info?.model||seg.generationBlocked?.model||seg.generationFailure?.model||null;
+  const chars=String(seg.speechText||seg.text||"").length;
+  data.failures.push({key,kind,chars,model:model||"unknown",httpStatus,
+    blockReason:blockReason||null,finishReason:finishReason||null,
+    time:historical?null:new Date().toISOString()});
+  return true;
+}
+function geminiDiagnosticReport(ch,chapterIndex){
+  const failures=Object.values(ch.geminiBlockHistory||{}).flatMap(x=>x.failures||[]);
+  const lines=["Opal Reader Gemini TTS failure diagnostics","Reader version: "+APP_UI_VERSION,
+    "Chapter: "+Ir(ch,chapterIndex),"Passages with recorded failures: "+Object.keys(ch.geminiBlockHistory||{}).length,
+    "Total recorded failures: "+failures.length,
+    "Note: historic attempts made before tracking may be missing or have unknown timestamps/models.",
+    "Transcript and API credentials omitted.",""];
+  Object.entries(ch.geminiBlockHistory||{}).forEach(([root,data],index)=>{
+    lines.push("Original passage #"+(index+1)+": "+(data.failures||[]).length+" failures; "+(data.splits||0)+" splits.");
+    const pieces=ch.segments.map((seg,idx)=>({seg,idx})).filter(x=>(x.seg.blockRootId||x.seg.id)===root);
+    for(const p of pieces){
+      const status=p.seg.systemVoiceFallback?"device voice":p.seg.generationBlocked?"blocked":p.seg.generationFailure?"provider error":p.seg.audioKey?"generated":"unresolved";
+      lines.push("  Current segment "+(p.idx+1)+": "+String(p.seg.speechText||p.seg.text||"").length+" chars; "+status);
+    }
+    for(const f of data.failures||[]){
+      lines.push("  "+f.kind+"; model="+f.model+"; chars="+f.chars+
+        "; HTTP="+(f.httpStatus||"unknown")+"; blockReason="+(f.blockReason||"n/a")+
+        "; finishReason="+(f.finishReason||"n/a")+"; time="+(f.time||"unknown (historical)"));
+    }
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+// Read-only, spoiler-free chapter snapshot plus durable Worker queue events.
+async function copyGeminiDiagnostics(ch,index){
+  const parts=[geminiDiagnosticReport(ch,index),"Generation snapshot (spoiler-free)"];
+  const total=ch?.segments?.length||0;
+  const saved=(ch?.segments||[]).flatMap((s,i)=>s.audioKey&&!s.audioStale?[i+1]:[]);
+  parts.push("Saved audio: "+saved.length+"/"+total);
+  parts.push("Saved segment numbers: "+(saved.join(", ")||"(none)"));
+  const job=ch?.generation||{};
+  parts.push("Chapter queue state: "+(job.state||"unknown"));
+  parts.push("Chapter queue progress: "+(Number(job.completed)||0)+"/"+(Number(job.total)||0));
+  if(job.scope)parts.push("Reader queue scope: "+String(job.scope).slice(0,50));
+   if(job.cooldown_reason)parts.push("Cooldown: "+job.cooldown_reason+" / "+(job.cooldown_scope||"unspecified"));
+  if(Number(job.next_retry_at)>0)parts.push("Scheduled retry (UTC): "+new Date(Number(job.next_retry_at)).toISOString());
+  if(job.jobId&&a.apiBase&&a.accessToken){
+    try{
+      const server=await kr(a.apiBase,a.accessToken,job.jobId);
+      parts.push("Worker queue state: "+(server?.state||"unknown"));
+      parts.push("Worker queue progress: "+(Number(server?.completed)||0)+"/"+(Number(server?.total)||0));
+      const quotaEvents=Array.isArray(server?.quota_diagnostics)?server.quota_diagnostics.slice(-8):[];
+      parts.push("Gemini 429 quota evidence (Worker 1.4.37+, metadata only):");
+      if(!quotaEvents.length)parts.push("  No saved quota evidence for this job. Earlier 429s cannot be reconstructed.");
+      for(const record of quotaEvents){
+        const date=Number(record?.at)>0?new Date(Number(record.at)).toISOString():"unknown";
+        const vals=xs=>Array.isArray(xs)&&xs.length?xs.map(x=>String(x).slice(0,110)).join(", "):"not supplied";
+        parts.push("  "+date+" HTTP "+(Number(record?.http_status)||429)+" / "+String(record?.google_status||"status unavailable").slice(0,50));
+        parts.push("    Job: "+String(record?.job_kind==="chapter_or_split"&&job.scope==="blocked_split"?"blocked_split (Reader metadata)":record?.job_kind||"unknown")+"; model: "+String(record?.model||"unknown").slice(0,100)+"; segment: "+(record?.attempted_segment??"unknown")+"; queued pieces: "+(record?.job_segment_count??"unknown"));
+        parts.push("    Quota metrics: "+vals(record?.quota_metrics)+"; quota IDs: "+vals(record?.quota_ids)+"; stated limits: "+vals(record?.stated_limits));
+        parts.push("    Provider Retry-After: "+(record?.retry_after_seconds??"not supplied")+" sec; RetryInfo: "+(record?.retry_info_seconds??"not supplied")+" sec; classified: "+String(record?.cooldown_scope||"unknown"));
+        if(Number(record?.scheduled_retry_at)>0)parts.push("    Reader Worker retry: "+new Date(Number(record.scheduled_retry_at)).toISOString());
+      }
+      const trace=Array.isArray(server?.generation_trace)?server.generation_trace:[];
+      parts.push("Worker segment activity (oldest first):");
+      if(!trace.length)parts.push("  No queue trace for this job. Requires deployed Worker v1.4.35+.");
+      for(const item of trace){
+        const time=Number.isFinite(Number(item.at))?new Date(Number(item.at)).toISOString():"unknown time";
+        const seg=Number.isInteger(item.segment)?" segment "+item.segment:"";
+        const scope=item.scope?" ("+String(item.scope).slice(0,32)+")":"";
+        const retry=Number.isFinite(Number(item.retry_at))?" retry "+new Date(Number(item.retry_at)).toISOString():"";
+        parts.push("  "+time+" "+String(item.event||"event").slice(0,40)+seg+scope+retry);
+      }
+    }catch(error){parts.push("Worker queue activity unavailable: "+(error?.status||"connection error"))}
+  }else parts.push("Worker queue activity unavailable: no saved chapter job or connection.");
+  parts.push("No narration text, API keys, cache keys or provider request IDs in generation activity.");
+  const report=parts.join("\n");
+  try{
+    if(!navigator.clipboard?.writeText)throw Error("Clipboard unavailable");
+    await navigator.clipboard.writeText(report);
+    alert("Gemini diagnostics and generation activity copied (spoiler-free).");
+  }catch(err){prompt("Copy Gemini diagnostic report:",report)}
+}
+
+// Case #4: runtime-only watchlist of every job Reader knows about for a
+// chapter — the slot records plus everything lt() has merged and the
+// Worker's registry discovery has returned. It is NEVER persisted into
+// the book record (no new book fields; sync behavior unchanged) and is
+// rebuilt on every load.
+const chapterJobWatch=new Map();
+function noteChapterJob(ch,status){
+  const jobId=status?.job_id||status?.jobId;
+  if(!ch||!jobId)return;
+  let byId=chapterJobWatch.get(ch);
+  if(!byId){byId=new Map();chapterJobWatch.set(ch,byId)}
+  const prev=byId.get(jobId)||{};
+  byId.set(jobId,{...prev,jobId,
+    state:status.state||prev.state||"unknown",
+    completed:Number.isFinite(status.completed)?status.completed:prev.completed,
+    error:status.error!==undefined?status.error:prev.error,
+    chapterIndex:Number.isInteger(status.chapter_index)?status.chapter_index:prev.chapterIndex,
+    continueSessionId:status.continue_session_id||prev.continueSessionId||null,
+    updatedAt:Date.now()});
+}
+function knownChapterJobs(ch){
+  const byId=new Map();
+  for(const slot of [ch?.generation,ch?.replacementGeneration])
+    if(slot?.jobId)byId.set(slot.jobId,{jobId:slot.jobId,state:slot.state,
+      continueSessionId:slot.continue_session_id||null});
+  const watched=chapterJobWatch.get(ch);
+  if(watched)for(const [jobId,summary] of watched)
+    byId.set(jobId,{...(byId.get(jobId)||{}),...summary});
+  return [...byId.values()];
+}
+// Case #4 (Rowan S1): chapter status is AUDIO-FIRST. The primary status
+// comes from the segments themselves — Complete N/N whenever every
+// current leaf has valid playable audio, whatever any job record says;
+// otherwise Partial N/N or Not started 0/N. Generating / Quota paused /
+// Blocked are separate CURRENT annotations, present only where they
+// still block missing work. Blocked counts missing leaves only: a leaf
+// with a block record AND saved playable audio is not blocked. Pure
+// projection of (segments, known jobs) — same inputs, same truth, on
+// every device.
+function chapterTruth(ch,jobs){
+  const segments=ch?.segments||[],total=segments.length;
+  const playable=segments.filter(seg=>segmentPlayable(seg)&&!seg.audioStale).length,
+    blocked=segments.filter(seg=>seg.generationBlocked&&!(segmentPlayable(seg)&&!seg.audioStale)).length,
+    list=Array.isArray(jobs)?jobs:[],
+    complete=total>0&&playable===total,
+    parkedJob=list.find(j=>j?.state==="paused_quota")||null;
+  return {playable,total,blocked,missing:total-playable,complete,
+    label:complete?`Complete ${playable}/${total}`:playable>0?`Partial ${playable}/${total}`:`Not started 0/${total}`,
+    generating:!complete&&list.some(j=>["queued","generating"].includes(j?.state)),
+    quotaPaused:!complete&&!!parkedJob,
+    quotaParkedJobId:!complete&&parkedJob?parkedJob.jobId||null:null};
+}
+
+// Some blocked pieces are resolved with free device voices rather than audioKey.
+function chapterPlaybackReady(ch){
+  return !!ch?.segments?.length&&ch.segments.every(seg=>segmentPlayable(seg)&&!seg.audioStale);
+}
+function normalizeCompletedChapterStatus(ch){
+  if(!chapterPlaybackReady(ch))return false;
+  const old=ch.generation||{};
+  if(["queued","generating"].includes(old.state))return false;
+  const state=ch.segments.some(seg=>seg.systemVoiceFallback&&!seg.audioKey)?"ready_with_device_fallback":"ready";
+  if(old.state===state&&!old.error)return false;
+  ch.generation={...old,state,error:null};
+  return true;
+}
+function normalizeGeminiModel(value){
+  return value==="gemini-3.8-flash-lite-tts"?"gemini-3.8-flash-lite-tts":"gemini-3.8-flash-tts";
+}
+function zt(e){if(e.provider==="fish")return 15;if(e.provider==="openai")return 15;if(e.provider==="gemini"){const m=normalizeGeminiModel(a.geminiModel);return m==="gemini-3.8-flash-lite-tts"?10.8:16.2}return e.provider==="azure"?er(e.voice_id):Yt(e.voice_id)}function We(e){const c=zt(e);return c<=4?"Budget":c<=20?"Midrange":"Premium"}function He(e,c){return e/1e6*zt(c)}
+function bookCostEstimate(){
+  const out={total:0,remaining:0,chars:0,remainingChars:0,missing:new Set};
+  for(const ch of a.book?.chapters||[])for(const seg of ch.segments||[]){
+    let voice=null;
+    try{voice=seg.systemVoiceFallback?null:segmentVoice(ch,seg)}catch(_){}
+    if(!voice){if(seg.systemVoiceFallback){out.chars+=plainSpeech(seg.speechText||seg.text||"").length;continue}out.missing.add(seg.pov||"Default Narrator");continue}
+    const n=plainSpeech(seg.speechText||seg.text||"").length,cost=He(n,voice);
+    out.chars+=n;out.total+=cost;
+    if(!seg.audioKey||seg.audioStale){out.remainingChars+=n;out.remaining+=cost}
+  }
+  return out;
+}
+function bookCostBanner(){
+  const e=bookCostEstimate(),missing=[...e.missing];
+  if(missing.length)return`<div class="estimate-banner"><strong>Book cost estimate waiting on cast</strong><span>Assign a voice for ${ie(missing.join(", "))} to price the whole book.</span></div>`;
+  return`<div class="estimate-banner"><strong>Estimated full-book generation · ${Pe(e.total)}</strong><span>${e.chars.toLocaleString()} spoken chars · about ${Pe(e.remaining)} still ungenerated</span></div><div class="muted tiny" style="margin:-6px 0 14px">Forecast from the current cast and provider/model rates. Gemini is estimated before generation because its final bill depends on actual audio-token duration.</div>`;
+}function segmentFallbackTarget(){const m=/^segfb:(\d+):(\d+)$/.exec(a.voiceTarget||"");return m?{chapter:+m[1],segment:+m[2]}:null}
+function ot(){const t=segmentFallbackTarget();if(t)return`Segment ${t.segment+1} fallback`;return a.voiceTarget==="default"?null:a.book?.povs.find(e=>e.id===a.voiceTarget)?.name}
+function Cr(){const t=segmentFallbackTarget();if(t)return a.book?.chapters?.[t.chapter]?.segments?.[t.segment]?.text?.length||0;const e=ot();return a.book?.chapters.flatMap(c=>c.segments).filter(c=>e?c.pov===e:!c.pov).reduce((c,r)=>c+r.text.length,0)||0}
+function Ar(){const t=segmentFallbackTarget(),target=t?a.book?.chapters?.[t.chapter]?.segments?.[t.segment]?.text:null,e=t?null:ot(),c=target||a.book?.chapters.flatMap(r=>r.segments).find(r=>e?r.pov===e:!r.pov)?.text||a.book?.chapters[0]?.segments[0]?.text||"Welcome to OpalReader.",m=c.slice(0,300),s=Math.max(m.lastIndexOf(". "),m.lastIndexOf("! "),m.lastIndexOf("? "));return(s>=180?m.slice(0,s+1):m).trim()}function Ze(e){return a.voiceProfiles[`${e.provider}:${e.voice_id}`]||{favorite:!1,tags:[],notes:""}}function Ve(){const e=new Date().toISOString().slice(0,7);return a.usage.month!==e&&(a.usage={month:e,spent:0}),a.usage}async function Ae(){const e={id:"main",apiBase:a.apiBase,accessToken:a.accessToken,voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:Date.now()};if(await ke("settings",e),a.providers.sync){const c={voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,updatedAt:e.sharedUpdatedAt};St(a.apiBase,a.accessToken,c).catch(()=>{})}}function xr(e){return{...e,epub:e.epub?{name:e.epub.name}:null}}
+/* Preserve newer in-flight generation IDs when an older cloud/device snapshot wins
+   a book timestamp race. Never resubmit jobs here: Worker statuses remain authoritative. */
+function preserveInFlightGenerationSession(selected,other){
+  if(!selected||!other||selected.id!==other.id)return selected;
+  const held=other.continueSession,current=selected.continueSession;
+  const pending=s=>s&&["running","staging_unconfirmed","paused"].includes(s.state)&&
+    Array.isArray(s.jobs)&&s.jobs.length>0&&Number(s.startedAt)>0;
+  if(!pending(held))return selected;
+  if(current?.id===held.id)return selected; // A paused/completed server state must not be resurrected.
+  if(current&&Number(current.startedAt||0)>=Number(held.startedAt||0))return selected;
+  const result={...selected,continueSession:held,
+    updatedAt:Math.max(Date.now(),Number(selected.updatedAt)||0,Number(other.updatedAt)||0)+1};
+  const jobIds=new Set(held.jobs.map(j=>j?.jobId).filter(Boolean));
+  result.chapters=(selected.chapters||[]).map((chapter,i)=>{
+    const previous=other.chapters?.[i];
+    if(!previous)return chapter;
+    let next=chapter;
+    const donor=[previous.generation,previous.replacementGeneration];
+    for(const key of ["generation","replacementGeneration"]){
+      const g=previous[key];
+      if(g?.jobId&&jobIds.has(g.jobId)&&chapter[key]?.jobId!==g.jobId){
+        if(next===chapter)next={...chapter};
+        next[key]=g;
+      }
+    }
+    // Preserve matching already-generated audio, not stale or altered passages.
+    if(previous.segments?.length===chapter.segments?.length){
+      const segs=chapter.segments.map((seg,j)=>{
+        const old=previous.segments[j];
+        return old?.audioKey&&!old.audioStale&&!seg.audioKey&&
+          old.text===seg.text&&old.speechText===seg.speechText&&old.pov===seg.pov
+          ?{...seg,audioKey:old.audioKey}:seg;
+      });
+      if(segs.some((seg,j)=>seg!==chapter.segments[j])){
+        if(next===chapter)next={...chapter};
+        next.segments=segs;
+      }
+    }
+    return next;
+  });
+  return result;
+}
+async function Ee(e,strict=false){
+  // A three-minute timer or background upload may hold an obsolete book object.
+  // Always read the newest local copy before uploading its generation session.
+  const latest=await Oe("books",e?.id).catch(()=>null);
+  if(latest){
+    const newer=(Number(latest.updatedAt)||0)>=(Number(e?.updatedAt)||0)?latest:e;
+    e=preserveInFlightGenerationSession(newer,newer===latest?e:latest);
+  }
+  if(!a.providers.sync||!e)return false;
+  try{
+    const c=await _r(a.apiBase,a.accessToken,xr(e));
+    if(!c.accepted&&c.book){
+      const m=xe(preserveInFlightGenerationSession({...c.book},e));
+      await ke("books",m);
+      if(m.continueSession===e.continueSession)Er(m);
+      if(a.book?.id===m.id)a.book=m;
+    }
+    a.syncStatus="Synced";
+    return true;
+  }catch(err){
+    if(err?.status===409){
+      const lid=e.id;
+      let local=null;
+      try{local=await Oe("books",lid)}catch(_){}
+      if(local&&local.restoredAt){
+        await dtClearServer(lid);
+        dtRemove(lid);
+        try{await _r(a.apiBase,a.accessToken,xr(local));a.syncStatus="Synced"}
+        catch(_){a.syncStatus="Sync pending"}
+      }else{
+        dtAdd(lid);
+        await dtPurgeLocal(lid);
+        a.syncStatus="Synced";
+      }
+    }else a.syncStatus="Sync pending";
+    if(strict&&a.syncStatus!=="Synced")throw err;
+    return a.syncStatus==="Synced";
+  }
+}function Er(e){!a.providers.sync||e._syncTimer||Object.defineProperty(e,"_syncTimer",{value:setTimeout(()=>{delete e._syncTimer,Ee(e)},180e3),configurable:!0,writable:!0,enumerable:!1})}async function pe(){a.book&&(a.book.chapters.forEach(normalizeCompletedChapterStatus),a.book.updatedAt=Date.now(),await ke("books",a.book),a.books=await Be("books"),Er(a.book))}async function delIDB(e,t){const n=await nt();return new Promise((o,r)=>{const d=n.transaction(e,"readwrite").objectStore(e).delete(t);d.onsuccess=()=>o(!0),d.onerror=()=>r(d.error)})}async function deleteBookFlow(e){try{if(!e)return;const b=xe(await Oe("books",e));if(!b){alert("Book not found.");return}const t=b.title||"this book";if(confirm(`Back up "${t}" before deleting?\n\nOK = download a backup, then delete\nCancel = choose what to do next`)){if(!await backupBook(e))return}else if(!confirm(`Delete "${t}" WITHOUT a backup?\n\nThis removes the book, its EPUB, and cached audio from this device. This cannot be undone.`))return;const k=[...new Set((b.chapters||[]).flatMap(c=>(c.segments||[]).map(s=>s.audioKey).filter(Boolean)))];for(const key of k){try{await delIDB("audio",key)}catch(_){}}
+// Purge the book's audio from the worker's R2 cache too (best-effort: local delete always proceeds).
+try{
+if(a.apiBase&&k.length){
+const chapters=(b.chapters||[]).map((c,i)=>({chapter_index:i,audio_keys:[...new Set((c.segments||[]).map(s=>s.audioKey).filter(Boolean))]}));
+const jobIds=[...new Set((b.chapters||[]).flatMap(c=>[c.generation?.jobId||c.generation?.job_id,c.replacementGeneration?.jobId||c.replacementGeneration?.job_id]).filter(j=>/^[a-f0-9]{64}$/.test(j||"")))];
+await be(a.apiBase,a.accessToken,"/api/audio/purge",{method:"DELETE",body:JSON.stringify({book_id:b.id,chapters,job_ids:jobIds})});
+}
+}catch(_){}
+try{await delIDB("epubs",e)}catch(_){}let dNotice="";if(a.providers.sync&&a.apiBase){let ok=false,why="";try{const jr=await(await be(a.apiBase,a.accessToken,"/api/sync/book/"+encodeURIComponent(e),{method:"DELETE"})).json();ok=!!(jr&&jr.deleted)}catch(err){why=(err&&err.message)||"network error"}if(!ok)dNotice=`The server did not confirm the delete (${why||"no confirmation"}).`}dtAdd(e);await delIDB("books",e);a.books=(await Be("books")).map(xe);if(a.book&&a.book.id===e)a.book=null;a.view="library";if(dNotice)alert(`Deleted "${t}" from this device.\n\n${dNotice}\nIt will finish deleting from the server on the next sync \u2014 it cannot come back.`);se()}catch(err){alert(err.message||"Could not delete the book.")}}async function backupBook(e){try{const b=xe(await Oe("books",e));if(!b)throw new Error("Book not found.");const z=new Mt;z.file("book.json",JSON.stringify({format:"opalreader-book-backup",version:1,exportedAt:new Date().toISOString(),book:xr(b)},null,2));const ep=await localEpubGet(b.id);if(ep?.blob)z.file("book.epub",ep.blob);const keys=[...new Set(b.chapters.flatMap(ch=>ch.segments).map(s=>s.audioKey).filter(Boolean))];let saved=0;for(const key of keys){let rec=await Oe("audio",key);if(!rec?.blob&&a.providers.sync){const remote=await At(a.apiBase,a.accessToken,key);if(remote)rec={blob:remote}}if(rec?.blob){z.file(`audio/${key}.mp3`,rec.blob);saved++}}z.file("backup-info.json",JSON.stringify({audioKeys:keys.length,audioFiles:saved,epubIncluded:!!ep?.blob},null,2));const blob=await z.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}}),safe=(b.title||"book").replace(/[^a-z0-9_-]+/gi,"-").replace(/^-+|-+$/g,"").slice(0,60)||"book",url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=`${safe}.opalreader.zip`;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),3e4);return!0}catch(err){alert(err.message||"Book backup failed.");return!1}}async function restoreBookBackup(file){try{const z=await Mt.loadAsync(file),metaFile=z.file("book.json");if(!metaFile)throw new Error("This is not an OpalReader book backup.");const payload=JSON.parse(await metaFile.async("text"));if(payload?.format!=="opalreader-book-backup"||!payload.book)throw new Error("Unsupported OpalReader backup.");const b=xe(payload.book),ep=z.file("book.epub");if(ep){const blob=await ep.async("blob");await localEpubPut(b.id,new File([blob],b.epub?.name||"book.epub",{type:"application/epub+zip"}),b.epub?.name||"book.epub")}const audioFiles=Object.values(z.files).filter(x=>!x.dir&&x.name.startsWith("audio/")&&x.name.endsWith(".mp3"));for(const af of audioFiles){const key=af.name.slice(6,-4),blob=await af.async("blob");await ke("audio",{id:key,blob,restoredBackup:!0,createdAt:Date.now()})}b.updatedAt=Date.now();b.restoredAt=Date.now();dtRemove(b.id);await dtClearServer(b.id);await ke("books",b);a.books=(await Be("books")).map(xe);a.book=b;a.view="chapters";se();alert(`Restored ${b.title} with ${audioFiles.length} backed-up audio file${audioFiles.length===1?"":"s"}.`)}catch(err){alert(err.message||"Could not restore that OpalReader backup.")}}async function $e(){if(!a.apiBase)return a.providers;try{a.providers=await br(a.apiBase,a.accessToken),a.syncStatus=a.providers.sync?"Ready to sync":"Local only"}catch{a.providers={azure:!1,fish:!1,openai:!1,gemini:!1,sync:!1,generation:!1},a.syncStatus="Connection unavailable"}return a.providers}/* v1.4.21 deletion tombstones: deleted books stay deleted across devices. */
+const DT_KEY="opalreader.deletedBooks.v1";
+function dtRead(){try{return JSON.parse(localStorage.getItem(DT_KEY)||"{}")}catch(_){return{}}}
+function dtWrite(m){try{localStorage.setItem(DT_KEY,JSON.stringify(m))}catch(_){}}
+function dtPrune(){const m=dtRead(),cut=Date.now()-180*864e5;let c=false;for(const k of Object.keys(m))if(!(m[k]>cut)){delete m[k];c=true}if(c)dtWrite(m)}
+function dtHas(id){return!!(id&&dtRead()[id])}
+function dtAdd(id){if(!id)return;const m=dtRead();m[id]=Date.now();dtWrite(m)}
+function dtRemove(id){if(!id)return;const m=dtRead();if(m[id]){delete m[id];dtWrite(m)}}
+async function dtClearServer(id){try{await be(a.apiBase,a.accessToken,"/api/sync/deleted/"+encodeURIComponent(id),{method:"DELETE"})}catch(_){}}
+async function dtPurgeLocal(id){try{await delIDB("epubs",id)}catch(_){}try{await delIDB("books",id)}catch(_){}if(a.book&&a.book.id===id)a.book=null}
+// Retry read-only sync requests after transient Worker 5xx or connection errors.
+// Fail immediately for authentication, malformed data, and other nontransient errors.
+function syncServerMessage(err){const m=typeof err?.message==="string"?err.message.trim():"";if(!m||/^Request failed \(\d+\)$/.test(m))return"";return m.replace(/\s+/g," ").slice(0,240)}
+async function syncReadWithRetry(read,phase){
+  for(let attempt=0;attempt<3;attempt++){
+    try{return await read()}
+    catch(err){
+      const status=Number(err?.status)||0;
+      const retryable=[500,502,503,504].includes(status)||(status===0&&err?.name==="TypeError");
+      if(attempt>=2||!retryable){if(err&&typeof err==="object")err.syncPhase=phase;throw err}
+      await new Promise(resolve=>setTimeout(resolve,700*(attempt+1)));
+    }
+  }
+}
+async function syncSharedSettingsWithRetry(payload){
+  for(let attempt=0;attempt<2;attempt++){
+    try{return await St(a.apiBase,a.accessToken,payload)}
+    catch(err){
+      if(attempt===1||![500,502,503,504].includes(Number(err?.status)))throw err;
+      await new Promise(resolve=>setTimeout(resolve,750));
+    }
+  }
+}
+// Receiving a newer cloud chapter or position invalidates the loaded player
+// source, not its cached audio. Next Play loads the received chapter/bookmark.
+function releaseOldPlaybackForCloudResume(previous,incoming){
+  if(!previous||!incoming||previous.id!==incoming.id||!ee._chapterPlayback)return;
+  const changed=(Number(previous.currentChapter)||0)!==(Number(incoming.currentChapter)||0)
+    ||(Number(previous.currentSegment)||0)!==(Number(incoming.currentSegment)||0)
+    ||Math.abs((Number(previous.position)||0)-(Number(incoming.position)||0))>0.5;
+  if(!changed)return;
+  dl("sync: release stale audio so Play uses the received chapter/position");
+  ee._chapterPlayback=false;
+  ee._restoringPosition=true;
+  ee._userPaused=true;
+  ee._scenePauseTarget=null;
+  if(ee._systemSpeechActive&&"speechSynthesis"in window){
+    window.speechSynthesis.cancel();
+    ee._systemSpeechActive=false;
+  }
+  const oldSrc=ee.src;
+  ee.pause();
+  ee.onloadedmetadata=null;
+  ee.removeAttribute("src");
+  ee.load();
+  if(oldSrc?.startsWith("blob:"))try{URL.revokeObjectURL(oldSrc)}catch(_){}
+  ee._restoringPosition=false;
+  ee._compositePlayback=false;
+  ee._singleSegmentPreview=false;
+  ee._opalCompositeBlob=null;
+  ee._opalCompositeSource=null;
+  ee._compositeStartSegment=0;
+  ee._compositeEndSegment=0;
+  ee._waitingForGeneration=false;
+}
+async function rt(){if(await $e(),!a.providers.sync)return se();a.syncStatus="Syncing…",a.syncError=null;let syncPhase="starting synchronization";se();try{const[{books:e=[],deleted:dl=[]},c]=await Promise.all([syncReadWithRetry(()=>yr(a.apiBase,a.accessToken),"downloading cloud library"),syncReadWithRetry(()=>wr(a.apiBase,a.accessToken),"downloading shared settings")]),r=await Be("books"),m=new Map(r.map(o=>[o.id,xe(o)]));syncPhase="reconciling book records";for(const td of dl||[]){const tid=td&&td.id;if(!tid)continue;dtAdd(tid);if(m.has(tid)){await dtPurgeLocal(tid);m.delete(tid)}}for(const o of e){
+    const incoming=xe(o);
+    if(dtHas(incoming.id)){
+      try{await be(a.apiBase,a.accessToken,"/api/sync/book/"+encodeURIComponent(incoming.id),{method:"DELETE"})}catch(_){}
+      continue;
+    }
+    const local=m.get(incoming.id);
+    if(!local){
+      await ke("books",incoming);m.set(incoming.id,incoming);
+      if(a.book?.id===incoming.id){releaseOldPlaybackForCloudResume(a.book,incoming);a.book=incoming}
+      continue;
+    }
+    const cloudNewer=Number(incoming.updatedAt||0)>Number(local.updatedAt||0);
+    const selected=cloudNewer?incoming:local;
+    const reconciled=preserveInFlightGenerationSession(selected,cloudNewer?local:incoming);
+    if(cloudNewer||reconciled!==selected){
+      await ke("books",reconciled);m.set(incoming.id,reconciled);
+      if(a.book?.id===incoming.id){
+        releaseOldPlaybackForCloudResume(a.book,reconciled);a.book=reconciled;
+      }
+    }
+    if(!cloudNewer||reconciled!==selected)await Ee(reconciled,true);
+  }for(const o of m.values()){if(dtHas(o.id))continue;e.some(u=>u.id===o.id)||await Ee(o,true)}syncPhase="checking EPUB cloud copies";for(const o of m.values())if(!o.epubCloudSynced){const u=await localEpubGet(o.id);u?.blob&&(await Ct(a.apiBase,a.accessToken,o.id,u.blob),o.epubCloudSynced=!0,await ke("books",o))}syncPhase="updating shared settings";const s=c.settings,i=await Oe("settings","main"),l=i?.sharedUpdatedAt||0;s&&(s.updatedAt||0)>l?(a.voiceProfiles=s.voiceProfiles||a.voiceProfiles,a.monthlyCap=s.monthlyCap??a.monthlyCap,a.usage=s.usage||a.usage,a.fishModel=s.fishModel||a.fishModel,a.openaiModel=s.openaiModel||a.openaiModel,a.geminiModel=normalizeGeminiModel(s.geminiModel||a.geminiModel),a.geminiLane=s.geminiLane==="standard"?"standard":"batch",a.playbackRate=Ie(s.playbackRate??a.playbackRate),a.shelfApiBase=s.shelfApiBase||a.shelfApiBase,a.shelfLogEnabled=s.shelfLogEnabled??a.shelfLogEnabled,me(),await ke("settings",{...i,id:"main",voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:s.updatedAt})):(!s||l>(s.updatedAt||0))&&await (async()=>{syncPhase="uploading shared settings";return syncSharedSettingsWithRetry({voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,updatedAt:l||Date.now()})})(),a.books=(await Be("books")).map(xe),a.syncError=null,a.syncStatus="Synced"}catch(err){const status=Number(err?.status)||0;const reason=status===401?"HTTP 401: the access token was rejected.":status===403?"HTTP 403: access denied.":status===413?"HTTP 413: upload too large.":status===429?"HTTP 429: rate limit; retry later.":status>=500?`HTTP ${status}: ${syncServerMessage(err)||"server or storage request failed."}`:status?`HTTP ${status}: sync request failed.`:err?.name==="QuotaExceededError"?"Local device storage is full.":err?.name==="SyntaxError"?"The Worker returned an unreadable response.":err?.name==="TypeError"?"The browser could not read the Worker response (network or gateway error).":"Unexpected sync error; no HTTP response was reported.";a.syncError={phase:err?.syncPhase||syncPhase,reason};if(["updating shared settings","uploading shared settings"].includes(syncPhase)){try{a.books=(await Be("books")).map(xe)}catch(_){ }a.syncStatus="Books synced · settings pending"}else a.syncStatus="Sync pending"}se()}function se(){me();const e=a.book;const _sm=document.querySelector(".modal-back .modal"),_st=_sm?_sm.scrollTop:0;Sr.innerHTML=`<main class="shell"><header class="top"><div><div class="brand">✦ OpalReader <button id="versionInfo" class="version-info" aria-label="Show OpalReader version" title="Version">i</button>${quotaMiniMarkup()}</div><div class="sync-line">${ie(a.syncStatus)}${a.syncError?` <button type="button" id="syncDetailsBtn" class="sync-details-button">Details</button>`:""}</div></div><nav class="tabs"><button data-view="library" class="${a.view==="library"?"active":""}">Library</button>${e?`<button data-view="cast" class="${a.view==="cast"?"active":""}">Cast</button><button data-view="chapters" class="${a.view==="chapters"?"active":""}">Chapters</button>`:""}<button data-view="settings" class="${a.view==="settings"?"active":""}">Setup</button></nav></header>${zr()}</main>${a.modal?$r():""}${e?jr():""}`;const _sm2=document.querySelector(".modal-back .modal");if(_sm2&&_st)_sm2.scrollTop=_st;Zr(),me()}function zr(){return a.view==="settings"?Tr():!a.book||a.view==="library"?Rr():a.view==="cast"?Or():Pr()}let quotaBadgeRequest=null,quotaBadgeTimer=null;
+function quotaMiniStamp(value){
+  if(!value)return"none";
+  const d=new Date(value);if(!Number.isFinite(d.getTime()))return"none";
+  const now=new Date(),sameDay=d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()&&d.getDate()===now.getDate();
+  const time=d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+  return sameDay?time:`${d.toLocaleDateString([],{month:"numeric",day:"numeric"})} ${time}`;
+}
+function quotaMiniParts(){
+  const q=a.quotaReport||{},now=Date.now();
+  const num=v=>v==null||!Number.isFinite(Number(v))?null:Math.max(0,Number(v));
+  const rolling=num(q.used_24h),resetMs=Number(q.resets_at_ms)||0;
+  const current=q.reset_timezone==="America/Los_Angeles"&&resetMs>now&&Number(q.day_start_ms)<=now;
+  // Old Workers used "used_today" for a rolling 24h alias; do not mislabel it.
+  const today=current?num(q.used_calendar_day??q.used_today):null;
+  const mins=current?Math.ceil((resetMs-now)/60000):null;
+  const remaining=mins==null?"refresh pending":mins>=60?`${Math.floor(mins/60)}h ${mins%60}m`:`${mins}m`;
+  const resetTime=current?quotaMiniStamp(resetMs):"unknown";
+  const todayText=today==null?"?":today.toLocaleString();
+  const rollingText=rolling==null?"?":rolling.toLocaleString();
+  return{today,rolling,todayText,rollingText,remaining,resetTime,current,
+    nextDrop:q.next_expiry_ms?quotaMiniStamp(q.next_expiry_ms):"none",
+    last:q.last_request_ms?quotaMiniStamp(q.last_request_ms):"none"};
+}
+function quotaMiniSummary(){
+  const p=quotaMiniParts();
+  return`Gemini today ${p.todayText} · 24h ${p.rollingText} · ${p.current?"reset "+p.resetTime+" ("+p.remaining+")":"Pacific reset pending"}`;
+}
+function quotaMiniDetails(){
+  const p=quotaMiniParts();
+  return`Worker-recorded Gemini attempts, including errors and blocks. Since Pacific midnight: ${p.todayText}. Rolling 24 hours: ${p.rollingText}. ${p.current?"Next Pacific reset at "+p.resetTime+" ("+p.remaining+" left).":"Pacific-day counter requires the updated Reader Worker."} Next 24h drop-off: ${p.nextDrop}. Last recorded attempt: ${p.last}. These are estimates, not Google's official model-specific quota totals.`;
+}
+function quotaMiniMarkup(){
+  if(!a.apiBase)return"";
+  return`<span id="quotaMini" class="quota-mini" role="status" aria-label="${ie(quotaMiniDetails())}" title="${ie(quotaMiniDetails())}">${ie(quotaMiniSummary())}</span>`;
+}
+function updateQuotaMiniDom(){
+  const el=document.querySelector("#quotaMini");if(!el)return;
+  el.textContent=quotaMiniSummary();
+  el.setAttribute("aria-label",quotaMiniDetails());
+  el.setAttribute("title",quotaMiniDetails());
+}
+async function refreshQuotaBadge(){
+  if(!a.apiBase)return null;
+  if(quotaBadgeRequest)return quotaBadgeRequest;
+  quotaBadgeRequest=(async()=>{try{const response=await be(a.apiBase,a.accessToken,"/api/quota/gemini");if(!response.ok)throw new Error("Gemini request tracker unavailable");const fresh=await response.json();if(!fresh||((fresh.used_24h==null&&fresh.used_today==null)&&fresh.tracking_available!==false))throw new Error("Gemini request tracker returned no count");a.quotaReport=fresh;writeQuotaBadgeCache(fresh);updateQuotaMiniDom();return a.quotaReport}catch(_){return a.quotaReport||null}finally{quotaBadgeRequest=null}})();
+  return quotaBadgeRequest;
+}
+function scheduleQuotaBadgeRefresh(delay=500){
+  clearTimeout(quotaBadgeTimer);quotaBadgeTimer=setTimeout(()=>refreshQuotaBadge(),delay);
+}
+async function loadUsageReport(){
+  if(!a.apiBase)return null;
+  const d=new Date(),from=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`;
+  a.usageReport=await(await be(a.apiBase,a.accessToken,`/api/usage/report?from=${encodeURIComponent(from)}`)).json();
+  await refreshQuotaBadge();
+  return a.usageReport;
+}function quotaPanel(){
+  const q=a.quotaReport;if(!q)return`<div class="muted tiny">Gemini request tracker loading…</div>`;
+  const p=quotaMiniParts();
+  const hint=p.current?`Resets at midnight Pacific (${ie(p.resetTime)} local time, in ${ie(p.remaining)}).`:"Pacific-day total unavailable until the updated Reader Worker is deployed and refreshed.";
+  return`<div class="chapter-progress" role="status" aria-label="Gemini requests since Pacific midnight ${p.todayText}"><span>Gemini today · Pacific day</span><strong>${ie(p.todayText)}</strong></div>
+  <div class="muted tiny">${hint}</div>
+  <div class="chapter-progress" role="status" aria-label="Gemini requests in the rolling last 24 hours ${p.rollingText}"><span>Gemini · last 24 hours</span><strong>${ie(p.rollingText)}</strong></div>
+  <div class="muted tiny">Next request drops off the rolling 24-hour window: ${ie(p.nextDrop)}. Counts include blocked and failed requests. Worker estimates, not Google's official model-specific quota readings.</div>`;
+}
+function usagePanel(){
+  const r=a.usageReport;
+  if(!r)return`<div class="provider-note"><strong>TTS call report</strong><span>Worker ledger not loaded yet</span></div>`;
+  const cs=r.cost_summary||{},metered=Number(cs.metered_cost||0),legacy=Number(cs.legacy_estimated_cost||0),unmetered=Number(cs.unmetered_calls||0);
+  const rows=(r.summary||[]).map(x=>{
+    const mt=Number(x.metered_cost||0),le=Number(x.legacy_estimated_cost||0),parts=[];
+    parts.push(`${Number(x.successful_calls||0)} ok / ${Number(x.failed_calls||0)} failed`);
+    if(Number(x.retries||0))parts.push(`${Number(x.retries)} retries`);
+    if(Number(x.cache_hits||0))parts.push(`${Number(x.cache_hits)} cache hits`);
+    if(Number(x.skipped_existing_audio||0))parts.push(`${Number(x.skipped_existing_audio)} existing skips`);
+    if(Number(x.input_tokens||0)||Number(x.output_tokens||0))parts.push(`${Number(x.input_tokens||0).toLocaleString()} in / ${Number(x.output_tokens||0).toLocaleString()} out tokens`);
+    else parts.push(`${Number(x.characters_sent||0).toLocaleString()} chars`);
+    if(mt)parts.push(`${Pe(mt)} token-metered`);
+    if(le)parts.push(`${Pe(le)} legacy estimate`);
+    if(Number(x.unmetered_calls||0))parts.push(`${Number(x.unmetered_calls)} unmetered`);
+    return`<div class="usage-row"><strong>${ie(Et(x.provider))} · ${ie(x.usage_type)}</strong><span>${parts.join(" · ")}</span></div>`;
+  }).join("");
+  const headline=`${Pe(metered)} token-metered${unmetered?` · ${unmetered} older/unmetered call${unmetered===1?"":"s"}`:""}`;
+  const legacyNote=legacy?`<div class="muted tiny">Legacy character-based estimate: ${Pe(legacy)}. It is not treated as provider billing.</div>`:"";
+  return`<div class="usage-report">${quotaPanel()}<div class="provider-note"><strong>Worker-tracked TTS cost</strong><span>${headline}</span></div>${legacyNote}<strong>${Number(r.events||0).toLocaleString()} ledger events</strong>${rows||'<div class="muted tiny">No TTS events in this period.</div>'}</div>`;
+}function Tr(){return`<section class="card setup"><h2>Secure connection</h2>${a.syncError?`<div class="sync-issue" role="status"><strong>${ie(a.syncStatus)}</strong><div>Stopped while ${ie(a.syncError.phase)}. ${ie(a.syncError.reason)}</div><div class="muted tiny">Your local books and audio have not been cleared. Check the connection and tap Sync now below.</div></div>`:""}${a.syncError&&["uploading shared settings","updating shared settings"].includes(a.syncError.phase)?`<div class="sync-issue"><strong>Use your existing cloud preferences</strong><div class="muted tiny">Download the shared voice, model, and playback settings already saved in the cloud instead of uploading this iPad’s newer local defaults.</div><button id="useCloudSettings" type="button" class="secondary">Use cloud settings</button></div>`:""}<p class="muted">Your provider keys remain encrypted in your Cloudflare Worker. OpalReader stores only the Worker URL and your personal access token.</p><label>Worker URL<input id="apiBase" class="field" value="${ie(a.apiBase)}" placeholder="https://opalreader-api.your-name.workers.dev"></label><div class="secret-field"><label for="accessToken">Personal access token</label><div class="secret-field-row"><input id="accessToken" type="password" class="field" value="${ie(a.accessToken)}" autocomplete="off" spellcheck="false"><button id="showAccessToken" type="button" class="secondary" aria-controls="accessToken" aria-pressed="false">Show</button></div></div><div class="settings-grid"><label>Monthly soft cap<input id="monthlyCap" class="field" type="number" min="0" step="1" value="${a.monthlyCap}"></label><label>Fish Audio model<select id="fishModel" class="field"><option value="s2.1-pro" ${a.fishModel==="s2.1-pro"?"selected":""}>S2.1 Pro · $15/M</option><option value="s2.1-pro-free" ${a.fishModel==="s2.1-pro-free"?"selected":""}>S2.1 Pro Free</option></select></label><label>OpenAI model<select id="openaiModel" class="field"><option value="gpt-4o-mini-tts" ${a.openaiModel==="gpt-4o-mini-tts"?"selected":""}>gpt-4o-mini-tts · $15/M</option><option value="tts-1" ${a.openaiModel==="tts-1"?"selected":""}>tts-1</option><option value="tts-1-hd" ${a.openaiModel==="tts-1-hd"?"selected":""}>tts-1-hd</option></select></label><label>Gemini model<select id="geminiModel" class="field"><option value="gemini-3.8-flash-tts" ${a.geminiModel==="gemini-3.8-flash-tts"?"selected":""}>3.8 Flash TTS · $0.50/M input + $9/M audio</option><option value="gemini-3.8-flash-lite-tts" ${a.geminiModel==="gemini-3.8-flash-lite-tts"?"selected":""}>3.8 Flash-Lite TTS · $0.50/M input + $6/M audio</option></select></label><label>Gemini generation pathway<select id="generationLane" class="field"><option value="batch" ${a.geminiLane!=="standard"?"selected":""}>Batch · half price · generates ahead (up to 24h)</option><option value="standard" ${a.geminiLane==="standard"?"selected":""}>Standard · faster generation · regular price</option></select></label></div><p class="muted tiny">Applies to new chapter and Continue jobs only. Existing jobs keep their original pathway. Single-segment voice previews stay Standard.</p><div class="provider-note"><strong>Local forecast only</strong><span>${Pe(Ve().spent)} of your $${a.monthlyCap.toFixed(2)} soft cap · not provider billing</span></div><div class="provider-note"><strong>Azure Speech</strong><span>${a.providers.azure?"Connected":"Not configured"}</span></div><div class="provider-note"><strong>Fish Audio</strong><span>${a.providers.fish?"Connected · $15/M bytes":"Not configured"}</span></div><div class="provider-note"><strong>OpenAI TTS</strong><span>${a.providers.openai?"Connected · $15/M characters":"Not configured"}</span></div><div class="provider-note"><strong>Gemini TTS</strong><span>${a.providers.gemini?"Connected · 3.8 TTS ($0.50/M text; $9/M Flash audio or $6/M Flash-Lite audio through Dec 31, 2026)":"Not configured"}</span></div><div class="provider-note"><strong>Cross-device storage</strong><span>${a.providers.sync?"KV + R2 connected":"Not configured"}</span></div><div class="provider-note"><strong>Background generation</strong><span>${a.providers.generation?"Queue connected":"Queue not configured"}</span></div>${usagePanel()}<div class="row"><button id="refreshUsage" class="secondary" ${a.apiBase?"":"disabled"}>Refresh TTS report</button></div><h2>Opal Shelf</h2><p class="muted">Log actual listening minutes (wall-clock time at any speed — never audio-file length) to your Shelf read-throughs. Link each book from its Chapters page.</p><label>Shelf worker URL<input id="shelfApiBase" class="field" value="${ie(a.shelfApiBase)}" placeholder="https://opal-shelf.your-name.workers.dev"></label><label><input type="checkbox" id="shelfLogEnabled" ${a.shelfLogEnabled!==!1?"checked":""}> Log listening time to Opal Shelf</label><div class="row"><button id="saveSetup" class="primary">Save setup</button><button id="syncNow" class="secondary" ${a.apiBase?"":"disabled"}>Sync now</button></div>${q2ReadoutMarkup()}</section>`}function lastResume(){const e=[...a.books].filter(c=>c?.chapters?.some(r=>r?.playback?.started&&!r?.playback?.completed)).sort((c,r)=>(r.lastPlayedAt||r.updatedAt||0)-(c.lastPlayedAt||c.updatedAt||0));for(const c of e){const r=Math.min(Math.max(0,Number(c.currentChapter)||0),Math.max(0,c.chapters.length-1)),m=c.chapters[r];if(Le(m)){const s=nr(c,r);return{book:c,chapterIndex:r,chapter:m,resume:s}}}return null}function Rr(){const e=lastResume(),t=[...a.books].sort((c,r)=>(r.lastPlayedAt||r.updatedAt||r.importedAt||0)-(c.lastPlayedAt||c.updatedAt||c.importedAt||0));return`<section class="import-compact"><input id="epub" type="file" accept=".epub,application/epub+zip" hidden><input id="bookBackup" type="file" accept=".zip,.opalreader.zip,application/zip" hidden><button id="import" class="primary import-button">+ Add EPUB</button><button id="importBackup" class="secondary">Import backup</button><span class="muted tiny">Import an EPUB or restore an OpalReader backup</span></section>${e?`<section class="card library-resume"><div class="library-resume-copy">${e.book.cover?`<img class="resume-cover" src="${e.book.cover}" alt="">`:""}<div><strong>${ie(e.book.title)}</strong><div class="muted tiny">${ie(Ir(e.chapter,e.chapterIndex,e.book))} · segment ${e.resume.segment+1}/${e.chapter.segments.length}</div></div></div><button class="primary" data-resume-book="${e.book.id}">▶ Resume</button></section>`:""}<div class="section-head"><h2>Library</h2><span class="muted">${a.books.length} book${a.books.length===1?"":"s"}</span></div><section class="grid">${t.map(c=>`<button class="card book" data-book="${c.id}">${c.cover?`<img class="cover" src="${c.cover}">`:'<div class="cover">✦</div>'}<h3>${ie(c.title)}</h3><div class="muted">${ie(c.author||"Unknown author")}</div></button>`).join("")}</section>`}function Tt(){const e=a.book;return`<section class="book-head"><div>${e.cover?`<img class="cover" src="${e.cover}">`:'<div class="cover">✦</div>'}</div><div class="book-head-copy"><button class="ghost book-back" data-view="library">‹ Library</button><h1>${ie(e.title)}</h1><div class="muted">${ie(e.author||"Unknown author")} · ${e.chapters.length} chapters</div><button class="ghost book-backup" id="backupCurrentBook">⇩ Back up book</button> <button class="ghost book-delete" id="deleteCurrentBook">🗑 Delete book</button> <button class="ghost" id="shelfLinkBtn">📚 Shelf${e.shelfReadId?" ✓":""}</button></div></section>`}function Br(e,c){const r=a.book.chapters.flatMap(m=>m.segments).filter(m=>e?m.pov===e:!m.pov).reduce((m,s)=>m+s.text.length,0);return He(r,c)}function Or(){const e=[{id:"default",name:"Default Narrator",voice:a.book.defaultVoice,default:!0},...a.book.povs];return`${Tt()}<div class="section-head"><div><h2>Cast</h2><div class="muted">Each POV can use a different provider. Estimates are gross before provider allowances.</div></div><button id="addPov" class="secondary">+ Add POV</button></div>${bookCostBanner()}${e.map(c=>`<article class="card cast"><div class="cast-info"><h3>${ie(c.name)}</h3>${c.voice?`<div>${ie(c.voice.name)}</div><div class="row"><span class="badge">${Et(c.voice.provider)}</span><span class="badge ${We(c.voice)==="Premium"?"stale":""}">${We(c.voice)} · ${Pe(Br(c.default?null:c.name,c.voice))} est.</span></div>${c.voice.provider==="gemini"?`<input class="field" data-style-direction="${c.id}" value="${ie(c.voice.style_direction||"")}" placeholder="Style direction, e.g. warm Southern drawl" maxlength="300" style="margin-top:.35em" aria-label="Gemini style direction for ${ie(c.name)}">`:""}`:'<div class="muted">No voice assigned</div>'}</div><div class="row">${c.voice?`<button class="secondary" data-preview-cast="${c.id}">▶ Preview</button>`:""}<button class="primary" data-cast="${c.id}">${c.voice?"Change voice":"Find a voice"}</button>${c.default?"":`<button class="ghost" data-rename="${c.id}">Rename</button>`}</div></article>`).join("")}`}function Le(e){return chapterPlaybackReady(e)}function playable(e,c=0){return!!e?.segments?.slice(Math.max(0,c)).find(m=>segmentPlayable(m))}function firstPlayable(e,c=0){const i=e?.segments?.findIndex((m,n)=>n>=c&&segmentPlayable(m));return i>=0?i:-1}function isUnnumberedBookSection(e){return /^(?:prologue|epilogue)(?:$|[\\s:—–-])/i.test(String(e?.title||"").trim())}
+function chapterDisplayNumber(book,index){
+  const chapters=book?.chapters||[];
+  return chapters.slice(0,Math.max(0,index)).filter(section=>!isUnnumberedBookSection(section)).length+1;
+}
+function Ir(e,c,book=a.book){
+  const title=String(e?.title||"").trim();
+  if(isUnnumberedBookSection(e)||/^chapter\\s+\\d+\\b/i.test(title))return title;
+  return `Chapter ${chapterDisplayNumber(book,c)} — ${title||"Untitled"}`;
+}
+// Chapter card indicator mirrors the Queue's real quota-cooldown status.
+// A stopped auto-split job is shown separately: it is NOT an automatic retry.
+function chapterQuotaBanner(ch){
+  // Case #4: keyed to the DERIVED truth, not the evictable slot — the
+  // banner shows whenever any KNOWN job for the chapter is quota-parked
+  // and work is still missing (S1: never on a complete chapter), even if
+  // a repair job currently occupies the display slot.
+  if(chapterTruth(ch,knownChapterJobs(ch)).quotaPaused)
+    return '<div class="chapter-quota-note" role="status"><strong>Gemini daily limit reached</strong> · No automatic 3 AM restart. Generated audio is safe. Tap Resume or Continue to quota when you wake up.</div>';
+  const job=[ch?.replacementGeneration,ch?.generation].find(
+    j=>["paused_quota","paused_update"].includes(j?.state)||
+       j?.cooldown_reason==="quota"&&j?.state==="queued");
+  if(!job)return "";
+  if(job.state==="paused_update")
+    return '<div class="chapter-quota-note" role="status"><strong>Paused for Reader update</strong> · Previous generation stopped. Audio is saved; restart manually.</div>';
+  if(job.state==="paused_quota")
+    return '<div class="chapter-quota-note" role="status"><strong>Gemini daily limit reached</strong> · No automatic 3 AM restart. Generated audio is safe. Tap Resume or Continue to quota when you wake up.</div>';
+  const when=Number(job.next_retry_at)>Date.now()
+    ?new Date(Number(job.next_retry_at)).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})
+    :"shortly";
+  return '<div class="chapter-quota-note" role="status"><strong>Temporary Gemini rate limit</strong> · Retrying '+when+'. This is not an overnight daily reset.</div>';
+}
+function continueQuotaHeader(){
+  const s=a.book?.continueSession;
+  const label=s?.state==="paused"?"Resume to quota":
+    s?.state==="update_paused"?"Restart after update":
+    s?.state==="running"?"Continue running…":
+    s?.state==="staging_unconfirmed"?"Check same setup":a.geminiLane==="batch"?"Generate ahead (Batch)":"Continue to quota";
+  const done=s?.jobs?.filter(j=>["ready","partial"].includes(j.state)).length||0;
+  const count=s?.jobs?.length||0;
+  const note=s?.state==="paused"?"Gemini stopped the queue. Manual restart required.":
+    s?.state==="update_paused"?"Older queue stopped after update. Restart manually with saved audio.":
+    s?.state==="running"?"Generating in the background · "+done+"/"+count+" batches complete.":
+    s?.state==="staging_unconfirmed"?String(s.error||"Setup not confirmed. Check the same job IDs or safely discard the failed plan."):
+    s?.state==="error"?String(s.error||"Queue needs attention"):
+    a.geminiLane==="batch"?"Generate missing audio ahead with discounted, asynchronous Gemini Batch (may take up to 24 hours).":"Generate missing audio through upcoming chapters, stopping at Gemini quota.";
+  return '<div class="row"><label>Gemini pathway <select id="chapterLane" class="field"><option value="batch" '+(a.geminiLane!=="standard"?"selected":"")+'>Batch · half price</option><option value="standard" '+(a.geminiLane==="standard"?"selected":"")+'>Standard · faster</option></select></label></div><div class="row"><button class="primary" id="continueToQuota"'+
+    (s?.state==="running"?' disabled':'')+'>'+ie(label)+
+    '</button>'+(s?.state==="staging_unconfirmed"?'<button class="secondary" type="button" id="discardUnconfirmedContinue">Discard failed setup</button>':'')+
+    '<span class="muted tiny" role="status">'+ie(note)+'</span></div>'+
+    '<div id="continuePreparation" class="muted tiny" role="status" aria-live="polite"></div>';
+}
+function Pr(){return`${Tt()}<div class="section-head"><h2>Chapters</h2><button class="secondary" data-view="cast">Manage cast</button></div>${bookCostBanner()}${continueQuotaHeader()}<section class="chapter-list">${a.book.chapters.map((e,c)=>{const quotaBanner=chapterQuotaBanner(e),r=e.segments.map(S=>S.pov||"Narrator").filter((S,h,y)=>h===0||S!==y[h-1]),m=e.segments.some(S=>!st(S.pov)),s=Le(e),p=playable(e),hasAudio=e.segments.some(S=>!!S.audioKey),i=e.generation||{state:"not_generated"},l=e.replacementGeneration,o=s&&l?l:i,u=_t({segments:e.segments,generation:o}),truth=chapterTruth(e,knownChapterJobs(e)),_=["queued","generating"].includes(u.state),k=(truth.total>0&&(truth.playable>0||truth.blocked>0||truth.generating||truth.quotaPaused))?`<div class="chapter-progress" role="status" aria-label="${ie(truth.label)}"><span>${truth.complete?"Complete":truth.playable+" of "+truth.total+" sections ready"}${truth.blocked?" · "+truth.blocked+" blocked":""}${truth.generating?" · Generating":""}${truth.quotaPaused?" · Paused for Gemini quota · manual restart":""}</span><span class="progress-track" aria-hidden="true"><span style="width:${Math.round(truth.playable/truth.total*100)}%"></span></span><strong>${truth.playable}/${truth.total}</strong></div>`:"",w=hasAudio?l?`<div class="replacement-detail">Replacement: ${ie(u.state)} ${u.completed}/${u.total}${l.error?`<div class="chapter-error">${ie(l.error)}</div>`:""}</div><button class="ghost" data-regenerate="${c}" ${_?"disabled":""}>${u.state==="failed"?"Retry regeneration":"Regenerate with current cast"}</button>`:`<button class="ghost" data-regenerate="${c}">Regenerate with current cast</button>`:"";return`<article class="card chapter${quotaBanner?" quota-paused":""}"><div class="chapter-main"><div class="chapter-title"><h3>${ie(Ir(e,c))}</h3><details class="chapter-details"><summary aria-label="Chapter details">ⓘ</summary><div class="chapter-detail-pop"><div>${e.text.length.toLocaleString()} characters</div><div>${e.segments.length} narration segment${e.segments.length===1?"":"s"}</div>${r.length>1?'<div class="multi-note">Multiple POV switches</div>':""}<button class="ghost" data-review="${c}">${r.length>1?"Review switches":"Review POV"}</button>${w}</div></details></div><div class="chapter-pov">${ie(r.join(" → "))}</div></div><div class="chapter-actions">${k}${p?`<button class="secondary play-chapter" data-play-chapter="${c}" aria-label="Play ${ie(Ir(e,c))}">▶</button><button class="ghost" data-regen-chapter="${c}" aria-label="Regenerate ${ie(Ir(e,c))}" title="Clear audio and regenerate">↻</button>`:`<button class="${u.state==="failed"?"secondary":"primary"}" data-generate="${c}" ${_?"disabled":""}>${u.state==="failed"?"Retry":_?"Working…":"Generate"}</button>`}</div>${i.state==="paused_quota"||truth.quotaParkedJobId?`<button class="secondary" data-resume-quota="${c}">Resume manually</button>`:""}${quotaBanner}${i.state==="partial"&&i.error&&!chapterPlaybackReady(e)?`<div class="chapter-error">${ie(i.error)} Open Review POV to repair the affected segment.</div>`:""}${u.state==="failed"&&i.error&&!chapterPlaybackReady(e)?`<div class="chapter-error">${ie(i.error)} <button class="ghost" data-clear-generation-error="${c}">Clear error</button></div>`:""}</article>`}).join("")}</section>`}function $r(){return a.modal.type==="segments"?Lr(a.modal.chapter):a.modal.type==="systemVoices"?systemVoicePickerMarkup():a.modal.type==="sections"?renderSectionList():Nr()}function Lr(e){const c=a.book.chapters[e],generationState=(Le(c)&&c.replacementGeneration)||c.generation||{},blockedBusy=["queued","generating"].includes(generationState.state),quotaPaused=chapterTruth(c,knownChapterJobs(c)).quotaPaused,activeSegmentKeys=new Set(Array.isArray(generationState.segmentKeys)?generationState.segmentKeys:[]),chapterProgress=chapterTruth(c,knownChapterJobs(c)),jobSegments=Array.isArray(generationState.segments)?generationState.segments:[],pendingJobIndex=jobSegments.findIndex(t=>!["ready","blocked","provider_failed"].includes(t?.state)&&!t?.provider_internal),progressKey=pendingJobIndex>=0&&Array.isArray(generationState.segmentKeys)?generationState.segmentKeys[pendingJobIndex]:null,progressLocalIndex=progressKey?c.segments.findIndex(t=>segIdentity(t,c.pov)===progressKey):pendingJobIndex>=0&&jobSegments.length===c.segments.length?pendingJobIndex:-1,r=a.modal?.prosodyMatch,m=r?c.segments[r.segment]:null,s=m?st(m.pov):null,i=r&&m?`<div class="prosody-lab"><div class="row"><div><strong>Prosody Lab</strong><div class="muted tiny">Found “${ie(r.query)}” in Segment ${r.segment+1} at ${r.at.toLocaleString()}-${(r.at+r.length).toLocaleString()} · ${s?`${ie(s.name||s.voice_id)} · ${ie(Et(s.provider))}`:"voice not assigned"}</div></div><button id="clearProsodyMatch" class="ghost">Clear</button></div><p class="muted">Each Generate button makes a fresh synthesis request with the exact same current voice. When it is ready, tap Play so iOS treats playback as an explicit user action.</p><div class="prosody-actions"><button class="secondary" data-prosody="full">Generate full segment</button><button class="secondary" data-prosody="context">Generate previous + match paragraph</button><button class="secondary" data-prosody="paragraph">Generate match paragraph only</button><button class="secondary" data-prosody="2000">Generate ~2,000-char context</button><button class="secondary" data-prosody="1500">Generate ~1,500-char context</button><button class="secondary" data-prosody="1000">Generate ~1,000-char context</button></div>${a.modal.prosodyResult?`<div class="prosody-ready"><strong>${ie(a.modal.prosodyResult.label)} ready</strong><div class="muted tiny">${Number(a.modal.prosodyResult.chars||0).toLocaleString()} chars · ${ie(a.modal.prosodyResult.voice||"")}</div><button class="primary" id="playProsodyResult">▶ Play sample</button></div>`:""}${a.modal.prosodyStatus?`<div class="prosody-status">${ie(a.modal.prosodyStatus)}</div>`:""}</div>`:"";const capPause=capRepairPause(c),capPauseHtml=capPause?`<div class="prosody-status" role="status">${capPause.overCap?`Background repair paused at your monthly soft cap. ${Pe(capPause.spent)} of ${Pe(capPause.cap)} spent this month; the blocked passages alone are estimated at ${Pe(capPause.forecast)} before splitting.`:`Background repair paused at your monthly soft cap.${capPause.cap>0?` ${Pe(capPause.spent)} of ${Pe(capPause.cap)} spent this month; blocked passages are estimated at ${Pe(capPause.forecast)} before splitting.`:""} Tap Resume and Reader will check the full repair plan against your cap before queueing anything.`}</div>${capPause.overCap?"":`<div class="row"><button class="secondary" data-resume-cap-repair="${e}">Resume background repair</button></div>`}`:"";return`<div class="modal-back"><section class="modal"><div class="modal-title"><div><h2>${ie(c.title)}</h2><p class="muted">Confirm POV and manage TTS segments. Passage text is hidden until you choose to reveal it.</p></div><button id="closeModal" class="ghost">✕</button></div><div class="row segment-tools"><button id="findSegmentText" class="ghost">Find text in segments</button><button id="copyGeminiDiagnostics" class="ghost">Copy Gemini diagnostics</button>${c.autoSplitEnabled&&c.generation?.scope!=="background_repair"?`<button id="stopAutoSplit" class="secondary">Stop auto-splitting</button>`:""}${c.generation?.scope==="background_repair"&&["queued","generating"].includes(c.generation.state)?`<span class="muted">Background repair continues while Reader is closed. Already queued requests will finish.</span>`:""}</div>${capPauseHtml||(c.autoSplitStatus?`<div class="prosody-status" role="status">${ie(c.autoSplitStatus)}</div>`:"")}${quotaPaused?`<div class="prosody-status" role="status">Gemini quota pause · no automatic 3 AM retry. Tap Resume manually on the Chapters screen when ready. Saved audio is preserved.</div>`:""}${a.modal?.segmentExportStatus?`<div class="prosody-status regen-bar" role="status">${a.modal.segmentRegenActive?`<span class="progress-track" aria-hidden="true"><span class="regen-indeterminate"></span></span>`:""}<span>${ie(a.modal.segmentExportStatus)}</span></div>`:""}${i}${c.segments.map((r,m)=>{const head=r.text.slice(0,220),geminiHistory=c.geminiBlockHistory?.[r.blockRootId||r.id],recordedFailures=geminiHistory?.failures?.length||0,recordedSplits=geminiHistory?.splits||0,segmentWorking=blockedBusy&&(activeSegmentKeys.size?activeSegmentKeys.has(segIdentity(r,c.pov)):(!r.audioKey||r.audioStale)),showProgress=blockedBusy&&progressLocalIndex===m;return`<article class="segment-review"><div class="row"><strong>Segment ${m+1} · ${r.text.length.toLocaleString()} chars</strong>${r.audioKey||r.systemVoiceFallback?"":` <span class="badge stale">Not generated</span>`}${r.generationBlocked?` <span class="badge stale">Gemini blocked</span>`:""}${r.generationFailure?` <span class="badge stale">Gemini error</span>`:""}${r.systemVoiceFallback?` <span class="badge">Device voice · free</span>`:""}${r.fallbackVoice?` <span class="badge">Fallback: ${ie(r.fallbackVoice.name||r.fallbackVoice.voice_id)}</span>`:""}${r.generatedModel||r.providerRequestId||r.audioKey?`<details class="segment-details"><summary aria-label="Segment synthesis details">ⓘ</summary><div class="segment-detail-pop">${r.generatedModel||r.providerRequestId?`<div class="muted tiny">${r.generatedModel?`Model: ${ie(r.generatedModel)}`:""}${r.providerRequestId?`${r.generatedModel?" · ":""}Request ID: ${ie(r.providerRequestId)}`:""}</div>`:""}${r.audioKey?`<div class="tiny" style="word-break:break-all"><strong>Audio key:</strong> ${ie(r.audioKey)}</div>`:""}</div></details>`:""}<select class="field compact" data-segment-pov="${m}"><option value="">Default Narrator</option>${a.book.povs.map(s=>`<option value="${ie(s.name)}" ${r.pov===s.name?"selected":""}>${ie(s.name)}</option>`).join("")}</select></div><div class="segment-boundary"><div><details class="segment-spoiler"><summary><span class="segment-spoiler-closed">🔒 Reveal text (spoilers)</span><span class="segment-spoiler-open">🔓 Hide text</span></summary><div class="segment-spoiler-content"><span class="muted">START</span><p>${ie(head)}${r.text.length>220?"…":""}</p></div></details></div></div><div class="row">${r.systemVoiceFallback?`<button class="secondary" data-device-fallback="${m}">Change system voice</button><button class="ghost" data-cloud-fallback="${m}">Choose cloud voice instead</button>`:r.generationFailure?`<button class="secondary" data-regenerate-segment="${m}">Retry Gemini</button><button class="secondary" data-device-fallback="${m}">Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:r.generationBlocked&&r.splitExhausted?`<button class="secondary" data-device-fallback="${m}">Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:r.generationBlocked?`<button class="secondary" data-split-blocked="${m}"${blockedBusy?" disabled":""}>${quotaPaused?"Paused for Gemini quota":blockedBusy?"Chapter working…":"Repair blocked chapter in background"}</button><button class="secondary" data-device-fallback="${m}"${blockedBusy?" disabled":""}>Use free device voice</button><button class="ghost" data-cloud-fallback="${m}">Choose another cloud voice</button>`:`<button class="ghost" data-regenerate-segment="${m}"${a.modal?.segmentRegenSegment===m?" disabled":""}>${r.audioKey?"Regenerate segment":"Generate segment"}</button>${m<c.segments.length-1?`<button class="secondary" data-generate-rest="${m}"${blockedBusy?" disabled":""}>${quotaPaused?"Paused for Gemini quota":segmentWorking?"Chapter working…":"Generate rest of chapter"}</button>`:""}`}</div>${r.systemVoiceFallback?`<div class="muted tiny">Free on-device/browser voice: ${ie(r.systemVoiceFallback.name||"Device voice")}. No cloud TTS request or provider charge.</div>`:r.generationFailure?`<div class="muted tiny">${ie(r.generationFailure.error||"Gemini internal error.")} Reader kept this piece isolated so the rest of the chapter can continue.</div>`:r.generationBlocked?`<div class="muted tiny">${ie(r.generationBlocked.finishReason||"UNKNOWN")}/${ie(r.generationBlocked.blockReason||"PROHIBITED_CONTENT")} · Reader did not retry this text.${r.splitExhausted?" No smaller safe split remains.":""}</div>`:""}${recordedFailures?`<div class="muted tiny">Original passage: ${recordedFailures} recorded Gemini failure${recordedFailures===1?"":"s"} · ${recordedSplits} split${recordedSplits===1?"":"s"}.${recordedFailures>=2&&r.generationBlocked?" Repeated blocks: a free device voice avoids more Gemini requests.":""}</div>`:""}${showProgress?_p({...chapterProgress,quotaPaused}):""}</article>${m<c.segments.length-1?`<div class="tts-boundary-marker">TTS request boundary ↓</div>`:""}`}).join("")}<button id="doneSegments" class="primary">Done</button></section></div>`}function Nr(){const e=Cr(),c=a.voiceList.filter(Ur),fb=segmentFallbackTarget(),r=`<select id="voiceGender" class="field"><option value="">Any gender</option><option value="female" ${a.voiceGender==="female"?"selected":""}>Female</option><option value="male" ${a.voiceGender==="male"?"selected":""}>Male</option><option value="neutral" ${a.voiceGender==="neutral"?"selected":""}>Neutral</option></select>`,s=`<div class="voice-structured">${r}</div>`;return`<div class="modal-back"><section class="modal"><div class="modal-title"><div><h2>${fb?"Fallback voice":"Voice Lab"}</h2><p class="muted">${fb?`This voice applies only to Segment ${fb.segment+1}; the book cast stays unchanged.`:`Book auditions use the same ${ie(ot()||"narrator")} excerpt (up to 300 characters). Gemini auditions use Flash-Lite; full-book generation keeps your selected model. Free samples use the provider’s demo.`}</p></div><button id="closeModal" class="ghost">✕</button></div><div class="tabs provider-tabs"><button data-provider-select="azure" class="${a.provider==="azure"?"active":""}"${a.providers.azure?"":" disabled"}>Azure</button><button data-provider-select="fish" class="${a.provider==="fish"?"active":""}"${a.providers.fish?"":" disabled"}>Fish Audio</button><button data-provider-select="openai" class="${a.provider==="openai"?"active":""}"${a.providers.openai?"":" disabled"}>OpenAI</button><button data-provider-select="gemini" class="${a.provider==="gemini"?"active":""}"${a.providers.gemini?"":" disabled"}>Gemini</button></div><div class="voice-filters"><input id="voiceSearch" class="field" placeholder="Optional descriptive keywords…" value="${ie(a.search)}"><select id="locale" class="field"><option value="">All English locales</option>${["en-US","en-GB","en-AU","en-CA","en-IN","en-IE","en-NZ","en-ZA","en-SG","en-PH"].map(i=>`<option ${a.locale===i?"selected":""}>${i}</option>`).join("")}</select><button id="doSearch" class="secondary">Search</button></div>${s}<div class="estimate-banner"><strong>${e.toLocaleString()} ${fb?"characters in this blocked piece":"characters in this role"}</strong><span>${c.length} matching voice${c.length===1?"":"s"} loaded · ${fb?"only this piece will be regenerated":"book-part estimates are before free allowances"}.</span></div>${(()=>{const t=a.voiceTarget&&a.book?(a.voiceTarget==="default"?a.book.defaultVoice:a.book.povs.find(p=>p.id===a.voiceTarget)?.voice):null,y=t&&t.style_direction&&t.style_direction.trim();return y?`<div class="muted tiny" style="margin:.35em 0">\uD83C\uDFAD Auditions include this role\u2019s style direction (\u201C${ie(y)}\u201D), so what you hear matches chapter audio.</div>`:""})()}${c.length?c.map(i=>Dr(i,e)).join(""):'<div class="empty muted">No voices match these filters. Broaden one filter and search again.</div>'}${a.voiceHasMore?'<button id="loadMoreVoices" class="secondary load-more">Load more voices</button>':""}</section></div>`}function Ur(e){const c=Ze(e),r={"en-US":"american","en-GB":"british","en-AU":"australian","en-CA":"canadian","en-IN":"indian","en-IE":"irish","en-NZ":"new zealand","en-ZA":"south african","en-SG":"singaporean","en-PH":"filipino"},m=r[a.locale],s=String(e.raw?.accent||e.raw?.labels?.accent||e.locale||"").replaceAll("_"," ").toLowerCase(),i=String(e.raw?.gender||e.gender||"").toLowerCase(),l=String(e.raw?.age||e.raw?.labels?.age||"").replaceAll(/[_-]/g," ").toLowerCase(),o=String(e.raw?.use_case||e.raw?.labels?.use_case||"").replaceAll(/[_-]/g," ").toLowerCase(),u=!m||e.provider==="gemini"||e.provider==="openai"||s.includes(m),_=[e.name,e.locale,...e.traits,e.raw?.description,...Object.values(e.raw?.labels||{}),c.tags.join(" "),c.notes].join(" ").toLowerCase();return!u||a.voiceGender&&i!==a.voiceGender?!1:!a.search?!0:a.search.toLowerCase().split(/\s+/).filter(Boolean).every(k=>_.includes(k))}function Dr(e,c){const r=Ze(e),m=He(c,e);return`<article class="voice ${r.favorite?"favorite":""}"><div class="voice-main"><button class="star" data-favorite="${ie(e.voice_id)}" aria-label="Favorite">${r.favorite?"★":"☆"}</button><div><strong>${ie(e.name)}</strong><div class="muted tiny">${ie([Et(e.provider),e.locale,e.gender,...e.traits].filter(Boolean).join(" · "))}</div>${r.tags.length?`<div class="user-tags">${r.tags.map(l=>`<span>${ie(l)}</span>`).join("")}</div>`:""}${r.notes?`<div class="tiny notes">${ie(r.notes)}</div>`:""}</div></div><div class="voice-actions"><span class="cost ${We(e).toLowerCase()}">${We(e)} · ${Pe(m)}</span><button class="ghost" data-tag="${ie(e.voice_id)}">Tag/notes</button>'<span class="preview-unavailable">No free preview available</span>'${a.auditioningVoice===e.voice_id?'<button class="secondary" disabled>⏳ Auditioning…</button>':'<button class="secondary" data-book-preview="'+ie(e.voice_id)+'">▶ Book audition</button>'}<button class="primary" data-choose="${ie(e.voice_id)}">Use voice</button></div></article>`}function jr(){const e=a.book.chapters[a.book.currentChapter]||a.book.chapters[0],c=e?.segments[a.book.currentSegment||0],segN=a.book.currentSegment||0,segCt=e?.segments.length||1,atEnd=(a.book.currentChapter||0)>=a.book.chapters.length-1&&segN>=segCt-1;return`<footer class="player" aria-label="Audiobook player"><div class="player-context">${a.book.cover?`<img class="player-cover" src="${a.book.cover}" alt="">`:'<div class="player-cover player-cover-fallback" aria-hidden="true">✦</div>'}<div class="player-copy"><strong class="player-book-title">${ie(a.book.title||"Current book")}</strong><span class="player-chapter-title">${ie(e?.title||"")}</span><button id="sectionList" class="player-segment player-segment-btn" aria-label="Choose a section">${ee._compositePlayback?`${ie(c?.pov||"Narrator")} · continuous segments ${Number(ee._compositeStartSegment||0)+1}–${Number(ee._compositeEndSegment||e?.segments.length||1)}/${e?.segments.length||1}`:c?.systemVoiceFallback&&!c?.audioKey?`${ie(c?.pov||"Narrator")} · device voice · segment ${(a.book.currentSegment||0)+1}/${e?.segments.length||1}${ee._systemSpeechPending?" · tap Play":""}`:`${ie(c?.pov||"Narrator")} · segment ${(a.book.currentSegment||0)+1}/${e?.segments.length||1}`}</button></div><div class="section-stepper"><button id="prevSection" class="round section-step" aria-label="Previous section">‹</button><button id="nextSection" class="round section-step" aria-label="Next section"${atEnd?" disabled":""}>›</button></div></div><div class="player-controls"><button id="prevChapter" class="round player-skip" aria-label="Previous chapter">|‹</button><button id="back15" class="round player-jump" aria-label="Rewind 15 seconds">−15</button><button id="play" class="round play-toggle" aria-label="${ee.paused?"Play":"Pause"}">${ee.paused?"▶":"Ⅱ"}</button><button id="forward30" class="round player-jump" aria-label="Forward 30 seconds">+30</button><button id="nextChapter" class="round player-skip" aria-label="Next chapter">›|</button><label class="speed-control"><span class="sr-only">Listening speed</span><select id="speed" class="field compact" aria-label="Listening speed">${fr(a.playbackRate).map(m=>`<option value="${m.value}" ${m.selected?"selected":""}>${m.label}</option>`).join("")}</select></label></div><div class="audio-recovery-row"><button id="recoverAudio" type="button" ${!ee.src||ee._systemSpeechActive?"disabled":""}>Restore sound</button><button id="copyPlaybackLog" type="button">Copy playback log</button>${silentRecoveryChapter?.bookId===a.book.id&&silentRecoveryChapter?.chapterIndex===a.book.currentChapter?'<span class="audio-recovery-note">Playing individual segments this chapter</span>':''}</div><div class="timeline"><input id="seek" aria-label="Playback position" type="range" min="0" max="${ee.duration||1}" value="${ee.currentTime||0}" step=".1"><div class="timeline-meta tiny"><span id="elapsed">${vt(ee.currentTime)}</span><span id="duration">${vt(ee.duration)}</span></div></div></footer>`}function Qr(p,m){return p==="fish"?a.fishModel:p==="openai"?a.openaiModel:p==="gemini"?normalizeGeminiModel(a.geminiModel):m}function Fr(e){return a.provider==="azure"?tr(e):(e.voices||[]).map(v=>({...v,model_id:Qr(v.provider,v.model_id)}))}async function Ce(e=!1){if(!a.apiBase)return a.modal=null,a.view="settings",se();try{if(!a.providers.azure&&!a.providers.fish&&!a.providers.openai&&!a.providers.gemini&&await $e(),a.providers[a.provider]||(a.provider=a.providers.gemini?"gemini":a.providers.fish?"fish":a.providers.azure?"azure":a.providers.openai?"openai":a.provider),!a.providers[a.provider])throw new Error("No voice provider is connected. Add provider credentials (Gemini, Fish Audio, Azure, OpenAI) to the Worker.");const c=a.provider==="azure"?{languageCode:a.locale||"en-US"}:{search:a.search,page_size:100,page:a.voicePage,gender:a.voiceGender},r=await vr(a.apiBase,a.accessToken,a.provider,c),m=Fr(r);a.voiceList=e?[...a.voiceList,...m].filter((s,i,l)=>l.findIndex(o=>o.voice_id===s.voice_id)===i):m,a.voiceHasMore=!1,se()}catch(c){alert(c.message)}}async function et(e,c=!1){try{if(Se.pause(),!c)throw new Error("No free preview is available for this voice.");a.auditioningVoice=e.voice_id,se();const m=Ar(),auditionModel=e.provider==="gemini"?"gemini-3.8-flash-lite-tts":Qr(e.provider,e.model_id),auditionRate=e.provider==="gemini"?10.8:zt(e),auditionCost=m.length/1e6*auditionRate,vt=a.voiceTarget&&a.book?(a.voiceTarget==="default"?a.book.defaultVoice:a.book.povs.find(p=>p.id===a.voiceTarget)?.voice):null,vy=((vt&&vt.style_direction||"").trim()||e.style_direction||""),s="preview-"+await tt(m+e.provider+e.voice_id+auditionModel+vy);let i=await Oe("audio",s);if(!i){let l=a.providers.sync?await At(a.apiBase,a.accessToken,s):null,o=!l;if(!l){const u={text:m,voice_id:e.voice_id,voice_name:e.name||e.voice_id,language_code:e.locale,model_id:auditionModel,cache_key:s,style_direction:vy,usage_type:"book_audition",book_id:a.book?.id,book_title:a.book?.title,chapter_index:a.book?.currentChapter??0,chapter_number:(a.book?.currentChapter??0)+1,chapter_title:a.book?.chapters?.[a.book?.currentChapter??0]?.title||"",segment_index:null,total_segments:null,estimated_cost:auditionCost,pricing_rate:auditionRate};l=await gt(a.apiBase,a.accessToken,e.provider,u)}l.opalCache==="HIT"&&(o=!1),i={id:s,blob:l,preview:!0,createdAt:Date.now()},ke("audio",i).catch(()=>{}),o&&(Ve().spent+=(l.opalCost??auditionCost),await Ae())}Se.src?.startsWith("blob:")&&URL.revokeObjectURL(Se.src),Se.src=URL.createObjectURL(i.blob),Se.play()}catch(r){alert(r.message)}finally{a.auditioningVoice===e.voice_id&&(a.auditioningVoice=null),a.modal&&a.modal.type==="voices"&&se()}}function prosodyParagraphs(e){const c=[],r=/\n\s*\n/g;let m=0,s;while((s=r.exec(e))){const i=e.slice(m,s.index);i.trim()&&c.push({start:m,end:s.index,text:i.trim()}),m=r.lastIndex}const i=e.slice(m);return i.trim()&&c.push({start:m,end:e.length,text:i.trim()}),c}function prosodyTestText(e){const c=a.modal?.prosodyMatch;if(!c)throw new Error("Find the problem text first.");const r=a.book.chapters[a.modal.chapter],m=r.segments[c.segment];if(!m)throw new Error("That TTS segment is no longer available.");if(e==="full")return{label:"Full segment",text:m.speechText||m.text,segment:m};const s=prosodyParagraphs(m.text),i=s.findIndex(l=>c.at>=l.start&&c.at<=l.end);if(i<0)throw new Error("I could not isolate the matching paragraph.");if(e==="paragraph")return{label:"Matched paragraph",text:s[i].text,segment:m};if(e==="context")return{label:"Previous + matched paragraph",text:[s[Math.max(0,i-1)].text,...i>0?[s[i].text]:[]].join("\n\n"),segment:m};if(e==="2000"||e==="1500"||e==="1000"){const target=e==="2000"?2000:e==="1500"?1500:1000;let start=i,text=s[i].text;while(start>0){const candidate=s[start-1].text+"\n\n"+text;if(candidate.length>target&&text.length>=target*.7)break;text=candidate,start--;if(text.length>=target)break}return{label:`~${target.toLocaleString()} char context`,text,segment:m}}throw new Error("Unknown prosody test.")}async function runProsodyAudition(e){try{if(!a.apiBase)throw new Error("Connect the Worker first.");const c=prosodyTestText(e),r=st(c.segment.pov);if(!r)throw new Error(`Choose a voice for ${c.segment.pov||"Default Narrator"} first.`);Se.pause();const s=Qr(r.provider,r.model_id),i=`prosody-${await tt(c.text+r.provider+r.voice_id+s)}-${crypto.randomUUID()}`,l={text:c.text,voice_id:r.voice_id,voice_name:r.name||r.voice_id,language_code:r.locale,model_id:s,cache_key:i,style_direction:r.style_direction||"",usage_type:"book_audition",book_id:a.book.id,book_title:a.book.title,chapter_index:a.modal.chapter,chapter_number:a.modal.chapter+1,chapter_title:a.book.chapters[a.modal.chapter].title,segment_index:a.modal.prosodyMatch.segment,total_segments:a.book.chapters[a.modal.chapter].segments.length,estimated_cost:He(c.text.length,r),pricing_rate:zt(r)};a.modal.prosodyStatus=`Generating ${c.label}…`;a.modal.prosodyResult=null;se();const o=await gt(a.apiBase,a.accessToken,r.provider,l);Ve().spent+=(o.opalCost??He(c.text.length,r)),await Ae(),Se.src?.startsWith("blob:")&&URL.revokeObjectURL(Se.src);const u=URL.createObjectURL(o);Se.src=u,a.modal&&(a.modal.prosodyResult={label:c.label,chars:c.text.length,voice:r.name||r.voice_id,url:u},a.modal.prosodyStatus=`${c.label} is ready. Tap Play sample.`,se())}catch(c){a.modal&&(a.modal.prosodyStatus=null,se()),alert(c.message||"Prosody audition failed.")}}async function playProsodyResult(){try{if(!a.modal?.prosodyResult?.url)throw new Error("Generate a prosody sample first.");Se.pause();Se.src=a.modal.prosodyResult.url;await Se.play();a.modal&&(a.modal.prosodyStatus=`Playing ${a.modal.prosodyResult.label}…`,se())}catch(e){alert(e.message||"Prosody sample could not play.")}}async function qe(e,{forceFresh=!1,segmentIndices=null}={}){
+  const c=a.book.chapters[e],r=[];
+  const indices=Array.isArray(segmentIndices)?segmentIndices:c.segments.map((_,m)=>m);
+  for(const m of indices){
+    const sg=c.segments[m];
+    if(!sg||!Number.isInteger(m))throw new Error("A requested TTS segment is missing.");
+    const i=segmentVoice(c,sg);
+    if(!i)throw new Error(`Choose a voice for ${sg.pov||"Default Narrator"} first.`);
+    const o={provider:i.provider,voice:i.voice_id,model:Qr(i.provider,i.model_id),rate:1,style:i.style_direction||""};
+    const v=sg.speechText||sg.text,fingerprint=await tt(v+JSON.stringify(o));
+    const current=!sg.audioStale&&sg.audioKey&&(sg.generationFingerprint===fingerprint||(!sg.generationFingerprint&&sg.audioKey===fingerprint));
+    const cacheKey=forceFresh?await tt(fingerprint+":force:"+crypto.randomUUID()):current?sg.audioKey:fingerprint;
+    r.push({text:v,provider:i.provider,voice_id:i.voice_id,voice_name:i.name||i.voice_id,language_code:i.locale,model_id:o.model,cache_key:cacheKey,fingerprint,
+      style_direction:i.style_direction||"",estimated_cost:He(plainSpeech(sg.speechText||sg.text).length,i)*(a.geminiLane==="batch"&&i.provider==="gemini"?.5:1),pricing_rate:zt(i)*(a.geminiLane==="batch"&&i.provider==="gemini"?.5:1),
+      usage_type:"book_generation",book_id:a.book.id,book_title:a.book.title,chapter_index:e,chapter_number:e+1,
+      chapter_title:c.title,segment_index:m,total_segments:c.segments.length});
+  }
+  return{job_id:await tt(JSON.stringify({release:GENERATION_RELEASE_ID,mode:a.geminiLane,book:a.book.id,chapter:e,keys:r.map(sg=>sg.cache_key)})),...generationReleaseStamp(),generation_mode:a.geminiLane,book_id:a.book.id,book_title:a.book.title,
+    chapter_index:e,chapter_number:e+1,chapter_title:c.title,segments:r};
+}
+async function lt(e,c,{replacement:r=!1}={}){const m=a.book.chapters[e],s=r?m.replacementGeneration||{}:m.generation||{},i=Number(s.recordedCost)||0,l=Number(c.generated_cost)||0,o=Math.max(0,l-i);if(c?.state==="paused_update"){m.autoSplitEnabled=false;m.autoSplitPauseReason="update";m.autoSplitStatus="Generation paused for update. Saved audio is intact; restart manually.";}if(c?.inline_split===true&&typeof ensureInlineMapping==="function")await ensureInlineMapping(e,m,s,c);if(c?.inline_split===true&&typeof applyInlineSplits==="function")applyInlineSplits(m,s,c);if(!r&&s.scope==="background_repair"&&c.adaptive_repair){const ok=applyAdaptiveRepair(m,s,c);if(!ok&&["ready","partial"].includes(c?.state)&&!s.repairApplied){m.autoSplitEnabled=false;m.autoSplitPauseReason="error";m.autoSplitStatus="Background repair audio is saved, but passage mapping changed. Copy diagnostics before retrying.";}}// Case #4: every status merged through lt() joins the chapter's job
+// watchlist. Guarded typeof: lt() is also exercised by extracted-code
+// harnesses that don't provide the watchlist helper — the watchlist is
+// runtime-only and rebuildable, so skipping the note there is safe.
+if(typeof noteChapterJob==="function")noteChapterJob(m,c);or(m,c,{replacement:r,recordedCost:l}),o&&(Ve().spent+=o,await Ae());
+// Case #4 final integration: if the slot record was only created by
+// the merge above (a job first seen through discovery), it carried no
+// staged mapping into applyInlineSplits. Give a finished tree one
+// second chance against the record that now exists, then re-merge so
+// the leaves' results land through the aligned mapping. One-shot:
+// applyInlineSplits itself refuses a second expansion.
+if(c?.inline_split===true&&["ready","partial"].includes(c?.state)&&typeof ensureInlineMapping==="function"&&typeof applyInlineSplits==="function"){const s2=r?m.replacementGeneration:m.generation;if(s2&&!s2.inlineApplied){await ensureInlineMapping(e,m,s2,c);if(applyInlineSplits(m,s2,c))or(m,c,{replacement:r,recordedCost:l})}}if(c?.state==="failed"&&quotaQueueFailure(c)){m.autoSplitEnabled=false;m.autoSplitPauseReason="quota";m.autoSplitStatus="Automatic splitting paused: Gemini request quota reached."}await pe();scheduleAutoSplit(e)}
+const adaptiveQueueStarting=new Set();
+let adaptiveWorkerCheck={ok:false,at:0};
+async function adaptiveWorkerReady(){
+  if(Date.now()-adaptiveWorkerCheck.at<60000)return adaptiveWorkerCheck.ok;
+  let ok=false;
+  try{const h=await(await be(a.apiBase,a.accessToken,"/health")).json();
+    const v=/^(\d+)\.(\d+)\.(\d+)$/.exec(String(h?.version||""));
+    ok=!!(h?.ok&&v&&(Number(v[1])>1||Number(v[1])===1&&(Number(v[2])>4||Number(v[2])===4&&Number(v[3])>=38)));
+  }catch{}
+  adaptiveWorkerCheck={ok,at:Date.now()};return ok;
+}
+async function adaptiveRepairPlan(chapterIndex){
+  const ch=a.book.chapters[chapterIndex],nodes=[],roots=[];
+  for(let i=0;i<ch.segments.length;i++){
+    const original=ch.segments[i];if(!gemini400Blocked(ch,original))continue;
+    const voice=segmentVoice(ch,original);if(voice?.provider!=="gemini")continue;
+    const speech=String(original.speechText||original.text||"");
+    const cut=naturalBlockedSplitPoint(plainSpeech(speech));
+    if(cut<0){original.splitExhausted=true;continue}
+    const first=splitSpeechMarkup(speech,cut),forest=[];
+    const cfg={provider:voice.provider,voice:voice.voice_id,
+      model:Qr(voice.provider,voice.model_id),rate:1,style:voice.style_direction||""};
+    async function add(raw,path,parent){
+      const text=plainSpeech(raw).trim();
+      const fingerprint=await tt(raw+JSON.stringify(cfg));
+      const node={text,speechText:raw,provider:"gemini",voice_id:voice.voice_id,
+        voice_name:voice.name||voice.voice_id,language_code:voice.locale,
+        model_id:cfg.model,cache_key:fingerprint,fingerprint,
+        style_direction:voice.style_direction||"",estimated_cost:He(text.length,voice),
+        pricing_rate:zt(voice),usage_type:"book_generation",
+        book_id:a.book.id,book_title:a.book.title,chapter_index:chapterIndex,
+        chapter_number:chapterIndex+1,chapter_title:ch.title,
+        segment_index:i,repair_source_index:i,repair_parent:parent,
+        repair_path:path,total_segments:ch.segments.length};
+      const index=forest.length;forest.push(node);
+      const next=naturalBlockedSplitPoint(text);
+      if(next>=0&&path.length<12){
+        const halves=splitSpeechMarkup(raw,next);
+        if(halves.every(part=>plainSpeech(part).trim().length>=140)){
+          await add(halves[0],path+"L",index);
+          await add(halves[1],path+"R",index);
+        }
+      }
+    }
+    await add(first[0],"L",-1);await add(first[1],"R",-1);
+    if(nodes.length+forest.length>90)break;
+    const begin=nodes.length;
+    nodes.push(...forest.map(node=>({...node,
+      repair_parent:node.repair_parent<0?-1:node.repair_parent+begin})));
+    roots.push({index:i,id:original.id||null,
+      identity:segIdentity(original,ch.pov),rootId:original.blockRootId||original.id||null,
+      begin,count:forest.length});
+  }
+  return {nodes,roots};
+}
+// Case #4 final integration (Rowan): applyInlineSplits consumes a
+// root-to-chapter mapping (local.segmentIndices, one chapter index per
+// job root, in job order). New jobs are staged WITH it (Mr,
+// generateRestOfChapter, Wr), but jobs staged before that — or first
+// seen through discovery, where the slot record was rebuilt from a
+// status alone — may lack it. Derive it here, at reconciliation time,
+// rather than abandoning those jobs' split trees:
+//   1. from the staged segmentKeys (text identities, job order),
+//      anchored and disambiguated as described below.
+//   2. failing that, from the job status itself: recompute the chapter
+//      payload with qe() and match the roots' cache keys against it,
+//      anchor-filtered the same way.
+// Any doubt (edited text, changed voices, ambiguous order) leaves the
+// record untouched: applyInlineSplits stays closed and or()'s inline
+// guard keeps merges identity-safe in the meantime.
+//
+// Case #4 re-review (Rowan): segIdentity is narration text + POV only
+// — it carries no unique segment ID — so when two chapter segments are
+// identical twins, matching identities in chapter order picks the
+// EARLIEST twin, which may be the wrong occurrence (and the split
+// tree's text-integrity check cannot tell identical passages apart).
+// Recovery therefore never chooses an occurrence by position alone. A
+// root's occurrence is used only when it is FORCED:
+//   - pinned by the root's repair_source_index: the Worker stamps
+//     every split parent with its root's payload segment_index (split
+//     parents keep their root's cache key, and every tree entry's
+//     repair_source_index is its root's payload segment_index, which
+//     for ordinary jobs IS the chapter index). That value is
+//     authoritative: a derived or stored index that disagrees with it
+//     is wrong, and a derivation that cannot be reconciled with every
+//     available anchor fails safe; or
+//   - the unique solution of the strictly-increasing assignment of all
+//     roots to their identity/cache-key matches (job order IS chapter
+//     order), computed as earliest-greedy vs latest-greedy: a root is
+//     resolved only where both assignments agree.
+// A stored mapping that contradicts an anchor is cleared when no safe
+// recovery replaces it, so nothing downstream can expand or merge
+// onto the wrong twin.
+function inlineRootEntries(status){
+  return (Array.isArray(status?.segments)?status.segments:[])
+    .filter(o=>!(typeof o?.repair_path==="string"&&o.repair_path.length>0));
+}
+function inlineRootAnchor(o){
+  return Number.isInteger(o?.repair_source_index)&&o.repair_source_index>=0?o.repair_source_index:null;
+}
+// One ascending candidate list per root (job order): compute the
+// component-wise earliest and latest strictly-increasing assignments.
+// A position is FORCED only where both agree; anything else comes back
+// null (ambiguous — the caller defers or refuses, never guesses).
+// Returns null when no assignment exists at all.
+function forcedIndexAssignment(sets){
+  const n=sets.length,earliest=new Array(n).fill(null),latest=new Array(n).fill(null);
+  let prev=-1;
+  for(let k=0;k<n;k++){let pick=null;for(const u of sets[k])if(u>prev){pick=u;break}if(pick==null)return null;earliest[k]=pick;prev=pick}
+  prev=Infinity;
+  for(let k=n-1;k>=0;k--){let pick=null;const q=sets[k];for(let j=q.length-1;j>=0;j--)if(q[j]<prev){pick=q[j];break}if(pick==null)return null;latest[k]=pick;prev=pick}
+  return earliest.map((u,k)=>u===latest[k]?u:null);
+}
+// Resolve each job root to its chapter index from the staged identity
+// keys: an anchored root pins its occurrence (and the staged identity
+// there must agree, else that root is unresolvable); every other root
+// resolves only where the joint assignment forces it. Unresolvable
+// roots come back null. Returns null only for malformed input.
+function resolveIndicesFromKeys(ch,keys,roots){
+  if(!Array.isArray(keys)||!Array.isArray(roots)||!roots.length||keys.length!==roots.length)return null;
+  if(!Array.isArray(ch?.segments))return null;
+  const cand=new Map();
+  ch.segments.forEach((t,u)=>{if(t==null)return;const id=segIdentity(t,ch.pov),q=cand.get(id)||[];q.push(u);cand.set(id,q)});
+  const sets=roots.map((o,k)=>{
+    const anchor=inlineRootAnchor(o);
+    if(anchor!=null)return anchor<ch.segments.length&&segIdentity(ch.segments[anchor],ch.pov)===keys[k]?[anchor]:[];
+    return (cand.get(keys[k])||[]).slice();
+  });
+  if(sets.some(q=>!q.length))return roots.map(()=>null);
+  return forcedIndexAssignment(sets)||roots.map(()=>null);
+}
+function deriveIndicesFromKeys(ch,keys,count,roots){
+  if(!Array.isArray(keys)||!count||keys.length!==count)return null;
+  if(!Array.isArray(roots)||roots.length!==count)return null;
+  const resolved=resolveIndicesFromKeys(ch,keys,roots);
+  return resolved&&resolved.every(u=>Number.isInteger(u))?resolved:null;
+}
+async function ensureInlineMapping(e,ch,local,status){
+  try{
+    if(!local||typeof local!=="object"||local.inlineApplied)return;
+    if(local.scope==="background_repair"||status?.adaptive_repair)return;
+    const roots=inlineRootEntries(status);
+    if(!roots.length||!Array.isArray(ch?.segments))return;
+    const existing=Array.isArray(local.segmentIndices)?local.segmentIndices:null;
+    let anchorConflict=false;
+    if(existing&&existing.length===roots.length){
+      const keys=Array.isArray(local.segmentKeys)?local.segmentKeys:null;
+      const ok=existing.every((idx,k)=>Number.isInteger(idx)&&idx>=0&&idx<ch.segments.length
+        &&(inlineRootAnchor(roots[k])==null||idx===inlineRootAnchor(roots[k]))
+        &&(!keys||keys.length!==roots.length||segIdentity(ch.segments[idx],ch.pov)===keys[k]));
+      if(ok)return;
+      anchorConflict=existing.some((idx,k)=>inlineRootAnchor(roots[k])!=null&&idx!==inlineRootAnchor(roots[k]));
+    }
+    const fromKeys=deriveIndicesFromKeys(ch,local.segmentKeys,roots.length,roots);
+    if(fromKeys){local.segmentIndices=fromKeys;return}
+    if(typeof qe==="function"){
+      const payload=await qe(e),segs=Array.isArray(payload?.segments)?payload.segments:[];
+      const sets=roots.map(root=>{
+        const anchor=inlineRootAnchor(root),values=[];
+        for(const sg of segs){
+          if(!sg||(sg.cache_key!==root.cache_key&&sg.fingerprint!==root.cache_key))continue;
+          if(anchor!=null&&sg.segment_index!==anchor)continue;
+          values.push(sg.segment_index);
+        }
+        return values;
+      });
+      if(!sets.some(q=>!q.length)){
+        const forced=forcedIndexAssignment(sets);
+        if(forced&&forced.every(u=>Number.isInteger(u))){local.segmentIndices=forced;return}
+      }
+    }
+    // Nothing could be recovered safely. A stored mapping that
+    // contradicts a Worker anchor is worse than none at all: clear it
+    // so applyInlineSplits stays closed and or() defers, instead of
+    // expanding or merging onto the wrong twin. The job's audio stays
+    // on its server-side status either way — nothing is lost.
+    if(anchorConflict)local.segmentIndices=null;
+  }catch{/* best-effort: or()'s inline guard keeps merges safe without a mapping */}
+}
+function applyInlineSplits(ch,local,status){
+  // Case #4 final review (Rowan Blocker 1): an ordinary generation job
+  // now resolves POLICY_BLOCKs inline on the Worker, and its status
+  // carries the split tree (repair_path / repair_source_index /
+  // speech_text per node). When such a job finishes, expand each split
+  // chapter root into the tree's terminal leaves -- the same chapter
+  // surgery applyAdaptiveRepair performs for repair jobs -- then
+  // rebuild the local record's segment mapping aligned to the FULL
+  // status array, so the ordinary or() merge applies every leaf's
+  // result exactly (audio, blocked-for-fallback, provider failure).
+  // Integrity: the leaves' joined plain text must reproduce the
+  // original passage (whitespace-insensitive) before anything splices;
+  // on any mismatch the chapter is left untouched.
+  if(local?.inlineApplied||!["ready","partial"].includes(status?.state))return false;
+  if(status?.inline_split!==true||!Array.isArray(status.segments))return false;
+  const jobId=status.job_id||status.jobId||null;
+  if(local?.jobId&&jobId&&local.jobId!==jobId)return false;
+  const items=status.segments;
+  const isChild=s=>typeof s?.repair_path==="string"&&s.repair_path.length>0;
+  const roots=items.filter(s=>!isChild(s));
+  if(!Array.isArray(local?.segmentIndices)||local.segmentIndices.length!==roots.length)return false;
+  // Root entries in status order map through the local record's
+  // submit-time segmentIndices (roots-only alignment).
+  const rootChapterIndex=new Map();
+  { let k=0;
+    for(let u=0;u<items.length;u++){
+      if(isChild(items[u]))continue;
+      rootChapterIndex.set(u,local.segmentIndices[k++]);
+    } }
+  const edits=[];
+  for(let u=0;u<items.length;u++){
+    const s=items[u];
+    if(s?.state!=="split"||isChild(s)||!Number.isInteger(s?.repair_source_index))continue;
+    const leaves=items.filter(x=>isChild(x)&&x.repair_source_index===s.repair_source_index&&
+      ["ready","blocked","provider_failed"].includes(x.state));
+    if(!leaves.length||leaves.some(x=>typeof x.speech_text!=="string"))return false;
+    const chapterIndex=rootChapterIndex.get(u);
+    // The Worker's anchor is authoritative: repair_source_index IS
+    // this root's chapter index, so a mapping that sends the root
+    // anywhere else is wrong. Refuse rather than expand the wrong
+    // occurrence — the text-integrity check below cannot catch this
+    // when another segment is an identical twin of the passage.
+    if(chapterIndex!==s.repair_source_index)return false;
+    const old=Number.isInteger(chapterIndex)?ch.segments[chapterIndex]:null;
+    if(!old)return false;
+    const joined=leaves.map(x=>plainSpeech(x.speech_text)).join("");
+    const original=plainSpeech(old.speechText||old.text||"");
+    if(joined.replace(/\s+/g,"")!==original.replace(/\s+/g,""))return false;
+    const pieces=leaves.map((leaf,n)=>{
+      const seg={...old,id:n?crypto.randomUUID():old.id||crypto.randomUUID(),
+        text:plainSpeech(leaf.speech_text),speechText:leaf.speech_text,
+        blockRootId:old.blockRootId||old.id||null,
+        audioKey:null,audioStale:false,generationFingerprint:null,
+        providerRequestId:null,generatedModel:null};
+      delete seg.generationBlocked;delete seg.generationFailure;
+      delete seg.segmentGeneration;delete seg.splitExhausted;delete seg.systemVoiceFallback;
+      if(n)delete seg.sceneBreakBefore;
+      if(leaf.state==="ready"){seg.audioKey=leaf.cache_key||null;
+        seg.generationFingerprint=leaf.cache_key||null;seg.generatedModel=leaf.model||null}
+      if(leaf.state==="blocked"){seg.generationBlocked={
+        error:leaf.error||"Gemini blocked this small piece.",
+        blockReason:leaf.block_reason||"POLICY_BLOCK",finishReason:leaf.finish_reason||"HTTP_400",
+        model:leaf.model||null,jobId};seg.splitExhausted=true}
+      if(leaf.state==="provider_failed")seg.generationFailure={
+        error:leaf.error||"Gemini provider error.",kind:"provider_internal",
+        model:leaf.model||null,jobId};
+      return seg;
+    });
+    edits.push({statusIndex:u,sourceIndex:s.repair_source_index,chapterIndex,old,pieces,
+      splitCount:items.filter(x=>x.repair_source_index===s.repair_source_index&&x.state==="split").length});
+  }
+  if(!edits.length)return false;
+  // Splice descending so earlier chapter indices stay valid.
+  const shiftAt=new Map();
+  for(const x of edits.sort((p,q)=>q.chapterIndex-p.chapterIndex)){
+    if(typeof geminiRootInfo==="function"){
+      const hist=geminiRootInfo(ch,x.old);
+      if(hist)hist.splits=(Number(hist.splits)||0)+x.splitCount;
+    }
+    ch.segments.splice(x.chapterIndex,1,...x.pieces);
+    shiftAt.set(x.chapterIndex,x.pieces.length-1);
+  }
+  ch.text=ch.segments.map(s=>s.text).join("\n\n");
+  // Rebuild the local mapping aligned to the FULL status array (the
+  // convention or()'s exact-index path expects): roots shift by the
+  // expansions before them; a split parent points at its first piece
+  // (its state maps as a no-op there); each terminal leaf points at
+  // its own piece; internal split nodes point at their root's first
+  // piece. Keys are re-derived from the expanded chapter; fingerprints
+  // keep root values and take each leaf's cache key.
+  const shiftBefore=idx=>{let d=0;for(const[at,delta]of shiftAt)if(at<idx)d+=delta;return d};
+  const newIndices=new Array(items.length).fill(-1),
+        newKeys=new Array(items.length).fill(null),
+        newFingerprints=new Array(items.length).fill(null);
+  const firstPieceAt=new Map();
+  { let k=0;
+    for(let u=0;u<items.length;u++){
+      const s=items[u];
+      if(isChild(s))continue;
+      const base=local.segmentIndices[k];
+      const at=Number.isInteger(base)?base+shiftBefore(base):-1;
+      newIndices[u]=at;
+      newKeys[u]=at>=0&&ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+      newFingerprints[u]=Array.isArray(local.segmentFingerprints)?local.segmentFingerprints[k]??null:null;
+      k++;
+      if(s?.state==="split")firstPieceAt.set(s.repair_source_index,at);
+    } }
+  { const cursor=new Map();
+    for(let u=0;u<items.length;u++){
+      const s=items[u];
+      if(!isChild(s))continue;
+      if(["ready","blocked","provider_failed"].includes(s.state)){
+        const start=firstPieceAt.get(s.repair_source_index);
+        if(start==null||start<0)continue;
+        const at=start+(cursor.get(s.repair_source_index)||0);
+        cursor.set(s.repair_source_index,(cursor.get(s.repair_source_index)||0)+1);
+        newIndices[u]=at;
+        newKeys[u]=ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+        newFingerprints[u]=s.cache_key||null;
+      }else{
+        const at=firstPieceAt.get(s.repair_source_index);
+        if(at==null||at<0)continue;
+        newIndices[u]=at;
+        newKeys[u]=ch.segments[at]?segIdentity(ch.segments[at],ch.pov):null;
+      }
+    } }
+  local.segmentIndices=newIndices;
+  local.segmentKeys=newKeys;
+  local.segmentFingerprints=newFingerprints;
+  local.inlineApplied=true;
+  return true;
+}
+function applyAdaptiveRepair(ch,local,status){
+  if(local?.repairApplied||!["ready","partial"].includes(status?.state))return false;
+  if(!Array.isArray(local?.repairNodes)||!Array.isArray(local?.repairRoots)||
+     status.segments?.length!==local.repairNodes.length)return false;
+  const edits=[];
+  for(const root of local.repairRoots){
+    // Earlier batches can expand segment indexes. Locate by stable ID rather
+    // than old index so subsequent chapter batches never overwrite a neighbor.
+    const resolved=root.id?ch.segments.findIndex(seg=>seg?.id===root.id):
+      root.index;
+    const old=ch.segments[resolved];
+    if(resolved<0||!old||(root.id&&old.id!==root.id)||
+       segIdentity(old,ch.pov)!==root.identity)return false;
+    const pieces=[];
+    for(let n=root.begin;n<root.begin+root.count;n++){
+      const s=status.segments[n],p=local.repairNodes[n];
+      if(!s||!p||!["ready","blocked","provider_failed"].includes(s.state))continue;
+      const seg={...old,id:pieces.length?crypto.randomUUID():old.id||crypto.randomUUID(),
+        text:p.displayText||p.text,speechText:p.speechText,blockRootId:root.rootId||old.id,
+        audioKey:null,audioStale:false,generationFingerprint:null,
+        providerRequestId:null,generatedModel:null};
+      delete seg.generationBlocked;delete seg.generationFailure;
+      delete seg.segmentGeneration;delete seg.splitExhausted;delete seg.systemVoiceFallback;
+      if(pieces.length)delete seg.sceneBreakBefore;
+      if(s.state==="ready"){seg.audioKey=s.cache_key||p.cache_key;
+        seg.generationFingerprint=p.fingerprint;seg.generatedModel=s.model||p.model_id}
+      if(s.state==="blocked"){seg.generationBlocked={
+        error:s.error||"Gemini blocked this small piece.",
+        blockReason:s.block_reason||"POLICY_BLOCK",finishReason:s.finish_reason||"HTTP_400",
+        model:s.model||p.model_id,jobId:status.job_id};seg.splitExhausted=true}
+      if(s.state==="provider_failed")seg.generationFailure={
+        error:s.error||"Gemini provider error.",kind:"provider_internal",
+        model:s.model||p.model_id,jobId:status.job_id};
+      pieces.push(seg);
+    }
+    if(!pieces.length)return false;
+    edits.push({...root,index:resolved,pieces});
+  }
+  for(const x of edits.sort((p,q)=>q.index-p.index)){
+    const hist=geminiRootInfo(ch,ch.segments[x.index]);
+    if(hist){
+      const wasAlreadyBlocked=local.repairNodes[x.begin]?.repair_path!=="";
+      hist.splits=(Number(hist.splits)||0)+(wasAlreadyBlocked?1:0)+
+        status.segments.slice(x.begin,x.begin+x.count).filter(s=>s?.state==="split").length;
+    }
+    ch.segments.splice(x.index,1,...x.pieces);
+  }
+  ch.text=ch.segments.map(s=>s.text).join("\n\n");
+  local.repairApplied=true;
+  // Case #4 final pass: a repair plan is capped (90 nodes), so a chapter
+  // with many blocked passages can need several plans in a row. Pieces
+  // THIS pass produced are terminal — ready, blocked with
+  // splitExhausted set, or provider-failed — but roots the cap left out
+  // of the plan are untouched and still repairable. Keep the automatic
+  // chain armed for them (lt()'s scheduleAutoSplit queues the next
+  // plan) instead of switching off until a manual tap. The next plan
+  // build re-checks eligibility exactly; if nothing is plannable it
+  // disables the chain itself, and every pass permanently resolves at
+  // least one root, so this cannot loop.
+  const remainingRepairable=ch.segments.some(seg=>seg.generationBlocked&&
+    !seg.splitExhausted&&!seg.audioKey&&!seg.systemVoiceFallback);
+  if(remainingRepairable){
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;
+    ch.autoSplitStatus="Background repair saved this pass; more blocked passages remain, so repair continues automatically.";
+  }else{
+    ch.autoSplitEnabled=false;ch.autoSplitPauseReason="completed";
+    ch.autoSplitStatus=ch.segments.some(s=>s.generationBlocked||s.generationFailure)
+      ?"Background repair finished with unresolved pieces."
+      :"Background repair finished; all pieces saved.";
+  }
+  return true;
+}
+function effectivePauseReason(chapter){
+  if(chapter?.autoSplitPauseReason)return chapter.autoSplitPauseReason;
+  if(chapter?.autoSplitEnabled===false&&chapter?.autoSplitStatus==="Background repair paused at your monthly soft cap.")return "cap";
+  return null;
+}
+function capRepairPause(chapter){
+  if(!chapter||chapter.autoSplitEnabled!==false||effectivePauseReason(chapter)!=="cap")return null;
+  // Affordance gate: at least one repairable blocked piece — a segment the
+  // repair plan would actually take (Gemini-blocked, voice resolvable, and
+  // a safe split point exists). Mirrors adaptiveRepairPlan's root filters
+  // without its side effects. Every probe is guarded: gemini400Blocked
+  // itself resolves the segment voice, so a chapter whose cast/voices
+  // cannot resolve derives "no work" instead of throwing out of render.
+  let forecast=0,work=0;
+  for(const seg of chapter.segments||[]){
+    let blocked=false,voice=null,cut=-1;
+    try{blocked=gemini400Blocked(chapter,seg)}catch(_){}
+    if(!blocked)continue;
+    try{voice=segmentVoice(chapter,seg)}catch(_){}
+    if(voice?.provider!=="gemini")continue;
+    const speech=plainSpeech(seg.speechText||seg.text||"");
+    try{cut=naturalBlockedSplitPoint(speech)}catch(_){}
+    if(cut<0)continue;
+    work++;forecast+=He(speech.length,voice);
+  }
+  if(!work)return null;
+  const cap=Number(a.monthlyCap)||0,spent=Number(Ve().spent)||0;
+  // forecast is a BASE cost: the blocked passages once each, before the
+  // repair plan splits them. The queue-time guard sums the full repair
+  // tree (always >= this base), so the banner may only state what the
+  // base proves: overCap means even the base busts the cap. Otherwise the
+  // banner makes no eligibility claim — Resume defers to the real plan
+  // check in queueAdaptiveRepair, which confirms or refuses there.
+  return{forecast,spent,cap,overCap:cap>0&&spent+forecast>cap};
+}
+async function queueAdaptiveRepair(chapterIndex,{manual=false}={}){
+  const book=a.book,ch=book?.chapters?.[chapterIndex],key=book?.id+":"+chapterIndex;
+  if(!ch||adaptiveQueueStarting.has(key))return;
+  if([ch.generation,ch.replacementGeneration].some(j=>["queued","generating"].includes(j?.state)))return;
+  adaptiveQueueStarting.add(key);
+  try{
+    if(!await adaptiveWorkerReady()){
+      if(manual)return splitBlockedSegment(chapterIndex,ch.segments.findIndex(s=>gemini400Blocked(ch,s)));
+      return runAutoSplit(chapterIndex);
+    }
+    const plan=await adaptiveRepairPlan(chapterIndex);
+    if(!plan.nodes.length){
+      ch.autoSplitEnabled=false;ch.autoSplitPauseReason="exhausted";ch.autoSplitStatus="No remaining blocked pieces have a safe split point.";
+      await pe();se();return;
+    }
+    const cost=plan.nodes.reduce((sum,x)=>sum+Number(x.estimated_cost||0),0);
+    if(a.monthlyCap>0&&Ve().spent+cost>a.monthlyCap){
+      if(!manual){ch.autoSplitEnabled=false;ch.autoSplitPauseReason="cap";
+        ch.autoSplitStatus="Background repair paused at your monthly soft cap.";
+        await pe();se();return}
+      if(!confirm("Worst-case background repairs may exceed your monthly soft cap. Continue?"))return;
+    }
+    if(manual&&!confirm("Queue background repair for "+plan.roots.length+
+      " blocked passage(s)? The Worker will generate only necessary pieces, even when Reader is closed."))return;
+    if(!a.providers.generation&&(await $e(),!a.providers.generation))
+      throw new Error("Cloudflare generation queue is not connected.");
+    const jobId=await tt(JSON.stringify({book:book.id,chapter:chapterIndex,
+      release:GENERATION_RELEASE_ID,kind:"adaptive_repair",keys:plan.nodes.map(s=>s.cache_key)}));
+    // Worker-anchored duplicate check (Case #2 review): the deterministic
+    // jobId is an identity, not proof of Worker state, and this device's
+    // local book may be a stale snapshot (whole-book sync is
+    // last-writer-wins). Ask the Worker for this job's real status before
+    // submitting. Below, an active or finished server job is adopted
+    // through the same lt() path the poller uses, and parked/paused jobs
+    // are reconciled — never blind-resubmitted (the Worker's POST adopts
+    // queued/generating/ready/partial itself, but restarts the rest). A
+    // confirmed "failed" falls through to the normal submit, which
+    // restarts that same job. Any uncertain lookup fails closed: the
+    // throw lands in the outer catch and nothing is submitted.
+    // Scope boundary: the lookup is keyed by THIS device's deterministic
+    // plan id, so it can only find the same job (same book, chapter,
+    // release, and plan cache keys). A repair submitted under a
+    // different plan — e.g. by another device whose cast changed,
+    // changing the cache keys — is not discoverable from the client.
+    // Comprehensive cross-device duplicate protection needs a
+    // Worker-side job index (Roundtable Case #3) and is not claimed
+    // here.
+    let serverJob=null;
+    try{serverJob=await kr(a.apiBase,a.accessToken,jobId)}
+    catch(err){if(err?.status!==404)throw new Error("Background repair could not verify this chapter's job with the Worker. Check your connection and try again.")}
+    if(serverJob&&typeof serverJob.state!=="string")
+      throw new Error("Background repair could not verify this chapter's job with the Worker. Check your connection and try again.");
+    const payload={job_id:jobId,book_id:book.id,book_title:book.title,chapter_index:chapterIndex,
+      chapter_number:chapterIndex+1,chapter_title:ch.title,
+      diagnostic_job_kind:"adaptive_repair",adaptive_repair:true,
+      segments:plan.nodes.map(({speechText,...p})=>({...p,text:speechText}))};
+    // Ledger seed (Case #2 re-review): when the Worker already holds
+    // this job, its status carries the job's cumulative generated_cost.
+    // Seed the fresh local record's recordedCost with that figure, so
+    // lt()'s delta (generated_cost - recordedCost) credits only spend
+    // accrued AFTER this adoption/restart. Without the seed, resuming
+    // on a second device re-credits cost another device already
+    // recorded into the shared, synced monthly ledger — inflating
+    // spent and corrupting the cap accounting this feature exists to
+    // fix. Accepted tradeoff: server-accrued cost that no device has
+    // recorded yet at adoption time is treated as already accounted
+    // and never credited (a bounded undercount of the local estimate).
+    // That is the safer error for a soft-cap ledger: re-crediting
+    // double-counts the common two-device case and can falsely trip
+    // the cap. A confirmed-absent job (404) is genuinely new: seed 0.
+    const recordedCostSeed=serverJob?Number(serverJob.generated_cost)||0:0;
+    if(serverJob&&serverJob.state!=="failed"){
+      // Case #4 §4.2: adoption performs NO staging write. The old order
+      // overwrote the slot with {completed:0, total:roots*2} BEFORE the
+      // adoption branch ran — evicting a parked job's record and
+      // repainting the chapter as 0/2 (the Oct 20 flip-flop). Now only
+      // the repair-mapping context is merged onto the existing record
+      // (applyAdaptiveRepair needs scope/nodes/roots on the pre-merge
+      // slot to map a finished repair); progress fields (state,
+      // completed, total) are never reset, and lt() merges the server's
+      // real status directly. Two non-progress fields DO ride along:
+      // jobId (the record now names the adopted job) and recordedCost —
+      // Case #2's ledger seed, which must be on the record BEFORE lt()
+      // merges, or adoption would re-credit spend another device
+      // already recorded. A stale submitUnconfirmed flag is cleared:
+      // the server holding this job IS the confirmation.
+      ch.generation={...ch.generation,jobId,scope:"background_repair",
+        repairNodes:plan.nodes,repairRoots:plan.roots,repairApplied:false,
+        recordedCost:recordedCostSeed};
+      delete ch.generation.submitUnconfirmed;
+      ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;
+      // Adopt/reconcile the server's job instead of submitting a second
+      // one. lt() applies finished repairs and merges live progress; the
+      // pins below keep paused/parked outcomes from re-arming the
+      // automatic scheduler against a job that is not running.
+      await lt(chapterIndex,serverJob);
+      if(serverJob.state==="paused_quota"){
+        ch.autoSplitEnabled=false;ch.autoSplitPauseReason="quota";
+        ch.autoSplitStatus="Automatic splitting paused: the Worker already has this repair paused for Gemini quota.";
+        await pe();
+      }else if(serverJob.state==="parked"||serverJob.state==="staging_incomplete"){
+        ch.autoSplitEnabled=false;ch.autoSplitPauseReason="error";
+        ch.autoSplitStatus="The Worker already holds a repair job for this chapter that has not started. Reader will not queue a duplicate.";
+        await pe();
+      }else if(serverJob.state==="queued"||serverJob.state==="generating"){
+        ch.autoSplitStatus="Background repair was already queued on the Worker for this chapter; Reader is following that job instead of queueing a duplicate.";
+        await pe();
+      }
+      se();ct();return;
+    }
+    // Genuine submit (server 404, or a confirmed-failed job restarting):
+    // only NOW may the staging write create the slot record.
+    ch.generation={jobId,state:"queued",completed:0,total:plan.roots.length*2,
+      scope:"background_repair",repairNodes:plan.nodes,repairRoots:plan.roots,
+      repairApplied:false,recordedCost:recordedCostSeed,error:null};
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus="Background repair queued; Reader may be closed.";
+    await pe();se();
+    try{const status=await xt(a.apiBase,a.accessToken,payload);
+      await lt(chapterIndex,status);se();ct();
+    }catch(err){
+      if(err?.status){ch.generation={...ch.generation,state:"failed",error:err.message};
+        ch.autoSplitEnabled=false;ch.autoSplitPauseReason="error";await pe();se();throw err}
+      ch.generation={...ch.generation,submitUnconfirmed:true};
+      await pe();se();ct();
+    }
+  }catch(err){ch.autoSplitStatus="Background repair could not start: "+String(err?.message||err);
+    await pe();se();if(manual)alert(ch.autoSplitStatus)}
+  finally{adaptiveQueueStarting.delete(key)}
+}
+async function runAutoSplitSmart(chapterIndex){
+  const ch=a.book?.chapters?.[chapterIndex];
+  if(!ch?.autoSplitEnabled)return;
+  if([ch.generation,ch.replacementGeneration].some(j=>["queued","generating"].includes(j?.state)))return;
+  // Case #4 §4.4: automatic repair never stages while ANY known job for
+  // the chapter is quota-parked — the Oct 20 loop burned 11 calls exactly
+  // here, because the old guard only looked at the local slot. (Manual
+  // taps call queueAdaptiveRepair directly and are NOT gated here; the
+  // Worker's park gate is the server-side backstop either way.)
+  if(knownChapterJobs(ch).some(j=>j.state==="paused_quota"))return;
+  return queueAdaptiveRepair(chapterIndex);
+}
+
+// v1.4.79: Gemini HTTP 400 POLICY_BLOCK, chapter-wide split-and-retry.
+// Only explicit chapter generation or tapping auto-split arms a chapter.
+// Jobs are serialized, stored before submission, and never change the voice.
+const autoSplitInFlight=new Set();
+function gemini400Blocked(ch,seg){
+  const b=seg?.generationBlocked;
+  if(!b||b.blockReason!=="POLICY_BLOCK"||seg.splitExhausted||seg.audioKey||seg.systemVoiceFallback)return false;
+  const voice=segmentVoice(ch,seg);
+  if(voice?.provider!=="gemini"&&!/^gemini-/i.test(b.model||""))return false;
+  return /HTTP[_ ]?400/i.test(b.finishReason||"")||/(?:HTTP[_ ]?400|error\s*\(400\)|status\s*400)/i.test(b.error||"");
+}
+function scheduleAutoSplit(chapterIndex){
+  const ch=a.book?.chapters?.[chapterIndex];
+  if(!ch?.autoSplitEnabled||document.visibilityState==="hidden")return;
+  setTimeout(()=>runAutoSplitSmart(chapterIndex).catch(err=>console.warn("Automatic Gemini splitting stopped",err)),0);
+}
+async function runAutoSplit(chapterIndex){
+  const book=a.book,ch=book?.chapters?.[chapterIndex],key=book?.id+":"+chapterIndex;
+  if(!ch?.autoSplitEnabled||autoSplitInFlight.has(key))return;
+  autoSplitInFlight.add(key);
+  try{
+    while(a.book===book&&ch.autoSplitEnabled){
+      if(document.visibilityState==="hidden")return;
+      if([ch.generation,ch.replacementGeneration].some(j=>["queued","generating"].includes(j?.state)))return;
+      if(ch.segments.some(s=>s.segmentGeneration?.jobId))return;
+      if([ch.generation,ch.replacementGeneration].some(j=>j?.submitUnconfirmed&&j?.state==="failed"))
+        throw new Error("An earlier queue request is unconfirmed. Check it before generating more.");
+      if([ch.generation,ch.replacementGeneration].some(j=>j?.state==="failed"&&/lost contact|generation expired|network|quota|request failed/i.test(j.error||"")))
+        throw new Error("A previous request failed. Resolve it before resuming automatic splitting.");
+      const at=ch.segments.findIndex(s=>gemini400Blocked(ch,s));
+      if(at<0){
+        ch.autoSplitEnabled=false;ch.autoSplitPauseReason="exhausted";
+        const remaining=ch.segments.filter(s=>s.generationBlocked&&s.splitExhausted).length;
+        ch.autoSplitStatus=remaining?remaining+" blocked piece(s) have no usable split point.":"Automatic repair finished.";
+        await pe();se();return;
+      }
+      const result=await splitBlockedSegment(chapterIndex,at,{automatic:true});
+      if(result==="paused")return;
+      if(result==="queued"){
+        // Immediate cache/status completion should advance the next blocked
+        // passage without depending on an additional polling transition.
+        if([ch.generation,ch.replacementGeneration].some(j=>["queued","generating"].includes(j?.state)))return;
+        continue;
+      }
+      if(result!=="exhausted")return;
+    }
+  }catch(err){
+    if(a.book===book){ch.autoSplitEnabled=false;ch.autoSplitPauseReason="error";ch.autoSplitStatus="Automatic splitting paused: "+String(err?.message||err);await pe();se()}
+    console.warn("Automatic Gemini splitting stopped",err);
+  }finally{autoSplitInFlight.delete(key)}
+}
+
+// Continue to quota is opt-in, book-scoped, and never restarts on a clock.
+// Worker stages one job per chapter/batch, activating the next only when the
+// previous job finishes; a Gemini 429 pauses the entire chain until a tap.
+const continueTerminal=new Set(["ready","partial","failed"]);
+let continueBusy=false;
+
+function setContinuePreparation(message){
+  const status=document.querySelector("#continuePreparation");
+  if(status)status.textContent=message||"";
+  const button=document.querySelector("#continueToQuota");
+  if(button){
+    const working=!!message;
+    button.disabled=working||a.book?.continueSession?.state==="running";
+    if(working)button.setAttribute("aria-busy","true");
+    else button.removeAttribute("aria-busy");
+  }
+}
+
+async function refreshContinueSession({force=false}={}){
+  const book=a.book,session=book?.continueSession;
+  if(!session||!session.jobs?.length||!a.apiBase||!a.accessToken)return;
+  if(session.state==="complete"||session.state==="error"||
+     session.state==="update_paused"&&!force||session.state==="paused"&&!force)return;
+  if(session.state==="paused"&&force)session.state="running";
+  let changed=false;
+  for(let checks=0;checks<4;checks++){
+    const job=session.jobs.find(j=>!continueTerminal.has(j.state));
+    if(!job){
+      session.state="complete";changed=true;break;
+    }
+    if(job.state==="paused_quota"&&!force){session.state="paused";changed=true;break}
+    if(job.state==="paused_update"){session.state="update_paused";changed=true;break}
+    let status;
+    try{status=await kr(a.apiBase,a.accessToken,job.jobId)}
+    catch(err){
+      if(err?.status===404&&Array.isArray(session.requests)){
+        session.state="staging_unconfirmed";session.error="Queue submission was not confirmed. Tap Continue to check the same plan.";
+        changed=true;
+      }
+      break;
+    }
+    if(status.state==="parked"&&job.state==="parked")break;
+    const local=job.local,chapter=book.chapters[job.chapterIndex];
+    if(!chapter) {session.state="error";session.error="Chapter no longer exists.";changed=true;break}
+    const needSync=job.state!==status.state||
+      job.completed!==status.completed||job.error!==status.error||
+      (local.scope==="background_repair"&&["ready","partial"].includes(status.state)&&!local.repairApplied);
+    job.state=status.state;job.completed=status.completed;job.error=status.error||null;
+    if(needSync){
+      chapter.generation={...local,jobId:job.jobId};
+      chapter.autoSplitEnabled=false;chapter.autoSplitPauseReason="continue";
+      await lt(job.chapterIndex,status);
+      job.local={...chapter.generation};
+      changed=true;
+    }
+    if(status.state==="paused_quota"){session.state="paused";changed=true;break}
+    if(status.state==="paused_update"){
+      session.state="update_paused";session.error="Previous generation stopped during update. Saved audio is safe.";
+      changed=true;break;
+    }
+    if(status.state==="failed"){
+      session.state="error";session.error=status.error||"A generation job failed.";changed=true;break;
+    }
+    if(!continueTerminal.has(status.state))break;
+  }
+  if(changed){await pe();se()}
+}
+
+// Prepare immutable Gemini split trees before Continue starts. A newly blocked
+// source activates its children BEFORE the Worker moves to the next source.
+async function continueAdaptiveBatches(chapterIndex,full,onProgress=null){
+  const ch=a.book.chapters[chapterIndex],batches=[];
+  let batch={nodes:[],roots:[]},skippedVoice=0;
+  const flush=()=>{if(batch.nodes.length){batches.push(batch);batch={nodes:[],roots:[]}}};
+  for(let index=0;index<ch.segments.length;index++){
+    if(onProgress&&(index===0||index%3===0)){
+      onProgress(index+1,ch.segments.length);
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    const original=ch.segments[index],candidate=full.segments[index];
+    if(!original||!candidate||original.systemVoiceFallback||original.generationFailure)continue;
+    const blocked=gemini400Blocked(ch,original);
+    if(original.generationBlocked&&!blocked)continue; // never re-bill exhausted or ineligible text
+    if(!blocked&&original.audioKey&&!original.audioStale)continue;
+    if(candidate.provider!=="gemini"){skippedVoice++;continue}
+    const voice=segmentVoice(ch,original);
+    if(!voice||voice.provider!=="gemini"){skippedVoice++;continue}
+    const cfg={provider:voice.provider,voice:voice.voice_id,
+      model:Qr(voice.provider,voice.model_id),rate:1,style:voice.style_direction||""};
+    const forest=[];
+    async function addPiece(raw,path,parent,isOriginal=false){
+      const plain=plainSpeech(raw).trim();
+      const fp=isOriginal?candidate.fingerprint:await tt(raw+JSON.stringify(cfg));
+      const item=isOriginal?{...candidate}:{...candidate,text:raw,cache_key:fp,
+        fingerprint:fp,estimated_cost:He(plain.length,voice)};
+      const n=forest.length;
+      forest.push({...item,repair_parent:parent,repair_path:path,
+        repair_source_index:index,segment_index:index,speechText:raw,
+        displayText:isOriginal?original.text:plain});
+      const cut=path.length<5?naturalBlockedSplitPoint(plain):-1;
+      if(cut<0)return;
+      const halves=splitSpeechMarkup(raw,cut);
+      if(halves.length!==2||halves.some(x=>plainSpeech(x).trim().length<140))return;
+      await addPiece(halves[0],path+"L",n);
+      await addPiece(halves[1],path+"R",n);
+    }
+    const raw=String(original.speechText||original.text||"");
+    if(!raw.trim())continue;
+    if(blocked){
+      const point=naturalBlockedSplitPoint(plainSpeech(raw));
+      if(point<0){original.splitExhausted=true;continue}
+      const parts=splitSpeechMarkup(raw,point);
+      if(parts.length!==2||parts.some(x=>plainSpeech(x).trim().length<140)){
+        original.splitExhausted=true;continue;
+      }
+      await addPiece(parts[0],"L",-1);
+      await addPiece(parts[1],"R",-1);
+    }else await addPiece(raw,"",-1,true);
+    if(!forest.length)continue;
+    if(forest.length>90)throw Error("A narration segment exceeds the safe adaptive tree limit.");
+    if(batch.nodes.length+forest.length>90)flush();
+    const begin=batch.nodes.length;
+    batch.nodes.push(...forest.map(item=>({...item,
+      repair_parent:item.repair_parent<0?-1:item.repair_parent+begin})));
+    batch.roots.push({index,id:original.id||null,
+      identity:segIdentity(original,ch.pov),rootId:original.blockRootId||original.id||null,
+      begin,count:forest.length});
+  }
+  flush();
+  return {batches,skippedVoice};
+}
+
+
+// This only clears a locally staged, unconfirmed plan. Every original job ID
+// must be proven absent from the Worker. Network failures and any found job
+// veto removal, protecting partially staged sessions and generated audio.
+function continueSetupErrorDetail(err){
+  const status=Number(err?.status)||0;
+  return "Setup not confirmed"+(status?" (HTTP "+status+")":" (no HTTP response)")+
+    ": "+String(err?.message||"The Worker confirmation was not received.");
+}
+async function discardUnconfirmedContinueSetup(){
+  if(continueBusy||!a.book)return;
+  const book=a.book,session=book.continueSession;
+  if(session?.state!=="staging_unconfirmed"||!Array.isArray(session.requests)||
+      !Array.isArray(session.jobs)||session.jobs.length<1){
+    alert("There is no safely discardable setup plan.");return;
+  }
+  if(!confirm("Check every saved generation job ID on the server, then discard ONLY the unaccepted local setup if all are missing? Your book, cast, audio and listening positions stay intact."))return;
+  continueBusy=true;
+  try{
+    if(!a.apiBase)throw Error("Worker connection is not configured.");
+    const ids=[...new Set(session.jobs.map(j=>j?.jobId))];
+    if(ids.some(id=>typeof id!=="string"||!/^[a-f0-9]{64}$/.test(id))||
+        ids.length!==session.jobs.length)
+      throw Error("Saved job IDs are missing or duplicated; nothing was cleared.");
+    for(const [index,id] of ids.entries()){
+      let found=null;
+      try{found=await kr(a.apiBase,a.accessToken,id)}
+      catch(err){if(Number(err?.status)===404)continue;throw err}
+      throw Error("Job "+(index+1)+" exists on the Worker ("+
+        String(found?.state||"status available")+"). Nothing was discarded.");
+    }
+    if(a.book!==book||book.continueSession!==session)
+      throw Error("The book or generation session changed during verification.");
+    book.continueSession=null;
+    await pe();
+    se();
+    alert("All "+ids.length+" saved jobs were confirmed absent. Only the failed local setup was discarded; your book and audio are unchanged.");
+  }catch(err){
+    alert("Failed setup was NOT discarded: "+String(err?.message||err));
+  }finally{continueBusy=false}
+}
+// Canonical JSON for plan fingerprinting — the exact recipe the Worker
+// uses (object keys sorted at every depth, array order preserved,
+// undefined object fields dropped), so a job's fingerprint is identical
+// on both sides of the wire.
+function stableJsonStringify(value){
+  if(value===null||typeof value!=="object")
+    return JSON.stringify(value===undefined?null:value);
+  if(Array.isArray(value))
+    return "["+value.map(item=>
+      stableJsonStringify(item===undefined?null:item)).join(",")+"]";
+  return "{"+Object.keys(value).filter(k=>value[k]!==undefined).sort()
+    .map(k=>JSON.stringify(k)+":"+stableJsonStringify(value[k])).join(",")+"}";
+}
+// Chunked Continue submission. The one-shot POST carried the entire plan
+// in a single multi-megabyte body; when that request died at intake the
+// Worker had staged nothing and the only retry was resending everything.
+// Here the SAME plan — the same session ID and the same job payloads, so a
+// saved staging_unconfirmed session resumes untouched — goes up in slices
+// of a few jobs that are each independently acknowledged. Every job's
+// contents are pinned by a SHA-256 fingerprint declared with the plan, so
+// nothing can be staged under a plan ID with altered contents. The Worker
+// stages every job parked and activates the session only at finalize,
+// after the complete plan is verified server-side. A slice that fails
+// leaves the session unconfirmed with its requests intact; checking the
+// same setup again re-sends the slices and the Worker simply skips the
+// jobs it already holds for this session. If a finalize succeeded but
+// its response never reached Reader, the next check hears already_active
+// from the stage endpoint and reconciles from the finalize summary —
+// nothing is staged or activated twice.
+const CONTINUE_STAGE_SLICE=3;
+async function submitContinuePlan(sessionId,bookId,requests,onProgress){
+  const jobIds=requests.map(j=>j.job_id);
+  const fingerprints={};
+  for(const j of requests)
+    fingerprints[j.job_id]=await tt(stableJsonStringify(j));
+  let alreadyActive=false;
+  for(let at=0;at<requests.length&&!alreadyActive;at+=CONTINUE_STAGE_SLICE){
+    const slice=requests.slice(at,at+CONTINUE_STAGE_SLICE);
+    if(onProgress)onProgress("Submitting jobs "+(at+1)+"–"+
+      (at+slice.length)+" of "+requests.length+" to Cloudflare…");
+    const ack=await(await be(a.apiBase,a.accessToken,
+      "/api/generation/continue/stage",{method:"POST",
+        body:JSON.stringify({session_id:sessionId,book_id:bookId,
+          job_ids:jobIds,job_fingerprints:fingerprints,jobs:slice})})).json();
+    if(ack?.already_active)alreadyActive=true;
+  }
+  if(onProgress)onProgress("Verifying the complete plan…");
+  const accepted=await be(a.apiBase,a.accessToken,
+    "/api/generation/continue/finalize",{method:"POST",
+      body:JSON.stringify({session_id:sessionId,book_id:bookId})});
+  return await accepted.json();
+}
+async function continueToQuota(){
+  if(continueBusy||!a.book)return;
+  continueBusy=true;
+  const book=a.book;
+  setContinuePreparation("Checking generation connection…");
+  try{
+    if(!a.providers.generation&&(await $e(),!a.providers.generation))
+      throw Error("Cloudflare generation Queue is not connected.");
+    const health=await(await be(a.apiBase,a.accessToken,"/health")).json();
+    const v=/^(\d+)\.(\d+)\.(\d+)$/.exec(String(health?.version||""));
+    if(!health?.ok||health.version!==GENERATION_WORKER_VERSION)
+      throw Error("Reader requires deployed Worker "+GENERATION_WORKER_VERSION+" to continue generation.");
+    setContinuePreparation("Checking existing session…");
+    let session=book.continueSession;
+    if(session){
+      if(session.state==="staging_unconfirmed"&&Array.isArray(session.requests)){
+        const response=await submitContinuePlan(session.id,book.id,
+          session.requests,text=>setContinuePreparation(text));
+        for(const j of session.jobs){
+          const status=response.jobs?.find(x=>x.job_id===j.jobId);
+          if(status)j.state=status.state||j.state;
+        }
+        delete session.requests;session.state="running";session.error=null;
+        if(session.jobs[0]?.local)session.jobs[0].local.state=
+          response.jobs?.[0]?.state||"queued";
+        await pe();se();ct();return;
+      }
+      await refreshContinueSession({force:true});
+      if(session.state==="update_paused"){
+        if(!confirm("The previous generation stopped for a Reader update. Build a NEW queue that reuses all saved audio?"))return;
+        book.continueSession=null;session=null;await pe();se();
+      }
+      if(session?.state==="paused"){
+        const job=session.jobs.find(j=>j.state==="paused_quota");
+        if(!job)throw Error("No paused job found. Copy Gemini diagnostics before retrying.");
+        const result=await(await be(a.apiBase,a.accessToken,
+          "/api/generation/jobs/"+encodeURIComponent(job.jobId)+"/resume",{
+            method:"POST",body:"{}"})).json();
+        if(!result.resumed&&result.status?.state!=="queued"&&result.status?.state!=="generating")
+          throw Error("The Worker did not resume this job. "+(result.status?.error||""));
+        if(result.probe){
+          // Case #4 §4.5 + Rowan S3/S5: while the park is active,
+          // Continue consumes exactly ONE probe total — on the session's
+          // earliest parked job (the one resumed above). The session
+          // stays paused and says so honestly, instead of flipping to
+          // "running" and silently re-parking a moment later.
+          session.state="paused";
+          session.error="Quota still full — one test call was made on the earliest parked chapter. Generation stays parked until the daily reset; tap Continue again to test once more.";
+          await pe();se();ct();return;
+        }
+        job.state="queued";session.state="running";
+        session.error=null;await pe();se();ct();return;
+      }
+      if(session?.state==="running"){
+        alert("Continue to quota is already running in the background.");return;
+      }
+      if(session?.state==="error"){
+        throw Error(session.error||"The existing queue needs attention before another plan.");
+      }
+    }
+    setContinuePreparation("Preparing the chapter plan…");
+    await new Promise(resolve=>setTimeout(resolve,0));
+    const jobs=[],localJobs=[];
+    let forecast=0,skippedVoice=0;
+    const sessionId=await tt(GENERATION_RELEASE_ID+":"+book.id+":"+crypto.randomUUID());
+    const start=Math.max(0,Math.min(Number(book.currentChapter)||0,book.chapters.length-1));
+    for(let i=start;i<book.chapters.length&&jobs.length<30;i++){
+      const ch=book.chapters[i];
+      if([ch.generation,ch.replacementGeneration].some(j=>
+        ["queued","generating","paused_quota"].includes(j?.state)))
+        throw Error("Chapter "+(i+1)+" already has a job running or paused. Finish or resume it first.");
+      setContinuePreparation("Preparing chapter "+(i+1)+" of "+book.chapters.length+"…");
+      const full=await qe(i);
+      const prepared=await continueAdaptiveBatches(i,full,(passage,total)=>
+        setContinuePreparation("Chapter "+(i+1)+" of "+book.chapters.length+
+          " · passage "+passage+" of "+total));
+      skippedVoice+=prepared.skippedVoice;
+      for(let part=0;part<prepared.batches.length&&jobs.length<30;part++){
+        const plan=prepared.batches[part];
+        const jobId=await tt(JSON.stringify({
+          sessionId,release:GENERATION_RELEASE_ID,chapter:i,part,adaptive:true,
+          keys:plan.nodes.map(x=>x.cache_key)}));
+        const payload={...full,job_id:jobId,book_id:book.id,
+          adaptive_repair:true,adaptive_source_mode:"mixed",
+          diagnostic_job_kind:"adaptive_repair",
+          segments:plan.nodes.map(({speechText,displayText,...node})=>({...node,text:speechText}))};
+        const meta={jobId,scope:"background_repair",state:"parked",
+          repairNodes:plan.nodes,repairRoots:plan.roots,repairApplied:false,
+          recordedCost:0,error:null};
+        jobs.push(payload);
+        localJobs.push({jobId,chapterIndex:i,state:"parked",completed:0,error:null,local:meta});
+        // Forecast is deliberately conservative; dormant child requests only
+        // run if their parent actually gets a Gemini POLICY_BLOCK.
+        forecast+=plan.nodes.reduce((sum,x)=>sum+Number(x.estimated_cost||0),0);
+      }
+    }
+    if(!jobs.length){
+      alert("No eligible unfinished Gemini narration remains from your current chapter onward."+
+        (skippedVoice?" Some segments need a Gemini narrator selected.":""));return;
+    }
+    if(a.monthlyCap>0&&Ve().spent+forecast>a.monthlyCap&&!confirm(
+       "Continue to quota could exceed your monthly soft cap of $"+a.monthlyCap.toFixed(2)+
+       ". Worst-case estimated generation: "+Pe(forecast)+". Continue?"))return;
+    setContinuePreparation("");
+    if(!confirm((a.geminiLane==="batch"?"Generate ahead using Gemini Batch? Jobs may take up to 24 hours and will not automatically fall back to Standard. ":"Continue Gemini generation into upcoming chapters of this book until Google reports a quota limit? Reader will stop and wait for your manual Continue tap the next morning. ")+jobs.length+" queued chapter/repair batch(es)."+
+      (skippedVoice?" "+skippedVoice+" non-Gemini segment(s) will be skipped, without changing their voices.":"")))return;
+    session={id:sessionId,release:GENERATION_RELEASE_ID,state:"staging_unconfirmed",jobs:localJobs,
+      requests:jobs,startedAt:Date.now()};
+    book.continueSession=session;
+    await pe();se();
+    setContinuePreparation("Submitting the confirmed plan to Cloudflare…");
+    const server=await submitContinuePlan(sessionId,book.id,jobs,
+      text=>setContinuePreparation(text));
+    for(const j of localJobs){
+      const state=server.jobs?.find(x=>x.job_id===j.jobId);
+      if(state)j.state=state.state||j.state;
+    }
+    delete session.requests;session.state="running";session.error=null;
+    session.jobs[0].local.state="queued";
+    await pe();se();ct();
+  }catch(err){
+    if(book.continueSession?.state!=="staging_unconfirmed"){
+      alert("Continue to quota: "+String(err?.message||err));
+    }else{
+      book.continueSession.error=continueSetupErrorDetail(err);
+      await pe();se();
+      alert(book.continueSession.error);
+    }
+  }finally{
+    continueBusy=false;
+    setContinuePreparation("");
+    if(a.view==="chapters")se();
+  }
+}
+async function resumeChapterQuota(i){
+  const ch=a.book?.chapters?.[i];
+  // Case #4: Resume targets the chapter's parked job from the DERIVED
+  // truth — including a registry-discovered job this device never staged
+  // (the slot may currently hold a different job's record).
+  const slotJob=ch?.generation?.state==="paused_quota"?ch.generation:null;
+  const jobId=slotJob?.jobId||chapterTruth(ch,knownChapterJobs(ch)).quotaParkedJobId;
+  if(!jobId)return;
+  try{
+    const result=await(await be(a.apiBase,a.accessToken,
+      "/api/generation/jobs/"+encodeURIComponent(jobId)+"/resume",{
+        method:"POST",body:"{}"})).json();
+    if(result.status){await lt(i,result.status,{replacement:ch?.replacementGeneration?.jobId===jobId});se();ct()}
+    if(result.probe)
+      alert("The Gemini daily limit is still parked, so Resume sent ONE test call instead of restarting everything. If the limit has actually reset, generation continues; otherwise the chapter re-parks and shows the new reset time.");
+  }catch(err){alert(String(err?.message||"Could not resume chapter."))}
+}
+
+const watchPollAt=new Map();
+// Rowan review fix (Case #4): the discovery throttle is PER BOOK. A
+// single global timestamp let opening Book B within 45s of discovering
+// Book A suppress B's first discovery entirely — and with no locally
+// known job in B, no later poll was guaranteed, so a remote parked job
+// in B could stay invisible indefinitely. Keyed by book id, every book
+// gets its own initial discovery the moment it is opened.
+const jobDiscoveryAt=new Map();
+// Case #4 §4.3: fetch the Worker's job registry for the open book
+// (throttled; also refreshed on visibility regain via Ye). Discovered
+// jobs join the runtime watchlist, so a parked job this device never
+// staged is still followed. An older Worker without the endpoint just
+// fails the fetch and Reader keeps today's slot-only behavior.
+// Case #4 final pass (Rowan R1/R2): discovery results are cached per
+// book id together with the book INSTANCE they were applied to.
+//  R1 — the watchlist is keyed by chapter OBJECT, but reopening a book
+//       from IndexedDB builds fresh chapter objects. The per-book
+//       throttle alone would then skip discovery for up to 45s while
+//       the new objects know nothing — a remotely parked job vanished
+//       from the interface again. So on an instance change the cached
+//       jobs are rehydrated onto the new chapter objects immediately
+//       (Rowan's rehydration option); the throttle itself is untouched
+//       and Ye() re-runs discovery every poll cycle, so fresh data
+//       follows within the normal window.
+//  R2 — the response is applied ONLY to the instance that requested
+//       it. The book id and instance are captured before the await;
+//       if the user switched books while the request was in flight,
+//       the stale response is dropped whole — one book's jobs are
+//       never noted onto another book's chapters.
+const discoveryCacheByBook=new Map();
+async function refreshChapterJobDiscovery(force=false){
+  if(!a.book?.id||!a.apiBase)return;
+  const book=a.book,bookId=book.id,now=Date.now();
+  const cached=discoveryCacheByBook.get(bookId);
+  const instanceChanged=!!cached&&cached.instance!==book;
+  if(instanceChanged){
+    for(const job of cached.jobs){
+      const ch=book.chapters[job.chapter_index];
+      if(ch)noteChapterJob(ch,job);
+    }
+    discoveryCacheByBook.set(bookId,{...cached,instance:book});
+  }
+  if(!force&&now-(jobDiscoveryAt.get(bookId)||0)<45000)return;
+  jobDiscoveryAt.set(bookId,now);
+  try{
+    const res=await(await be(a.apiBase,a.accessToken,
+      "/api/generation/books/"+encodeURIComponent(bookId)+"/jobs")).json();
+    // Case #4 final review (Blocker 3, combined R1+R2): a response
+    // applies to the CURRENT instance of the SAME book. Reopening book
+    // A as a fresh instance while A's first discovery is still in
+    // flight must not drop the response -- the reopened instance has
+    // no cache to rehydrate and the 45s throttle blocks a refetch, so
+    // dropping it would hide a remotely parked job until some
+    // unrelated UI event. A response is dropped only when a DIFFERENT
+    // book is open now, which keeps cross-book contamination
+    // impossible (the accepted R2 behavior).
+    if(a.book?.id!==bookId)return;
+    const current=a.book;
+    if(res?.quota_park)a.quotaPark=res.quota_park;
+    const jobs=Array.isArray(res?.jobs)?res.jobs:[];
+    discoveryCacheByBook.set(bookId,{instance:current,jobs});
+    for(const job of jobs){
+      const ch=current.chapters[job.chapter_index];
+      if(ch)noteChapterJob(ch,job);
+    }
+  }catch{
+    // Discovery unavailable: slot-only behavior, as before -- but a
+    // failed fetch must not throttle the next refresh into silence,
+    // so clear this call's stamp and let a reopen retry promptly.
+    if(jobDiscoveryAt.get(bookId)===now)jobDiscoveryAt.delete(bookId);
+  }
+}
+function ct(){clearTimeout(a.generationPoll);const continueOwned=id=>a.book?.continueSession?.jobs?.some(j=>j.jobId===id);
+// Rowan review fix (Case #4): "active" is derived from EVERY known job
+// (knownChapterJobs — slots ∪ watchlist), not only the two slots. A
+// queued/generating job evicted from both slots by a later job is
+// still followed by Ye(), so it must also keep the polling timer
+// alive; before, its timer simply never scheduled. Continue-owned jobs
+// are excluded here — refreshContinueSession polls them, and a running
+// session already counts as active via the check at the end.
+const active=a.book?.chapters.some(c=>knownChapterJobs(c).some(j=>["queued","generating"].includes(j.state)&&!j.continueSessionId&&!continueOwned(j.jobId)))||a.book?.continueSession?.state==="running";
+// Case #4 §4.3: a book whose only jobs are parked still gets a slow
+// poll (60s, visible only). Before, ct() scheduled nothing in that
+// state — the timer died and parked jobs were never re-checked.
+const parkedKnown=!active&&a.book?.chapters.some(c=>knownChapterJobs(c).some(j=>j.state==="paused_quota"));
+if(active&&document.visibilityState!=="hidden")a.generationPoll=setTimeout(Ye,2500);else if(parkedKnown&&document.visibilityState!=="hidden")a.generationPoll=setTimeout(Ye,60000)}async function Ye(){if(!a.book||!a.apiBase)return;let e=!1;for(const[c,r]of a.book.chapters.entries())for(const m of[!1,!0]){const s=m?r.replacementGeneration:r.generation,i=s?.jobId;if(!i||!["queued","generating"].includes(s.state)||a.book.continueSession?.jobs?.some(j=>j.jobId===i))continue;try{const l=await kr(a.apiBase,a.accessToken,i);if(s.pollFailures||s.pollFirstFailureAt){delete s.pollFailures;delete s.pollFirstFailureAt;await pe(),e=!0}(l.state!==s.state||l.completed!==s.completed||l.error!==s.error||l.next_retry_at!==s.next_retry_at)&&(await lt(c,l,{replacement:m}),scheduleQuotaBadgeRefresh(),e=!0)}catch(l){console.warn("Generation status refresh failed",l);if(l&&l.status===404){s.state="failed";s.error="Generation expired \u2014 tap Generate to restart.";delete s.pollFailures;delete s.pollFirstFailureAt}else{const n=(Number(s.pollFailures)||0)+1;s.pollFailures=n;if(!s.pollFirstFailureAt)s.pollFirstFailureAt=Date.now();if(Date.now()-s.pollFirstFailureAt>10*60*1000){s.state="failed";s.error="Lost contact with the worker \u2014 tap Generate to check again.";delete s.pollFailures;delete s.pollFirstFailureAt}}e=!0;await pe()}}await refreshChapterJobDiscovery();
+// Case #4 §4.3 watchlist: jobs known beyond the slots (registry-
+// discovered, or evicted from the slot by a later job) are followed
+// with GETs only — never a POST. Parked jobs poll at most once a
+// minute; Continue-session jobs are owned by refreshContinueSession
+// and are never touched here.
+// Rowan review fixes (Case #4):
+//  (1) Terminal jobs (ready/partial/failed) are NEVER polled from the
+//      watchlist. Discovery can surface many historical jobs; polling
+//      them burns a status GET every cycle, forever. A slot job's own
+//      terminal transition still lands through the slot loop above —
+//      it polls while the slot reads queued/generating — so chapter
+//      completion renders exactly as before.
+//  (2) A fetched status is merged through lt() ONLY into a slot the
+//      job actually owns (its own generation/replacement slot), or
+//      adopted into an EMPTY generation slot. A job occupying neither
+//      slot updates the watchlist only. Discovery summaries omit
+//      `error`, so a fetched `error: null` otherwise counted as a
+//      "change" and lt() painted an old finished job over the
+//      chapter's current, unrelated generation slot.
+const TERMINAL_JOB_STATES=["ready","partial","failed"];
+for(const[c,r]of a.book.chapters.entries()){
+  const watched=chapterJobWatch.get(r);if(!watched)continue;
+  for(const[jobId,summary]of watched){
+    if(a.book.continueSession?.jobs?.some(j=>j.jobId===jobId))continue;
+    if(TERMINAL_JOB_STATES.includes(summary.state))continue;
+    const isRepSlot=r.replacementGeneration?.jobId===jobId;
+    const inSlot=isRepSlot||r.generation?.jobId===jobId;
+    if(inSlot&&["queued","generating"].includes(summary.state))continue;
+    if(summary.state==="paused_quota"&&Date.now()-(watchPollAt.get(jobId)||0)<60000)continue;
+    watchPollAt.set(jobId,Date.now());
+    try{
+      const l=await kr(a.apiBase,a.accessToken,jobId);
+      noteChapterJob(r,l);
+      const ownsSlot=inSlot||!r.generation?.jobId;
+      if(ownsSlot&&(l.state!==summary.state||l.completed!==summary.completed||l.error!==summary.error))
+        {await lt(c,l,{replacement:isRepSlot});scheduleQuotaBadgeRefresh();e=!0}
+    }catch{/* silent: the next poll cycle retries */}
+  }
+}
+e&&se();await refreshContinueSession();for(const [idx,ch] of a.book.chapters.entries())if(ch.autoSplitEnabled&&!a.book.continueSession?.jobs?.some(j=>j.chapterIndex===idx&&["parked","queued","generating","paused_quota"].includes(j.state)))scheduleAutoSplit(idx);ct()}async function Mr(e,{forceFresh=!1}={}){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet. Add the OPALREADER_GENERATION Queue binding to the Worker.");const r=await qe(e,{forceFresh}),m=r.segments.filter((u,_)=>{const k=c.segments[_],current=k.generationFingerprint||k.audioKey;return forceFresh||!(c.generation?.segments?.[_]?.state==="ready"&&c.generation.segments[_].cache_key===u.cache_key)&&(k.audioStale||current!==u.fingerprint)}).reduce((u,_)=>u+_.estimated_cost,0),s=Ve();if(a.monthlyCap>0&&s.spent+m>a.monthlyCap&&!confirm(`This chapter is estimated to bring locally tracked generation to ${Pe(s.spent+m)}, above your ${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;const i=c.generation?.jobId===r.job_id&&Number(c.generation.recordedCost)||0,l=c.generation?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.generation={jobId:r.job_id,state:"queued",completed:l&&Number(c.generation.completed)||0,total:r.segments.length,segmentKeys:c.segments.map(sg=>segIdentity(sg,c.pov)),segmentFingerprints:r.segments.map(sg=>sg.fingerprint),segmentIndices:r.segments.map(sg=>sg.segment_index),recordedCost:i,error:null},await pe(),se();try{const o=await xt(a.apiBase,a.accessToken,r);await lt(e,o),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.generation={...c.generation,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the queue acknowledgement, but the chapter job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.generation={...c.generation||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}async function generateRestOfChapter(e,startIndex){
+  const ch=a.book.chapters[e];
+  try{
+    if(!ch)throw new Error("That chapter could not be found.");
+    if(["queued","generating"].includes(ch.generation?.state))throw new Error("This chapter already has a generation job running.");
+    if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet. Add the OPALREADER_GENERATION Queue binding to the Worker.");
+    const full=await qe(e),selected=[],segmentKeys=[],segmentFingerprints=[];
+    for(let n=Math.max(0,Number(startIndex)||0);n<ch.segments.length;n++){
+      const seg=ch.segments[n],candidate=full.segments[n];
+      if(!seg||!candidate||seg.systemVoiceFallback||seg.generationBlocked||seg.generationFailure)continue;
+      const current=seg.generationFingerprint||seg.audioKey;
+      const needs=!seg.audioKey||seg.audioStale||current!==candidate.fingerprint;
+      if(!needs)continue;
+      selected.push(candidate);
+      segmentKeys.push(segIdentity(seg,ch.pov));
+      segmentFingerprints.push(candidate.fingerprint);
+    }
+    if(!selected.length){alert("Everything from this point to the end of the chapter is already generated with the current voices.");return}
+    const firstOriginal=selected[0].segment_index,lastOriginal=selected[selected.length-1].segment_index,cost=selected.reduce((sum,x)=>sum+(Number(x.estimated_cost)||0),0),usage=Ve();
+    if(a.monthlyCap>0&&usage.spent+cost>a.monthlyCap&&!confirm(`Generating the rest of this chapter is estimated to bring locally tracked generation to ${Pe(usage.spent+cost)}, above your ${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;
+    const range=firstOriginal===lastOriginal?`Segment ${firstOriginal+1}`:`Segments ${firstOriginal+1}–${lastOriginal+1}`;
+    if(!confirm(`Generate the rest of the chapter from here via ${a.geminiLane==="batch"?"Gemini Batch (asynchronous)":"Standard"}? Reader will queue ${selected.length} missing or stale segment${selected.length===1?"":"s"} (${range}) and reuse everything already generated. Estimated new synthesis: about ${Pe(cost)}.`))return;
+    const jobId=await tt(JSON.stringify({release:GENERATION_RELEASE_ID,book:a.book.id,chapter:e,from:Math.max(0,Number(startIndex)||0),keys:selected.map(x=>x.cache_key)}));
+    const payload={...full,job_id:jobId,segments:selected};
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;ch.generation={jobId,state:"queued",completed:0,total:selected.length,segmentKeys,segmentFingerprints,segmentIndices:selected.map(x=>x.segment_index),recordedCost:0,error:null,rangeStart:Math.max(0,Number(startIndex)||0)};
+    await pe();se();
+    try{
+      const status=await xt(a.apiBase,a.accessToken,payload);
+      await lt(e,status);se();ct();
+    }catch(submitErr){
+      if(submitErr?.status)throw submitErr;
+      // If Safari loses only the acknowledgement, keep the exact stable job
+      // instead of making a second paid request. The normal poller will find
+      // the accepted job, if it reached the Worker.
+      ch.generation={...ch.generation,state:"queued",error:null};
+      await pe();se();ct();
+      alert("Reader lost the queue acknowledgement, but the same chapter job is preserved. It will check that job instead of sending a duplicate request.");
+    }
+  }catch(err){
+    ch.generation={...ch.generation||{},state:"failed",error:err.message};
+    await pe();se();alert(err.message||"The rest of the chapter could not be queued.");
+  }
+}
+async function Wr(e){const c=a.book.chapters[e];try{if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet.");const r=await qe(e),m=c.segments.map(k=>k.generationFingerprint||k.audioKey),s=r.segments.map(k=>k.fingerprint);if(m.every((k,w)=>k===s[w]))return alert("This chapter already uses the current cast.");const i=r.segments.reduce((k,w)=>k+w.estimated_cost,0);if(!confirm(`Regenerate this chapter with the current cast? New synthesis may use provider credits (about ${Pe(i)} gross). The existing audio stays playable until the replacement is fully ready.`))return;const l=c.segments.map(sg=>segIdentity(sg,c.pov)),o=c.replacementGeneration,u=o?.jobId===r.job_id;c.autoSplitEnabled=true;c.autoSplitPauseReason=null;c.autoSplitStatus=null;c.replacementGeneration={jobId:r.job_id,state:"queued",completed:u&&Number(o.completed)||0,total:r.segments.length,segmentKeys:l,segmentFingerprints:r.segments.map(sg=>sg.fingerprint),segmentIndices:r.segments.map(sg=>sg.segment_index),recordedCost:u&&Number(o.recordedCost)||0,error:null},await pe(),se();try{const status=await xt(a.apiBase,a.accessToken,r);await lt(e,status,{replacement:!0}),se(),ct()}catch(submitErr){if(submitErr?.status)throw submitErr;c.replacementGeneration={...c.replacementGeneration,state:"queued",error:null,submitUnconfirmed:!0};await pe();se();ct();alert("Reader lost the regeneration acknowledgement, but the replacement job is preserved. It will check that exact job instead of sending a duplicate request.")}}catch(err){c.replacementGeneration={...c.replacementGeneration||{},state:"failed",error:err.message},await pe(),se(),alert(err.message)}}function queuedSegmentPayload(e,c,j){
+  const ch=a.book.chapters[e],seg=ch?.segments?.[c],text=seg?.speechText||seg?.text||"";
+  return{job_id:j.jobId,diagnostic_job_kind:"single_segment",book_id:a.book.id,book_title:a.book.title,chapter_index:e,chapter_number:e+1,chapter_title:ch.title,segments:[{text,provider:j.provider,voice_id:j.voiceId,voice_name:j.voiceName,language_code:j.locale,model_id:j.model,cache_key:j.cacheKey,fingerprint:j.fingerprint,style_direction:j.styleDirection||"",estimated_cost:Number(j.estimatedCost)||0,pricing_rate:Number(j.pricingRate)||0,usage_type:"book_generation",book_id:a.book.id,book_title:a.book.title,chapter_index:e,chapter_number:e+1,chapter_title:ch.title,segment_index:c,total_segments:ch.segments.length}]};
+}
+async function finishQueuedSegment(e,c,j,status){
+  const ch=a.book.chapters[e],seg=ch?.segments?.[c],item=status?.segments?.[0]||{};
+  if(!seg)throw new Error("That segment could not be found.");
+  const actual=Math.max(0,Number(status?.generated_cost)||0),oldKey=j.oldKey||null;
+  if(actual>0){Ve().spent+=actual;await Ae()}
+  seg.audioKey=j.cacheKey;seg.generationFingerprint=j.fingerprint;seg.audioStale=!1;
+  seg.generatedModel=item.model||j.model||null;seg.providerRequestId=item.provider_request_id||null;
+  delete seg.segmentGeneration;delete seg.generationBlocked;delete seg.generationFailure;delete seg.splitExhausted;delete seg.systemVoiceFallback;
+  delete seg.pendingAudioKey;delete seg.pendingGenerationFingerprint;delete seg.pendingGeneratedModel;delete seg.pendingGenerationAt;delete seg.pendingEstimatedCost;delete seg.pendingOldAudioKey;
+  Fe.clear();oldKey&&oldKey!==j.cacheKey&&delIDB("audio",oldKey).catch(()=>{});
+  ch.generation={...ch.generation||{},state:ch.generation?.state||"not_generated"};normalizeCompletedChapterStatus(ch);
+  await pe();
+  a.modal&&(a.modal.segmentExportStatus=`Segment ${c+1} is ready${actual?" · "+Pe(actual)+" metered":""}.`,a.modal.segmentRegenActive=!1,a.modal.segmentRegenSegment=null);
+  se();scheduleQuotaBadgeRefresh();
+}
+async function waitQueuedSegment(e,c,j,{submitIfMissing=!1}={}){
+  let submitted=!1,last=null,networkMisses=0;
+  for(let n=0;n<180;n++){
+    try{
+      let status;
+      try{status=await kr(a.apiBase,a.accessToken,j.jobId)}
+      catch(err){
+        if(err?.status===404&&submitIfMissing&&!submitted){
+          status=await xt(a.apiBase,a.accessToken,queuedSegmentPayload(e,c,j));submitted=!0;
+        }else throw err;
+      }
+      last=status;networkMisses=0;
+      if(status?.state==="ready"){await finishQueuedSegment(e,c,j,status);return{done:!0,status}}
+      if(status?.state==="failed"){scheduleQuotaBadgeRefresh();return{done:!1,failed:!0,status}};
+      a.modal&&(a.modal.segmentExportStatus=`${status?.state==="generating"?"Generating":"Queued"} Segment ${c+1} in the background…`,a.modal.segmentRegenActive=!0,a.modal.segmentRegenSegment=c,se());
+    }catch(err){
+      networkMisses++;
+      if(err?.status===404&&submitIfMissing&&!submitted)continue;
+      if(networkMisses>=8)return{done:!1,network:!0,error:err,status:last};
+      a.modal&&(a.modal.segmentExportStatus=`Segment ${c+1} is still queued; Reader is reconnecting…`,se());
+    }
+    await new Promise(r=>setTimeout(r,1000));
+  }
+  return{done:!1,working:!0,status:last};
+}
+function quotaQueueFailure(status){
+  const msg=String(status?.error||"");
+  return !!(status?.quota_exceeded||(status?.segments||[]).some(x=>x?.quota_exceeded)||/\b429\b|quota exceeded|RESOURCE_EXHAUSTED|generate_requests_per_model/i.test(msg));
+}
+function providerFailedQueueItem(status){return(status?.segments||[]).find(x=>x?.state==="provider_failed"||x?.provider_internal)||null}
+function rememberProviderFailure(seg,status,ch=null){
+  const item=providerFailedQueueItem(status);if(!seg||!item)return!1;
+  seg.generationFailure={error:item.error||status?.error||"Gemini internal error.",kind:"provider_internal",model:item.model||null,jobId:status?.job_id||status?.jobId||null};
+  if(ch)recordGeminiFailure(ch,seg,{...seg.generationFailure},"provider_internal");
+  delete seg.segmentGeneration;return!0;
+}
+function blockedQueueItem(status){return(status?.segments||[]).find(x=>x?.state==="blocked")||null}
+function rememberBlockedSegment(seg,status,ch=null){
+  const item=blockedQueueItem(status);if(!seg||!item)return!1;
+  seg.generationBlocked={error:item.error||status?.error||"Gemini blocked this segment.",blockReason:item.block_reason||"PROHIBITED_CONTENT",finishReason:item.finish_reason||"UNKNOWN",model:item.model||null,jobId:status?.job_id||status?.jobId||null};
+  if(ch)recordGeminiFailure(ch,seg,{...seg.generationBlocked},"policy_block");
+  delete seg.segmentGeneration;return!0;
+}
+function naturalBlockedSplitPoint(text,minPart=140){
+  const s=String(text||""),mid=s.length/2,candidates=[];
+  const add=p=>{if(p>=minPart&&s.length-p>=minPart)candidates.push(p)};
+  for(const m of s.matchAll(/\n\s*\n/g))add(m.index+m[0].length);
+  if(!candidates.length)for(const m of s.matchAll(/[.!?]["'”’)]?\s+/g))add(m.index+m[0].length);
+  if(!candidates.length)for(const m of s.matchAll(/\s+/g))add(m.index+m[0].length);
+  if(!candidates.length)return-1;
+  return candidates.reduce((best,p)=>Math.abs(p-mid)<Math.abs(best-mid)?p:best,candidates[0]);
+}
+function splitSpeechMarkup(raw,plainIndex){
+  const s=String(raw||""),OPEN="<emphasis>",CLOSE="</emphasis>";let pos=0,plain=0,inEm=!1;
+  while(pos<s.length&&plain<plainIndex){
+    if(s.startsWith(OPEN,pos)){inEm=!0;pos+=OPEN.length;continue}
+    if(s.startsWith(CLOSE,pos)){inEm=!1;pos+=CLOSE.length;continue}
+    plain++;pos++;
+  }
+  let left=s.slice(0,pos),right=s.slice(pos);
+  if(inEm){left+=CLOSE;right=OPEN+right}
+  return[left.trim(),right.trim()];
+}
+
+// v1.4.93: Do not spend Gemini requests on newly auto-split pieces until the
+// policy-block-aware Worker is live. The health check never sends story text.
+async function geminiInputBlockWorkerReady(){
+  if(!a.apiBase)return false;
+  try{
+    const health=await(await be(a.apiBase,a.accessToken,"/health")).json();
+    const match=/^(\d+)\.(\d+)\.(\d+)$/.exec(String(health?.version||""));
+    if(!match||health?.ok!==true)return false;
+    const major=Number(match[1]),minor=Number(match[2]),patch=Number(match[3]);
+    return major>1||(major===1&&(minor>4||minor===4&&patch>=34));
+  }catch{return false}
+}
+async function splitBlockedSegment(e,c,{automatic=false}={}){
+  const ch=a.book?.chapters?.[e],seg=ch?.segments?.[c];
+  if(!seg?.generationBlocked)return automatic?"paused":alert("That segment is not marked as blocked.");
+  if([ch.generation,ch.replacementGeneration].some(job=>["queued","generating"].includes(job?.state)))
+    return automatic?"paused":alert("Reader is still generating this chapter. Wait for its current job to finish before splitting.");
+  if(!await geminiInputBlockWorkerReady()){
+    ch.autoSplitStatus="Automatic splitting is waiting for Reader Worker v1.4.34. No Gemini requests sent. Check Worker deployment and connection.";
+    await pe();se();
+    if(automatic)return "paused";
+    alert(ch.autoSplitStatus);return;
+  }
+  const plain=String(seg.text||plainSpeech(seg.speechText)||""),cut=naturalBlockedSplitPoint(plain);
+  if(cut<0){
+    seg.splitExhausted=!0;
+    await pe();se();
+    if(automatic)return "exhausted";
+    ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;await pe();se();scheduleAutoSplit(e);
+    alert("This passage has no usable split point. Reader will try the other blocked passages in this chapter.");return;
+  }
+  const raw=seg.speechText||seg.text||"",parts=splitSpeechMarkup(raw,cut),
+    leftSpeech=parts[0],rightSpeech=parts[1],
+    leftText=plainSpeech(leftSpeech).trim(),rightText=plainSpeech(rightSpeech).trim();
+  if(!leftText||!rightText){seg.splitExhausted=true;await pe();se();if(automatic)return "exhausted";ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;await pe();se();scheduleAutoSplit(e);return alert("This passage cannot be split further. Reader will check the other blocked passages.")}
+  let voice;try{voice=segmentVoice(ch,seg)}catch(err){if(automatic)throw err;return alert(err.message)}
+  if(!voice){if(automatic)throw new Error("A Gemini narrator voice is missing.");return alert("Choose a voice for this segment before generating its split pieces.")}
+  const forecast=He(leftText.length+rightText.length,voice);
+  if(!automatic&&!confirm(`Start automatic Gemini 400 repair for this chapter? Reader will first split Segment ${c+1}, then keep splitting and retrying OTHER policy-blocked passages until they generate or have no safe split point. Already generated audio is preserved. This can use many provider requests. The first split is estimated at about ${Pe(forecast)}. Continue?`))return;
+  if(a.monthlyCap>0&&Ve().spent+forecast>a.monthlyCap){if(automatic){ch.autoSplitEnabled=false;ch.autoSplitPauseReason="cap";ch.autoSplitStatus="Automatic splitting paused at your spending cap. Continue manually if desired.";await pe();se();return "paused"}if(!confirm(`These two pieces may bring locally tracked generation to ${Pe(Ve().spent+forecast)}, above your ${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;}
+  try{
+    if(!a.providers.generation&&(await $e(),!a.providers.generation))
+      throw new Error("Background generation is not connected yet. Add the OPALREADER_GENERATION Queue binding to the Worker.");
+  }catch(err){if(automatic)throw err;return alert(err.message||"The generation queue is unavailable.")}
+  recordGeminiFailure(ch,seg,seg.generationBlocked,"policy_block",true);
+  const originalRoot=seg.blockRootId||seg.id;
+  const base={...seg,blockRootId:originalRoot,audioKey:null,audioStale:!1,generationFingerprint:null,providerRequestId:null,generatedModel:null,segmentGeneration:null,generationBlocked:null};
+  const left={...base,id:seg.id||crypto.randomUUID(),text:leftText,speechText:leftSpeech};
+  const right={...base,id:crypto.randomUUID(),text:rightText,speechText:rightSpeech};
+  delete left.segmentGeneration;delete left.generationBlocked;delete left.splitExhausted;
+  delete right.segmentGeneration;delete right.generationBlocked;delete right.splitExhausted;
+  const priorSegments=ch.segments.slice(),priorText=ch.text;
+  ch.segments.splice(c,1,left,right);
+  ch.text=ch.segments.map(x=>x.text).join("\n\n");
+  let full,selected,jobId;
+  try{
+    full=await qe(e,{segmentIndices:[c,c+1]});
+    // The two replacements are the only segments we even prepare.
+    selected=full.segments;
+    if(selected.length!==2||selected.some(x=>!x?.cache_key||!x?.text))
+      throw new Error("The two replacement requests could not be prepared.");
+    jobId=await tt(JSON.stringify({release:GENERATION_RELEASE_ID,book:a.book.id,chapter:e,kind:"blocked_split",oldSegmentId:seg.id||null,keys:selected.map(x=>x.cache_key)}));
+  }catch(err){
+    // Failed preparation must not leave a half-split chapter behind.
+    ch.segments=priorSegments;ch.text=priorText;
+    await pe();se();
+    if(automatic)throw err;
+    return alert(err.message||"Could not prepare the two split requests.");
+  }
+  ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;
+  const rootInfo=geminiRootInfo(ch,left);if(rootInfo)rootInfo.splits=(Number(rootInfo.splits)||0)+1;
+  const segmentKeys=[segIdentity(left,ch.pov),segIdentity(right,ch.pov)];
+  const payload={...full,job_id:jobId,segments:selected,diagnostic_job_kind:"blocked_split"};
+  ch.generation={
+    jobId,state:"queued",completed:0,total:2,
+    segmentKeys,segmentIndices:[c,c+1],
+    segmentFingerprints:selected.map(x=>x.fingerprint),
+    recordedCost:0,error:null,scope:"blocked_split"
+  };
+  await pe();se();
+  try{
+    const status=await xt(a.apiBase,a.accessToken,payload);
+    await lt(e,status);se();ct();
+  }catch(submitErr){
+    if(submitErr?.status){
+      ch.generation={...ch.generation,state:"failed",error:submitErr.message};
+      await pe();se();
+      if(automatic){ch.autoSplitEnabled=false;ch.autoSplitPauseReason="error";ch.autoSplitStatus="Automatic splitting paused: "+submitErr.message;await pe();se();return "paused"}
+      return alert(submitErr.message||"The two split requests could not be queued.");
+    }
+    // Retain the same job ID on lost Safari acknowledgement. Never resubmit
+    // new request IDs or expand the job to the remaining chapter.
+    ch.generation={...ch.generation,state:"queued",error:null,submitUnconfirmed:!0};
+    await pe();se();ct();
+    if(!automatic)alert("Reader lost the queue acknowledgement, but kept the exact two-piece job. It will check that job without creating another request.");
+  }
+  return "queued";
+}
+async function systemVoiceList(){
+  if(!("speechSynthesis"in window))return[];
+  let v=window.speechSynthesis.getVoices();
+  if(v.length)return v;
+  await new Promise(resolve=>{let done=!1;const finish=()=>{if(done)return;done=!0;window.speechSynthesis.removeEventListener?.("voiceschanged",finish);resolve()};window.speechSynthesis.addEventListener?.("voiceschanged",finish,{once:!0});setTimeout(finish,900)});
+  return window.speechSynthesis.getVoices();
+}
+// v1.4.83: device-specific Safari speechSynthesis fallback picker.
+const SYSTEM_FALLBACK_PREFS_KEY="opalreader.systemVoicePrefs.v1";
+let systemVoicePreviewUtterance=null;
+function systemVoicePreferences(){try{const p=JSON.parse(localStorage.getItem(SYSTEM_FALLBACK_PREFS_KEY)||"{}");return p&&typeof p==="object"&&!Array.isArray(p)?p:{}}catch(_){return{}}}
+function saveSystemVoicePreference(group,voice,voices=[],index=-1){if(!["male","female"].includes(group))return;const prefs=systemVoicePreferences();prefs[group]={voiceURI:voice.voiceURI||"",name:voice.name||"",lang:voice.lang||"",listingOrdinal:index>=0?voiceOrdinal(voices,index):1};try{localStorage.setItem(SYSTEM_FALLBACK_PREFS_KEY,JSON.stringify(prefs))}catch(_){}}
+function voiceCategory(v){const n=String(v?.name||"").trim().toLowerCase();if(!/^en\b/i.test(v?.lang||""))return"other";if(new Set(["albert","bad news","bahh","bells","boing","bubbles","cellos","fred","good news","jester","junior","kathy","organ","ralph","superstar","trinoids","whisper","wobble","zarvox","hysterical","deranged","pipe organ","princess"]).has(n))return"classic";return"everyday"}
+function voiceOrdinal(voices,index){const v=voices[index];if(!v)return 1;return 1+voices.slice(0,index).filter(x=>x.voiceURI===v.voiceURI&&x.name===v.name&&x.lang===v.lang).length}
+function systemVoiceOptionLabel(voices,index){const v=voices[index];if(!v)return"Unavailable";const matches=voices.map((x,i)=>i).filter(i=>voices[i].name===v.name&&voices[i].lang===v.lang);const nth=matches.indexOf(index)+1;return String(v.name||"Unnamed voice")+(matches.length>1?` (listing ${nth} of ${matches.length})`:"")+" · "+String(v.lang||"Unknown language")}
+function systemVoiceGroupMarkup(voices,entries,label,current){if(!entries.length)return"";return `<optgroup label="${ie(label)}">${entries.map(({i})=>`<option value="${i}" ${i===current?"selected":""}>${ie(systemVoiceOptionLabel(voices,i))}</option>`).join("")}</optgroup>`}
+function systemVoiceSelectionHint(voices,index){const v=voices[index];if(!v)return"Choose a voice to hear a preview.";const count=voices.filter(x=>x.name===v.name&&x.lang===v.lang).length;return count>1?`Safari lists ${count} entries called ${v.name}. They may be duplicates; audition each to compare.`:"Audition this voice before applying it to your passage."}
+function systemVoiceMatchIndex(voices,p){if(!p)return-1;const c=voices.map((v,i)=>({v,i})),uri=p.voiceURI||"";const u=uri?c.filter(({v})=>v.voiceURI===uri&&(!p.lang||v.lang===p.lang)):[],n=p.name?c.filter(({v})=>v.name===p.name&&v.lang===p.lang):[],match=u.length?u:n;return match[Math.min(Math.max(0,(Number(p.listingOrdinal)||1)-1),match.length-1)]?.i??-1}
+function stopSystemVoicePreview(){if(!systemVoicePreviewUtterance)return;systemVoicePreviewUtterance=null;if("speechSynthesis"in window)window.speechSynthesis.cancel()}
+async function useSystemVoiceFallback(chapterIndex,segmentIndex){
+  const seg=a.book?.chapters?.[chapterIndex]?.segments?.[segmentIndex];
+  if(!seg)return;
+  if(!("speechSynthesis"in window)||!("SpeechSynthesisUtterance"in window))return alert("This browser does not expose device voices.");
+  const voices=await systemVoiceList();
+  if(a.book?.chapters?.[chapterIndex]?.segments?.[segmentIndex]!==seg)return;
+  const current=systemVoiceMatchIndex(voices,seg.systemVoiceFallback);
+  const english=voices.findIndex(v=>v.default&&voiceCategory(v)==="everyday");
+  const us=voices.findIndex(v=>/^en-US\b/i.test(v.lang||"")&&voiceCategory(v)==="everyday");
+  const anyEnglish=voices.findIndex(v=>voiceCategory(v)==="everyday");
+  const selectedIndex=current>=0?current:english>=0?english:us>=0?us:anyEnglish>=0?anyEnglish:voices.length?0:-1;
+  a.modal={type:"systemVoices",chapter:chapterIndex,segment:segmentIndex,voices,selectedIndex,showOther:!!voices[selectedIndex]&&voiceCategory(voices[selectedIndex])!=="everyday",saveAs:"none",status:null};
+  se();
+}
+function systemVoicePickerMarkup(){
+  const m=a.modal,voices=m.voices||[],prefs=systemVoicePreferences();
+  const entries=voices.map((v,i)=>({v,i})),sort=(x,y)=>String(x.v.name||"").localeCompare(String(y.v.name||""))||x.i-y.i,ordinary=entries.filter(({v})=>voiceCategory(v)==="everyday").sort(sort),classic=entries.filter(({v})=>voiceCategory(v)==="classic").sort(sort),other=entries.filter(({v})=>voiceCategory(v)==="other").sort(sort),showMore=!!m.showOther||!ordinary.length,otherCount=classic.length+other.length;
+  const saved=kind=>{const item=prefs[kind],index=systemVoiceMatchIndex(voices,item);return `<button type="button" class="ghost" data-saved-system-voice="${kind}" ${index<0?"disabled":""}>Use saved ${kind}${item?" · "+ie(item.name||"unknown"):" (none)"}</button>`};
+  return `<div class="modal-back"><section class="modal system-voice-picker"><div class="modal-title"><div><h2>Choose system voice</h2><p class="muted">${ie(Ir(a.book?.chapters?.[m.chapter],m.chapter))} · Segment ${m.segment+1}. Free on-device narration.</p></div><button class="ghost" id="closeModal" type="button" aria-label="Back to Review POV">✕</button></div><p class="muted">Everyday English voices appear first. Downloaded Premium voices may not be available in Safari.</p>${voices.length?`${otherCount?`<label class="system-voice-more"><input type="checkbox" id="showOtherSystemVoices" ${showMore?"checked":""}> Show classic, novelty and other-language voices (${otherCount})</label>`:""}<label class="system-voice-label" for="systemVoiceSelect">Voice</label><select class="field" id="systemVoiceSelect">${systemVoiceGroupMarkup(voices,ordinary,"Everyday English voices",m.selectedIndex)}${showMore?systemVoiceGroupMarkup(voices,classic,"Classic and novelty voices",m.selectedIndex)+systemVoiceGroupMarkup(voices,other,"Other languages",m.selectedIndex):""}</select><p class="muted tiny" id="systemVoiceSelectionHint">${ie(systemVoiceSelectionHint(voices,m.selectedIndex))}</p><div class="row system-voice-actions"><button class="secondary" type="button" id="auditionSystemVoice">▶ Audition voice</button><button class="ghost" type="button" id="stopSystemVoiceAudition">Stop preview</button></div><p class="muted tiny">Auditions read a neutral sample, never book text.</p><p id="systemVoicePreviewStatus" class="muted tiny" role="status">${ie(m.status||"")}</p><div class="row system-voice-saved">${saved("male")}${saved("female")}</div><label class="system-voice-label" for="systemVoiceSaveAs">Remember this voice</label><select class="field" id="systemVoiceSaveAs"><option value="none" ${m.saveAs==="none"?"selected":""}>Only this segment</option><option value="male" ${m.saveAs==="male"?"selected":""}>Save as my male fallback</option><option value="female" ${m.saveAs==="female"?"selected":""}>Save as my female fallback</option></select><p class="muted tiny">Saved preferences stay on this device. You can change them anytime.</p><div class="row system-voice-actions"><button class="primary" type="button" id="applySystemVoice" ${m.selectedIndex<0?"disabled":""}>Use selected voice</button><button class="ghost" type="button" id="cancelSystemVoice">Cancel</button></div>`:`<p class="muted">Safari returned no available voices. Try again or reopen Reader.</p><div class="row"><button type="button" class="secondary" id="refreshSystemVoices">Check voices again</button><button type="button" class="ghost" id="cancelSystemVoice">Back</button></div>`}</section></div>`;
+}
+function systemVoicePickerStatus(msg){if(a.modal?.type==="systemVoices")a.modal.status=msg;const e=document.querySelector("#systemVoicePreviewStatus");if(e)e.textContent=msg}
+function auditionSelectedSystemVoice(){
+  const m=a.modal,voice=m?.type==="systemVoices"?m.voices?.[m.selectedIndex]:null;
+  if(!voice)return systemVoicePickerStatus("Choose an available voice first.");
+  if(ee._systemSpeechActive)return systemVoicePickerStatus("Pause the current device narration before auditioning.");
+  try{
+    stopSystemVoicePreview();
+    if(!ee.paused)ee.pause();
+    const u=new SpeechSynthesisUtterance("Hello! This is a short preview of your Opal Reader narration voice.");
+    u.voice=voice;u.lang=voice.lang||"en-US";u.rate=1;systemVoicePreviewUtterance=u;
+    u.onstart=()=>{if(systemVoicePreviewUtterance===u)systemVoicePickerStatus("Playing preview…")};
+    u.onend=()=>{if(systemVoicePreviewUtterance===u){systemVoicePreviewUtterance=null;systemVoicePickerStatus("Preview finished.")}};
+    u.onerror=()=>{if(systemVoicePreviewUtterance===u){systemVoicePreviewUtterance=null;systemVoicePickerStatus("This voice could not play. Try another available voice.")}};
+    systemVoicePickerStatus("Starting preview…");
+    window.speechSynthesis.speak(u);
+  }catch(err){systemVoicePreviewUtterance=null;systemVoicePickerStatus(err.message||"Preview could not start.")}
+}
+function backToReviewFromSystemVoice(){const m=a.modal;if(m?.type!=="systemVoices")return;stopSystemVoicePreview();a.modal={type:"segments",chapter:m.chapter};se()}
+async function applySelectedSystemVoice(){
+  const m=a.modal;if(m?.type!=="systemVoices")return;const voice=m.voices?.[m.selectedIndex];
+  const ch=a.book?.chapters?.[m.chapter],seg=ch?.segments?.[m.segment];
+  if(!voice||!seg)return systemVoicePickerStatus("Selected voice or segment is unavailable.");
+  if(["queued","generating"].includes(ch.generation?.state)||["queued","generating"].includes(ch.replacementGeneration?.state))return systemVoicePickerStatus("Wait for the current chapter job to finish first.");
+  stopSystemVoicePreview();
+  seg.systemVoiceFallback={voiceURI:voice.voiceURI||"",name:voice.name||"Device voice",lang:voice.lang||"en-US",listingOrdinal:voiceOrdinal(m.voices,m.selectedIndex)};
+  delete seg.generationBlocked;delete seg.generationFailure;delete seg.splitExhausted;
+  delete seg.fallbackVoice;delete seg.segmentGeneration;
+  if(m.saveAs!=="none")saveSystemVoicePreference(m.saveAs,voice,m.voices,m.selectedIndex);
+  normalizeCompletedChapterStatus(ch);await pe();
+  a.modal={type:"segments",chapter:m.chapter};se();
+}
+function chooseCloudFallbackVoice(e,c){
+  const seg=a.book?.chapters?.[e]?.segments?.[c];if(!seg)return;
+  a.voiceTarget=`segfb:${e}:${c}`;
+  a.provider=a.providers.azure?"azure":a.providers.fish?"fish":a.providers.openai?"openai":a.providers.gemini?"gemini":"azure";
+  a.voiceList=[];a.voicePage=0;a.voiceHasMore=!1;a.modal={type:"voices",fallbackReturn:{chapter:e,segment:c}};Ce();
+}
+let systemSpeechUtterance=null;
+async function afterSystemSegment(chapterIndex,segmentIndex){
+  if(!a.book)return;
+  const ch=a.book.chapters[chapterIndex],next=segmentIndex+1;
+  ee._chapterPlayback=!1;
+  if(next<ch.segments.length){
+    at(a.book,chapterIndex,next,0);
+    if(segmentPlayable(ch.segments[next])&&!ch.segments[next]?.audioStale){await pe();return playContinuousFrom(chapterIndex,next,0)}
+    shelfListenStop();ee._chapterPlayback=!1;ee._waitingForGeneration=!0;await pe();se();updateMediaSession();return;
+  }
+  ar(a.book,chapterIndex);const nc=chapterIndex+1;
+  if(nc<a.book.chapters.length){at(a.book,nc,0,0);if(playable(a.book.chapters[nc])){await pe();return Me(nc)}shelfListenStop();ee._chapterPlayback=!1;ee._waitingForGeneration=!0;await pe();se();updateMediaSession();return}
+  shelfListenStop();ee._chapterPlayback=!1;a.book.completed=!0;await pe();se();updateMediaSession();
+}
+async function playSystemSegment(e,c,{userGesture=!1}={}){
+  const ch=a.book.chapters[e],seg=ch?.segments?.[c],cfg=seg?.systemVoiceFallback;if(!seg||!cfg)return;
+  if(!("speechSynthesis"in window)||!("SpeechSynthesisUtterance"in window))throw new Error("Device TTS is not available in this browser.");
+  try{ee.pause()}catch(_){}
+  if(window.speechSynthesis.speaking||window.speechSynthesis.pending)window.speechSynthesis.cancel();
+  // Keep the call to speechSynthesis.speak() synchronous with a user's Play tap.
+  // Awaiting IndexedDB or voiceschanged first can consume iOS's playback gesture.
+  const voices=window.speechSynthesis.getVoices(),u=new SpeechSynthesisUtterance(plainSpeech(seg.speechText||seg.text||""));
+  u.voice=voices.find(v=>v.voiceURI===cfg.voiceURI)||voices.find(v=>v.name===cfg.name)||null;u.lang=cfg.lang||u.voice?.lang||"en-US";u.rate=1;
+  let started=!1,finished=!1;
+  systemSpeechUtterance=u;ee._systemSpeechActive=!0;ee._systemSpeechPending=!1;ee._chapterPlayback=!0;ee._waitingForGeneration=!1;at(a.book,e,c,0);se();updateMediaSession();It();
+  u.onstart=()=>{if(systemSpeechUtterance!==u)return;started=!0;ee._systemSpeechPending=!1;shelfListenStart();It();updateMediaSession()};
+  u.onend=async()=>{if(systemSpeechUtterance!==u||finished)return;finished=!0;
+    if(!started){
+      systemSpeechUtterance=null;ee._systemSpeechActive=!1;ee._systemSpeechPending=!0;shelfListenStop();at(a.book,e,c,0);await pe();se();It();updateMediaSession();return;
+    }
+    systemSpeechUtterance=null;ee._systemSpeechActive=!1;ee._systemSpeechPending=!1;shelfListenPaused();It();await afterSystemSegment(e,c)
+  };
+  u.onerror=async()=>{if(systemSpeechUtterance!==u||finished)return;finished=!0;systemSpeechUtterance=null;ee._systemSpeechActive=!1;ee._systemSpeechPending=!0;shelfListenStop();at(a.book,e,c,0);await pe();se();It();updateMediaSession();if(userGesture)alert("The device voice did not start. Tap Play once more to retry this segment.")};
+  window.speechSynthesis.speak(u);
+  pe().catch(()=>{});
+  setTimeout(()=>{if(systemSpeechUtterance!==u||finished||started)return;finished=!0;systemSpeechUtterance=null;ee._systemSpeechActive=!1;ee._systemSpeechPending=!0;try{window.speechSynthesis.cancel()}catch(_){};shelfListenStop();at(a.book,e,c,0);pe().catch(()=>{});se();It();updateMediaSession()},2500);
+}
+// v1.4.105: Missing segments share the chapter job's deterministic cache
+// key, so a paused Queue can reuse the audio without spending Gemini requests.
+// Explicit regenerations and stale audio still request a fresh take.
+function needsFreshManualTake(seg){return!!(seg?.audioKey||seg?.audioStale)}
+async function regenerateOneSegment(e,c){
+  const ch=a.book.chapters[e],seg=ch?.segments?.[c];
+  try{
+    if(!seg)throw new Error("That segment could not be found.");
+    if(!a.apiBase)throw new Error("Connect the Worker first.");
+    if(!a.providers.generation&&(await $e(),!a.providers.generation))throw new Error("Background generation is not connected yet.");
+
+    // v1.4.50 legacy recovery: finish any direct request that was already in flight
+    // before segment generation moved to the Queue.
+    if(seg.pendingAudioKey){
+      a.modal&&(a.modal.segmentExportStatus=`Checking the older Segment ${c+1} request…`,a.modal.segmentRegenActive=!0,a.modal.segmentRegenSegment=c,se());
+      const pendingKey=seg.pendingAudioKey,pendingOldKey=seg.pendingOldAudioKey||null,pendingCost=Number(seg.pendingEstimatedCost||0),pending=await recoverFreshAudio(a.apiBase,a.accessToken,pendingKey,2,750);
+      if(pending.ready){
+        pendingCost>0&&(Ve().spent+=pendingCost,await Ae());
+        seg.audioKey=pendingKey;seg.generationFingerprint=seg.pendingGenerationFingerprint||seg.generationFingerprint||pendingKey;seg.audioStale=!1;seg.generatedModel=seg.pendingGeneratedModel||seg.generatedModel;seg.providerRequestId=null;
+        delete seg.pendingAudioKey;delete seg.pendingGenerationFingerprint;delete seg.pendingGeneratedModel;delete seg.pendingGenerationAt;delete seg.pendingEstimatedCost;delete seg.pendingOldAudioKey;
+        Fe.clear();pendingOldKey&&pendingOldKey!==pendingKey&&delIDB("audio",pendingOldKey).catch(()=>{});
+        ch.generation={...ch.generation||{},state:ch.generation?.state||"not_generated"};normalizeCompletedChapterStatus(ch);
+        await pe();a.modal&&(a.modal.segmentExportStatus=`Older Segment ${c+1} request finished and was recovered.`,a.modal.segmentRegenActive=!1,a.modal.segmentRegenSegment=null);se();return;
+      }
+      if(!pending.reachable)throw new Error("Reader cannot reach the Worker to check the older request yet. No new synthesis was sent.");
+      if(!confirm("Reader still cannot find audio from the older direct request. Start one new queued synthesis instead? This could cost again if that older request eventually appears."))return;
+      delete seg.pendingAudioKey;delete seg.pendingGenerationFingerprint;delete seg.pendingGeneratedModel;delete seg.pendingGenerationAt;delete seg.pendingEstimatedCost;delete seg.pendingOldAudioKey;await pe();
+    }
+
+    // Existing one-segment Queue job: resume/check the exact same job, never create
+    // another provider request just because Safari lost a connection.
+    if(seg.segmentGeneration?.jobId){
+      const j=seg.segmentGeneration;
+      a.modal&&(a.modal.segmentExportStatus=`Checking queued Segment ${c+1}…`,a.modal.segmentRegenActive=!0,a.modal.segmentRegenSegment=c,se());
+      const resumed=await waitQueuedSegment(e,c,j,{submitIfMissing:!0});
+      if(resumed.done)return;
+      if(resumed.failed){
+        a.modal&&(a.modal.segmentRegenActive=!1,a.modal.segmentRegenSegment=null,se());
+        if(rememberBlockedSegment(seg,resumed.status,ch)){await pe();se();if(gemini400Blocked(ch,seg)){scheduleAutoSplit(e);return}alert(`Gemini blocked Segment ${c+1}. Reader did not retry it. Use “Repair blocked chapter in background” to try smaller unchanged pieces.`);return}
+        if(rememberProviderFailure(seg,resumed.status,ch)){await pe();se();alert(`Gemini hit an internal error on Segment ${c+1}. Reader stopped after one attempt. You can retry Gemini, use the free device voice, or choose another cloud voice.`);return}
+        if(quotaQueueFailure(resumed.status)){delete seg.segmentGeneration;await pe();se();alert(resumed.status?.error||"Gemini quota is still exhausted. Reader did not start another provider request. Try again after quota becomes available.");return}
+        if(!confirm(`Segment ${c+1} failed in the generation queue. Start a new queued synthesis? This creates a new provider request.`))return;
+        delete seg.segmentGeneration;await pe();
+      }else{
+        a.modal&&(a.modal.segmentRegenActive=!1,a.modal.segmentRegenSegment=null,se());
+        throw new Error(resumed.network?"Reader lost contact with the Worker, but the same queued job is preserved. Tap this segment later and Reader will check it again without creating a duplicate request.":"Segment generation is still running in the background. Tap this segment later to check the same job.");
+      }
+    }
+
+    const voice=segmentVoice(ch,seg);
+    if(!voice)throw new Error(`Choose a voice for ${seg.pov||"Default Narrator"} first.`);
+    if(!a.providers[voice.provider])throw new Error("The "+voice.provider+" provider is not configured. Add its key in Voice Lab first.");
+    const model=Qr(voice.provider,voice.model_id),settings={provider:voice.provider,voice:voice.voice_id,model,rate:1,style:voice.style_direction||""},text=seg.speechText||seg.text,fingerprint=await tt(text+JSON.stringify(settings)),oldKey=seg.audioKey,cacheKey=needsFreshManualTake(seg)?await tt(fingerprint+":force:"+crypto.randomUUID()):fingerprint,cost=He(plainSpeech(text).length,voice),usage=Ve();
+    if(a.monthlyCap>0&&usage.spent+cost>a.monthlyCap&&!confirm(`This segment is estimated to bring locally tracked generation to ${Pe(usage.spent+cost)}, above your $${a.monthlyCap.toFixed(2)} soft cap. Continue?`))return;
+    if(!confirm(`${oldKey?"Regenerate":"Generate"} Segment ${c+1} with ${voice.name||voice.voice_id} on ${model}? Reader will queue exactly one provider job (about ${Pe(cost)} forecast).`))return;
+    const jobId=await tt(JSON.stringify({release:GENERATION_RELEASE_ID,book:a.book.id,chapter:e,segment:c,cacheKey}));
+    const j={jobId,cacheKey,fingerprint,oldKey:oldKey||null,estimatedCost:cost,pricingRate:zt(voice),provider:voice.provider,voiceId:voice.voice_id,voiceName:voice.name||voice.voice_id,locale:voice.locale,model,styleDirection:voice.style_direction||"",startedAt:Date.now()};
+    seg.segmentGeneration=j;ch.autoSplitEnabled=true;ch.autoSplitPauseReason=null;ch.autoSplitStatus=null;await pe();
+    a.modal&&(a.modal.segmentExportStatus=`Queueing Segment ${c+1}…`,a.modal.segmentRegenActive=!0,a.modal.segmentRegenSegment=c,se());
+
+    // Submission is intentionally idempotent: if the acknowledgement is lost,
+    // the same job id is checked/resubmitted. The Worker lease prevents a
+    // duplicate provider synthesis.
+    try{await xt(a.apiBase,a.accessToken,queuedSegmentPayload(e,c,j))}
+    catch(_){}
+    const result=await waitQueuedSegment(e,c,j,{submitIfMissing:!0});
+    if(result.done)return;
+    a.modal&&(a.modal.segmentRegenActive=!1,a.modal.segmentRegenSegment=null,se());
+    if(result.failed){if(rememberBlockedSegment(seg,result.status,ch)){await pe();se();if(gemini400Blocked(ch,seg)){scheduleAutoSplit(e);return}throw new Error(`Gemini blocked Segment ${c+1}. Reader did not retry it. Use “Repair blocked chapter in background” to try smaller unchanged pieces.`)}if(rememberProviderFailure(seg,result.status,ch)){await pe();se();throw new Error(`Gemini hit an internal error on Segment ${c+1}. Reader stopped after one attempt. Retry Gemini, use the free device voice, or choose another cloud voice.`)}if(quotaQueueFailure(result.status)){delete seg.segmentGeneration;await pe();se();throw new Error(result.status?.error||"Gemini quota is still exhausted. Reader did not start another provider request.")}throw new Error(`Segment ${c+1} failed in the generation queue. Tap it again if you want to explicitly start a new provider request.`)}
+    if(result.network)throw new Error("Reader lost contact with the Worker, but the queued job is preserved. Tap this segment later and Reader will check that same job first.");
+    throw new Error("Segment generation is still running in the background. Tap this segment later to check the same job.");
+  }catch(err){
+    a.modal&&(a.modal.segmentRegenActive=!1,a.modal.segmentRegenSegment=null,se());
+    alert(err.message||"Segment generation failed.");
+  }
+}
+async function ut(){if(!checkpointReaderPlayback(true))return;await pe()}const Fe=new Map;async function Bt(e){if(!e?.audioKey)return null;if(Fe.has(e.audioKey))return Fe.get(e.audioKey);const r=(async()=>{const okB=t=>t&&t.size>1024;const local=await Oe("audio",e.audioKey);if(okB(local?.blob))return local;if(local)try{await delIDB("audio",e.audioKey)}catch(_){};if(!a.providers.sync)return null;const m=await At(a.apiBase,a.accessToken,e.audioKey);if(!okB(m))return null;const rec={id:e.audioKey,blob:m,createdAt:Date.now(),remote:!0};try{await ke("audio",rec)}catch(_){}return rec})().finally(()=>Fe.delete(e.audioKey));return Fe.set(e.audioKey,r),r}function dt(e,c=0){const r=a.book?.chapters[e];if(Le(r))for(const m of r.segments.slice(c,c+3))m.audioKey&&!m.audioStale&&Bt(m).catch(()=>{})}function retryPlay(e=0){dl("retryPlay("+e+")");if(e===0)ee._userPaused=!1;else if(ee._userPaused||!ee.paused){dl("retryPlay("+e+") skip paused="+ee.paused);return}dl("retryPlay("+e+") calling play()");ee.play().then(()=>{dl("play() resolved")}).catch(err=>{dl("play() rejected "+(err&&err.name));if(ee._userPaused||!ee.paused)return;if(e<4){ee._pendingPlay=!0,console.warn("Playback start deferred, retrying",err),setTimeout(()=>retryPlay(e+1),900)}else{ee._pendingPlay=!0,dl("retryPlay GAVE UP");console.warn("Playback start deferred",err)}})}// v1.4.85: join ready audio into bounded composite chunks; failed oversized
+// requests are halved instead of abandoning continuous playback completely.
+// v1.4.86: keep one validated, bounded recent composite on-device so
+// re-opening a dormant Reader need not wait on a fresh Cloudflare POST.
+const LOCAL_CONTINUOUS_AUDIO_ID="opalreader.continuous.v186.latest";
+const compositeInFlight=new Map();
+const compositeBlobOrigins=new WeakMap();
+// iOS/WebKit may lose the backing file of an IndexedDB Blob after the single
+// composite-cache slot is replaced by prefetch. Never play an IDB Blob directly.
+// Rebuild a standalone in-memory Blob before the next prefetch can evict it.
+// Limit the copy on memory-constrained phones; oversized cached chunks are
+// fetched afresh from the Worker instead (no TTS regeneration).
+const MAX_DETACHED_COMPOSITE_BYTES=24*1024*1024;
+async function detachCachedComposite(blob){
+  if(blob.size>MAX_DETACHED_COMPOSITE_BYTES){
+    dl("composite cache BYPASS large="+blob.size);
+    return null;
+  }
+  try{
+    const bytes=await blob.arrayBuffer();
+    if(bytes.byteLength!==blob.size)throw new Error("short cached audio read");
+    const detached=new Blob([bytes],{type:blob.type||"audio/wav"});
+    compositeBlobOrigins.set(detached,"idb-detached");
+    dl("composite cache VERIFIED detached="+detached.size);
+    return detached;
+  }catch(error){
+    dl("composite cache UNREADABLE "+(error?.name||"Error")+": "+(error?.message||error));
+    return null;
+  }
+}
+function localCompositeSignature(chapterIndex,start,end){
+  const book=a.book,ch=book?.chapters?.[chapterIndex];
+  if(!book||!ch)return null;
+  return ["clean-wav-1.4.33",book.id,ch.id||chapterIndex,start,end,
+    ...ch.segments.slice(start,end).map(seg=>seg.audioKey||"")].join("|");
+}
+async function recentComposite(signature){
+  if(!signature)return null;
+  try{
+    const row=await Oe("audio",LOCAL_CONTINUOUS_AUDIO_ID);
+    return row?.signature===signature&&row.blob?.size>1024?row.blob:null;
+  }catch(error){
+    dl("composite cache lookup failed "+(error?.name||error));
+    return null;
+  }
+}
+function rememberComposite(signature,blob){
+  if(!signature||!blob||blob.size<=1024||blob.size>48*1024*1024)return;
+  ke("audio",{id:LOCAL_CONTINUOUS_AUDIO_ID,signature,blob,createdAt:Date.now()}).catch(err=>{
+    console.warn("Composite audio cache unavailable",err?.message||err);
+  });
+}
+async function getCompositeBlob(chapterIndex,start,end){
+  const signature=localCompositeSignature(chapterIndex,start,end);
+  if(compositeInFlight.has(signature))return compositeInFlight.get(signature);
+  const task=(async()=>{
+    const cached=await recentComposite(signature);
+    if(cached){
+      const independent=await detachCachedComposite(cached);
+      if(independent){dl("composite local cache HIT (independent)");return independent}
+      dl("composite cache FALLBACK to Worker");
+    }
+    const blob=await chapterComposite(a.apiBase,a.accessToken,a.book,chapterIndex,start,end);
+    compositeBlobOrigins.set(blob,"fresh-worker");
+    dl("composite fresh Worker bytes="+blob.size);
+    rememberComposite(signature,blob);
+    return blob;
+  })();
+  compositeInFlight.set(signature,task);
+  try{return await task}finally{
+    if(compositeInFlight.get(signature)===task)compositeInFlight.delete(signature);
+  }
+}
+async function playChapterComposite(e,startSegment=0,r=0,endSegment=null,preloadedBlob=null,expectedSrc=null){
+  dl("composite start ch="+e+" seg="+startSegment);
+  await ut();
+  // The user may have paused or navigated while the fast-start upgrade
+  // awaited persistence. Do not replace a now-unrelated audio source.
+  if(expectedSrc&&(ee.src!==expectedSrc||ee.paused||
+    document.visibilityState!=="visible"))return null;
+  const ch=a.book.chapters[e],start=Math.min(Math.max(0,Number(startSegment)||0),Math.max(0,ch.segments.length-1));
+  const end=Math.min(ch.segments.length,endSegment==null?ch.segments.length:Math.max(start,Number(endSegment)||start));
+  const ready=end-start>1&&ch.segments.slice(start,end).every(seg=>seg?.audioKey&&!seg?.audioStale&&!seg?.systemVoiceFallback);
+  if(!ready){dl("composite not eligible");return null}
+  let blob=preloadedBlob;
+  try{
+    if(!blob)blob=await Promise.race([
+      getCompositeBlob(e,start,end),
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error("composite fetch timeout")),20000))
+    ]);
+    dl("composite got "+(blob&&blob.size))
+  }catch(err){
+    dl("composite fetch FAIL "+(err&&err.message));
+    return null
+  }
+  if(!blob||blob.size<1024){dl("composite blob bad");return null}
+  if(ee.src?.startsWith("blob:"))try{URL.revokeObjectURL(ee.src)}catch(_){}
+  ee._restoringPosition=!0;
+  ee._chapterPlayback=!0;
+  ee._compositePlayback=!0;
+  ee._compositeStartSegment=start;
+  ee._compositeEndSegment=end;
+  ee._waitingForGeneration=!1;
+  me();
+  ee.onloadedmetadata=()=>{
+    me();
+    ee.currentTime=Math.min(Math.max(0,Number(r)||0),Math.max(0,(ee.duration||0)-.25));
+    updatePlayerTimeline();
+    at(a.book,e,start,ee.currentTime);
+    ee._restoringPosition=!1;
+    checkpointReaderPlayback(true);
+    updateMediaSession();
+    retryPlay()
+  };
+  ee._opalCompositeBlob=blob; // Diagnostic handle only, no extra copy.
+  ee._opalCompositeSource=compositeBlobOrigins.get(blob)||"unknown";
+  dl("composite source="+ee._opalCompositeSource);
+  ee.src=URL.createObjectURL(blob);
+  const loaded=await new Promise(ok=>{
+    const clean=()=>{clearTimeout(timer);ee.removeEventListener("loadedmetadata",onmeta);ee.removeEventListener("error",onerr)};
+    const onmeta=()=>{clean();ok(!0)};
+    const onerr=()=>{clean();ok(!1)};
+    const timer=setTimeout(()=>{clean();ok(!1)},12000);
+    ee.addEventListener("loadedmetadata",onmeta);
+    ee.addEventListener("error",onerr);
+    ee.load()
+  });
+  if(!loaded){
+    dl("composite load FAIL -> segments");
+    ee._compositePlayback=!1;
+    ee._compositeEndSegment=0;
+    try{URL.revokeObjectURL(ee.src)}catch(_){}
+    return null
+  }
+  at(a.book,e,start,Math.max(0,Number(r)||0));
+  checkpointReaderPlayback(true);
+  if(end===ch.segments.length)warmNextChapterAudio(e);
+  else warmFollowingAudioChunk(e,end);
+  await pe();
+  se();
+  return!0
+}
+function continuousRunEnd(ch,start){
+  let end=Math.max(0,start),chars=0;
+  // During another chapter's generation, request smaller composite chunks so
+  // narration playback does not compete for a huge R2 merge.
+  const busy=a.book?.chapters?.some(other=>other!==ch&&
+    [other.generation,other.replacementGeneration].some(job=>
+      ["queued","generating"].includes(job?.state)));
+  const charLimit=busy?5000:14000,segmentLimit=busy?4:16;
+  // Bound requests proactively, not just after a Worker 413 response.
+  // ~14k narration characters generally stays comfortably below the 64 MB
+  // PCM composite cap; the Worker still enforces exact audio-byte limits.
+  while(end<(ch?.segments?.length||0)){
+    const seg=ch.segments[end];
+    // Respect scene boundaries during continuous R2 chunk assembly.
+    if(end>start&&seg?.sceneBreakBefore)break;
+    if(!seg?.audioKey||seg?.audioStale||seg?.systemVoiceFallback)break;
+    const next=String(seg.speechText||seg.text||"").length;
+    if(end>start&&(chars+next>charLimit||end-start>=segmentLimit))break;
+    chars+=next;
+    end++;
+  }
+  return end;
+}
+// If a saved composite has to fall back to individual audio, translate the
+// composite clock to an exact segment/position first. Never seek 3 minutes
+// into a 25-second audio segment.
+async function individualFromCompositeTime(chapterIndex,start,end,time){
+  const t=Math.max(0,Number(time)||0);
+  if(!(t>0)||end<=start+1)return {segment:start,position:t};
+  let remaining=t,last=start;
+  for(let i=start;i<end;i++){
+    const seconds=await sectionDuration(chapterIndex,i);
+    if(!(seconds>0)||!Number.isFinite(seconds))return {segment:start,position:0};
+    last=i;
+    if(remaining<seconds-.05)return {segment:i,position:remaining};
+    remaining-=seconds;
+  }
+  return {segment:last,position:Math.max(0,(await sectionDuration(chapterIndex,last))-.25)};
+}
+// v1.4.88: don't discard a completed composite simply because Safari was
+// still loading/starting the fast individual fallback when Cloudflare replied.
+function installDeferredCompositeUpgrade(chapterIndex,start,end,pending,source){
+  if(!source)return;
+  const bookId=a.book?.id,signature=localCompositeSignature(chapterIndex,start,end);
+  let blob=null,finished=false;
+  let timer=null;
+  const cleanup=()=>{
+    if(finished)return;
+    finished=true;
+    for(const event of ["playing","loadedmetadata","canplay","seeked"])
+      ee.removeEventListener(event,tryUpgrade);
+    for(const event of ["pause","ended","emptied"])
+      ee.removeEventListener(event,cancel);
+    if(timer!==null)clearTimeout(timer);
+  };
+  const cancel=()=>cleanup();
+  const samePlayback=()=>a.book?.id===bookId &&
+    a.book.currentChapter===chapterIndex &&
+    a.book.currentSegment===start &&
+    localCompositeSignature(chapterIndex,start,end)===signature &&
+    ee.src===source&&!ee._compositePlayback&&!ee._systemSpeechActive;
+  const tryUpgrade=()=>{
+    if(finished)return;
+    if(!samePlayback()||ee._userPaused||document.visibilityState!=="visible"){
+      cleanup();return;
+    }
+    if(!blob||ee.paused||ee._restoringPosition||ee.readyState<2)return;
+    const position=Math.max(0,Number(ee.currentTime)||0);
+    if(Number.isFinite(ee.duration)&&position>=ee.duration-.5){
+      cleanup();return;
+    }
+    cleanup();
+    playChapterComposite(chapterIndex,start,position,end,blob,source)
+      .catch(err=>console.warn("Continuous playback upgrade failed",err));
+  };
+  for(const event of ["playing","loadedmetadata","canplay","seeked"])
+    ee.addEventListener(event,tryUpgrade);
+  for(const event of ["pause","ended","emptied"])
+    ee.addEventListener(event,cancel);
+  // Generation can slow Cloudflare's R2 merge; keep a late upgrade eligible
+  // while the first segment is already playing, never by holding Play.
+  timer=setTimeout(cleanup,60000);
+  pending.then(value=>{blob=value;tryUpgrade()},err=>{
+    dl("Composite warm-up failed: "+(err?.message||err));
+    cleanup();
+  });
+  tryUpgrade();
+}
+// While finishing a chapter, assemble the first chunk of the next chapter
+// opportunistically. The next Play can then use the same clean local WAV
+// composite immediately, rather than always beginning with a solo segment.
+function warmFollowingAudioChunk(chapterIndex,nextSegment){
+  const ch=a.book?.chapters?.[chapterIndex];
+  if(!ch||!a.apiBase||!a.providers?.sync||document.visibilityState==="hidden")return;
+  const end=continuousRunEnd(ch,nextSegment);
+  if(end-nextSegment<2)return;
+  getCompositeBlob(chapterIndex,nextSegment,end).catch(err=>
+    dl("Following chunk prefetch skipped: "+(err?.message||err))
+  );
+}
+function warmNextChapterAudio(chapterIndex){
+  const nextIndex=chapterIndex+1,ch=a.book?.chapters?.[nextIndex];
+  if(!ch||!a.apiBase||!a.providers?.sync||document.visibilityState==="hidden")return;
+  const resume=nr(a.book,nextIndex),start=resume.segment;
+  const end=continuousRunEnd(ch,start);
+  if(end-start<2)return;
+  getCompositeBlob(nextIndex,start,end).catch(err=>
+    dl("Next chapter audio prefetch skipped: "+(err?.message||err))
+  );
+}
+// v1.4.90: illustrated scene breaks are 950 ms of native audio silence.
+// Native audio continues under iOS screen lock; JS timers may not.
+let sceneTransitionToken=0;
+const SCENE_BREAK_PAUSE_MS=950;
+function sceneSilenceWav(){
+  const sampleRate=16000,count=Math.round(sampleRate*SCENE_BREAK_PAUSE_MS/1000);
+  const bytes=count*2,buffer=new ArrayBuffer(44+bytes),v=new DataView(buffer);
+  const ascii=(at,text)=>{for(let i=0;i<text.length;i++)v.setUint8(at+i,text.charCodeAt(i))};
+  ascii(0,"RIFF");v.setUint32(4,36+bytes,true);ascii(8,"WAVE");
+  ascii(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);
+  v.setUint16(22,1,true);v.setUint32(24,sampleRate,true);
+  v.setUint32(28,sampleRate*2,true);v.setUint16(32,2,true);
+  v.setUint16(34,16,true);ascii(36,"data");v.setUint32(40,bytes,true);
+  return new Blob([buffer],{type:"audio/wav"});
+}
+async function advanceAtSceneBoundary(chapterIndex,nextSegment){
+  const book=a.book,segment=book?.chapters?.[chapterIndex]?.segments?.[nextSegment];
+  if(!segment?.sceneBreakBefore)return playContinuousFrom(chapterIndex,nextSegment,0);
+  const target={token:++sceneTransitionToken,bookId:book.id,chapterIndex,nextSegment};
+  at(book,chapterIndex,nextSegment,0);
+  ee._scenePauseTarget=target;
+  ee._compositePlayback=false;
+  ee._chapterPlayback=true;
+  ee._restoringPosition=true;
+  warmFollowingAudioChunk(chapterIndex,nextSegment);
+  if(ee.src?.startsWith("blob:"))try{URL.revokeObjectURL(ee.src)}catch(_){}
+  ee.onloadedmetadata=()=>{
+    if(ee._scenePauseTarget!==target)return;
+    ee.currentTime=0;
+    ee._restoringPosition=false;
+    ee.playbackRate=1;
+    updateMediaSession();
+    retryPlay();
+  };
+  ee.src=URL.createObjectURL(sceneSilenceWav());
+  ee.load();
+  // Save the next *narration* segment at zero, not the silent WAV timestamp.
+  await pe().catch(error=>console.warn("Scene-break bookmark save failed",error));
+}
+async function playContinuousFrom(chapterIndex,segmentIndex,position=0,{fastStart=true,preferredEnd=null}={}){
+  sceneTransitionToken++;
+  if(ee._scenePauseTarget){ee._scenePauseTarget=null;ee.pause()}
+  const ch=a.book?.chapters?.[chapterIndex],seg=ch?.segments?.[segmentIndex];
+  if(!seg)return;
+  // Keep the user-activation fast path for iOS device speech.
+  if(seg.systemVoiceFallback&&!seg.audioKey)return Ot(chapterIndex,segmentIndex,position);
+  // Following a silence incident, bypass stitched chunks until next chapter.
+  if(silentRecoveryChapter){
+    if(silentRecoveryChapter.bookId!==a.book?.id||
+       silentRecoveryChapter.chapterIndex!==chapterIndex) silentRecoveryChapter=null;
+    else {dl("recovery segment-only ch="+chapterIndex+" seg="+segmentIndex);return Ot(chapterIndex,segmentIndex,position);}
+  }
+  let end=preferredEnd&&validReaderChunk(ch,{start:segmentIndex,end:preferredEnd,keys:ch.segments.slice(segmentIndex,preferredEnd).map(s=>s.audioKey)})?preferredEnd:continuousRunEnd(ch,segmentIndex);
+  if(fastStart&&end-segmentIndex>1){
+    // Read the local composite just once. If it's absent, give the Worker
+    // a short head start, but don't make Play wait through repeated retries.
+    const pending=getCompositeBlob(chapterIndex,segmentIndex,end);
+    let wakeTimer=null;
+    const first=await Promise.race([
+      pending.then(blob=>({blob}),error=>({error})),
+      new Promise(resolve=>{wakeTimer=setTimeout(()=>resolve({slow:true}),1200)})
+    ]);
+    if(wakeTimer!==null)clearTimeout(wakeTimer);
+    if(first.blob){
+      const ok=await playChapterComposite(chapterIndex,segmentIndex,position,end,first.blob);
+      if(ok)return ok;
+    }
+    // The saved position is relative to the whole group. Map it to its
+    // constituent segment before falling back or it may jump minutes ahead.
+    const fallback=await individualFromCompositeTime(chapterIndex,segmentIndex,end,position);
+    await Ot(chapterIndex,fallback.segment,fallback.position);
+    if(first.slow&&fallback.segment===segmentIndex){
+      installDeferredCompositeUpgrade(chapterIndex,segmentIndex,end,pending,ee.src);
+    }
+    return;
+  }
+  while(end-segmentIndex>1){
+    try{
+      const ok=await playChapterComposite(chapterIndex,segmentIndex,position,end);
+      if(ok)return ok;
+    }catch(err){console.warn("Chapter audio chunk failed",err)}
+    // 413 (too large), mixed codec, transient failures: use a smaller group.
+    end=segmentIndex+Math.floor((end-segmentIndex)/2);
+  }
+  const fallback=await individualFromCompositeTime(chapterIndex,segmentIndex,continuousRunEnd(ch,segmentIndex),position);
+  return Ot(chapterIndex,fallback.segment,fallback.position);
+}
+async function Me(e){
+  const ch=a.book.chapters[e],resume=nr(a.book,e);
+  dl("Me("+e+")");
+  const start=segmentPlayable(ch.segments[resume.segment])&&!ch.segments[resume.segment]?.audioStale?resume.segment:firstPlayable(ch,0);
+  if(start<0){alert("This chapter is not playable yet. Start generation and wait for the first segment to finish.");return}
+  const saved=ch.playback?.composite,preferredEnd=start===resume.segment&&validReaderChunk(ch,saved)&&saved.start===start?saved.end:null;
+  return playContinuousFrom(e,start,start===resume.segment?resume.position:0,{fastStart:true,preferredEnd});
+}async function Ot(e,c,r=0){sceneTransitionToken++;if(ee._scenePauseTarget){ee._scenePauseTarget=null;ee.pause()}const m=a.book.chapters[e],s=m.segments[c],i=Math.max(0,Number(r)||0),gesture=!!navigator.userActivation?.isActive;if(s?.systemVoiceFallback&&!s?.audioKey&&gesture){ut().catch(()=>{});return playSystemSegment(e,c,{userGesture:!0})}await ut();ee._compositePlayback=!1;ee._opalCompositeBlob=null;ee._opalCompositeSource=null;ee._compositeStartSegment=0;ee._compositeEndSegment=0;if(s?.systemVoiceFallback&&!s?.audioKey)return playSystemSegment(e,c);if(!s?.audioKey){const next=firstPlayable(m,c);if(next>=0&&next!==c)return Ot(e,next,0);alert("That segment has not finished generating yet.");return}if(ee._systemSpeechActive&&"speechSynthesis"in window){window.speechSynthesis.cancel();ee._systemSpeechActive=!1;systemSpeechUtterance=null}let l=null;try{l=await Bt(s)}catch(_){console.warn("Segment audio fetch failed",_);alert("Couldn't reach the audio \u2014 check your connection.");return}dl("Ot Bt->"+(l?l.blob.size:"null"));if(!l){s.audioKey=null,s.audioStale=!1,await pe(),se(),alert("That segment\u2019s audio is missing or damaged. Generate this segment again (or tap \u21bb to regenerate the chapter).");return}dt(e,c+1),ee.src?.startsWith("blob:")&&URL.revokeObjectURL(ee.src),ee._restoringPosition=!0,ee._chapterPlayback=!0,ee._waitingForGeneration=!1,me(),ee.onloadedmetadata=()=>{me(),ee.currentTime=Math.min(i,Math.max(0,(ee.duration||0)-.25)),updatePlayerTimeline(),me(),ee._restoringPosition=!1,(c===m.segments.length-1?warmNextChapterAudio(e):warmFollowingAudioChunk(e,c+1)),updateMediaSession(),retryPlay()},ee.src=URL.createObjectURL(l.blob),ee.load(),me(),at(a.book,e,c,i),delete m.playback.composite,writeReaderBookmark(a.book,e,c,i,null,true),await pe(),se()}function lastPlayable(ch,from){const s=ch?.segments||[];for(let i=Math.min(from,s.length-1);i>=0;i--){if(segmentPlayable(s[i]))return i}return -1}
+async function activePlaybackSection(){const ch=a.book.currentChapter||0;if(!ee._compositePlayback)return a.book.currentSegment||0;let t=ee.currentTime||0;const start=ee._compositeStartSegment||0,end=ee._compositeEndSegment||a.book.chapters[ch].segments.length;for(let i=start;i<end;i++){const duration=await sectionDuration(ch,i);if(!(duration>0)||t<duration-.03)return i;t-=duration}return Math.max(start,end-1)}
+async function prevSection(){if(!a.book)return;const ch=a.book.currentChapter||0,seg=await activePlaybackSection(),p=lastPlayable(a.book.chapters[ch],seg-1);if(p>=0)return playContinuousFrom(ch,p,0);for(let c=ch-1;c>=0;c--){const lp=lastPlayable(a.book.chapters[c],1e9);if(lp>=0)return playContinuousFrom(c,lp,0)}return playContinuousFrom(ch,seg,0)}
+async function nextSection(){if(!a.book)return;const ch=a.book.currentChapter||0,seg=await activePlaybackSection(),nx=firstPlayable(a.book.chapters[ch],seg+1);if(nx>=0)return playContinuousFrom(ch,nx,0);const nc=a.book.chapters.findIndex((c,i)=>i>ch&&playable(c));if(nc>=0)return Me(nc)}
+function renderSectionList(){const chI=a.book.currentChapter||0,ch=a.book.chapters[chI],cur=a.book.currentSegment||0;const rows=(ch?.segments||[]).map((s,i)=>{const ok=segmentPlayable(s);return`<button class="section-row${i===cur?" current":""}" data-jump-section="${i}"${ok?"":" disabled"}><span class="section-num">${i+1}</span><span class="section-pov">${ie(s.pov||"Narrator")}</span><span class="st">${i===cur?"▶ playing":s.systemVoiceFallback?"device":"ready"}</span></button>`}).join("");return`<div class="modal-back"><section class="modal"><div class="modal-title"><div><h2>Sections</h2><p class="muted">${ie(ch?.title||"Chapter "+(chI+1))} · tap a section to jump</p></div><button id="closeModal" class="ghost">✕</button></div><div class="section-list">${rows}</div></section></div>`}
+function sectionDuration(chI,segI){return(async()=>{try{const s=a.book?.chapters[chI]?.segments[segI],rec=await Bt(s);if(!rec?.blob)return 0;const url=URL.createObjectURL(rec.blob);try{return await new Promise(res=>{let done=false;const fin=v=>{if(done)return;done=true;try{URL.revokeObjectURL(url)}catch(_){}res(v)};const t=new Audio;t.preload="metadata";t.addEventListener("loadedmetadata",()=>fin(t.duration||0),{once:true});t.addEventListener("error",()=>fin(0),{once:true});setTimeout(()=>fin(0),8000);t.src=url})}catch(_){try{URL.revokeObjectURL(url)}catch(__){}return 0}}catch(_){return 0}})()}
+function stepSection(ch,seg,dir){if(dir<0){const p=lastPlayable(a.book.chapters[ch],seg-1);if(p>=0)return[ch,p];for(let c=ch-1;c>=0;c--){const lp=lastPlayable(a.book.chapters[c],1e9);if(lp>=0)return[c,lp]}return null}const n=firstPlayable(a.book.chapters[ch],seg+1);if(n>=0)return[ch,n];const nc=a.book.chapters.findIndex((c,i)=>i>ch&&playable(c));if(nc>=0){const f=firstPlayable(a.book.chapters[nc],0);if(f>=0)return[nc,f]}return null}
+async function seekBy(delta){
+  if(!a.book||!ee._chapterPlayback)return;
+  if(ee._compositePlayback){
+    const t=(Number(ee.currentTime)||0)+delta, duration=Number(ee.duration)||0;
+    if(t>=0&&t<duration){ee.currentTime=t;updatePlayerTimeline();return}
+    const ch=a.book.currentChapter||0;
+    if(t<0){
+      const start=ee._compositeStartSegment||0,prev=stepSection(ch,start,-1);
+      if(!prev){ee.currentTime=0;updatePlayerTimeline();return}
+      const d=await sectionDuration(prev[0],prev[1]);
+      return playContinuousFrom(prev[0],prev[1],Math.max(0,d+t));
+    }
+    const end=ee._compositeEndSegment||a.book.chapters[ch].segments.length;
+    if(end<a.book.chapters[ch].segments.length)return playContinuousFrom(ch,end,Math.max(0,t-duration));
+    const next=a.book.chapters.findIndex((c,i)=>i>ch&&playable(c));
+    if(next>=0)return playContinuousFrom(next,firstPlayable(a.book.chapters[next],0),Math.max(0,t-duration));
+    ee.currentTime=Math.max(0,duration-.25);updatePlayerTimeline();return
+  }
+  let ch=a.book.currentChapter||0,seg=a.book.currentSegment||0;
+  const current=a.book.chapters?.[ch]?.segments?.[seg];
+  // Web Speech has no seekable currentTime. From a device fallback, -15 moves
+  // into the previous audio segment (near its end) and +30 moves to the next
+  // playable segment. This keeps the transport from getting trapped.
+  if(current?.systemVoiceFallback&&!current?.audioKey){
+    if("speechSynthesis"in window){try{window.speechSynthesis.cancel()}catch(_){}}
+    ee._systemSpeechActive=!1;ee._systemSpeechPending=!1;systemSpeechUtterance=null;shelfListenStop();
+    if(delta<0){
+      const p=stepSection(ch,seg,-1);
+      if(!p)return playSystemSegment(ch,seg,{userGesture:!0});
+      const d=await sectionDuration(p[0],p[1]);
+      return playContinuousFrom(p[0],p[1],d>0?Math.max(0,d+delta):0)
+    }
+    const n=stepSection(ch,seg,1);
+    if(n)return playContinuousFrom(n[0],n[1],0);
+    return
+  }
+  let t=(Number(ee.currentTime)||0)+delta,g=0;
+  while(t<0&&g++<60){
+    const p=stepSection(ch,seg,-1);
+    if(!p){t=0;break}
+    ch=p[0];seg=p[1];
+    const d=await sectionDuration(ch,seg);
+    if(!(d>0)){t=0;break}
+    t+=d
+  }
+  g=0;
+  while(g++<60){
+    const d=await sectionDuration(ch,seg);
+    if(!(d>0)){t=0;break}
+    if(t<=d)break;
+    const n=stepSection(ch,seg,1);
+    if(!n){t=d;break}
+    t-=d;ch=n[0];seg=n[1]
+  }
+  if(t<0)t=0;
+  const moved=ch!==a.book.currentChapter||seg!==a.book.currentSegment;
+  if(moved){
+    return playContinuousFrom(ch,seg,Math.max(0,t))
+  }
+  const apply=()=>{ee.currentTime=Math.min(Math.max(0,t),Math.max(0,(ee.duration||0)-.25));updatePlayerTimeline()};
+  if(ee.readyState>=1)apply();
+  else ee.addEventListener("loadedmetadata",function h(){ee.removeEventListener("loadedmetadata",h);apply()},{once:!0})
+}
+function maskAccessToken(){const field=document.querySelector("#accessToken"),button=document.querySelector("#showAccessToken");if(!field||!button)return;field.type="password";button.textContent="Show";button.setAttribute("aria-pressed","false")}
+document.addEventListener("visibilitychange",()=>{if(document.hidden)maskAccessToken()});
+window.addEventListener("pagehide",maskAccessToken);
+
+async function useExistingCloudSettings(){
+  if(!a.apiBase||!a.accessToken){alert("Save the Worker URL and personal access token first.");return}
+  if(!confirm("Use the existing cloud voice, model, and playback preferences on this device? Your books, audio, and connection credentials are kept. This does not change cloud settings."))return;
+  try{
+    const response=await syncReadWithRetry(()=>wr(a.apiBase,a.accessToken),"downloading shared settings");
+    const s=response?.settings;
+    if(!s||typeof s!=="object")throw new Error("There are no saved cloud preferences yet. Your local settings were left unchanged.");
+    const local=await Oe("settings","main")||{};
+    const updatedAt=Number(s.updatedAt)||0;
+    a.voiceProfiles=s.voiceProfiles||a.voiceProfiles;
+    a.monthlyCap=s.monthlyCap??a.monthlyCap;
+    a.usage=s.usage||a.usage;
+    a.fishModel=s.fishModel||a.fishModel;
+    a.openaiModel=s.openaiModel||a.openaiModel;
+    a.geminiModel=normalizeGeminiModel(s.geminiModel||a.geminiModel);
+    a.playbackRate=Ie(s.playbackRate??a.playbackRate);
+    a.shelfApiBase=s.shelfApiBase||a.shelfApiBase;
+    a.shelfLogEnabled=s.shelfLogEnabled??a.shelfLogEnabled;
+    await ke("settings",{...local,id:"main",apiBase:a.apiBase,accessToken:a.accessToken,voiceProfiles:a.voiceProfiles,monthlyCap:a.monthlyCap,usage:a.usage,fishModel:a.fishModel,openaiModel:a.openaiModel,geminiModel:a.geminiModel,geminiLane:a.geminiLane,playbackRate:a.playbackRate,shelfApiBase:a.shelfApiBase,shelfLogEnabled:a.shelfLogEnabled,sharedUpdatedAt:updatedAt});
+    me();
+    await rt();
+  }catch(err){
+    alert("Could not download cloud preferences: "+(err?.status?"HTTP "+err.status+". ":"")+(err?.message||"Connection failed")+". Your local settings were not cleared.");
+  }
+}
+function Zr(){
+document.querySelector("#useCloudSettings")?.addEventListener("click",useExistingCloudSettings);
+document.querySelector("#syncDetailsBtn")?.addEventListener("click",()=>{a.view="settings";se()});
+document.querySelector("#showAccessToken")?.addEventListener("click",()=>{const field=document.querySelector("#accessToken"),button=document.querySelector("#showAccessToken");if(!field||!button)return;const show=field.type==="password";field.type=show?"text":"password";button.textContent=show?"Hide":"Show";button.setAttribute("aria-pressed",String(show))});
+document.querySelector("#recoverAudio")?.addEventListener("click",()=>recoverSilentAudio().catch(err=>{dl("RESTORE ERROR "+(err?.message||err));alert("Restore sound failed. Tap Play to retry.")}));
+document.querySelector("#copyPlaybackLog")?.addEventListener("click",copyPlaybackLog);
+document.querySelector("#versionInfo")?.addEventListener("click",()=>{const n=(Number(window.__vtaps||0)+1);window.__vtaps=n;clearTimeout(window.__vtimer);window.__vtimer=setTimeout(()=>{window.__vtaps=0},4000);if(n>=5){window.__vtaps=0;dl("showing log");alert("Playback log (newest first):\n"+(DL.length?DL.slice(-40).reverse().join("\n"):"(empty)"))}else if(n===1)alert(`OpalReader ${APP_UI_VERSION}`)}),document.querySelectorAll("[data-view]").forEach(e=>e.onclick=()=>{a.view=e.dataset.view,se()}),document.querySelector("#import")?.addEventListener("click",()=>document.querySelector("#epub").click()),document.querySelector("#importBackup")?.addEventListener("click",()=>document.querySelector("#bookBackup").click()),document.querySelector("#bookBackup")?.addEventListener("change",async e=>{const f=e.target.files?.[0];if(f)await restoreBookBackup(f);e.target.value=""}),document.querySelector("#backupCurrentBook")?.addEventListener("click",()=>backupBook(a.book.id)),document.querySelector("#deleteCurrentBook")?.addEventListener("click",()=>deleteBookFlow(a.book?.id)),document.querySelector("#shelfLinkBtn")?.addEventListener("click",()=>shelfLinkOpen()),document.querySelector("#epub")?.addEventListener("change",async e=>{try{const c=e.target.files[0],r=await Kt(c);r.updatedAt=Date.now(),await ke("books",r),a.providers.sync&&await Promise.allSettled([Ee(r),Ct(a.apiBase,a.accessToken,r.id,c)]),a.books=await Be("books"),a.book=r,a.view="chapters",se()}catch(c){alert(c.message)}}),document.querySelectorAll("[data-book]").forEach(e=>e.onclick=async()=>{a.book=xe(await Oe("books",e.dataset.book)),a.view="chapters",se(),dt(a.book.currentChapter||0,a.book.currentSegment||0),Ye()}),document.querySelectorAll("[data-resume-book]").forEach(e=>e.onclick=async()=>{try{a.book=xe(await Oe("books",e.dataset.resumeBook)),a.view="chapters",se(),dt(a.book.currentChapter||0,a.book.currentSegment||0),Ye(),await Me(a.book.currentChapter||0)}catch(c){alert(c.message)}}),document.querySelector("#chapterLane")?.addEventListener("change",async e=>{a.geminiLane=e.target.value==="standard"?"standard":"batch";await Ae();se()}),document.querySelector("#saveSetup")?.addEventListener("click",async()=>{a.apiBase=document.querySelector("#apiBase").value.trim(),a.accessToken=document.querySelector("#accessToken").value.trim(),a.monthlyCap=+document.querySelector("#monthlyCap").value||0,a.fishModel=document.querySelector("#fishModel")?.value||"s2.1-pro",a.openaiModel=document.querySelector("#openaiModel")?.value||"gpt-4o-mini-tts",a.geminiModel=normalizeGeminiModel(document.querySelector("#geminiModel")?.value),a.geminiLane=document.querySelector("#generationLane")?.value==="standard"?"standard":"batch",a.shelfApiBase=document.querySelector("#shelfApiBase").value.trim(),a.shelfLogEnabled=document.querySelector("#shelfLogEnabled").checked,await Ae(),await $e(),a.providers.sync&&await rt(),a.view=a.book?"cast":"library",se()}),document.querySelector("#syncNow")?.addEventListener("click",async()=>{if(a.book&&ee._chapterPlayback&&!ee.paused)await ut();await rt()}),document.querySelector("#refreshUsage")?.addEventListener("click",async()=>{try{await loadUsageReport(),se()}catch(e){alert(e.message||"Usage report could not be loaded.")}}),document.querySelectorAll("[data-cast]").forEach(e=>e.onclick=()=>{a.voiceTarget=e.dataset.cast,a.provider=a.providers.gemini?"gemini":a.providers.fish?"fish":a.providers.azure?"azure":a.providers.openai?"openai":"gemini",a.modal={type:"voices"},a.voiceList=[],a.voicePage=0,a.voiceHasMore=!1,Ce()}),document.querySelectorAll("[data-style-direction]").forEach(e=>e.onchange=async()=>{const t=e.dataset.styleDirection,n=t==="default"?a.book.defaultVoice:a.book.povs.find(o=>o.id===t)?.voice;n&&(n.style_direction=e.value.trim().slice(0,300),await pe(),se())}),document.querySelector("#closeModal")?.addEventListener("click",()=>{if(a.modal?.type==="systemVoices")return backToReviewFromSystemVoice();a.modal=null,se()}),document.querySelectorAll("[data-provider-select]").forEach(e=>e.onclick=()=>{a.provider=e.dataset.providerSelect,a.voiceList=[],a.voicePage=0,Ce()}),document.querySelector("#doSearch")?.addEventListener("click",()=>{a.search=document.querySelector("#voiceSearch").value,a.locale=document.querySelector("#locale").value,a.voiceGender=document.querySelector("#voiceGender")?.value||"",a.voicePage=0,Ce()}),document.querySelector("#locale")?.addEventListener("change",e=>{a.locale=e.target.value,a.voicePage=0,Ce()}),document.querySelector("#loadMoreVoices")?.addEventListener("click",()=>{a.voicePage+=1,Ce(!0)}),document.querySelectorAll("[data-book-preview]").forEach(e=>e.onclick=()=>et(a.voiceList.find(c=>c.voice_id===e.dataset.bookPreview),!0)),document.querySelectorAll("[data-preview-cast]").forEach(e=>e.onclick=()=>{a.voiceTarget=e.dataset.previewCast;const c=e.dataset.previewCast==="default"?a.book.defaultVoice:a.book.povs.find(r=>r.id===e.dataset.previewCast)?.voice;et(c,!0)}),document.querySelectorAll("[data-favorite]").forEach(e=>e.onclick=async()=>{const c=a.voiceList.find(s=>s.voice_id===e.dataset.favorite),r=`${c.provider}:${c.voice_id}`,m=Ze(c);a.voiceProfiles[r]={...m,favorite:!m.favorite},await Ae(),se()}),document.querySelectorAll("[data-tag]").forEach(e=>e.onclick=async()=>{const c=a.voiceList.find(l=>l.voice_id===e.dataset.tag),r=`${c.provider}:${c.voice_id}`,m=Ze(c),s=prompt("Private tags, separated by commas",m.tags.join(", "));if(s===null)return;const i=prompt("Private notes",m.notes);a.voiceProfiles[r]={...m,tags:s.split(",").map(l=>l.trim()).filter(Boolean),notes:i??m.notes},await Ae(),se()}),document.querySelectorAll("[data-choose]").forEach(e=>e.onclick=async()=>{let c=a.voiceList.find(r=>r.voice_id===e.dataset.choose);try{const sf=segmentFallbackTarget();if(sf){const ch=a.book.chapters[sf.chapter],seg=ch?.segments?.[sf.segment];if(!seg)throw new Error("That segment could not be found.");seg.fallbackVoice=ur(c);delete seg.systemVoiceFallback;await pe();a.modal={type:"segments",chapter:sf.chapter};se();await regenerateOneSegment(sf.chapter,sf.segment);return}dr(a.book,a.voiceTarget,c);await pe(),a.modal=null,se()}catch(r){alert(r.message)}}),document.querySelectorAll("[data-review]").forEach(e=>e.onclick=()=>{a.modal={type:"segments",chapter:+e.dataset.review},se()}),document.querySelectorAll("[data-clear-generation-error]").forEach(e=>e.onclick=async()=>{const ch=a.book.chapters[+e.dataset.clearGenerationError];if(!ch)return;if(["queued","generating"].includes(ch.generation?.state))return;if(ch.generation?.jobId){ch.generation={...ch.generation,state:"queued",error:null};await pe();se();ct();return}const ready=ch.segments.every(s=>segmentPlayable(s)&&!s.audioStale);ch.generation={state:ready?"ready":"not_generated"};await pe();se()}),document.querySelectorAll("[data-segment-pov]").forEach(e=>e.onchange=async()=>{const c=a.book.chapters[a.modal.chapter].segments[+e.dataset.segmentPov];c.pov=e.value||null,c.manualPov=!0,c.audioKey&&(c.audioStale=!0),await pe(),se()}),document.querySelectorAll("[data-regenerate-segment]").forEach(e=>e.onclick=()=>regenerateOneSegment(a.modal.chapter,+e.dataset.regenerateSegment)),document.querySelectorAll("[data-generate-rest]").forEach(e=>e.onclick=()=>generateRestOfChapter(a.modal.chapter,+e.dataset.generateRest)),document.querySelectorAll("[data-split-blocked]").forEach(e=>e.onclick=()=>queueAdaptiveRepair(a.modal.chapter,{manual:true})),document.querySelectorAll("[data-resume-cap-repair]").forEach(e=>e.onclick=()=>{const idx=a.modal.chapter,book=a.book,ch=book?.chapters?.[idx];if(!ch)return;const repairBusy=[ch.generation,ch.replacementGeneration].some(g=>g?.scope==="background_repair"&&["queued","generating"].includes(g.state)),continueBusy=(book.continueSession?.jobs||[]).some(j=>j.chapterIndex===idx&&["parked","queued","generating","paused_quota"].includes(j.state));if(repairBusy||continueBusy){se();return}queueAdaptiveRepair(idx,{manual:true})}),document.querySelectorAll("[data-device-fallback]").forEach(e=>e.onclick=()=>useSystemVoiceFallback(a.modal.chapter,+e.dataset.deviceFallback)),
+document.querySelector("#systemVoiceSelect")?.addEventListener("change",e=>{if(a.modal?.type==="systemVoices"){stopSystemVoicePreview();a.modal.selectedIndex=Number(e.target.value);systemVoicePickerStatus("");const hint=document.querySelector("#systemVoiceSelectionHint");if(hint)hint.textContent=systemVoiceSelectionHint(a.modal.voices,a.modal.selectedIndex)}}),document.querySelector("#showOtherSystemVoices")?.addEventListener("change",e=>{const m=a.modal;if(m?.type!=="systemVoices")return;stopSystemVoicePreview();m.showOther=!!e.target.checked;if(!m.showOther&&voiceCategory(m.voices[m.selectedIndex])!=="everyday")m.selectedIndex=m.voices.findIndex(v=>voiceCategory(v)==="everyday");se()}),
+document.querySelector("#systemVoiceSaveAs")?.addEventListener("change",e=>{if(a.modal?.type==="systemVoices")a.modal.saveAs=e.target.value}),
+document.querySelectorAll("[data-saved-system-voice]").forEach(e=>e.onclick=()=>{const m=a.modal;if(m?.type!=="systemVoices")return;const i=systemVoiceMatchIndex(m.voices||[],systemVoicePreferences()[e.dataset.savedSystemVoice]);if(i<0)return;stopSystemVoicePreview();m.selectedIndex=i;m.showOther=voiceCategory(m.voices[i])!=="everyday";m.saveAs=e.dataset.savedSystemVoice;se()}),
+document.querySelector("#auditionSystemVoice")?.addEventListener("click",auditionSelectedSystemVoice),
+document.querySelector("#stopSystemVoiceAudition")?.addEventListener("click",()=>{stopSystemVoicePreview();systemVoicePickerStatus("Preview stopped.")}),
+document.querySelector("#applySystemVoice")?.addEventListener("click",applySelectedSystemVoice),
+document.querySelector("#cancelSystemVoice")?.addEventListener("click",backToReviewFromSystemVoice),
+document.querySelector("#refreshSystemVoices")?.addEventListener("click",()=>{const m=a.modal;if(m?.type==="systemVoices")useSystemVoiceFallback(m.chapter,m.segment)}),document.querySelectorAll("[data-cloud-fallback]").forEach(e=>e.onclick=()=>chooseCloudFallbackVoice(a.modal.chapter,+e.dataset.cloudFallback)),document.querySelectorAll("[data-split]").forEach(e=>e.onclick=async()=>{const c=a.book.chapters[a.modal.chapter],r=+e.dataset.split,m=c.segments[r],s=prompt("Paste the first few words where the new POV begins:");if(!s)return;const i=m.text.toLowerCase().indexOf(s.toLowerCase());if(i<=0)return alert("I could not find those words in this segment.");const l={...m,id:crypto.randomUUID(),text:m.text.slice(i).trim(),audioKey:null,audioStale:!1,manualPov:!0};m.text=m.text.slice(0,i).trim(),m.audioKey=null,m.audioStale=!1,c.segments.splice(r+1,0,l),c.text=c.segments.map(o=>o.text).join(`
+
+`),await pe(),se()}),document.querySelectorAll("[data-merge]").forEach(e=>e.onclick=async()=>{const c=a.book.chapters[a.modal.chapter],r=+e.dataset.merge;c.segments[r-1].text+=`
+
+`+c.segments[r].text,c.segments[r-1].audioKey=null,c.segments.splice(r,1),c.text=c.segments.map(m=>m.text).join(`
+
+`),await pe(),se()}),document.querySelector("#copyGeminiDiagnostics")?.addEventListener("click",()=>copyGeminiDiagnostics(a.book.chapters[a.modal.chapter],a.modal.chapter)),document.querySelector("#stopAutoSplit")?.addEventListener("click",async()=>{const chapter=a.book?.chapters?.[a.modal.chapter];if(!chapter)return;chapter.autoSplitEnabled=false;chapter.autoSplitPauseReason="user";chapter.autoSplitStatus="Automatic splitting stopped. Any queued request will finish, but Reader will not queue further splits.";await pe();se()}),document.querySelector("#findSegmentText")?.addEventListener("click",()=>{const q=prompt("Find text in this chapter’s TTS segments:");if(!q?.trim())return;const chapter=a.book.chapters[a.modal.chapter],n=q.trim().toLowerCase();for(let i=0;i<chapter.segments.length;i++){const text=chapter.segments[i].text||"",at=text.toLowerCase().indexOf(n);if(at>=0){const match=text.slice(at,at+q.trim().length);a.modal.prosodyMatch={segment:i,at,length:match.length,query:q.trim()},a.modal.prosodyStatus=null,se();return}}alert("That text was not found in this chapter’s current TTS segments.")}),document.querySelectorAll("[data-prosody]").forEach(e=>e.onclick=()=>runProsodyAudition(e.dataset.prosody)),document.querySelector("#playProsodyResult")?.addEventListener("click",()=>playProsodyResult()),document.querySelector("#clearProsodyMatch")?.addEventListener("click",()=>{if(a.modal?.prosodyResult?.url?.startsWith("blob:"))try{URL.revokeObjectURL(a.modal.prosodyResult.url)}catch{}delete a.modal.prosodyMatch,delete a.modal.prosodyResult,a.modal.prosodyStatus=null,se()}),document.querySelector("#doneSegments")?.addEventListener("click",()=>{a.modal=null,se()}),document.querySelector("#continueToQuota")?.addEventListener("click",continueToQuota),document.querySelector("#discardUnconfirmedContinue")?.addEventListener("click",discardUnconfirmedContinueSetup),document.querySelectorAll("[data-resume-quota]").forEach(e=>e.onclick=()=>resumeChapterQuota(+e.dataset.resumeQuota)),document.querySelectorAll("[data-generate]").forEach(e=>e.onclick=()=>Mr(+e.dataset.generate)),document.querySelectorAll("[data-regenerate]").forEach(e=>e.onclick=()=>Wr(+e.dataset.regenerate)),document.querySelectorAll("[data-play-chapter]").forEach(e=>e.onclick=()=>Me(+e.dataset.playChapter)),document.querySelectorAll("[data-regen-chapter]").forEach(e=>e.onclick=async()=>{const c=+e.dataset.regenChapter,ch=a.book?.chapters[c];if(!ch)return;if(!confirm("Generate completely fresh audio for "+Ir(ch,c)+"? This bypasses every existing cached segment and uses new provider requests."))return;await Mr(c,{forceFresh:!0})}),document.querySelector("#addPov")?.addEventListener("click",async()=>{const e=prompt("POV or character name");e?.trim()&&(a.book.povs.push({id:crypto.randomUUID(),name:e.trim(),voice:null}),await pe(),se())}),document.querySelectorAll("[data-rename]").forEach(e=>e.onclick=async()=>{const c=a.book.povs.find(s=>s.id===e.dataset.rename),r=c.name,m=prompt("Rename POV",r);if(m?.trim()){c.name=m.trim();for(const s of a.book.chapters.flatMap(i=>i.segments))s.pov===r&&(s.pov=c.name);await pe(),se()}}),document.querySelector("#play")?.addEventListener("click",async()=>{try{dl("tap play paused="+ee.paused+" src="+!!ee.src);me();const sysSeg=a.book?.chapters?.[a.book.currentChapter||0]?.segments?.[a.book.currentSegment||0];if(sysSeg?.systemVoiceFallback&&!sysSeg?.audioKey&&(!ee._systemSpeechActive||!("speechSynthesis"in window)||(!window.speechSynthesis.speaking&&!window.speechSynthesis.paused))){await playSystemSegment(a.book.currentChapter||0,a.book.currentSegment||0,{userGesture:!0});return}if(ee._systemSpeechActive&&"speechSynthesis"in window){if(window.speechSynthesis.paused){window.speechSynthesis.resume();shelfListenStart();It();return}if(window.speechSynthesis.speaking){window.speechSynthesis.pause();shelfListenPaused();It();return}}if(!ee.paused){ee._userPaused=!0;return ee.pause()}if(!ee._chapterPlayback||!ee.src)dl("tap: fresh start");return await resumeCurrent();ee._userPaused=!1;dl("tap: direct play");await Promise.race([ee.play(),new Promise((_,rj)=>setTimeout(()=>rj(new Error("Playback timed out starting. The audio file may be damaged \u2014 try regenerating the segment.")),15000))])}catch(e){console.warn("Playback start failed",e),alert(e.message||"Playback could not start.")}}),document.querySelector("#prevChapter")?.addEventListener("click",()=>Me(Math.max(0,a.book.currentChapter-1))),document.querySelector("#nextChapter")?.addEventListener("click",()=>Me(Math.min(a.book.chapters.length-1,a.book.currentChapter+1))),document.querySelector("#prevSection")?.addEventListener("click",()=>{prevSection().catch(e=>alert(e.message||"Could not go back a section."))}),document.querySelector("#nextSection")?.addEventListener("click",()=>{nextSection().catch(e=>alert(e.message||"Could not advance a section."))}),document.querySelector("#sectionList")?.addEventListener("click",()=>{a.modal={type:"sections"},se()}),document.querySelectorAll("[data-jump-section]").forEach(e=>e.onclick=()=>{const n=+e.dataset.jumpSection;a.modal=null;playContinuousFrom(a.book.currentChapter||0,n,0).catch(e=>alert(e.message||"Could not jump to that section."))}),document.querySelector("#back15")?.addEventListener("click",()=>{seekBy(-15).catch(e=>console.warn("seek failed",e))}),document.querySelector("#forward30")?.addEventListener("click",()=>{seekBy(30).catch(e=>console.warn("seek failed",e))}),document.querySelector("#seek")?.addEventListener("input",e=>{ee.currentTime=+e.target.value,checkpointReaderPlayback(true)&&pe().catch(()=>{}),updatePlayerTimeline()}),document.querySelector("#speed")?.addEventListener("change",async e=>{a.playbackRate=Ie(e.target.value),me(),await Ae()})}ee.addEventListener("loadedmetadata",()=>{me(),updatePlayerTimeline()});ee.addEventListener("durationchange",updatePlayerTimeline);ee.addEventListener("canplay",()=>{me(),updatePlayerTimeline()});ee.ontimeupdate=()=>{if(checkpointReaderPlayback()){clearTimeout(ee._save);ee._save=setTimeout(pe,1200)}updatePlayerTimeline()};function updateMediaSession(){if(!("mediaSession"in navigator)||!a.book)return;const ch=a.book.chapters[a.book.currentChapter],seg=ch?.segments[a.book.currentSegment||0],sys=ee._systemSpeechActive&&"speechSynthesis"in window;try{navigator.mediaSession.metadata=new MediaMetadata({title:ch?.title||a.book.title,artist:a.book.author||"",album:a.book.title,artwork:a.book.cover?[{src:a.book.cover}]:[]});navigator.mediaSession.playbackState=sys?(window.speechSynthesis.paused?"paused":"playing"):(ee.paused?"paused":"playing");if(!sys&&Number.isFinite(ee.duration)&&ee.duration>0)navigator.mediaSession.setPositionState({duration:ee.duration,playbackRate:a.playbackRate||1,position:Math.min(ee.currentTime||0,ee.duration)})}catch{}}
+
+async function recoveryRewindPosition(chapter,start,end,position,composite,rewindSeconds=15){
+  // For a stitched WAV, currentTime is relative to the entire chunk.
+  // Rewind that clock first, THEN find the original segment.
+  let rewindTime=Math.max(0,Number(position)||0)-rewindSeconds;
+  if(composite&&rewindTime>=0)
+    return individualFromCompositeTime(chapter,start,end,rewindTime);
+  if(!composite&&rewindTime>=0)
+    return {segment:start,position:rewindTime};
+  // The requested 15 seconds crosses the start of the current chunk/segment.
+  // Walk backward through saved audio, never guessing TTS duration.
+  let segment=start;
+  while(rewindTime<0&&segment>0){
+    const prior=lastPlayable(a.book.chapters[chapter],segment-1);
+    if(prior<0)break;
+    const duration=await sectionDuration(chapter,prior);
+    if(!(duration>0)||!Number.isFinite(duration)){
+      dl("SILENT AUDIO unknown preceding duration ch="+chapter+" seg="+prior);
+      return {segment:prior,position:0};
+    }
+    segment=prior;rewindTime+=duration;
+  }
+  return {segment,position:Math.max(0,rewindTime)};
+}
+
+async function inspectCompositePcm(blob,seconds){
+  if(!blob||blob.size<44)return "composite source unavailable";
+  const h=new DataView(await blob.slice(0,44).arrayBuffer());
+  const tag=(at)=>String.fromCharCode(h.getUint8(at),h.getUint8(at+1),h.getUint8(at+2),h.getUint8(at+3));
+  if(tag(0)!=="RIFF"||tag(8)!=="WAVE"||tag(12)!=="fmt "||tag(36)!=="data")
+    return "noncanonical WAV header";
+  const encoding=h.getUint16(20,true),channels=h.getUint16(22,true);
+  const sampleRate=h.getUint32(24,true),byteRate=h.getUint32(28,true);
+  const dataBytes=h.getUint32(40,true);
+  if(encoding!==1||h.getUint16(34,true)!==16||!channels||!byteRate||
+     byteRate!==sampleRate*channels*2||dataBytes>blob.size-44)
+    return "unexpected WAV format/size";
+  const duration=dataBytes/byteRate,at=Math.max(0,Math.min(duration,Number(seconds)||0));
+  const windows=[];
+  for(const center of [at-1.5,at,at+1.5]){
+    const t=Math.max(0,Math.min(Math.max(0,duration-.35),center));
+    const start=44+Math.floor(t*byteRate/2)*2;
+    const byteCount=Math.min(Math.floor(byteRate*.35/2)*2,44+dataBytes-start);
+    if(byteCount<2)continue;
+    const v=new DataView(await blob.slice(start,start+byteCount).arrayBuffer());
+    let power=0,peak=0,aboveNoise=0,count=0;
+    for(let offset=0;offset+1<v.byteLength;offset+=2){
+      const sample=Math.abs(v.getInt16(offset,true));
+      power+=sample*sample;peak=Math.max(peak,sample);
+      if(sample>128)aboveNoise++;
+      count++;
+    }
+    const rms=count?Math.sqrt(power/count)/32768:0;
+    windows.push(t.toFixed(2)+"s:rms="+(rms*100).toFixed(2)+"% peak="+
+      (peak/32768*100).toFixed(1)+"% voiced="+(100*aboveNoise/Math.max(1,count)).toFixed(1)+"%");
+  }
+  return "PCM16 "+sampleRate+"Hz "+channels+"ch duration="+duration.toFixed(1)+
+    "s sample "+windows.join(" | ");
+}
+
+async function recoverSilentAudio(){
+  const old=ee,book=a.book;
+  if(!book||!old.src||old._systemSpeechActive||old._scenePauseTarget){
+    alert("Start a generated narration segment before using Restore sound.");
+    return;
+  }
+  const bookId=book.id,chapter=book.currentChapter||0,composite=!!old._compositePlayback;
+  const start=composite?(old._compositeStartSegment||0):(book.currentSegment||0);
+  const end=composite?(old._compositeEndSegment||book.chapters[chapter].segments.length):start+1;
+  const position=Math.max(0,Number(old.currentTime)||0);
+  const compositeBlob=composite?old._opalCompositeBlob:null;
+  dl("SILENT AUDIO ch="+chapter+" start="+start+" end="+end+" t="+position.toFixed(2)+
+    " composite="+composite+" ready="+old.readyState+" net="+old.networkState+
+    " paused="+old.paused+" muted="+old.muted+" volume="+old.volume+
+    " rate="+old.playbackRate+" duration="+(Number(old.duration)||0).toFixed(1)+
+    " visibility="+document.visibilityState+" source="+(old._opalCompositeSource||"unknown"));
+  if(composite)inspectCompositePcm(compositeBlob,position)
+    .then(result=>dl("SILENT AUDIO PCM "+result))
+    .catch(error=>dl("SILENT AUDIO PCM probe failed "+(error?.message||error)));
+  checkpointReaderPlayback(true);
+  old._userPaused=true;old.pause();shelfListenPaused();
+  let target={segment:start,position:Math.max(0,position-15)};
+  try{target=await recoveryRewindPosition(chapter,start,end,position,composite);}
+  catch(error){
+    dl("SILENT AUDIO rewind map failed "+(error?.message||error));
+    target={segment:start,position:0};
+  }
+  if(ee!==old||a.book?.id!==bookId||a.book.currentChapter!==chapter)return;
+  // The old HTMLAudioElement can remain silent while its clock advances.
+  // A fresh element plus the original TTS segment bypasses that decoder state.
+  const fresh=new Audio;
+  fresh.preload="auto";fresh.muted=old.muted;fresh.volume=old.volume;
+  for(const key of ["onplay","onpause","onerror","onended","ontimeupdate"]){
+    fresh[key]=old[key];old[key]=null;
+  }
+  old.onloadedmetadata=null;
+  fresh.addEventListener("loadedmetadata",()=>{if(ee===fresh){me();updatePlayerTimeline()}});
+  fresh.addEventListener("durationchange",()=>{if(ee===fresh)updatePlayerTimeline()});
+  fresh.addEventListener("canplay",()=>{if(ee===fresh){me();updatePlayerTimeline()}});
+  ee=fresh;traceAudioState(fresh);
+  silentRecoveryChapter={bookId,chapterIndex:chapter};
+  const oldSrc=old.src;old.pause();old.removeAttribute("src");old.load();
+  if(oldSrc?.startsWith("blob:"))try{URL.revokeObjectURL(oldSrc)}catch(_){}
+  dl("SILENT AUDIO fresh element -> segment "+target.segment+" t="+target.position.toFixed(2));
+  try{
+    await Ot(chapter,target.segment,target.position);
+    It();updatePlayerTimeline();updateMediaSession();
+  }catch(error){
+    dl("SILENT AUDIO restore failed "+(error?.message||error));
+    alert("Audio restart was interrupted. Tap Play to resume from your saved position.");
+  }
+}
+function copyPlaybackLog(){
+  const report="Opal Reader "+APP_UI_VERSION+" playback log\n"+DL.join("\n");
+  if(navigator.clipboard?.writeText)
+    navigator.clipboard.writeText(report).then(()=>alert("Playback log copied.")).catch(()=>prompt("Copy playback log:",report));
+  else prompt("Copy playback log:",report);
+}
+async function resumeCurrent(){dl("resumeCurrent");if(!a.book){dl("no book");return};const curCh=a.book.currentChapter||0,curSeg=a.book.currentSegment||0,sysSeg=a.book.chapters?.[curCh]?.segments?.[curSeg];if(sysSeg?.systemVoiceFallback&&!sysSeg?.audioKey&&(!ee._systemSpeechActive||!("speechSynthesis"in window)||(!window.speechSynthesis.speaking&&!window.speechSynthesis.paused)))return playSystemSegment(curCh,curSeg,{userGesture:!0});if(ee._systemSpeechActive&&"speechSynthesis"in window){if(window.speechSynthesis.paused){window.speechSynthesis.resume();shelfListenStart();It();updateMediaSession();return}if(window.speechSynthesis.speaking)return}if(ee.src&&ee._chapterPlayback){me();try{await ee.play();return}catch(e){console.warn("Resume failed, reloading",e)}}const current=a.book.currentChapter||0;if(playable(a.book.chapters[current])){dl("resumeCurrent->Me("+current+")");return Me(current)}const nextChapter=a.book.chapters.findIndex((c,i)=>i>=current&&playable(c));if(nextChapter>=0)return Me(nextChapter);throw new Error("No generated audio is ready yet.")}function installMediaSession(){if(!("mediaSession"in navigator))return;const set=(name,fn)=>{try{navigator.mediaSession.setActionHandler(name,fn)}catch{}};set("play",()=>resumeCurrent().catch(console.warn));set("pause",()=>{if(ee._systemSpeechActive&&"speechSynthesis"in window){window.speechSynthesis.pause();shelfListenPaused();It();updateMediaSession()}else ee.pause()});set("seekbackward",d=>{seekBy(-(d.seekOffset||15)).catch(e=>console.warn("seek failed",e))});set("seekforward",d=>{seekBy(d.seekOffset||30).catch(e=>console.warn("seek failed",e))});set("previoustrack",()=>a.book&&Me(Math.max(0,a.book.currentChapter-1)));set("nexttrack",()=>a.book&&Me(Math.min(a.book.chapters.length-1,a.book.currentChapter+1)))}function installPullToRefresh(){if(!("ontouchstart"in window))return;document.body.classList.add("pull-refresh-enabled");const e=document.createElement("div");e.className="pull-refresh",e.setAttribute("aria-live","polite"),e.innerHTML='<span class="pull-refresh-icon">↓</span><span class="pull-refresh-text">Pull to refresh</span>',document.body.appendChild(e);const c=e.querySelector(".pull-refresh-text"),r=e.querySelector(".pull-refresh-icon");let m=0,s=0,i=!1,l=!1,o=!1,u=0;const _=()=>{i=l=!1,u=0,e.classList.remove("visible","dragging","armed","refreshing"),e.style.transform="",c.textContent="Pull to refresh",r.textContent="↓"};document.addEventListener("touchstart",k=>{if(o||k.touches.length!==1||window.scrollY>1||a.modal)return;const w=k.target?.closest?.("input,textarea,select,[contenteditable=true],.timeline,.modal-back");if(w)return;m=k.touches[0].clientY,s=k.touches[0].clientX,i=!0,l=!1,u=0},{passive:!0}),document.addEventListener("touchmove",k=>{if(!i||o||k.touches.length!==1)return;const w=k.touches[0].clientY-m,S=Math.abs(k.touches[0].clientX-s);if(w<=0){_();return}if(!l&&w<10)return;if(!l&&w<=S*1.15)return;l=!0,u=Math.min(92,w*.58),k.preventDefault(),e.classList.add("visible","dragging"),e.style.transform=`translate(-50%,${Math.round(-58+u)}px)`;const h=u>=58;e.classList.toggle("armed",h),c.textContent=h?"Release to refresh":"Pull to refresh"}, {passive:!1}),document.addEventListener("touchend",async()=>{if(!i)return;const k=l&&u>=58;i=!1,l=!1;if(!k){_();return}o=!0,e.classList.remove("dragging","armed"),e.classList.add("visible","refreshing"),e.style.transform="translate(-50%, 2px)",c.textContent="Refreshing…",r.textContent="↻";try{a.book&&await ut()}catch{}finally{window.location.reload()}},{passive:!0}),document.addEventListener("touchcancel",()=>{o||_()},{passive:!0})}function It(){const e=document.querySelector("#play"),sys=ee._systemSpeechActive&&"speechSynthesis"in window&&window.speechSynthesis.speaking&&!window.speechSynthesis.paused;e&&(e.textContent=sys?"Ⅱ":ee._systemSpeechPending?"▶":ee.paused?"▶":"Ⅱ")}ee.onplay=()=>{ee._pendingPlay=!1,me(),It(),updateMediaSession(),shelfListenStart()};ee.onerror=()=>{if(ee._scenePauseTarget){const t=ee._scenePauseTarget;ee._scenePauseTarget=null;if(t.token===sceneTransitionToken&&a.book?.id===t.bookId)return playContinuousFrom(t.chapterIndex,t.nextSegment,0).catch(console.warn);return}const t=ee.error;dl("ELEMENT ERROR "+(t&&t.code));console.warn("Audio element error",t&&t.code,t&&t.message),shelfListenStop()};ee.onpause=()=>{checkpointReaderPlayback(true)&&pe().catch(()=>{});It(),updateMediaSession(),shelfListenPaused()};ee.onended=async()=>{dl("onended");
+  if(ee._scenePauseTarget){
+    const target=ee._scenePauseTarget;
+    ee._scenePauseTarget=null;
+    if(target.token===sceneTransitionToken&&a.book?.id===target.bookId&&
+       a.book.currentChapter===target.chapterIndex&&
+       a.book.currentSegment===target.nextSegment&&!ee._userPaused)
+      return playContinuousFrom(target.chapterIndex,target.nextSegment,0);
+    return;
+  }if(ee._singleSegmentPreview){shelfListenStop(),ee._singleSegmentPreview=!1,ee._chapterPlayback=!1,ee._compositePlayback=!1,ee.pause(),ee.currentTime=0,me(),updatePlayerTimeline(),updateMediaSession();return}if(!a.book){shelfListenStop();return}const chapterIndex=a.book.currentChapter,e=a.book.chapters[chapterIndex];if(ee._compositePlayback){const chunkEnd=ee._compositeEndSegment??e.segments.length;ee._compositePlayback=!1;ee._compositeEndSegment=0;if(chunkEnd<e.segments.length){ee._chapterPlayback=!1;if(segmentPlayable(e.segments[chunkEnd])&&!e.segments[chunkEnd]?.audioStale){at(a.book,chapterIndex,chunkEnd,0);await pe();return advanceAtSceneBoundary(chapterIndex,chunkEnd)}shelfListenStop();at(a.book,chapterIndex,chunkEnd,0);ee._chapterPlayback=!1;ee._waitingForGeneration=!0;await pe();se();updateMediaSession();return}ar(a.book,chapterIndex);const nextIndex=chapterIndex+1;if(nextIndex<a.book.chapters.length){at(a.book,nextIndex,0,0);const next=a.book.chapters[nextIndex];if(playable(next)){await pe();return Me(nextIndex)}shelfListenStop(),ee._chapterPlayback=!1,ee._waitingForGeneration=!0,await pe(),se(),updateMediaSession();return}shelfListenStop(),ee._chapterPlayback=!1,a.book.completed=!0,await pe(),se(),updateMediaSession();return}const c=(a.book.currentSegment||0)+1;dl("onended next seg="+c+" of "+e.segments.length);if(c<e.segments.length){ee._chapterPlayback=!1;if(segmentPlayable(e.segments[c])&&!e.segments[c]?.audioStale)return advanceAtSceneBoundary(chapterIndex,c);shelfListenStop(),at(a.book,chapterIndex,c,0),ee._chapterPlayback=!1,ee._waitingForGeneration=!0,await pe(),se(),updateMediaSession();return}ar(a.book,chapterIndex);const nextIndex=chapterIndex+1;if(nextIndex<a.book.chapters.length){at(a.book,nextIndex,0,0);const next=a.book.chapters[nextIndex];if(playable(next)){await pe();return Me(nextIndex)}shelfListenStop(),ee._chapterPlayback=!1,ee._waitingForGeneration=!0,await pe(),se(),updateMediaSession();return}shelfListenStop(),ee._chapterPlayback=!1,a.book.completed=!0,await pe(),se(),updateMediaSession()};(async()=>{a.books=(await Be("books")).map(xe);const e=await Oe("settings","main");a.apiBase=e?.apiBase||"",a.accessToken=e?.accessToken||"",a.voiceProfiles=e?.voiceProfiles||{},a.monthlyCap=e?.monthlyCap??15,a.usage=e?.usage||{month:"",spent:0},a.fishModel=e?.fishModel||"s2.1-pro",a.openaiModel=e?.openaiModel||"gpt-4o-mini-tts",a.geminiModel=normalizeGeminiModel(e?.geminiModel),a.geminiLane=e?.geminiLane==="standard"?"standard":"batch",a.playbackRate=Ie(e?.playbackRate),a.shelfApiBase=e?.shelfApiBase||"https://opal-shelf.4d8v7jw78c.workers.dev",a.shelfLogEnabled=e?.shelfLogEnabled!==!1,me(),installMediaSession(),installPullToRefresh(),"serviceWorker"in navigator&&navigator.serviceWorker.register("./sw-207.js"),dtPrune(),se(),shelfFlush(),a.apiBase&&a.accessToken&&(await rt(),await loadUsageReport().catch(()=>{}),updateQuotaMiniDom(),await Ye())})();document.addEventListener("visibilitychange",()=>{document.visibilityState==="hidden"&&(shelfPauseTimer?shelfListenStopConfirmed():shelfListenCheckpoint(),checkpointReaderPlayback(true),a.book&&ut().then(()=>Ee(a.book)).catch(()=>{})),document.visibilityState==="visible"&&(shelfFlush(),me(),a.book&&dt(a.book.currentChapter||0,a.book.currentSegment||0),refreshQuotaBadge(),Ye())});setInterval(()=>{document.visibilityState==="visible"&&refreshQuotaBadge()},5*60*1000);setInterval(()=>{document.visibilityState==="visible"&&updateQuotaMiniDom()},60*1000);window.addEventListener("pageshow",()=>{me();refreshQuotaBadge()});window.addEventListener("pagehide",()=>{shelfPauseTimer?shelfListenStopConfirmed():shelfListenCheckpoint(),checkpointReaderPlayback(true),a.book&&ut().then(()=>Ee(a.book)).catch(()=>{})});
