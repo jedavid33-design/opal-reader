@@ -1,0 +1,194 @@
+{
+ "candidate": {
+  "entry": "app-265.js",
+  "serviceWorker": "sw-ui2.js",
+  "cache": "opalreader-shell-ui2",
+  "buildMarker": "d5b-v2-playback-client-13",
+  "packagingMarker": "ui-pkg-2",
+  "base": "published UI1 tree (ui-pkg-1), live commit a9f8c169b6bcbcbf8c2240abd83af3e0772e4c1d",
+  "rollbackBasis": "a9f8c169b6bcbcbf8c2240abd83af3e0772e4c1d (intact as parent; app-264.js/sw-ui1.js/cache opalreader-shell-ui1 preserved byte-identical in the publish tree)"
+ },
+ "deltaPaths": [
+  "app-265.js",
+  "index.html",
+  "styles-152.css",
+  "sw-ui2.js"
+ ],
+ "publishPathCount": 56,
+ "publishDigest": "1c7c39c261b9b8a4e6d8d5a42972adff8f11ecf26d5ff69d47ae37463ef181f9",
+ "publishDigestMethod": "SHA-256 of the sorted 'path sha256' lines from package/PACKAGE-MANIFEST.json files map",
+ "tests": {
+  "unitBatteryTreeA": "UNIT BATTERY: 13/13 PASS",
+  "unitBatteryPackage": "UNIT BATTERY: 13/13 PASS",
+  "castCensus": "CAST CENSUS: PASS \u2014 mappings table covers exactly the census's non-Gemini cast voices; unverified flag exact.",
+  "chromiumProofTreeA": "CHROMIUM PROOF: 14/14 PASS",
+  "chromiumProofPackage": "CHROMIUM PROOF: 14/14 PASS",
+  "phoneWidthTreeA": "PHONE-WIDTH PROOF (tree-a): 9/9 PASS",
+  "phoneWidthPackage": "PHONE-WIDTH PROOF (package/publish): 9/9 PASS",
+  "phoneWidthBasePublished": "PHONE-WIDTH PROOF (base): 1/9 PASS",
+  "packageAssemble": "PACKAGE ASSEMBLE: ALL CHECKS PASS",
+  "pinnedLogs": [
+   "logs/unit-results.txt",
+   "logs/unit-results-package.txt",
+   "logs/chromium-results-tree-a.txt",
+   "logs/chromium-results-package.txt",
+   "logs/phone-results-tree-a.txt",
+   "logs/phone-results-package.txt",
+   "logs/phone-results-base.txt",
+   "logs/cast-census-results.txt",
+   "logs/assemble-results.txt",
+   "logs/run-exit-codes.json"
+  ],
+  "exitCodes": {
+   "run": "UI2 corrective (ui-pkg-2) full battery \u2014 exact final trees, Oct 28 2026",
+   "unitTreeA": {
+    "command": "node tests/unit-battery.mjs",
+    "exitCode": 0,
+    "log": "tests/unit-results.txt"
+   },
+   "unitPackage": {
+    "command": "node tests/unit-battery-package.mjs",
+    "exitCode": 0,
+    "log": "tests/unit-results-package.txt"
+   },
+   "castCensus": {
+    "command": "node tests/cast-census.mjs",
+    "exitCode": 0,
+    "log": "tests/cast-census-results.txt"
+   },
+   "chromiumTreeA": {
+    "command": "node tests/chromium-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/chromium-results-tree-a.txt"
+   },
+   "chromiumPackage": {
+    "command": "UI2_TREE=package/publish node tests/chromium-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/chromium-results-package.txt"
+   },
+   "phoneTreeA": {
+    "command": "UI2_TREE=tree-a node tests/phone-width-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/phone-results-tree-a.txt"
+   },
+   "phonePackage": {
+    "command": "UI2_TREE=package/publish node tests/phone-width-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/phone-results-package.txt"
+   },
+   "phoneBase": {
+    "command": "UI2_TREE=base node tests/phone-width-proof.mjs",
+    "exitCode": 1,
+    "log": "tests/phone-results-base.txt",
+    "note": "EXPECTED FAILURE \u2014 the reproduction run against the published ui-pkg-1 tree. 8 of 9 rows fail there (W-1 clip, W-2 header collision, W-3 unpinned bar, per-view overflow offenders); only H3a (short 'Complete 3/3' pill) passes. This is the defect evidence, not a candidate result."
+   },
+   "packageAssemble": {
+    "command": "python3 package-assemble.py",
+    "exitCode": 0,
+    "log": "package/assemble-results.txt"
+   }
+  }
+ },
+ "files": {
+  "base-index.html": {
+   "bytes": 1419,
+   "sha256": "b16d586faa90ac985e7ec7d628215edbff8d2f9ee746437e1fcd4b5c70586d6f",
+   "gitBlob": "e350413aaf420491971efa65782f0373ac8e65ce"
+  },
+  "delta/app-265.js": {
+   "bytes": 71527,
+   "sha256": "207a0918588e9e38ccbb26f602f692c90820a4771ed9d8f5fc127c4beed6eab0",
+   "gitBlob": "387eb574e917f5aa2da723ec6e5362f30e26f1d8"
+  },
+  "delta/index.html": {
+   "bytes": 1419,
+   "sha256": "414d24ff45d91f2fdb48f91e12ee00cf9afab2227f0d279ef0f6b8ec1efab71f",
+   "gitBlob": "46db7ccd908c317f6e46dabd7bce770395ea62a4"
+  },
+  "delta/styles-152.css": {
+   "bytes": 36953,
+   "sha256": "3ff48365c5d9db188c9c49b1a63cef3b2cfbebd720ae5630d499116b6394a425",
+   "gitBlob": "894a2ca8eaae41d2635dbee729bb56bcd0617911"
+  },
+  "delta/sw-ui2.js": {
+   "bytes": 9427,
+   "sha256": "3f17ec3d761729fb90d21d2cb5499f9c8fbf8abbfc1080884a2752565524ff50",
+   "gitBlob": "20bba833ba36c7e1199b35b1113603e44a82342a"
+  },
+  "tests/unit-battery.mjs": {
+   "bytes": 12981,
+   "sha256": "7660badc738ad7208886ec75410de5330e1e54186ae660ae8448499d5f0846ab",
+   "gitBlob": "bbc9dc350b4cb140dd46760b45ed4237c9e4cfed"
+  },
+  "tests/unit-battery-package.mjs": {
+   "bytes": 12999,
+   "sha256": "2c3504047161a08384f782827b19e609979126374ca60b266d1ce9184a55e858",
+   "gitBlob": "c0f0437dc3f28270b1d5cf3b52c504ba5a37e270"
+  },
+  "tests/cast-census.mjs": {
+   "bytes": 4527,
+   "sha256": "1283f73a6095e86539eb9c540cbdf72e04adf1003a3cf4732bdb067133d67338",
+   "gitBlob": "80362079bc0213e90868bc64caafe60beca1b386"
+  },
+  "tests/chromium-proof.mjs": {
+   "bytes": 44645,
+   "sha256": "c6ab3f96e95ebb478a4358d9622271a08e637619e4a8efeddaf1132728ec8af1",
+   "gitBlob": "76abde48e5f2e1bbd8748e03865a21e20d61a64e"
+  },
+  "tests/phone-width-proof.mjs": {
+   "bytes": 28955,
+   "sha256": "fbff71d14f36e4273c20e8de99cf87ee6e2bbdf26db579f2ca39ec4479ca42fe",
+   "gitBlob": "534425c86f5e31168918a755d4762b7a6795c097"
+  },
+  "logs/unit-results.txt": {
+   "bytes": 1019,
+   "sha256": "c580bb26e19cf6f967c6d74b7040e70363f7f0367bc8b273f713cb1dc45d463f",
+   "gitBlob": "937233f989e65d46fbcea4330732cf6aff3b54ba"
+  },
+  "logs/unit-results-package.txt": {
+   "bytes": 1019,
+   "sha256": "c580bb26e19cf6f967c6d74b7040e70363f7f0367bc8b273f713cb1dc45d463f",
+   "gitBlob": "937233f989e65d46fbcea4330732cf6aff3b54ba"
+  },
+  "logs/chromium-results-tree-a.txt": {
+   "bytes": 2713,
+   "sha256": "f73f55ec048e71dbeb825a87f94c7298ea7fe398726defe940d5cdb37ec874f4",
+   "gitBlob": "7f07f8714a2aaba16de965b09ee4c53d1c4f070d"
+  },
+  "logs/chromium-results-package.txt": {
+   "bytes": 2713,
+   "sha256": "f73f55ec048e71dbeb825a87f94c7298ea7fe398726defe940d5cdb37ec874f4",
+   "gitBlob": "7f07f8714a2aaba16de965b09ee4c53d1c4f070d"
+  },
+  "logs/phone-results-tree-a.txt": {
+   "bytes": 6153,
+   "sha256": "c0366a5bf4302ee4536d9f7de10336df27abd30ceef836b5d7edde2ddaa14a3b",
+   "gitBlob": "7ecb80271662d6a8d3d5729d0f5c428c03505186"
+  },
+  "logs/phone-results-package.txt": {
+   "bytes": 6162,
+   "sha256": "bc6242892649249adb2522cc099b0eebefb5dec7be06bf2c60c4815ccdd7e204",
+   "gitBlob": "77858bdea4f2dcf89c409959e9ae2aa8a5411cda"
+  },
+  "logs/phone-results-base.txt": {
+   "bytes": 2098,
+   "sha256": "bcd44f32b4d6ce7c65c7b43acd9975f37f1c5c9f26490ecc1a63ead972d63248",
+   "gitBlob": "481dba928b7cec2448e9c1919998043e93fd74b9"
+  },
+  "logs/cast-census-results.txt": {
+   "bytes": 1375,
+   "sha256": "8865b7c02be39354b12653097c34069476458e53b6a4fc24f7bebc852df1b57a",
+   "gitBlob": "edf9bafc07adb5e1bd5c18c303a83e716b838fce"
+  },
+  "logs/assemble-results.txt": {
+   "bytes": 1313,
+   "sha256": "c6fce61115a37a52ba081de00c9ffbff908d2cb00049eb0425f09dea6489cd96",
+   "gitBlob": "4ab441e5842ccb4448ae47c5a70d13de7b5a79f4"
+  },
+  "logs/run-exit-codes.json": {
+   "bytes": 1618,
+   "sha256": "79ffb523e904c3ccd4964ce7908be85304d5b71eab86c54139fb79bb84ca8899",
+   "gitBlob": "e04462167ea587268cb5eeb1228222ab64f936d5"
+  }
+ }
+}

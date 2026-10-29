@@ -1,0 +1,11 @@
+FAIL P1 W-1 @390: player bar + every control fully inside the viewport on the Library - P1: rate spans 343.6..420.3, bar 12.8..377.2 (clipped)
+FAIL S1 W-3 @390: bar pinned to viewport bottom while scrolling Library + book view; last row scrolls clear - library scroll 0: bar bottom 800.4 not pinned at 834 (position sticky)
+FAIL V1 scan @390: no document horizontal overflow on Library / Book / Find text / Settings - library: elements outside the viewport: [{"tag":"SELECT","id":"player-rate","cls":"","right":420,"width":77}]
+FAIL H1 W-2 @390: chapter headers — heading one line, no overlap, pill inside card + fully readable (Uncertain / Partial / Not started / long narrator) - ch1 Uncertain: heading text clipped/wrapped (scrollW 64 > clientW 0)
+PASS H3a W-2 @390: Complete-state header (bytes seeded confirmed on this device) {"iw":390,"docScrollWidth":390,"card":{"left":12.8,"right":377.2,"top":554.5,"bottom":618.8,"width":364.4,"height":64.4},"head":{"left":29.8,"right":360.2,"top":561.9,"bottom":608.3,"width":330.4,"height":46.4},"h4":{"left":29.8,"right":192.9,"top":574,"bottom":596,"width":163.1,"height":22},"pov":{"left":200.9,"right":234.8,"top":576,"bottom":594,"width":33.9,"height":18},"pill":{"left":242.8,"right":337.5,"top":573.5,"bottom":596.5,"width":94.7,"height":23},"h4Text":"Chapter 3","h4ScrollW":163,"h4ClientW":163,"povText":"Violet","povScrollW":34,"povClientW":34,"pillText":"Complete 3/3","pillScrollW":95,"pillClientW":95,"h4PovOverlap":0,"h4PillOverlap":0}
+FAIL P2 W-1 @360: player bar + every control fully inside the viewport - P2: rate spans 343.6..420.3, bar 12.8..347.2 (clipped)
+FAIL H2 W-2 @360: chapter header (Uncertain, 0/27) intact - ch1 Uncertain @360: heading text clipped/wrapped (scrollW 64 > clientW 0)
+FAIL H3b W-2 @390: Sync-incomplete header — long pill intact, heading one line - ch4 Sync incomplete: heading text clipped/wrapped (scrollW 64 > clientW 0)
+FAIL T1 tablet @768: player fits + pinned, chapter header keeps single-row arrangement, no overflow - tablet: bar bottom 724 not pinned at 1014
+
+PHONE-WIDTH PROOF (base): 1/9 PASS

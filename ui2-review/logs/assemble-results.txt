@@ -1,0 +1,23 @@
+PASS base path count == 53 (got 53)
+PASS delta classification == declared 4 paths (got ['app-265.js', 'index.html', 'styles-152.css', 'sw-ui2.js'])
+PASS new paths are exactly app-265.js, styles-152.css, sw-ui2.js
+PASS publish path count == 56 (got 56)
+PASS non-delta publish paths byte-identical to base (bad: [])
+PASS index line count unchanged
+PASS index diff == exactly the 2 pointer lines (got 2 diffs)
+PASS startup notice still names build d5b-v2-playback-client-13 (build unchanged)
+PASS sw-ui2 SHELL == packaged ui2 closure (30 entries)
+PASS sw-ui2 PURGE_ON_ACTIVATE == [] (ui1/corr1/v1 caches preserved)
+PASS sw-ui1 (rollback) SHELL fully resolvable in publish tree (missing: [])
+PASS app-265 import closure resolves (missing: None)
+PASS app-265 closure uses no corr1/d5c modules (bad: [])
+PASS app-264 (rollback) import closure resolves (missing: None)
+PASS app-264 closure untouched by ui2 (bad: [])
+PASS app-263 import closure resolves (missing: None)
+PASS app-263 closure untouched by ui1/ui2 (bad: [])
+PASS app-265 carries build -13 / ui-pkg-2 and registers sw-ui2.js
+PASS app-264 (rollback) still carries ui-pkg-1 and registers sw-ui1.js
+PASS frozen Shelf bridge byte-identical (SHA-256 pinned)
+
+wrote package/PACKAGE-MANIFEST.json; publish=56 paths, delta=4 paths
+PACKAGE ASSEMBLE: ALL CHECKS PASS
