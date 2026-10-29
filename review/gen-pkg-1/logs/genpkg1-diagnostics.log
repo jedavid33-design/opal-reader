@@ -1,0 +1,17 @@
+✔ Svc-1: fixture records read back — stage/detail, attempts, the 120 s unknown span (6.437972ms)
+✔ Svc-2: no segment text can ride the surface — sentinels absent, whitelist only (3.737129ms)
+✔ Svc-3: keyset pagination over executions + jobId targeting (3.896468ms)
+✔ Svc-4: unknown targets -> found:false without throwing; bad targeting rejected (2.588835ms)
+✔ Ent-1: operator credential admitted with NO client token; fixtures read (12.774852ms)
+✔ Ent-2: the client token alone is refused — and refusals read nothing (5.202017ms)
+✔ Ent-3: fail-closed configuration — operator unset or equal to client token -> 503 (5.060203ms)
+✔ Ent-4: the stamp cannot be forged publicly; the class gate requires it (5.93728ms)
+✔ Ent-5: unknown plan through the public chain -> 200 found:false, no throw (5.571922ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 254.995072

@@ -1,0 +1,7 @@
+make-src part 1 done: constants/entry/composition/runnable/sw/styles/index
+make-src part 2 done: app-268.js
+assemble: twin trees byte-identical, 81 paths
+package: publish 81 paths (base 73 + 9 delta), non-delta byte-identical, bridge SHA pinned
+package: import closure 26 modules, all inside SW SHELL (33 paths)
+package: rollback base sw-ui4 SHELL fully resolvable (31 paths)
+package-assemble: ALL CHECKS PASS
