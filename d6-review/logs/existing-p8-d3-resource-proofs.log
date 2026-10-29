@@ -1,0 +1,13 @@
+  [resource] largest object: size=5787234 wall=28.6ms cpu=29.9ms memDelta rss=6.7MiB heap=0.8MiB external=5.5MiB arrayBuffers=5.5MiB (abs peak AB=12.3MiB)
+  [resource] Pucked Over chunk table: [{"chunk":0,"rows":88,"bytes":261811618,"gets":176,"wallMs":404,"cpuMs":465},{"chunk":1,"rows":84,"bytes":261414666,"gets":168,"wallMs":382,"cpuMs":428},{"chunk":2,"rows":85,"bytes":259925106,"gets":170,"wallMs":371,"cpuMs":432},{"chunk":3,"rows":82,"bytes":262076378,"gets":164,"wallMs":423,"cpuMs":431},{"chunk":4,"rows":88,"bytes":260027916,"gets":176,"wallMs":557,"cpuMs":467},{"chunk":5,"rows":83,"bytes":250737188,"gets":166,"wallMs":395,"cpuMs":449}]
+  [resource] totals: gets=1020 wall=2532ms memDelta rss=51.0MiB heap=9.9MiB external=9.7MiB arrayBuffers=9.7MiB (abs peaks rss=173.7MiB AB=11.0MiB)
+✔ resource proof: the corpus' largest single object (5,787,234 B) primes with a one-object buffer footprint (44.39355ms)
+✔ resource proof: the largest book (Pucked Over shape — 510 rows, 1,555,992,872 B) imports in its pinned chunks through the production Worker path (4867.556507ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5124.360321

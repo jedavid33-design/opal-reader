@@ -1,0 +1,10 @@
+✔ settings CAS: revision 0 -> 1, lane becomes standard, cap unchanged (12.682964ms)
+✔ settings CAS: stale revision (record already at revision 1) is rejected, record untouched (6.202524ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 326.457935

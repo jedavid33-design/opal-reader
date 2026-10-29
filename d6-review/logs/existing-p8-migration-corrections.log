@@ -1,0 +1,24 @@
+✔ G1 worker path: imports fetch only their own book's bytes; read-only surfaces fetch ZERO audio (118.738307ms)
+✔ G2 worker entry (Option D): submits pend under the client credential; approvals are operator-only and fail closed (15.270806ms)
+✔ G2 pinned freeze: caller input may only MATCH the approved freeze, never define it (15.86701ms)
+✔ G3: only the coordinator-anchored certificate opens the gate (13.621772ms)
+✔ G4 baseline: the unmutated import gates (7.190045ms)
+✔ G4 mutation refuses the gate: extra sync row (8.757456ms)
+✔ G4 mutation refuses the gate: extra SQL row for an unbound content occurrence (8.621463ms)
+✔ G4 mutation refuses the gate: wrong sync revisionKey (7.437075ms)
+✔ G4 mutation refuses the gate: changed index format (9.162474ms)
+✔ G4 mutation refuses the gate: changed size (sync plane) (5.712358ms)
+✔ G4 mutation refuses the gate: missing provenance audit row (4.622814ms)
+✔ G4 mutation refuses the gate: tampered provenance audit row (4.534071ms)
+✔ G4 mutation refuses the gate: foreign-migration audit row (5.845439ms)
+✔ G4 mutation refuses the gate: partial import (one SQL binding deleted) (12.004797ms)
+✔ G4 mutation refuses the gate: unexpected tombstone in the sync plane (4.211707ms)
+✔ consistency: the per-book import identity pins migrationId, freezeDigest, size, format (4.518698ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 421.14227

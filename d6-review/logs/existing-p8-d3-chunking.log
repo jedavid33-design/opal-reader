@@ -1,0 +1,27 @@
+✔ chunked import: partial state is invisible and ungated; completion derives the one whole-book certificate; the existing gate applies unchanged (18.327922ms)
+✔ chunked and whole-book imports of the same book anchor the IDENTICAL certificate (13.398047ms)
+✔ retry (b): the same command id replays the stored receipt — zero additional R2 GETs, single effect (4.79991ms)
+✔ retry (a): an ambiguous transport interruption resolves to the true outcome under the same command id (5.292739ms)
+✔ retry (c): a durably rejected chunk replays ONLY its refusal under the same id; a corrected attempt needs a new retry-generation id (5.519259ms)
+✔ out-of-order chunk: durable refusal; the in-order retry still needs a new generation id (5.068553ms)
+✔ duplicate chunk under a NEW command id converges on the recorded application — zero GETs, no double effect (10.332108ms)
+✔ negative: missing chunk — the gate cannot pass and the view names the gap (4.11316ms)
+✔ negative: reordered rows inside a chunk payload are refused as a chunk mismatch, pre-prime (2.435783ms)
+✔ negative: substituted chunks — another chunk's rows, and another book's rows, are refused (3.476114ms)
+✔ negative: wrong migrationId mid-sequence is a divergence; earlier verified chunks stand, the book stays ungated (3.87334ms)
+✔ negative: altered freeze digest, altered payload row, and a book with no chunk pin are refused (2.972789ms)
+✔ negative: late bytes drift and late metadata drift reject the affected chunk only (4.71354ms)
+✔ negative: the two import paths never interleave on one book (6.792719ms)
+✔ negative: first chunk without content (and none stored) is unknown_book; a divergent carried content is refused (3.786971ms)
+✔ crash durability: a crash between chunks and after the final chunk loses nothing (6.574371ms)
+✔ attested rows flow through chunking with provenance intact; a bad attestation rejects its chunk (10.038768ms)
+✔ the shared object: two rows, one cache key, split across chunks — anchored once, provenance intact (9.504006ms)
+✔ limits: an oversize item, an over-cap chunk (bytes), and an over-cap chunk (rows) are all refused pre-prime (7.632689ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 314.144715

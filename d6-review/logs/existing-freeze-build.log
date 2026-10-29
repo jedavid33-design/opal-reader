@@ -1,0 +1,23 @@
+✔ (1) every mutating census route returns 423 and writes nothing (20.955813ms)
+✔ (1b) unauthenticated requests get the shipped 401 — the refusal never precedes auth (6.411287ms)
+✔ (2) D1 status GET: stored status served, watchdog/marker/catch-up all disabled (5.646841ms)
+✔ (2b) D1 status GET on a terminal job: mirror catch-up is never scheduled (2.081522ms)
+✔ (2c) D1 books/jobs GET: discovery from stored state, backfill/reconcile deferred (3.756495ms)
+✔ (3) D2 export GET: shipped auth failures precede the 423; a valid link is refused unconsumed (6.692008ms)
+✔ (4) D3 composite POST: hit serves read-only, miss 423s, segment fallback intact (37.199439ms)
+✔ (5) queue consumer under freeze retries (preservation) without processing or writing (1.181752ms)
+✔ (5b) a job delivered while frozen resumes and completes after the lift — segment generated exactly once (14.496064ms)
+✔ (6) freeze engaging mid-job blocks every subsequent write from that job (4.259329ms)
+✔ (6b) freeze engaging mid-job: message preserved, resumption completes the job exactly once in effect (16.792719ms)
+✔ (8) recordTtsUsage: speech records usage unfrozen, and is fenced at 423 frozen (3.001903ms)
+✔ copy fidelity: with the freeze lifted, a mutating route behaves as shipped (3.130866ms)
+✔ (9) every READ-ONLY census route is byte-identical shipped vs frozen variant (43.332769ms)
+✔ (10) fail-closed: every census route has a freeze disposition; every fence is present in the variant (11.46688ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 364.909662

@@ -1,0 +1,13 @@
+✔ stage1 write path: a funnel save lands on the coordinator and converges to a second device (10.556705ms)
+✔ stage1: the v1 LWW data-loss scenario replays as a surfaced conflict — the newer content survives (9.432589ms)
+✔ stage1: saving an unchanged book enqueues nothing (the funnel diffs honestly) (4.634261ms)
+✔ stage1 delete path: funnel delete tombstones; a later stale save is rejected_tombstoned, surfaced (8.088923ms)
+✔ stage1 seam + no old writers: pe is ONE definition in the shipped bundle; the assembled client contains no v1 write machinery (27.628062ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 218.256222

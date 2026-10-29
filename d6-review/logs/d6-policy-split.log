@@ -1,0 +1,19 @@
+✔ splitText: sentence boundary nearest the midpoint, concat exact, floor respected (2.245989ms)
+✔ splitText: word-boundary fallback when there is no sentence boundary (0.422904ms)
+✔ splitText: char-midpoint fallback for one long token; null below the floor (1.311918ms)
+✔ single split: whole blocked, both halves succeed; voice identical on every call; concat exact (1.702204ms)
+✔ recursive multi-level split resolves to depth 2 with attempts counted across the tree (0.869935ms)
+✔ depth cap: a tree that only resolves at the sixteenth leaf reaches depth 4 and succeeds within a large budget (3.494692ms)
+✔ floor terminal: a blocked part that cannot split without breaching the floor is TerminalBlock (2.462584ms)
+✔ budget exhaustion is terminal, reported as TerminalBlock, and spends no further calls (1.15995ms)
+✔ max depth is terminal even when budget remains (depth <= 4 pinned) (0.920931ms)
+✔ non-block provider errors propagate untouched (the executor classifies them) (0.656735ms)
+✔ stitchWav: PCM concat + rewrap; format mismatch throws (0.677026ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 161.672147

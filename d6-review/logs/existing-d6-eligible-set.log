@@ -1,0 +1,17 @@
+FP Ch 2: 18 unbound eligible; 18 carry block history
+✔ audio cross-check: bound counts equal audio-results uses per book (1.273811ms)
+✔ per-book disposition counts match the census derivation (1.077396ms)
+✔ totals: eligible 688 + voice_prompt 99 = 787 non-Ch3 unbound of 811 (0.527111ms)
+✔ voice_prompt exception is exactly The Goal's removed-provider cast (1.518137ms)
+✔ FP eligible = 333; Ch 2's 18 POLICY_BLOCK unbound are eligible (1.167431ms)
+✔ no Ch 3 occurrence is ever eligible or voice_prompt (0.692339ms)
+✔ entries are in reading order, complete, and digest is deterministic (5.404907ms)
+✔ synthetic fixture dispositions incl. removed-provider + parked chapter (0.598908ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 624.057712

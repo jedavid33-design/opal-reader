@@ -1,0 +1,11 @@
+✔ end-to-end: intent -> plan -> drive -> execute -> committed bindings; parked job untouched (49.767921ms)
+✔ adapter: unknown book fails closed with a named error (2.397246ms)
+✔ voice_prompt book: intent plans prompts, creates no jobs, provider never called (3.345869ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 268.44158

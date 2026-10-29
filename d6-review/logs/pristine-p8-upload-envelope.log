@@ -1,0 +1,22 @@
+✔ envelope: the built artifact validates clean against the documented upload schema (119.512268ms)
+✔ envelope: pre-amendment migrations without new_tag FAIL (C4) (115.550555ms)
+✔ envelope: queue binding with producer_only FAIL (B3) (102.536594ms)
+✔ envelope: top-level queue_consumers key FAIL (D1) (100.637426ms)
+✔ envelope: main_module that names no part FAIL (A1) (105.418878ms)
+✔ envelope: migrations as an array FAIL (C1) (98.872018ms)
+✔ envelope: a missing closure module FAIL (A0/A2) (104.958076ms)
+✔ update-envelope: the committed overlay validates clean against the built artifact (104.189633ms)
+✔ update-envelope: replaying the creation migration FAIL (U2/U3) (119.072678ms)
+✔ update-envelope: omitting the inherit binding FAIL (U4) (101.802393ms)
+✔ update-envelope: renaming the inherited secret FAIL (U4) (98.390515ms)
+✔ update-envelope: dropping a configuration binding FAIL (U6) (102.21408ms)
+✔ update-envelope: altering a configuration binding FAIL (U6) (114.279558ms)
+✔ update-envelope: dropping bindings_inherit=strict FAIL (U5) (110.928352ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1776.552766

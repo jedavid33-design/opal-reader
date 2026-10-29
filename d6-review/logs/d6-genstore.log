@@ -1,0 +1,17 @@
+✔ genstore: execution state machine — legal path walks, illegal jumps throw (10.979159ms)
+✔ genstore: createExecution never opens a second live execution for (job, occurrence) (2.650766ms)
+✔ genstore: reserved attempt released after a crash counts as NO call (3.44694ms)
+✔ genstore: dispatching + confirmed attempts count; confirm enforces the cost rules (3.372739ms)
+✔ genstore: commitVerified is atomic — sabotaged probe leaves NO binding, NO commit, occurrence untouched (56.254811ms)
+✔ genstore: unknown billing halts the phase in the same tx; reconciliation clears it (6.814501ms)
+✔ genstore: phaseAccounting counts in-flight uppers only while reserved/dispatching (2.958017ms)
+✔ genstore: storageAccounting — seeded base + flushed/verified/committed bytes only (3.109123ms)
+✔ genstore: recoveryScan classifies every non-terminal state (4.27327ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 336.850423

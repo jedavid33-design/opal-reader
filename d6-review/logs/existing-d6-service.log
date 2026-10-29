@@ -1,0 +1,13 @@
+✔ service: duplicate intent produces exactly ONE plan and ONE first job (22.10002ms)
+✔ service: driveOnce grants + drains, advances chapters, and completes the plan (116.553089ms)
+✔ service: quota exhaustion parks the plan at 100 ledger attempts; rollover resumes without re-granting settled work (42.522624ms)
+✔ service: restart mid-job — crash between drive passes produces no duplicate grants (15.632588ms)
+✔ service: recover() releases reserved attempts and fails their executions (non-spending) (6.31376ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 534.338643

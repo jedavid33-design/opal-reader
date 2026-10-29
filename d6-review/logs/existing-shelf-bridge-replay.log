@@ -1,0 +1,25 @@
+✔ replay: simple queue + flush 2xx — identical bytes, attempts persisted before POST (19.760991ms)
+✔ replay: merge inside 90s merges, exactly 90s does not, 89.999s merges into the newest (3.225848ms)
+✔ replay: 409 partial carve — item replaced by uncovered intervals, parts delivered (6.369283ms)
+✔ replay: 409 fully covered — item dropped, counted covered, nothing resent (1.895543ms)
+✔ replay: 404 read-through not found — relinkNeeded, head blocked, next item untouched (2.24027ms)
+✔ replay: 500 then network throw — head-of-line blocking, attempts persisted, error stamps (2.454141ms)
+✔ replay: restart mid-queue — a fresh bridge over the same storage flushes the durable outbox (2.083105ms)
+✔ replay: session near local midnight — local_date from LOCAL getters (UTC date differs) (1.208452ms)
+✔ replay: outbox cap keeps the newest 300 items, oldest dropped first (196.515903ms)
+✔ replay timing: 30s checkpoints queue chunks that merge into one session (4.249244ms)
+✔ replay timing: pause resumed at 3.9s — session continues, checkpoint counts the pause (9.051567ms)
+✔ replay timing: pause not resumed — session ends BACKDATED to the pause moment (25s, not 29s) (12.625859ms)
+✔ replay timing: resume within 90s of a stop cancels the flush and continues the same session (18.536114ms)
+✔ fixtures: golden outbox item and session payload against the adapter directly (1.387632ms)
+✔ fixtures: merge case against the adapter (inside merges, outside creates a second item) (0.625599ms)
+✔ fixtures: overlap carve against the adapter — exact parts, fresh ids, fully covered (1.114552ms)
+✔ adapter storage: the outbox lives under its own v2 key, nothing else is touched (0.393871ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 443.51516

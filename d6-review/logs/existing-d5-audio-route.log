@@ -1,0 +1,90 @@
+✔ gate order on the audio route: scope → token → instance, earliest refusal wins (13.117086ms)
+✔ gate: token unconfigured on the surface → 503 production_token_not_configured (1.133631ms)
+✔ gate: operator routes remain closed to the client token (2.438358ms)
+✔ full-object GET (mp3): byte-for-byte equal, digest compared, contract headers + §2.6 cache privacy (5.245478ms)
+✔ full-object GET (wav): byte-for-byte equal with audio/wav (1.001071ms)
+✔ large object (>1 MiB): full digest equal; a ranged read returns only its slice from R2 (118.663334ms)
+✔ CORS stays exact-origin on audio responses: a foreign origin gets no CORS headers (1.637046ms)
+▶ §2.5 matrix: every row, with per-row R2 operation counts (§6.2-3a)
+  ✔ no Range → 200 full (1.44011ms)
+  ℹ §2.5 row | no Range → 200 full | metadata=1 reads=1
+  ✔ closed range bytes=10-19 → 206 slice (1.245328ms)
+  ℹ §2.5 row | closed range bytes=10-19 → 206 slice | metadata=1 reads=1
+  ✔ oversized end bytes=990-999999 → 206 clamped to size-1 (0.804056ms)
+  ℹ §2.5 row | oversized end bytes=990-999999 → 206 clamped to size-1 | metadata=1 reads=1
+  ✔ open-ended bytes=995- → 206 to end (1.121652ms)
+  ℹ §2.5 row | open-ended bytes=995- → 206 to end | metadata=1 reads=1
+  ✔ suffix bytes=-25 → 206 final bytes (0.91325ms)
+  ℹ §2.5 row | suffix bytes=-25 → 206 final bytes | metadata=1 reads=1
+  ✔ suffix ≥ size bytes=-2000 → 206 whole object (0.79951ms)
+  ℹ §2.5 row | suffix ≥ size bytes=-2000 → 206 whole object | metadata=1 reads=1
+  ✔ zero suffix bytes=-0 → 416 (0.757135ms)
+  ℹ §2.5 row | zero suffix bytes=-0 → 416 | metadata=1 reads=0
+  ✔ start ≥ size bytes=1000- → 416 (0.365869ms)
+  ℹ §2.5 row | start ≥ size bytes=1000- → 416 | metadata=1 reads=0
+  ✔ start ≥ size closed bytes=1500-1600 → 416 (1.723976ms)
+  ℹ §2.5 row | start ≥ size closed bytes=1500-1600 → 416 | metadata=1 reads=0
+  ✔ start > end bytes=50-40 → 416 (0.824046ms)
+  ℹ §2.5 row | start > end bytes=50-40 → 416 | metadata=1 reads=0
+  ✔ multiple ranges → 416 intentional refusal, never multipart (0.363956ms)
+  ℹ §2.5 row | multiple ranges → 416 intentional refusal, never multipart | metadata=1 reads=0
+  ✔ unknown unit items=0-9 → Range ignored, 200 full (0.783165ms)
+  ℹ §2.5 row | unknown unit items=0-9 → Range ignored, 200 full | metadata=1 reads=1
+  ✔ malformed Range bytes=abc → ignored, 200 full (0.53332ms)
+  ℹ §2.5 row | malformed Range bytes=abc → ignored, 200 full | metadata=1 reads=1
+  ✔ malformed Range bytes=- → ignored, 200 full (0.644737ms)
+  ℹ §2.5 row | malformed Range bytes=- → ignored, 200 full | metadata=1 reads=1
+  ✔ malformed Range bytes=1-2-3 → ignored, 200 full (1.74713ms)
+  ℹ §2.5 row | malformed Range bytes=1-2-3 → ignored, 200 full | metadata=1 reads=1
+  ✔ If-Range strong match + range → 206 honoured (1.208453ms)
+  ℹ §2.5 row | If-Range strong match + range → 206 honoured | metadata=1 reads=1
+  ✔ If-Range mismatch + range → Range ignored, 200 full (0.670736ms)
+  ℹ §2.5 row | If-Range mismatch + range → Range ignored, 200 full | metadata=1 reads=1
+  ✔ If-Range date-form + range → Range ignored, 200 full (0.929904ms)
+  ℹ §2.5 row | If-Range date-form + range → Range ignored, 200 full | metadata=1 reads=1
+  ✔ If-Range weak tag + range → Range ignored, 200 full (0.643976ms)
+  ℹ §2.5 row | If-Range weak tag + range → Range ignored, 200 full | metadata=1 reads=1
+  ✔ If-None-Match match → 304, no body (0.470717ms)
+  ℹ §2.5 row | If-None-Match match → 304, no body | metadata=1 reads=0
+  ✔ If-None-Match match WITH Range → 304 (conditional precedence over Range) (0.426509ms)
+  ℹ §2.5 row | If-None-Match match WITH Range → 304 (conditional precedence over Range) | metadata=1 reads=0
+  ✔ If-None-Match * → 304 (0.247851ms)
+  ℹ §2.5 row | If-None-Match * → 304 | metadata=1 reads=0
+  ✔ If-None-Match list containing the etag → 304 (0.336154ms)
+  ℹ §2.5 row | If-None-Match list containing the etag → 304 | metadata=1 reads=0
+  ✔ If-None-Match weak form of the etag → 304 (weak comparison) (0.311827ms)
+  ℹ §2.5 row | If-None-Match weak form of the etag → 304 (weak comparison) | metadata=1 reads=0
+  ✔ If-None-Match non-matching → 200 full (0.492789ms)
+  ℹ §2.5 row | If-None-Match non-matching → 200 full | metadata=1 reads=1
+  ✔ HEAD, no Range → 200 full metadata, no body, no read (4.441242ms)
+  ℹ §2.5 row | HEAD, no Range → 200 full metadata, no body, no read | metadata=1 reads=0
+  ✔ HEAD with Range → Range ignored, 200 full metadata, no body (0.487962ms)
+  ℹ §2.5 row | HEAD with Range → Range ignored, 200 full metadata, no body | metadata=1 reads=0
+  ✔ HEAD with If-Range + Range → still 200 full metadata (0.268033ms)
+  ℹ §2.5 row | HEAD with If-Range + Range → still 200 full metadata | metadata=1 reads=0
+  ✔ HEAD + matching If-None-Match → 304 (1.476014ms)
+  ℹ §2.5 row | HEAD + matching If-None-Match → 304 | metadata=1 reads=0
+✔ §2.5 matrix: every row, with per-row R2 operation counts (§6.2-3a) (32.045638ms)
+✔ If-Modified-Since is inert on this route (no Last-Modified is issued): processed as if absent (2.378408ms)
+✔ OPTIONS: HEAD advertised, range/conditional headers allowed, expose list present, exact-origin echo + Vary preserved (1.898889ms)
+✔ absent object → 404 audio_not_found, truthful, after exactly one metadata lookup (0.642263ms)
+✔ format mismatch → 404: the other format is never probed (exactly one key touched) (1.288533ms)
+✔ malformed cache key or format → 400 invalid_audio_key, with zero R2 contact (1.91305ms)
+✔ size-mutated stored object → 503 audio_storage_unavailable, never served as playable bytes (1.423165ms)
+✔ storage failures the entry can distinguish → 503 audio_storage_unavailable (0.724466ms)
+✔ methods other than GET/HEAD on the audio route → 405, no R2 or coordinator contact (0.764416ms)
+✔ A1: production scope + non-empty R2_KEY_PREFIX → 503 production_r2_prefix_forbidden with ZERO R2 contact (GET and HEAD) (0.59985ms)
+✔ A1: production with an empty or unset R2_KEY_PREFIX keeps serving (the production shape) (1.096004ms)
+✔ A1: non-production scope at the route layer keeps its existing behaviour (no production check inferred) (0.808733ms)
+✔ A2: same-size replacement between HEAD and GET (different ETag, same size) → 503 audio_storage_unavailable, never served under the stale validator (1.388704ms)
+✔ A2: a GET ETag that is the HEAD ETag in bare (unquoted) form is the same validator → served normally (0.615763ms)
+✔ no-write audit: a full battery of audio requests writes nothing, anywhere (0.989695ms)
+✔ control: non-audio routes still forward to the coordinator exactly as before (1.705318ms)
+ℹ tests 52
+ℹ suites 0
+ℹ pass 52
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 424.966457

@@ -1,0 +1,16 @@
+✔ stage4 FIRST — Find works in the assembled client, with no lab anywhere in the composition (55.63383ms)
+✔ stage4 removals: azure/fish generation intents are rejected locally before persistence; kept providers pass (5.340922ms)
+✔ stage4 legacy playback: bindings from EVERY former provider resolve and count — audio is preserved (6.048212ms)
+✔ stage4 review gate: an UNMAPPED removed-provider voice cannot submit new generation — the flag enforces, not warns (3.175243ms)
+✔ stage4 review gate 2: a bare { bookId } request is checked against the SAVED book — POVs, default voice, SubmitJob and RepairJob (4.616745ms)
+✔ stage4 review gate 3: missing cache — the gate FETCHES the book; unverifiable (offline/absent) FAILS CLOSED; mappings must name supported providers (5.885718ms)
+✔ stage4 review gate 4: inline vs saved representations are BOTH checked; a job with no verifiable book data may not enqueue (5.104918ms)
+✔ stage4 voice mapping: removed-provider POVs are flagged for a decision; the book is never rewritten (2.224357ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 258.286328

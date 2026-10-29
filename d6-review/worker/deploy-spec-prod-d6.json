@@ -1,0 +1,123 @@
+{
+  "bindings": [
+    {
+      "class_name": "OpalReaderCoordinatorProdD6",
+      "name": "COORDINATOR",
+      "type": "durable_object_namespace"
+    },
+    {
+      "bucket_name": "opalreader-storage",
+      "name": "OPALREADER_STORAGE",
+      "type": "r2_bucket"
+    },
+    {
+      "name": "ALLOWED_ORIGIN",
+      "text": "https://jedavid33-design.github.io",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_V2_SCOPE",
+      "text": "production",
+      "type": "plain_text"
+    },
+    {
+      "name": "GENERATION_HALT",
+      "text": "1",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_GENERATION_V2",
+      "queue_name": "opalreader-generation-v2",
+      "type": "queue"
+    }
+  ],
+  "comment": "P8 D3 deploy SPEC \u2014 D6 SUCCESSOR (repo-only build; proposal SS6.2, CONTRACTS.md 'Entry + config'). This file authorizes nothing: no upload has been performed from it, the provider secret has not been set by tooling, and GENERATION_HALT remains '1'. Secret VALUES never appear here. P8 D3 deploy SPEC for the production migration surface (cutover plan \u00a7S4 as corrected; Rowan plan reviews 6355302486 / 6355404829, D1 sign-off 6355565715). This file authorizes nothing and no upload has been performed from it \u2014 D2 (the upload) is a separate Julie-approved gate. Secret VALUES never appear here. Topology: this script OWNS its coordinator class (OpalReaderCoordinatorProd, exported by v2/worker-entry-prod.js) and its OWN Durable Object namespace, created by this script's durable_object_migrations \u2014 it never shares the staging script's namespace, and the staging script (opalreader-api-v2, v2/p8/deploy-spec.json) is never re-scoped. D6 SUPERSEDES the base spec's no-queue shape for the v1 queue only in this respect: the NEW v2-dedicated queue opalreader-generation-v2 is bound below (producer + consumer on THIS script); opalreader-generation keeps exactly one consumer (the frozen v1 worker) and stays paused. GENERATION_HALT is 1. There is NO R2_KEY_PREFIX binding \u2014 its absence IS the production namespace shape (unprefixed audio/<key>), and the production class refuses to construct its R2 cache if a prefix is ever configured (production_r2_prefix_forbidden), so the shape does not depend on error-free upload metadata. Both secrets are recorded as NAMES ONLY in secret_bindings_required and are deliberately absent from the bindings list: OPALREADER_ACCESS_TOKEN and OPALREADER_MIGRATION_OPERATOR_TOKEN are set by Julie herself at D2 (dashboard / Secure Vault), distinct from each other and from staging's values; while the operator secret is unset, migration commands are unreachable on this surface (503 migration_operator_not_configured). The upload EMISSION derived from this spec conforms to Cloudflare's documented Script Upload metadata schema, enforced locally by tools/validate-prod-envelope.mjs.",
+  "compatibility_date": "2026-08-29",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "do_topology": {
+    "coordinator_class": "OpalReaderCoordinatorProdD6",
+    "instance": "account",
+    "migration_tag": "v2",
+    "migration_tag_note": "Migration tags are per-script/per-namespace: this v1 is the FIRST migration on the production script's own new namespace and is unrelated to the staging script's v1 tag on its namespace.",
+    "namespace": "this script's own, created by its migration above \u2014 distinct from the staging script's namespace; the two scripts share no Durable Object state",
+    "owner_script": "opalreader-api-v2-prod",
+    "state_rollback_truth": "Deleting this Worker script does NOT necessarily delete a created Durable Object database. Before any import, the production namespace's account instance holds no imported state and is read by no client (an empty, inert store), so a pre-import rollback is: delete the script; any DO storage left behind is empty and inert, and explicitly deleting it is a separate reviewed step. After imports begin, state rollback is unnecessary by design: imported books stay invisible until the global repoint (D5), which is Pages-side with its own rollback."
+  },
+  "durable_object_migrations": {
+    "new_sqlite_classes": [
+      "OpalReaderCoordinatorProdD6"
+    ],
+    "new_tag": "v2",
+    "note": "v2 is the second migration tag on THIS script's namespace (v1 created OpalReaderCoordinatorProd). OPEN DEPLOY-GATE QUESTION: a Durable Object class swap does not carry the old class's per-instance SQLite storage to the new class \u2014 how the account instance's existing state plane carries into the D6 class must be resolved at the separately authorized deploy gate. This repo-only spec records the target shape and authorizes nothing."
+  },
+  "kv_bindings": [],
+  "main_module": "v2/worker-entry-prod-d6.js",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "persist_invocations": true
+    }
+  },
+  "production_r2_namespace": {
+    "binding_present": false,
+    "key_prefix": "",
+    "note": "Unprefixed production key shape (audio/<cacheKey>.<ext>) in the shared opalreader-storage bucket. Enforced in code, not only here: OpalReaderCoordinatorProd refuses to construct its R2 cache when R2_KEY_PREFIX is set to anything (ProductionR2NamespaceError, code production_r2_prefix_forbidden) before any bucket operation."
+  },
+  "provider_secrets_absent_by_design": [
+    "OPENAI_API_KEY",
+    "AZURE_SPEECH_KEY",
+    "FISH_AUDIO_API_KEY"
+  ],
+  "provider_secrets_present": [],
+  "queue_consumers": [
+    {
+      "queue": "opalreader-generation-v2",
+      "max_batch_size": 10,
+      "max_retries": 3,
+      "note": "Consumer = this script itself (queue handler in v2/worker-entry-prod-d6.js -> /internal/execute). The v1 queue opalreader-generation is NOT a producer or consumer here: it keeps exactly one consumer (the frozen v1 worker) and stays paused, untouched."
+    }
+  ],
+  "queue_producers": [
+    {
+      "binding": "OPALREADER_GENERATION_V2",
+      "queue": "opalreader-generation-v2",
+      "note": "Producer = the v2 coordinator's outbox drain (d6HostEnv sendGrant), wired ONLY when GENERATION_HALT is '0'. 3 operations per message (write+read+delete); free allowance 10,000 ops/day (PINS.md SS4)."
+    }
+  ],
+  "script_name": "opalreader-api-v2-prod",
+  "secret_bindings_required": [
+    {
+      "name": "OPALREADER_ACCESS_TOKEN",
+      "source": "Set by Julie herself in the Cloudflare dashboard / Secure Vault at D2 time. Must be a DISTINCT production value; never copied from the v1 or staging scripts by tooling (secret values are unreadable between scripts). Deliberately absent from this spec's bindings and from the upload metadata.",
+      "type": "secret_text"
+    },
+    {
+      "name": "OPALREADER_MIGRATION_OPERATOR_TOKEN",
+      "source": "The operator credential for the migration command types, fenced at the production worker entry exactly as on staging. Set by Julie herself at D2, before any import, to a value DISTINCT from OPALREADER_ACCESS_TOKEN (the entry treats an equal value as not configured). DELIBERATELY UNSET in this spec \u2014 while unset, migration commands are unreachable on this surface (fail closed). Never set by tooling from any existing token, and never carried in chat, files, or logs.",
+      "type": "secret_text"
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "source": "The D6 provider secret (proposal SS6.3): set by Julie herself on opalreader-api-v2-prod before arming; agents never read, print, or transmit the value. Existence is verified by binding-NAME presence only. Deliberately absent from this spec's bindings and from the upload metadata \u2014 NAME ONLY, never a value.",
+      "type": "secret_text"
+    }
+  ],
+  "workers_dev_subdomain": {
+    "enabled": true,
+    "note": "A new script's workers.dev subdomain starts disabled via the API; D2 enables it once after upload (a step outside the script upload metadata)."
+  },
+  "d6_delta": {
+    "base_spec": "v2/p8/deploy-spec-prod.json (script opalreader-api-v2-prod, coordinator pin 1bee2490)",
+    "changes": [
+      "main_module -> v2/worker-entry-prod-d6.js; COORDINATOR class -> OpalReaderCoordinatorProdD6 (migration tag v2; see storage-continuity note in durable_object_migrations).",
+      "NEW queue opalreader-generation-v2: this script is sole producer (coordinator outbox drain) and sole consumer (queue handler -> /internal/execute).",
+      "GEMINI_API_KEY added to secret_bindings_required BY NAME ONLY (set by Julie herself; never a value in this repo).",
+      "GENERATION_HALT remains '1': the D6 build deploys HALTED. Queue delivery enablement is the LAST arming step, separately authorized.",
+      "Unchanged: scope production, instance account, unprefixed R2 namespace (fail-closed in code), observability enabled+persisted, both D2 secrets distinct and set by Julie, v1 worker/queue untouched, frozen Shelf bridge untouched."
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+✔ B1 happy path: chunks + positions + jobs carries land exactly as pinned; the view verifies three-way; the gate applies (30.09378ms)
+✔ B1: carries compose with the whole-book import path as well (staging surface shape) (10.650976ms)
+✔ checkpoint 1a: swapped-POV content (identical binding IDs) is refused at chunk 1 — zero GETs, zero migration business rows, durable rejected receipt (5.348302ms)
+✔ checkpoint 1b: reordered-chapters content (identical binding IDs) is refused the same way; the pin-correct content then applies under a retry-generation id (5.16696ms)
+✔ checkpoint 2: the carried position has the correct occ_index; a genuine baseSeq-0 event folds as receipt 1; a stale backward event is superseded, never a regression (7.206099ms)
+✔ checkpoint 3: a carried parked_policy job with pending occurrences refuses direct + indirect grants with full rollback; RequestResume refuses; the quota ledger is byte-identical after every carry operation (36.537816ms)
+✔ checkpoint 3b: a carried superseded job refuses grants and resume identically (19.396585ms)
+✔ checkpoint 3c: no lifecycle event transitions a carried job — the parked_policy / superseded rows of the table are empty and enforced (9.640621ms)
+✔ P5: omitting one pinned aggregate refuses the whole jobs transaction (6.209995ms)
+✔ P5: an extra aggregate refuses the whole jobs transaction (6.18642ms)
+✔ P5: a duplicated aggregate refuses (duplicate_row) (5.682724ms)
+✔ P5: a wrong state refuses the whole jobs transaction (6.488263ms)
+✔ P5: a wrong definition digest refuses the whole jobs transaction (5.433491ms)
+✔ P5: a wrong occurrence digest refuses the whole jobs transaction (5.552388ms)
+✔ P5: a non-carryable state is refused by construction (state_not_carryable) (10.484968ms)
+✔ P5: the jobs carry before the import completes refuses (import_incomplete) (2.525448ms)
+✔ P5 empty set: a signed-empty book carries with receipt + audit and zero job rows; replay returns the same receipt; a new id converges without a second audit (5.365257ms)
+✔ positions negatives: offset / occurrence / checkpoint divergence from the pin each refuse with zero rows (12.134922ms)
+✔ positions negatives: carry before the import completes refuses; wrong migration identity refuses; a book with no carry pin refuses (book_unpinned) (11.507031ms)
+✔ positions: the same payload under a new command id converges (one audit row); a divergent second carry refuses (4.776425ms)
+✔ positions: a fail-safe-shaped position (first occurrence, offset 0) is carried exactly as pinned (4.578117ms)
+✔ P6: gate after chunks only refuses flip_gate_carry_incomplete with zero gate rows, naming both missing carries (6.544577ms)
+✔ P6: gate after positions only / after jobs only refuses, naming the missing carry, zero gate rows (20.758387ms)
+✔ P6: tampering the positions audit after a full carry makes the gate refuse, zero gate rows (7.01335ms)
+✔ P6: tampering a stored job row after a full carry makes the gate refuse, zero gate rows (6.713711ms)
+✔ P6: deleting a pinned job row after a full carry makes the gate refuse (missing_job), zero gate rows (6.46672ms)
+✔ P6 regression: G4 binding completeness still refuses FIRST (a deleted binding is a G4 refusal, not a carry refusal) (5.832088ms)
+✔ P6 regression: a book with NO carry pin keeps the pre-B1 gate semantics — no carries required (5.222383ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 479.587387

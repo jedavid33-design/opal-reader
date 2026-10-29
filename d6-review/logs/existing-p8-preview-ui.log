@@ -1,0 +1,13 @@
+✔ preview UI: failed health does not clear the token; successful gated connect clears it and shows the device ID (25.819429ms)
+✔ preview F-B UI: a second Connect tap on the cleared field is a visible no-op; the working connection survives (19.309374ms)
+✔ preview F-B UI: a wrong token surfaces the server's refusal verbatim and keeps the prior connection's state (15.861382ms)
+✔ preview F-B UI: a slower successful attempt cannot overwrite a newer connection (14.323465ms)
+✔ preview F-B UI: a slower failing attempt cannot relabel or replace a newer connection (19.025519ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 575.078794

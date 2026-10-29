@@ -1,0 +1,17 @@
+✔ prod surface serves its OWN coordinator: health names the production scope, settings round-trip on the account instance, staging state untouched (22.667901ms)
+✔ the fences are disjoint in both directions: staging-shaped requests die on prod, production-shaped requests die on staging (7.361473ms)
+✔ prod DO class enforces the production scope on direct internal calls (3.497737ms)
+✔ prod surface imports from the UNPREFIXED namespace; smoke-prefixed objects are invisible to it (23.998428ms)
+✔ prod class refuses ANY configured R2 prefix before bucket contact (the mirror of the staging namespace fence) (3.367981ms)
+✔ Option D admission on the production surface: submits pend under the client credential alone; approvals are operator-fenced and fail closed (17.591397ms)
+✔ chunked import runs end-to-end on the production surface (unprefixed keys, per-chunk invisibility, gate) (23.130516ms)
+✔ the production deploy spec describes a distinct script that owns its class — and the staging spec is untouched (3.90656ms)
+✔ operator routes refuse when the CLIENT secret is unconfigured — either-secret rule, both surfaces, both routes (5.562063ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 310.779476
