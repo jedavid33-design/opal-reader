@@ -1,0 +1,16 @@
+PASS C0 CORR1 baseline: sw-corr1 controls, marker -12, corr1 cache present {"marker":"d5b-v2-playback-client-12"}
+PASS C1 upgrade: sw-ui1 activates, ui1 cache == SHELL set, corr1 cache preserved, markers -13/ui-pkg-1 {"caches":["opalreader-shell-corr1","opalreader-shell-ui1"]}
+PASS C2 connect: one-connect drain converges (bindings 251/251 in 3 pages), library truthful + hero, seeded Shelf session flushes {"bindings":{"family":"bindings","pages":3,"cursor":251,"tip":251,"complete":true,"reason":null}}
+PASS C3 book view: per-chapter truth pills, collapsibles, YOU ARE HERE, No audio yet + chapter footer, no stray cross-book card {"pill1":"Uncertain — audio not verified on this device (0/2 confirmed)","pill2":"Partial 1/2"}
+PASS C4 settings: diagnostics section rows keep CORR1 meanings; cap row; backup unavailable; token absent from storage {"fl":"sent 1, covered 0, carved 0 — 0 pending"}
+PASS C5 rollback: CORR1 shell runs again under sw-corr1; ui1 cache preserved inert {"caches":["opalreader-shell-corr1","opalreader-shell-ui1"]}
+PASS C6 flush failure instrument: 409 -> Settings diagnostics shows blocked HTTP 409, session still pending {"fl":"sent 0, covered 0, carved 0, blocked: HTTP 409 — 1 pending (Shelf reported an error)"}
+PASS C7 partial drain: banner + not-yet-synced counts + Sync incomplete pill + Not checked yet + no generate affordances + PARTIAL diagnostics {"banner":"Sync incomplete — bindings 100/251. Reconnect to resume loading.","sb":"100/251 PARTIAL/SYNC INCOMPLETE (network_error)"}
+PASS C8 first-page bindings failure: banner + Not checked yet + Sync incomplete + 0/0 PARTIAL diagnostics agree {"banner":"Sync incomplete — bindings 0/0. Reconnect to resume loading.","sb":"0/0 PARTIAL/SYNC INCOMPLETE (network_error)"}
+PASS C9 Find Text: result card carries human chapter/segment labels, real ids, and a highlighted match {"loc":"Fixture Pucked · Chapter 2 · Segment 1","ids":"fp-ch2 · o3"}
+PASS V1 generation affordances are inert: sheets open with the off-note, Start/Batch disabled, zero network writes, candidate state byte-stable {"newReqs":1}
+PASS V2 cast view: census-shaped rows, recorded mappings + unverified flag, attention order, inert change sheet, no-cast book handled {"names":["Tucker","Sabrina"]}
+PASS V3 accessibility + collapsible persistence: labelled controls, tap targets, state survives reload + reconnect {"dims":{"nav":44,"chapToggle":46.390625,"play":38.390625,"actionsToggle":44}}
+PASS V4 playback: play a segment, humanized status, Next advances to the successor {"st1":"Player: playing · Chapter 1 · Segment 2 · 0:00 / 0:30","st2":"Player: playing · Chapter 2 · Segment 1 · 0:00 / 0:30"}
+
+CHROMIUM PROOF: 14/14 PASS

@@ -241,3 +241,74 @@ on the final trees, claimed green on that basis only.
    then Julie's publish/window Go. D6 arming remains entirely
    separate; this candidate's generation controls are inert by
    construction and by test.
+
+## Correction C-1 (Rowan source review, Oct 28)
+
+Two findings from Rowan's source review, applied as a bounded
+correction. Identities unchanged (app-264.js / sw-ui1.js /
+opalreader-shell-ui1 / build -13 / ui-pkg-1); the delta is still
+exactly the same 11 paths; index.html is still the only modified
+base path. This section supersedes the two earlier statements that
+the index diff is "exactly the 2 pointer lines" / "exactly 2 lines".
+
+**Finding 1 — stale version string in the startup failure notice.**
+The candidate's index.html startup-failure notice (inherited
+unchanged from the base tree) read "Opal Reader could not load its
+interface (v1.4.122)" — a stale user-facing version identification:
+the notice fires precisely when the UI1 build itself has failed to
+load, and UI 1.4.122 is the pre-window client, not this build.
+Corrected in `src/index-ui1.html` to identify the build truthfully
+by its build marker, the same identity the candidate carries in its
+constants and diagnostics:
+
+  "Opal Reader could not load its interface (build
+  d5b-v2-playback-client-13). …"
+
+(The remaining "1.4.122" strings in the tree live only inside the
+rollback closure's own bundles — app-262.js identifies the 1.4.122
+rollback client, which is what those bytes are; inherited files stay
+byte-identical and none is a delta path.)
+
+**New index diff (base → publish): exactly 3 lines.**
+
+  1. script pointer: `app-263.js?v=corr-pkg-1` → `app-264.js?v=ui-pkg-1`
+  2. stylesheet pointer: `styles-150.css?v=d5c-pkg-8` → `styles-151.css?v=ui-pkg-1`
+  3. startup failure notice: `(v1.4.122)` → `(build d5b-v2-playback-client-13)`
+
+The package static checks were updated to declare exactly this
+expectation (2 pointer lines + the corrected notice line, which must
+carry the build marker) plus a new whole-file check that the
+published index contains no "1.4.122" anywhere;
+`package/PACKAGE-MANIFEST.json` now records the diff in an
+`indexDiff` field. Of the 53 publish paths, only index.html changed
+bytes versus the pre-correction package (new SHA-256
+b16d586faa90ac985e7ec7d628215edbff8d2f9ee746437e1fcd4b5c70586d6f);
+the publish-tree digest (sorted per-file SHA-256 listing, hashed)
+moved from 4060bb2098e441cf0f3f54e2883b80860d62e92137d038994a4fb44b7c63660a
+to cb2375c4170fd6978069d6c5b2c2e6588240d674a7209a09a444a182e99a0f69
+on that one file alone.
+
+**Rerun results (exact final trees, one complete run each; logs
+below).** Package assembly: ALL CHECKS PASS, exit 0. Unit battery:
+13/13 PASS, exit 0, on tree-a and on package/publish. Cast census:
+PASS, exit 0. Chromium proof: 14/14 PASS, exit 0, on tree-a and on
+package/publish. Harness honesty: the first package-tree Chromium
+invocation in this rerun used a wrong `UI1_TREE` path
+(`../package/publish`, which resolves outside the build root); the
+proof exited 1 with ENOENT before any row ran — an invocation
+error, not a candidate result. The preserved package log is from
+the corrected invocation (`UI1_TREE=package/publish`), and the
+aborted attempt is recorded in `tests/run-exit-codes.json`.
+
+**Finding 2 — battery logs pinned into the review artifact.**
+Rowan could not fetch the logs this report references (the artifact
+recorded only their tail lines; the files themselves 404'd).
+`snapshot-review-artifact.py` now also copies the preserved logs
+into the artifact under `logs/`: unit-results.txt,
+unit-results-package.txt, chromium-results-tree-a.txt,
+chromium-results-package.txt, cast-census-results.txt,
+assemble-results.txt — the NEW final-run logs from the rerun above —
+plus run-exit-codes.json (commands + exit codes for every run).
+MANIFEST.json lists each with bytes/SHA-256/git-blob id alongside
+the delta files; the pinned copies were verified byte-identical to
+their sources. The artifact now holds 22 hashed files + MANIFEST.

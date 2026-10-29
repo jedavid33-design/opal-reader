@@ -27,7 +27,50 @@
   "castCensus": "CAST CENSUS: PASS \u2014 mappings table covers exactly the census's non-Gemini cast voices; unverified flag exact.",
   "chromiumProofTreeA": "CHROMIUM PROOF: 14/14 PASS",
   "chromiumProofPackage": "CHROMIUM PROOF: 14/14 PASS",
-  "packageAssemble": "PACKAGE ASSEMBLE: ALL CHECKS PASS"
+  "packageAssemble": "PACKAGE ASSEMBLE: ALL CHECKS PASS",
+  "pinnedLogs": [
+   "logs/unit-results.txt",
+   "logs/unit-results-package.txt",
+   "logs/chromium-results-tree-a.txt",
+   "logs/chromium-results-package.txt",
+   "logs/cast-census-results.txt",
+   "logs/assemble-results.txt",
+   "logs/run-exit-codes.json"
+  ],
+  "exitCodes": {
+   "castCensus": {
+    "command": "node tests/cast-census.mjs",
+    "exitCode": 0,
+    "log": "tests/cast-census-results.txt"
+   },
+   "chromiumPackage": {
+    "command": "UI1_TREE=package/publish node tests/chromium-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/chromium-results-package.txt",
+    "note": "One earlier invocation in this rerun used UI1_TREE=../package/publish, which resolves outside the build root; the proof exited 1 with ENOENT before any row ran (harness invocation error, not a candidate result). The preserved log is from the corrected invocation above."
+   },
+   "chromiumTreeA": {
+    "command": "node tests/chromium-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/chromium-results-tree-a.txt"
+   },
+   "packageAssemble": {
+    "command": "python3 package-assemble.py",
+    "exitCode": 0,
+    "log": "package/assemble-results.txt"
+   },
+   "run": "Correction C-1 rerun (Rowan source review, Oct 28) \u2014 exact final trees after the startup-notice correction",
+   "unitPackage": {
+    "command": "node tests/unit-battery-package.mjs",
+    "exitCode": 0,
+    "log": "tests/unit-results-package.txt"
+   },
+   "unitTreeA": {
+    "command": "node tests/unit-battery.mjs",
+    "exitCode": 0,
+    "log": "tests/unit-results.txt"
+   }
+  }
  },
  "files": {
   "base-index.html": {
@@ -41,9 +84,9 @@
    "gitBlob": "609c55b89f3f001a3c9bb9afb4c5e24cde7f7b18"
   },
   "delta/index.html": {
-   "bytes": 1396,
-   "sha256": "63a9effcf38d36f2fa151592bccd8864eded8f5c4129ba04b22cc228b8365a3d",
-   "gitBlob": "3b8d7b83c8123935e80ec235b15c358a3637bb73"
+   "bytes": 1419,
+   "sha256": "b16d586faa90ac985e7ec7d628215edbff8d2f9ee746437e1fcd4b5c70586d6f",
+   "gitBlob": "e350413aaf420491971efa65782f0373ac8e65ce"
   },
   "delta/modules/composition-ui1.js": {
    "bytes": 63969,
@@ -104,6 +147,41 @@
    "bytes": 44220,
    "sha256": "a4cf98584bf069334799fb1d224035b2ed5332aa590471952dd21f86371c474c",
    "gitBlob": "52e9d8d34ed7be6851711ce6a72b3e3e62bd781e"
+  },
+  "logs/unit-results.txt": {
+   "bytes": 1019,
+   "sha256": "c580bb26e19cf6f967c6d74b7040e70363f7f0367bc8b273f713cb1dc45d463f",
+   "gitBlob": "937233f989e65d46fbcea4330732cf6aff3b54ba"
+  },
+  "logs/unit-results-package.txt": {
+   "bytes": 1019,
+   "sha256": "c580bb26e19cf6f967c6d74b7040e70363f7f0367bc8b273f713cb1dc45d463f",
+   "gitBlob": "937233f989e65d46fbcea4330732cf6aff3b54ba"
+  },
+  "logs/chromium-results-tree-a.txt": {
+   "bytes": 2702,
+   "sha256": "28dece403cc366ab6377a24f2ff43ad0db36e5a9c3170630002073ba2d2b7ef9",
+   "gitBlob": "eeca333332a23b220c41fae7e4ffd4cf12740998"
+  },
+  "logs/chromium-results-package.txt": {
+   "bytes": 2702,
+   "sha256": "28dece403cc366ab6377a24f2ff43ad0db36e5a9c3170630002073ba2d2b7ef9",
+   "gitBlob": "eeca333332a23b220c41fae7e4ffd4cf12740998"
+  },
+  "logs/cast-census-results.txt": {
+   "bytes": 1375,
+   "sha256": "8865b7c02be39354b12653097c34069476458e53b6a4fc24f7bebc852df1b57a",
+   "gitBlob": "edf9bafc07adb5e1bd5c18c303a83e716b838fce"
+  },
+  "logs/assemble-results.txt": {
+   "bytes": 1315,
+   "sha256": "a6211b57dde261e7a23b41a5aa81c0796f4159a8f51c3fe569125264085429d5",
+   "gitBlob": "41580a10f5a5f934164bc305e1f5487540cf2186"
+  },
+  "logs/run-exit-codes.json": {
+   "bytes": 1084,
+   "sha256": "23ed6395019556da5936653805d3d0791ce015b05ba86d9f289809f22e301a90",
+   "gitBlob": "1ef1199c5daa705506c8107cbe60a5f4f8bf7654"
   }
  }
 }

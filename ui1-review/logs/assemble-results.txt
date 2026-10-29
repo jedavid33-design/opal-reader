@@ -1,0 +1,20 @@
+PASS base path count == 43 (got 43)
+PASS delta classification == declared 11 paths (got ['app-264.js', 'index.html', 'modules/composition-ui1.js', 'modules/constants-ui1.js', 'modules/entry-ui1.js', 'modules/runnable-ui1.js', 'modules/vendor/client-store-ui1.js', 'modules/vendor/client/assembled-client-ui1.js', 'modules/vendor/client/projection-ui1.js', 'styles-151.css', 'sw-ui1.js'])
+PASS new paths are exactly the 10 ui1 files
+PASS publish path count == 53 (got 53)
+PASS non-delta publish paths byte-identical to base (bad: [])
+PASS index line count unchanged
+PASS index diff == 2 pointer lines + corrected startup notice (got 3 diffs)
+PASS published index carries no stale 1.4.122 identification
+PASS sw-ui1 SHELL == packaged ui1 closure (30 entries)
+PASS PURGE_ON_ACTIVATE == [] (existing caches, incl. corr1, preserved)
+PASS app-264 import closure resolves (missing: None)
+PASS app-264 closure uses no corr1/d5c modules (bad: [])
+PASS app-263 (rollback) import closure resolves (missing: None)
+PASS app-263 closure untouched by ui1 (bad: [])
+PASS app-264 carries build -13 / ui-pkg-1
+PASS app-263 (rollback) still carries build -12 / corr-pkg-1
+PASS frozen Shelf bridge byte-identical (SHA-256 pinned)
+
+wrote package/PACKAGE-MANIFEST.json; publish=53 paths, delta=11 paths
+PACKAGE ASSEMBLE: ALL CHECKS PASS
