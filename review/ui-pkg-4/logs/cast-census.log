@@ -1,0 +1,12 @@
+CAST CENSUS (frozen source records; content plane carries cast = povs verbatim, no defaultVoice):
+  Pucked Up [067ddb04…]: cast 2 (voiced 2, no-voice 0), style_direction present on 2/2 voices, segments 475, source defaultVoice present (NOT carried to the plane)
+  In Her Own League [1c6bc7a6…]: cast 4 (voiced 2, no-voice 2 — Epilogue - Reese, Epilogue - Emmett), style_direction present on 0/2 voices, segments 203, source defaultVoice absent
+  Pucked Over [21f655a2…]: cast 2 (voiced 2, no-voice 0), style_direction present on 2/2 voices, segments 510, source defaultVoice absent
+  Finding Home [48019197…]: cast 2 (voiced 2, no-voice 0), style_direction present on 2/2 voices, segments 152, source defaultVoice present (NOT carried to the plane)
+  Forever Pucked [5c589095…]: cast 2 (voiced 2, no-voice 0), style_direction present on 2/2 voices, segments 407, source defaultVoice present (NOT carried to the plane)
+  Pucked [89b2d4f1…]: cast 2 (voiced 2, no-voice 0), style_direction present on 1/2 voices, segments 654, source defaultVoice absent
+  The Goal [f1b1e2f9…]: cast 2 (voiced 2, no-voice 0), style_direction present on 0/2 voices, segments 209, source defaultVoice absent
+  recorded mappings: 4; non-Gemini cast voices in census: 4
+
+CAST CENSUS: PASS — mappings table covers exactly the census's non-Gemini cast voices; unverified flag exact.
+EXIT=0

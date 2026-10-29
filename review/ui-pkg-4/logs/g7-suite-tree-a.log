@@ -1,0 +1,25 @@
+PASS G1 classifier: every taxonomy member maps to its class; foreign errors unclassified
+PASS G2 router: exact-key dispatch; non-state keys never reach IDB; state key never reaches localStorage post-cutover
+PASS G3 migration S0->S6: byte equality, meta, marker last, legacy + shelf + prefs untouched, guard verifies, §8 inventory
+PASS G4 fresh install: no legacy record -> straight to cutover with migratedFrom none
+PASS G5 IDB open failure pre-cutover: stay on legacy, classified storage_unavailable, legacy untouched
+PASS G6a crash after S1 (empty IDB, no meta/marker): next launch completes migration
+PASS G6b crash after S3/S4 (rows+meta in IDB, marker absent): resume verifies and cuts over, no double migration
+PASS G6c steady state: evolved IDB record survives relaunch agreement; legacy snapshot not re-served
+PASS G6d S3 transaction failure is atomic: nothing staged lands; retry migrates cleanly
+PASS G6e aborted IDB transaction on set: prior record intact
+PASS G7 marker-write failure: stay on legacy, IDB remnant resumable, cutover completes next launch
+PASS G8 S4 verify mismatch: abort to legacy, IDB rows deleted (the only delete), legacy never modified
+PASS G9 legacy-writer tripwire: post-cutover legacy mutation stops the next launch; IDB untouched
+PASS G10 IDB evicted post-cutover: fail closed storage_unavailable; stale legacy NOT resurrected
+PASS G11 IDB quota on steady-state set: classified storage_quota_exceeded, prior record intact
+PASS G12 blocked IDB open pre-cutover: bounded wait, stay on legacy classified storage_unavailable
+PASS G13 versionchange in steady state: subsequent storage ops fail classified storage_unavailable
+PASS G14 full-size: migration then content drain 12->18 lands ~8.28M chars in IDB; preservation inventory holds; legacy frozen
+PASS G15 forced legacy path with real quota cap: drain classifies storage_quota_exceeded, never network_error; diag allowlist-clean
+PASS G16 transport failure still classifies network_error with stage transport
+PASS G17 single-writer epoch guard holds at the async IDB commit; concurrent writers never tear the record
+PASS G18 hash guard detects a post-cutover prefs change; shelf count still reported
+PASS G19 cyclic record on the legacy path classifies storage_serialization_failed
+g7-suite tree=tree-a: 23/23 passed
+EXIT=0

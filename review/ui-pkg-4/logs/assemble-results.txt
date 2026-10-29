@@ -1,0 +1,32 @@
+PASS base path count == 63 (got 63)
+PASS delta classification == declared 11 paths (got ['app-267.js', 'index.html', 'modules/composition-ui4.js', 'modules/constants-ui4.js', 'modules/entry-ui4.js', 'modules/runnable-ui4.js', 'modules/storage-state.js', 'modules/vendor/client-store-ui4.js', 'modules/vendor/client/assembled-client-ui4.js', 'styles-154.css', 'sw-ui4.js'])
+PASS new paths are exactly the 10 declared new files
+PASS publish path count == 73 (got 73)
+PASS non-delta publish paths byte-identical to base (bad: [])
+PASS index line count unchanged
+PASS index diff == exactly the 2 pointer lines + the notice marker line (got 3 diffs)
+PASS sw-ui4 SHELL == packaged ui4 closure (31 entries; missing [], extra [])
+PASS sw-ui4 PURGE_ON_ACTIVATE == [] (ui3/ui2/ui1/corr1/v1 caches preserved)
+PASS sw-ui3.js (rollback) SHELL fully resolvable in publish tree (missing: [])
+PASS sw-ui2.js (rollback) SHELL fully resolvable in publish tree (missing: [])
+PASS sw-ui1.js (rollback) SHELL fully resolvable in publish tree (missing: [])
+PASS sw-corr1.js (rollback) SHELL fully resolvable in publish tree (missing: [])
+PASS app-267 import closure resolves (missing: None)
+PASS app-267 closure routes through modules/composition-ui4.js
+PASS app-267 closure routes through modules/constants-ui4.js
+PASS app-267 closure routes through modules/entry-ui4.js
+PASS app-267 closure routes through modules/runnable-ui4.js
+PASS app-267 closure routes through modules/storage-state.js
+PASS app-267 closure routes through modules/vendor/client-store-ui4.js
+PASS app-267 closure routes through modules/vendor/client/assembled-client-ui4.js
+PASS app-267 closure uses NO ui3/ui1 composition/constants/entry/runnable/store/assembled (bad: [])
+PASS app-266 (rollback) import closure resolves (missing: None)
+PASS app-266 closure untouched by ui4 (bad: [])
+PASS client-store-ui1.js byte-identical to the accepted store (SHA-256 pinned)
+PASS app-267 carries ui-pkg-4 and registers sw-ui4.js
+PASS constants-ui4 carries build marker d5b-v2-playback-client-15
+PASS app-266 (rollback) still carries ui-pkg-3 and registers sw-ui3.js
+PASS frozen Shelf bridge byte-identical (SHA-256 pinned)
+
+wrote package/PACKAGE-MANIFEST.json; publish=73 paths, delta=11 paths
+PACKAGE ASSEMBLE: ALL CHECKS PASS

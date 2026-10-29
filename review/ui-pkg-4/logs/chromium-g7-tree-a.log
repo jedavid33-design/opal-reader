@@ -1,0 +1,9 @@
+PASS P0 boot: ui-pkg-4 shell up; pre-connect snapshot reads the legacy posture (content 12, no marker yet) {"bm":"d5b-v2-playback-client-15","pm":"ui-pkg-4"}
+PASS P1 T7 connect: migration verifies + cuts over; content drains 12->18 COMPLETE at full size; Diagnostics truthful {"stateRow":"IndexedDB · migration S6 · migrated 2026-10-29T20:42:22.479Z · storage estimate 1036392/1074778216 bytes · frozen-record","contentRow":"18/18 COMPLETE"}
+PASS P2 T7 residence: state lives in IDB at full enriched size; legacy snapshot byte-identical; outbox + journals preserved {"idbChars":8669722}
+PASS P3 T7 library renders 7 books; playback smoke of an existing binding reaches the audio pipeline {"audioHits":1}
+PASS P4 T7 restart: state persists from IDB, no re-migration, legacy still byte-identical, reconnect is a no-op drain {"backend":"indexeddb"}
+PASS P5 T11 eviction: IDB deleted in steady state -> Connect fails closed with storage_unavailable; stale legacy never served {"deleted":"ok"}
+PASS P6 T8 legacy path (IndexedDB unavailable at first launch): drain classifies storage_quota_exceeded against Chromium's real localStorage quota {"reason":"storage_quota_exceeded","diag":{"class":"storage_quota_exceeded","stage":"apply","errorName":"QuotaExceededError","errorCode":null,"seqFrom":13,"seqTo":18,"pagePayloadChars":7278325,"recordChars":8669485}}
+chromium-g7-proof tree=tree-a: 7/7 passed
+EXIT=0

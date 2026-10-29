@@ -1,0 +1,10 @@
+PASS T4 no-play browsing: Connect + drain + library/book/chapter/Settings issue ZERO byte-check GETs for segment bindings (only the preflight C3 probe fires) {"atConnect":{"c10cb90e978621a98590e17b16e5bfb2090c9b78d8a3bfdeb55162bfa429067a":1}}
+PASS T1 first play of unconfirmed a2: exactly ONE byte-check GET, confirmation recorded, pill advances 0/3 -> 1/3 {"pill":"Uncertain — audio not verified on this device (1/3 confirmed)"}
+PASS T2 replay of confirmed a2 (pause -> play): ZERO additional byte-check GETs {"total":1}
+PASS T3 byte-check failures (HTTP 500 + network abort): playback succeeds, nothing recorded, one attempt per initiation, no unhandled rejections {"c500":2,"cAbortServerSide":3,"cAbortAppLayer":1,"exceptions":0,"note":"server-side count for the abort key exceeds the app-layer count: Chromium's network stack transparently retries a connection-reset GET below the app layer (the client made exactly one fetch() call and recorded nothing)"}
+PASS T5 failed start (undecodable audio -> play() rejects): ZERO byte-check GETs, nothing recorded, player not playing {"state":"error"}
+PASS T6 concurrency: two initiations while the byte-check is held -> exactly ONE GET; post-settle initiation still ONE GET total (per-device bound) {"total":1}
+PASS TQ quota immobility: money counters identical before/after all W-4 traffic; zero generation commands issued {"money":{"attemptsToday":0,"spentMicroCents":0,"monthlyCap":50},"quotaGets":1,"byteCheckTotals":{"c10cb90e978621a98590e17b16e5bfb2090c9b78d8a3bfdeb55162bfa429067a":1,"0000000000000000000000000000000000000000000000000000000000000259":1,"00000000000000000000000000000000000000000000000000000000000001f5":2,"00000000000000000000000000000000000000000000000000000000000001f6":3,"00000000000000000000000000000000000000000000000000000000000001f7":1}}
+
+W-4 PROOF (tree-a): 7/7 PASS
+EXIT=0
