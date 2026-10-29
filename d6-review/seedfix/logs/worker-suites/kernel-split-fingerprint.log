@@ -1,0 +1,17 @@
+✔ fingerprint formula: golden vector pins inputs, key order and separator (19.837791ms)
+✔ fingerprint identity: style, voice and markup are all part of identity (6.378021ms)
+✔ plainSpeechText strips only emphasis tags (0.948523ms)
+✔ word-token tiling catches a merged word (lost space) (1.744558ms)
+✔ split prefers the paragraph break and children tile the parent (0.909114ms)
+✔ split falls back to sentence boundaries without a paragraph break (0.393ms)
+✔ split picks the candidate closest to the middle (0.20016ms)
+✔ unsplittable passages return -1 (caller must block, never rewrite) (0.358809ms)
+✔ emphasis spanning the seam is closed and reopened, wording intact (1.151798ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 179.339386

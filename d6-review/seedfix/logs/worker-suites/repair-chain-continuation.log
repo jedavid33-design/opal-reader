@@ -1,0 +1,11 @@
+✔ a finished pass keeps the chain armed while an untouched blocked root remains (2.533643ms)
+✔ the chain still stops when no repairable blocked root remains (0.323165ms)
+✔ an already-exhausted leftover does not re-arm the chain (termination) (0.266179ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 126.892548

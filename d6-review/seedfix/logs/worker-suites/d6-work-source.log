@@ -1,0 +1,18 @@
+✔ 1+4: exact text, cast-by-name resolution, style direction, fingerprint (2.595475ms)
+✔ 2: pov by id resolves to the same cast entry (0.384868ms)
+✔ 3: defaultVoice title segment — voice, provider, AND style from the fallback (0.309455ms)
+✔ 4b: style chain — a cast voice without style inherits the fallback's (design §2.2 order) (0.268913ms)
+✔ 2b: removed-provider voice — named disposition, recorded mapping, no payload (0.281973ms)
+✔ 2c: unresolvable pov -> unmapped_pov (named, never a throw) (0.211237ms)
+✔ 5: no_content — textless segment, unknown occurrence, missing entity, unknown job (1.204708ms)
+✔ 3b: without defaultVoice the title segment is unmapped (the pre-enrichment live truth) (0.342605ms)
+✔ 6: regression guard — the same fixture keyed `povs` resolves identically (0.735013ms)
+✔ 7: executor path — title (defaultVoice) + main (cast name) synthesize and commit (36.9959ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 208.666557

@@ -1,0 +1,18 @@
+✔ A/B: adapter resolves live-shaped names to cast ids; Goal dispositions (3.195005ms)
+✔ A: name-shaped and id-shaped planes yield IDENTICAL eligible sets (1.477437ms)
+✔ A: defaultVoice fallback resolves by (provider, voice_id) when the entity carries it; no cast match -> unresolved (0.385579ms)
+✔ A: duplicate cast name is unresolved and NAMED by the POV proof; named-but-unknown never falls through (1.426491ms)
+✔ C: anchor is the lineage ROOT; live-only parked row named, proof passes (1.511439ms)
+✔ C: record-carrying fallback names the anchor when a plane has no lineage ids (0.790146ms)
+✔ D: schema evolution over the DEPLOYED 3-column table preserves rows; idempotent (2.975015ms)
+✔ D: store seed semantics — first seed, idempotent re-seed, provenance on change (4.685362ms)
+✔ D: service halt fence (G2-amended contract: figureless; the executor never seeds implicitly) (3.062306ms)
+✔ D: entry fence — public gate chain, class gate, halt fence end-to-end (G2-amended) (25.012817ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 249.83562

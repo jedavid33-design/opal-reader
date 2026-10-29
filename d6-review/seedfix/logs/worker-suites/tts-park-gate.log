@@ -1,0 +1,13 @@
+✔ during a park, unlabeled direct speech is refused; the labeled override makes exactly one call (81.304274ms)
+✔ an override call that meets a daily 429 re-parks from the new evidence (11.527209ms)
+✔ with no park, direct speech is unaffected (2.049215ms)
+✔ client audit: gt() is the only override setter and has only explicit-tap callers (1.120682ms)
+✔ Continue-to-quota consumes at most one probe: the paused branch resumes one job and handles the probe answer (0.598198ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 292.39577

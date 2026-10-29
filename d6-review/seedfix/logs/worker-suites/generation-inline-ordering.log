@@ -1,0 +1,15 @@
+✔ parity: the Worker's split functions are the client's, verbatim (2.001284ms)
+✔ (a) Standard: segment 1 blocks -> splits -> all pieces succeed -> ONLY THEN segment 2 generates (90.505042ms)
+✔ (b) nested: a split child blocks again -> subdivides -> completes before the next original segment (26.421071ms)
+✔ (c) irreducible leaf mid-chapter: marked blocked for fallback, job advances past it only after the tree is exhausted (18.028416ms)
+✔ (c2) a short unsplittable segment behaves exactly as before: blocked, advance, no tree invented (11.12177ms)
+✔ (d) quota mid-tree: a daily 429 during inline splitting parks everything, tree + prior audio preserved, no further dispatches (54.931316ms)
+✔ (e) Batch: a blocked root splits inside the batch job's own lifecycle; pieces submit in order before the next segment (63.155367ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 508.757515

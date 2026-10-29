@@ -1,0 +1,17 @@
+✔ §5.1 clean chapter: segments generate sequentially, in order, no intervention (28.47326ms)
+✔ §5.2 single block: the split tree fully resolves before the next original segment is attempted (13.814701ms)
+✔ §5.3 nested block: a blocked child subdivides and completes before generation advances (8.341298ms)
+✔ §5.4 irreducible block: piece is marked blocked, surrounding audio retained, chapter NOT complete (4.260974ms)
+✔ §5.5 quota during splitting: a daily 429 parks the job with the split tree and audio intact (30.547012ms)
+✔ §5.5b a temporary 429 is NOT treated as exhausted daily quota (5.4573ms)
+✔ §5.6 Resume during a park spends exactly one test dispatch, then re-parks (6.851783ms)
+✔ §5.7 Batch and Standard share one cache: mode switches never regenerate existing audio (10.514148ms)
+✔ §5.7b a Batch policy block marks the segment blocked and the job partial — never complete (9.746526ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 281.4875

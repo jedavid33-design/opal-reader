@@ -1,0 +1,29 @@
+✔ I2 cold DO: the migration path binds both planes where the snapshot paths cannot see the object (10.842371ms)
+✔ I1 contrast: SyncPush still lands a bindings entity with NO byte verification — only the migration path verifies (3.362336ms)
+✔ missing object: the whole book is rejected and leaves zero residue (4.260533ms)
+✔ I3 negative 1: tampered customMetadata (forged sha label, bytes unchanged) is refused (3.653914ms)
+✔ I3 negative 2: swapped bytes under a stale (manifest-matching) metadata label are refused (2.890648ms)
+✔ honest metadata: a correct recorded sha is accepted alongside the v1 no-sha shape (3.652021ms)
+✔ shared key: two occurrences bound to one object; one index row, two bindings, both planes agree (7.221607ms)
+✔ legacy anchors bind by their own rule; a wrong anchor is refused (5.726604ms)
+✔ the 31: provenance acceptance binds all fingerprinted-distinct rows with an auditable trail (23.406156ms)
+✔ the 31: a missing attestation refuses the whole book as identity_mismatch, zero residue (3.174544ms)
+✔ the 31: attestation field disagreements are attestation_invalid, never a silent pass (3.67841ms)
+✔ the 31: a POSITIVE foreign identity in metadata is never rescued by an attestation (2.213652ms)
+✔ the 31: AdoptAudio (non-migration) keeps strict refusal of the same rows (2.398049ms)
+✔ idempotency: replay returns the stored receipt; a fresh command id converges with no churn (3.497359ms)
+✔ abort, crash, resume: an interrupted import never promotes the book; the gate is durable across crashes (6.680966ms)
+✔ read-back divergence: a deleted SQL row / a tampered sync row blocks the flip gate and shows in the view (4.866783ms)
+✔ flip gate: the anchored certificate replays idempotently; an arbitrary string is refused (G3) (4.392622ms)
+✔ no prime seam wired: the migration path fails closed and writes nothing (2.430478ms)
+✔ content divergence and foreign occurrences are refused (3.029717ms)
+✔ staging namespace fence: a smoke-prefixed prime cannot see production-shaped keys (2.753172ms)
+✔ read facade: GET /v2/migration/book/<id> serves the both-plane view and writes nothing (9.720938ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 283.508763

@@ -1,0 +1,11 @@
+✔ Ye polls registry-discovered jobs (GET only), merges changes, and leaves Continue jobs alone (4.074956ms)
+✔ ct keeps a 60s slow poll alive when the only known jobs are parked (1.027122ms)
+✔ ct schedules nothing when nothing is known and nothing is active (0.429815ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 135.761057

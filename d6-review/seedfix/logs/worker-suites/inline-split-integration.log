@@ -1,0 +1,20 @@
+✔ Test A: ordinary Generate stages segmentIndices itself; the finished inline tree expands with correct per-leaf audio (20.276048ms)
+✔ Test A2: replacement generation (real Wr init) stages segmentIndices itself and expands the tree (10.494529ms)
+✔ Test A3: generate-rest-of-chapter stages the subset mapping (non-contiguous roots) (4.744841ms)
+✔ Test B: a quota park mid-tree never shifts audio onto the wrong text; Resume rebuilds the tree (6.085262ms)
+✔ Test B2: during a mid-tree park, an unsplit root still merges — by job order, not shifted position (2.368084ms)
+✔ Test C: a legacy record with segmentKeys but NO segmentIndices still applies its split tree (3.975496ms)
+✔ Test C2: a record with neither keys nor indices backfills from the status cache keys (qe fingerprint match) (2.708825ms)
+✔ Test D: or() never positionally maps a grown inline status through stale root keys (0.854533ms)
+✔ Test E: a legacy subset job on the SECOND of two identical twins expands the second, anchored by repair_source_index (2.562986ms)
+✔ Test E2: with repair_source_index unavailable, duplicate identities make recovery REFUSE — chapter untouched, audio kept (3.688596ms)
+✔ Test E3: a stored mapping that contradicts the Worker anchor is corrected to the anchor before expansion (1.735524ms)
+✔ Test F: a pending tree defers an unsplit root whose identity is ambiguous between identical twins (1.308815ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 246.893475

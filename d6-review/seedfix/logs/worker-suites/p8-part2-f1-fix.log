@@ -1,0 +1,17 @@
+✔ F1 harness contract: SqlFacade .one() throws on 0 and on >1 rows, returns the row on exactly 1 (5.722448ms)
+✔ F1 direct: brand-new coordinator — defaults and intended not-found states, no 500-class throws (24.010813ms)
+✔ F1 direct: first SetSettings applies at revision 1, replay returns the original receipt once, stale baseRevision conflicts (3.694294ms)
+✔ F1 direct: cardinality discipline — _oneOrNull is null/row/throw, and strict _one still throws (1.893101ms)
+✔ F1 entry: brand-new smoke instance — GET /v2/settings returns defaults with no prior write (14.77914ms)
+✔ F1 entry: §5 smoke order — SetSettings round-trip, replay-once, read-back, conflict (worker entry -> DO) (8.685404ms)
+✔ F1 entry: missing meta.frozen is not a 500 — commands flow, and a freeze then rejects new work as designed (6.07081ms)
+✔ F1 entry (revised env): smoke prefix respected — byte-check sees the smoke object, never the production twin (5.21091ms)
+✔ F1 entry (revised env): the namespace guard is LIVE — wrong or absent DO prefix fails closed, zero bucket operations (7.927377ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 266.984495

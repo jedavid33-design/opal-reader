@@ -1,0 +1,116 @@
+--- impl/worker/worker-entry-prod-d6.js	2026-10-29 18:28:57.967224468 +0000
++++ seedfix-build/worker/worker-entry-prod-d6.js	2026-10-29 21:59:13.388714077 +0000
+@@ -42,9 +42,10 @@
+ //     GET /v2/d6-plans/<id> is served from /internal/d6/plan.
+ //   * CORRECTION 2 adds the storage-seed route (arming sub-step 0
+ //     found genstore.setStorageBaseBytes unreachable in production):
+-//     POST /v2/d6-seed-storage forwards — behind the same production
+-//     gate (scope + client token + instance) as every other public
+-//     route — to POST /internal/d6/seed-storage, where the service
++//     POST /v2/d6-seed-storage forwards — behind the production
++//     gate (scope + instance; its credential admission is the
++//     SEED-FIX shape described below) — to
++//     POST /internal/d6/seed-storage, where the service
+ //     refuses unless GENERATION_HALT is still "1" (seeding is a
+ //     pre-arming act only) and records the fresh recount with
+ //     provenance. The route was chosen over a command type
+@@ -52,18 +53,30 @@
+ //     coordinator's pinned two-hunk diff is untouched) and behind
+ //     the identical fence chain as the other D6 routes.
+ //   * G2 HARDENING (ENRICHMENT-DESIGN §3.2; Rowan review
+-//     6504846855): the seed route ADDITIONALLY requires the
+-//     migration-operator credential — the client gate still runs in
+-//     full (the client token is necessary but NOT sufficient), the
+-//     operator admission block below stamps admission on the
+-//     forward, and the DO class gate for the internal seed route
+-//     requires that stamp, so the route cannot be reached on the
+-//     internal header alone and the stamp cannot be forged through
+-//     public routing (the entry overwrites it unconditionally).
+-//     The invocation is FIGURELESS (any caller-supplied figures are
+-//     refused by the service) and the worker recounts the bucket
+-//     itself through its R2 binding, cross-checked at zero
+-//     tolerance against RECORDED_STORAGE_BASE before any write.
++//     6504846855) added the migration-operator credential to the
++//     seed route, and the SEED-FIX CORRECTION (Rowan design pass
++//     6509192325) changes that route's admission to the operator
++//     credential ALONE — the same shape as the two Option D
++//     operator routes: for this one route the production gate
++//     skips its client-token check (the scope-config, scope-header,
++//     and instance checks still run in full), and the operator
++//     admission block below is the credential fence. The
++//     dual-credential shape G2 shipped proved unreachable in
++//     practice: the credential-exchange transport refuses any
++//     request carrying two credential surrogates (HTTP 403
++//     credential_ambiguity, transport-level — the Oct 29, 2026
++//     arming attempt's seed call never reached this Worker; the
++//     identical wall stopped the Oct 23, 2026 D4 pilot). The
++//     operator credential remains mandatory: the admission block
++//     stamps admission on the forward, and the DO class gate for
++//     the internal seed route requires that stamp, so the route
++//     cannot be reached on the internal header alone and the stamp
++//     cannot be forged through public routing (the entry
++//     overwrites it unconditionally). The invocation is
++//     FIGURELESS (any caller-supplied figures are refused by the
++//     service) and the worker recounts the bucket itself through
++//     its R2 binding, cross-checked at zero tolerance against
++//     RECORDED_STORAGE_BASE before any write.
+ //   * A queue handler consumes the v2 queue into /internal/execute.
+ //     GENERATION_HALT still gates queue + execute via
+ //     assertGenerationEnabled, independently at each layer.
+@@ -292,7 +305,14 @@
+   const isOperatorRoute = request.method === "POST" &&
+     (url.pathname === "/v2/command-approvals" ||
+      url.pathname === "/v2/command-reconciliation");
+-  const denied = productionGate(request, env, cors, { skipClientToken: isOperatorRoute });
++  // SEED-FIX: the seed route is admitted on the operator
++  // credential alone, like the operator routes — the gate skips
++  // its client-token check for this route only (the scope checks
++  // inside the gate, and the instance check below, still run).
++  const isSeedRoute = request.method === "POST" &&
++    url.pathname === "/v2/d6-seed-storage";
++  const denied = productionGate(request, env, cors,
++    { skipClientToken: isOperatorRoute || isSeedRoute });
+   if (denied) return denied;
+   const instance = request.headers.get("x-opalreader-instance");
+   if (instance !== PRODUCTION_INSTANCE)
+@@ -310,14 +330,13 @@
+     if (peek && peek.type === "MigrateImportBindings")
+       return json(403, { error: "migration_chunk_required" }, cors);
+   }
+-  // G2: the storage-seed route joins the operator fence. Unlike
+-  // the two Option D operator routes (admitted on the operator
+-  // header ALONE — the production gate above skipped their client
+-  // token), the seed requires BOTH: the full client gate chain has
+-  // already run for it, and operator admission runs here in
+-  // addition. The client token alone is refused.
+-  const isSeedRoute = request.method === "POST" &&
+-    url.pathname === "/v2/d6-seed-storage";
++  // SEED-FIX: the storage-seed route is fenced exactly like the
++  // two Option D operator routes — admitted on the operator
++  // header ALONE (the production gate above skipped the client
++  // token for this route only; its scope checks and the instance
++  // check still ran). Operator admission runs here; the client
++  // token alone is refused, and so is any request without the
++  // operator credential.
+   let operatorAdmitted = false;
+   if (isOperatorRoute || isSeedRoute) {
+     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+@@ -365,11 +384,13 @@
+     planUrl.searchParams.set("planId", decodeURIComponent(planMatch[1]));
+     return forward(new Request(planUrl.toString(), { method: "GET" }));
+   }
+-  // D6 storage seed (CORRECTION 2, hardened at G2):
+-  // POST /v2/d6-seed-storage has passed the full production gate
+-  // above (scope config, scope header, client token, instance
+-  // header) AND the operator admission block (operatorAdmitted is
+-  // true here — admission failure already returned), and forwards
++  // D6 storage seed (CORRECTION 2, hardened at G2, admission
++  // corrected at SEED-FIX): POST /v2/d6-seed-storage has passed
++  // the production gate's scope checks (scope config, scope
++  // header — the gate's client-token check is skipped for this
++  // route only), the instance check, AND the operator admission
++  // block (operatorAdmitted is true here — admission failure
++  // already returned), and forwards
+   // to the internal seed route; forward() stamps the admission on
+   // the internal request, and the class gate requires the stamp.
+   // The service refuses while generation is not halted, so this

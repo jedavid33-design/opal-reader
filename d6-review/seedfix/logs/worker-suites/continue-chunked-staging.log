@@ -1,0 +1,25 @@
+✔ slices stage every job parked; nothing is enqueued before finalize (48.011652ms)
+✔ finalize before the plan is complete refuses and activates nothing (21.685193ms)
+✔ finalize activates exactly the first job, exactly once (7.906225ms)
+✔ interrupted setup resumes idempotently; re-staged jobs are not rewritten (8.926556ms)
+✔ a job already owned by another session cannot be claimed (8.185644ms)
+✔ the plan cannot change mid-staging (4.10459ms)
+✔ out-of-order chapters assembled across slices fail at finalize; all stay parked (4.421656ms)
+✔ stage rejects oversize slices and oversize plans (3.712562ms)
+✔ a payload-only partial job is re-staged, not skipped (3.73157ms)
+✔ legacy one-shot continue is unchanged (2.709686ms)
+✔ lost finalize acknowledgement: stage on an active session reconciles without re-staging or re-activating (10.752536ms)
+✔ an unstaged job cannot be staged with altered contents under its original ID (15.503737ms)
+✔ fingerprints are required, and a later slice cannot re-pin the plan (11.936954ms)
+✔ the complete 30-job plan stages in client-sized slices and activates once (67.185125ms)
+✔ manifest read failure fails closed: no repin, no job rewrite, no activation (8.534558ms)
+✔ worker and reader canonical JSON agree byte-for-byte (4.286312ms)
+✔ client submits the saved plan in acknowledged slices, then finalizes (3.827954ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 410.756234

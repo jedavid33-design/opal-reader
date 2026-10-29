@@ -1,0 +1,21 @@
+[d6-syncpush-payload] enriched entity / envelope sizes (bytes):
+  In Her Own League: entity=1440764 envelope=1441029 text=203 speechText=203 defaultVoice=source-null-noop
+  Pucked: entity=1330538 envelope=1330803 text=654 speechText=654 defaultVoice=source-null-noop
+  Pucked Over: entity=1280560 envelope=1280825 text=510 speechText=510 defaultVoice=source-null-noop
+  Forever Pucked: entity=1144602 envelope=1144867 text=407 speechText=407 defaultVoice=restore
+  Pucked Up: entity=1102169 envelope=1102434 text=475 speechText=475 defaultVoice=restore
+  The Goal: entity=654043 envelope=654308 text=209 speechText=0 defaultVoice=source-null-noop
+  Finding Home: entity=436905 envelope=437170 text=152 speechText=152 defaultVoice=restore
+[d6-syncpush-payload] largest = In Her Own League; aggregate enriched entities = 7389581 bytes
+[d6-syncpush-payload] push elapsed=31.9ms heapDelta~8869008B sqlitePages 68->1464 (page growth includes entity + history row, each ~1440764B)
+✔ sizes: largest envelope is inside the design's per-book range and far under platform ceilings (1.236395ms)
+✔ largest book: REAL SyncPush applies the enriched entity whole — CAS, read-back, history growth (65.186887ms)
+✔ CAS discipline at this size: a stale baseRevision conflicts and writes nothing (34.954496ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 783.758991

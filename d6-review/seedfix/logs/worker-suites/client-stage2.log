@@ -1,0 +1,13 @@
+✔ stage2: all four surfaces render the SAME model for the same chapter, across the state battery (18.238601ms)
+✔ stage2 twins: identical text, independent fates — no text-keyed confusion (5.243189ms)
+✔ stage2 split: a content revision replacing a segment with two children re-derives from the children (7.937561ms)
+✔ stage2: a second device projects the identical model after sync + its own byte verification (7.761969ms)
+✔ stage2 guard: the assembled client defines none of the v1 derivations; the projection is the only chapter-truth source (16.529356ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 314.057307

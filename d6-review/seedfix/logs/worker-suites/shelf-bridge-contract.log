@@ -1,0 +1,21 @@
+✔ queue stores the golden outbox item shape (9.065745ms)
+✔ merge rule: inside 90s merges durations, outside creates a second item (1.182365ms)
+✔ flush POSTs the golden session payload and removes the item (1.434162ms)
+✔ 409 overlap carve math matches the golden parts exactly (1.181343ms)
+✔ flush carves on 409, then delivers the parts with fresh ids (1.082665ms)
+✔ fully covered overlap drops the item and counts it covered (0.633601ms)
+✔ a failed head item blocks the queue (FIFO, head-of-line) (1.867793ms)
+✔ overlap parser returns null for non-overlap messages (0.505719ms)
+✔ outbox cap keeps the newest 300 items, oldest dropped first (52.849732ms)
+✔ timing: 30s checkpoints queue chunks that merge into one session (1.864137ms)
+✔ timing: pause under 4s resumes; confirmed stop backdates to the pause (9.215149ms)
+✔ timing: a confirmed pause-stop counts listening only up to the pause moment (0.544497ms)
+✔ timing: resume within 90s of a stop cancels the flush and continues the same session (1.100121ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 211.985728

@@ -1,0 +1,17 @@
+✔ ns: staging scope + missing R2_KEY_PREFIX — named error before any bucket operation (5.862839ms)
+✔ ns: staging scope + wrong prefixes — named error, zero bucket operations, every time (11.391335ms)
+✔ ns: staging scope + exactly 'smoke-p8/' — cache works and every bucket key carries the prefix (3.340172ms)
+✔ ns: non-staging scopes keep the unprefixed-or-configured behavior unchanged (4.351079ms)
+✔ ns: through the entry, a staging DO missing the prefix fails closed — request denied, bucket untouched (16.215274ms)
+✔ ns: through the entry, a correctly bound staging DO serves byte-checks inside the namespace only (6.23034ms)
+✔ preview: no Shelf base input and no user-supplied Shelf origin anywhere in the bundle (4.49807ms)
+✔ preview fixture: a flush delivers the outbox to the fake transport in FIFO order and records the would-be sends (14.642935ms)
+✔ preview fixture: the fake is the bridge's only fetch — a poisoned global fetch is never used; non-session POSTs record nothing (2.513722ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 245.913174

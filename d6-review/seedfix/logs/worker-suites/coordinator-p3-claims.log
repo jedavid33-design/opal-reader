@@ -1,0 +1,14 @@
+✔ claim lifecycle: claim -> read-only re-claims -> probe accepted -> report completes the claim (56.778087ms)
+✔ a voided grant claims as CLOSED; terminal closure refuses a claimed grant and rejects later claims (26.944435ms)
+✔ spend intent: exactly once, holder-only, and a claim alone never suffices (condition 1) (5.687425ms)
+✔ batch map: fence needs the intent; fenced -> submitted; ambiguous -> adopted by lookup (14.195002ms)
+✔ resolveBatchNeverAccepted: explicit evidence closes the map, voids the grant, releases the spend, re-advances (9.247688ms)
+✔ CLAIM FENCE: a contradictory not_accepted verdict against a claimed, spend-fenced, in-flight grant voids NOTHING (round 2) (12.428672ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 557.396458

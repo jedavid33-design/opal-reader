@@ -1,0 +1,20 @@
+✔ S1: caller figures are refused — either field, no write (6.469178ms)
+✔ S2: halt fence kept verbatim — unhalted and missing-flag both refuse figureless calls (4.489767ms)
+✔ S3: unconfigured expected base fails closed (2.526862ms)
+✔ S4: recount failures refuse and write nothing (throw, bad page, cursorless truncation, no bucket) (9.872456ms)
+✔ S5: zero tolerance — a one-byte or one-object drift refuses with both figures, no write (5.99697ms)
+✔ S6: exact match across multiple pages seeds the BUCKET'S OWN figures; re-seed idempotent (3.577539ms)
+✔ E1: client token alone cannot seed — operator header missing or wrong -> 403, no row (9.985356ms)
+✔ E2: fail-closed configuration — operator unset, or equal to the client token -> 503 (6.294436ms)
+✔ E3: the admitted stamp cannot be forged through public routing (3.286592ms)
+✔ E4: the class gate requires the stamp — internal header + scope alone do not suffice (10.885857ms)
+✔ E5: full public chain with both credentials seeds from the worker's own recount (6.462449ms)
+✔ E6: figures through the full chain are refused at the service; bucket drift refuses too (7.617671ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 258.019141

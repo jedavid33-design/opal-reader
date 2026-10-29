@@ -1,0 +1,18 @@
+✔ grant: occurrences granted, attempts reserved, outbox + lease written, one transaction (28.655804ms)
+✔ quota estimate guard: a full day blocks grants before any spend (3.808765ms)
+✔ spending cap is adjudicated inside the grant transaction (6.418483ms)
+✔ daily-limit evidence parks; the attempted occurrence is preserved pending (6.171632ms)
+✔ generic 429 is weather: backoff + retry, never a park (B5) (6.518923ms)
+✔ probe resume: one occurrence, success releases the park, no clock restart (B6) (7.72933ms)
+✔ stale reports are rejected for state; replays are harmless (4.668616ms)
+✔ repair chains: follow-on is created AND granted server-side, then completes (B7 + finding 5) (8.220797ms)
+✔ finding 4 regression: an all-failed report marks the job failed, not generating (5.275437ms)
+✔ finding 3: a success report whose bytes don't match the stated hash does not bind (8.984373ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 274.348256

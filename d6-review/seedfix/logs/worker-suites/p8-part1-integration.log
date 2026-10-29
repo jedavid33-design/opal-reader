@@ -1,0 +1,19 @@
+✔ entry: /health is public and identifies the v2 build (8.574658ms)
+✔ isolation (i): unauthenticated and non-staging requests are rejected (7.091793ms)
+✔ isolation (ii): no route can read or write v1-shaped data (8.260797ms)
+✔ entry + DO + sync contracts round-trip through the real transport and assembled client (46.279092ms)
+✔ byteCheck route answers from the R2 cache namespace (6.146424ms)
+✔ isolation (iii): queue handler and DO execute refuse while halted; spec has no consumer or provider secrets (3.829627ms)
+✔ providers: halt refuses before any network call; removed providers refuse by name (0.793581ms)
+✔ providers: Gemini legacy + OpenAI + Batch kernels behind the executor seam (scripted fetch) (12.362192ms)
+✔ cache adapter: putIfAbsent/probe/flush/hydrate round-trip over a fake R2 bucket (0.848644ms)
+✔ work source resolves occurrence payloads from the coordinator content plane (3.995346ms)
+✔ isolation (iv): preview bundle composes the client + bridge and root served files are byte-identical (12.674961ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 305.847897

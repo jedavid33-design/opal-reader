@@ -1,0 +1,12 @@
+✔ D3-1 (a): whole-book import on production is refused migration_chunk_required with a CORRECT operator credential — zero R2 GETs, zero commands written (2964.846411ms)
+✔ D3-1 (b): the refusal is identical with chunk 1 already applied — zero additional GETs, the applied chunk's state untouched (3212.030912ms)
+✔ D3-1 (c): after the refusal, MigrateImportChunk and MigrateRecordFlipGate are still admitted in their intended order (4846.238737ms)
+✔ D3-1 (d): DO/API backup — a direct internal request to the production coordinator (public entry bypassed) is refused the same way, and the API layer refuses a production-marked whole-book command on its own (2313.261054ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13714.560896

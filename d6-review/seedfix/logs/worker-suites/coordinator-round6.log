@@ -1,0 +1,11 @@
+✔ race 1a: probe says ACCEPTED after a report already settled the grant -> stale, logged, grant stays reported (30.766292ms)
+✔ race 1b: probe says NOT_ACCEPTED after a report already settled the grant -> stale, nothing voided or released (5.486123ms)
+✔ race 2: freeze at verdict time -> decision defers; thaw -> void + exactly one durable retry -> fresh grant, alarms only (8.314077ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 223.091805

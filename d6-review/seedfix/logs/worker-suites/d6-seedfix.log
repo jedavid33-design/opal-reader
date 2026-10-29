@@ -1,0 +1,16 @@
+✔ F1: client token only -> denied at the operator fence, no row (16.155755ms)
+✔ F2: no credentials at all -> denied at the operator fence, no row (3.083127ms)
+✔ F3: operator only, halted -> admitted; seed applies from the worker recount; state recorded (22.112945ms)
+✔ F4: operator only, NOT halted -> generation_not_halted, no mutation (8.521638ms)
+✔ F5: operator only + caller figures -> caller_figures_refused, no mutation (17.496667ms)
+✔ F6: operator only + one byte of bucket drift -> recount_mismatch, no mutation (24.531294ms)
+✔ F7: replay — a second identical operator-only call is idempotent and changes nothing (14.281552ms)
+✔ F8: cross-route regression — normal routes keep the client gate; Option D routes unchanged (13.285668ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 352.938667

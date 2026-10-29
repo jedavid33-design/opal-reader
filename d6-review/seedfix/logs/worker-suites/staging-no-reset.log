@@ -1,0 +1,11 @@
+✔ or() guard: same jobId never decreases completed/total; increases pass through (2.281564ms)
+✔ or() guard: a different jobId may still replace the slot (it is only a display cache) (0.27345ms)
+✔ queueAdaptiveRepair adoption: no staging overwrite, ever (2.271619ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 180.031884

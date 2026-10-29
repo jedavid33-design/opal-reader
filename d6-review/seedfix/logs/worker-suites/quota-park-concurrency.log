@@ -1,0 +1,10 @@
+✔ simultaneous cross-route sends + a park landing: in-flight calls finish, nothing new dispatches (82.60753ms)
+✔ the code states the bound honestly (S4): the pace reservation does not claim to serialize dispatch (0.745339ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 221.494328

@@ -1,0 +1,10 @@
+✔ probe success re-parks; probe 429 extends the park; expired park resumes fully (69.724726ms)
+✔ two Resume taps mint only one probe (per-job lease + state check) (7.971233ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 210.46101

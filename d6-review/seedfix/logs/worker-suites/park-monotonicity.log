@@ -1,0 +1,10 @@
+✔ competing daily 429s settle on the maximum parked_until; a shorter candidate never shortens it (80.462611ms)
+✔ CAS loser interleaving: a stalled shorter write cannot overwrite a longer park (33.97727ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 255.317056

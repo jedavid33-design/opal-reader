@@ -1,0 +1,11 @@
+✔ documented behavior: while Reader is hidden, the next repair plan is NOT submitted (7.452944ms)
+✔ documented behavior: when Reader is visible again, the chain submits the next plan (1.83909ms)
+✔ Worker: two repair jobs for one chapter complete back-to-back with NO client involvement between completions (36.611232ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 181.845347

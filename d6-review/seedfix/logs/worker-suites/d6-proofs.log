@@ -1,0 +1,14 @@
+Ch 3: absent=2a85f74f-353d-4c25-a86a-4a4db392868b policyBlock=6bd358a7-f590-4c49-8c07-dacf558c2721
+✔ all five proofs PASS on the real census fixture (1.296235ms)
+✔ Ch 3 reconciliation: exactly 27 rows with the expected dispositions (3.157759ms)
+✔ negative: removing a text payload fails completeness naming the ID (1.653932ms)
+✔ negative: a phantom plane ID fails ID stability naming it (0.529144ms)
+✔ negative: an unmapped POV fails the POV proof naming the occurrence (0.314662ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 412.73938

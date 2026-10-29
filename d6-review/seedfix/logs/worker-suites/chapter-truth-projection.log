@@ -1,0 +1,16 @@
+✔ complete chapter: every leaf playable -> Complete N/N (1.558639ms)
+✔ S1: complete-with-stale-park — a parked job record cannot un-complete a finished chapter (0.304577ms)
+✔ partial with blocked: blocked counts MISSING leaves only (0.257447ms)
+✔ device-fallback segments count as playable; stale audio does not (0.228713ms)
+✔ annotations reflect CURRENT blockers of missing work (0.434592ms)
+✔ not started: no audio yet (0.169334ms)
+✔ the Forever Pucked shape: 3/27 with a ready 2/2 repair stays 3/27 (0.420632ms)
+✔ knownChapterJobs unions slots and the watchlist (watch wins on fresher state) (0.470266ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 190.414857

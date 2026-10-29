@@ -1,0 +1,12 @@
+✔ audited artifacts are the shipped 1.4.43 / 1.4.117 sources (2.49229ms)
+✔ route census: extraction matches the audit classification exactly (10.471014ms)
+✔ every classified route key appears in the audit document (1.964027ms)
+✔ Correction-C coverage and non-route inventory are present in the audit (0.605309ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 222.25527

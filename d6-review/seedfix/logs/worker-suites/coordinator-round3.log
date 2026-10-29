@@ -1,0 +1,16 @@
+✔ fix 1: pause -> void -> resume cycles at the cap release every reservation; one sent request counts once (45.05237ms)
+✔ fix 1: voided dispatches release the 100/day estimate at the threshold (15.067542ms)
+✔ fix 2a: an identical re-bind after a silent byte swap is a conflict, not idempotent success (4.206734ms)
+✔ fix 2b: an executor-supplied digest matching swapped bytes cannot bless them over the anchored digest (3.273102ms)
+✔ fix 2c: the legacy exemption never ignores a known digest (2.967473ms)
+✔ fix 3: dispatch recorded right before a crash, no provider outcome -> stays outcome_unknown, never replayed; confirmed outcome settles spent (20.220606ms)
+✔ fix 4: pause -> delivered grant reports full success -> resume ends Complete, nothing new dispatched (26.582002ms)
+✔ fix 4 (queued): resume lands in queued before the in-flight report arrives -> the report still settles Complete (24.892226ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 363.285826

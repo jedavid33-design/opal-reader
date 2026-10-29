@@ -1,0 +1,66 @@
+--- impl/tests/d6-correction2.test.mjs	2026-10-29 18:30:35.480228253 +0000
++++ seedfix-build/tests/d6-correction2.test.mjs	2026-10-29 22:00:43.883717589 +0000
+@@ -31,6 +31,11 @@
+ //      fenced, worker-recount (ENRICHMENT-DESIGN §3.2). The two
+ //      service/entry seed tests below were amended in place to the
+ //      G2 contract; the full G2 matrix is tests/d6-seed-hardening.
++//      NOTE (SEED-FIX): the seed route's admission was amended
++//      again — operator credential ALONE (Rowan design pass
++//      6509192325): the entry-fence test's no-client-token probe
++//      now expects admission, not 401. The full SEED-FIX matrix is
++//      tests/d6-seedfix.test.mjs.
+ //
+ // Synthetic fixtures only — invented books, cast, and IDs; structural
+ // shapes mirror the live coordinator's content plane. No book text.
+@@ -522,6 +527,11 @@
+   // totaling the recorded base). The Correction-2 skeleton of this
+   // test — the gate chain order and the halt fence end-to-end — is
+   // unchanged; the full G2 matrix lives in d6-seed-hardening.
++  // SEED-FIX amendment: admission is now the operator credential
++  // ALONE — the gate skips its client-token check for this route,
++  // so the no-client-token probe below APPLIES the seed instead of
++  // returning the G2-era 401 (the scope/instance refusals and the
++  // halt fence are unchanged). Full matrix: d6-seedfix.
+   const OPTOK2 = "prod-operator-token-synthetic";
+   const recordedStub = {
+     async list({ limit = 1000, cursor } = {}) {
+@@ -557,7 +567,6 @@
+       body: JSON.stringify(seedBody),
+     }), entryEnv);
+ 
+-  assert.equal((await call({ token: null })).status, 401, "no token -> 401");
+   const badScope = await call({ scope: "staging" });
+   assert.equal(badScope.status, 403);
+   assert.equal((await badScope.json()).error, "production_scope_required");
+@@ -577,9 +586,11 @@
+   assert.equal(noInternal.status, 403);
+   assert.equal((await noInternal.json()).error, "internal_only");
+ 
+-  // Valid chain while halted: applied from the worker's own
+-  // recount, with provenance recorded.
+-  const ok = await call();
++  // SEED-FIX admission while halted: this call carries NO client
++  // token — the operator header alone admits — and the seed
++  // applies from the worker's own recount, with provenance
++  // recorded.
++  const ok = await call({ token: null });
+   assert.equal(ok.status, 200);
+   const okBody = await ok.json();
+   assert.equal(okBody.outcome, "applied");
+@@ -589,6 +600,16 @@
+   assert.equal(row.base_bytes, 5_736_481_302);
+   assert.equal(JSON.parse(row.provenance_json)[0].source, "worker-recount");
+ 
++  // A call carrying the client token as well stays admitted (the
++  // header is not consulted for this route) and the re-seed is
++  // idempotent — no second provenance entry.
++  const again = await call();
++  assert.equal(again.status, 200);
++  const againBody = await again.json();
++  assert.equal(againBody.outcome, "applied");
++  assert.equal(againBody.idempotent, true);
++  assert.equal(JSON.parse(db.prepare("SELECT * FROM d6_storage_state WHERE id = 1").get().provenance_json).length, 1);
++
+   // While NOT halted, an operator-admitted internal call is refused
+   // by the service fence and writes nothing. (G2: the internal
+   // request carries the admitted stamp — without it the class gate

@@ -1,0 +1,14 @@
+✔ manifest verification: honest dir loads; tampered file and wrong corpus digest fail closed (7.852484ms)
+✔ dry run: N/N digest equality, whitelist plan, run-scoped command IDs — and it writes nothing (11.66735ms)
+✔ execution: per-book CAS pushes land whitelist-only additions; parked fingerprint unmoved (10.523823ms)
+✔ idempotence: a second dry run plans zero commands; execution skips every book as no-op (6.206253ms)
+✔ hard stops: present-and-different text, a moved digest, and a differing defaultVoice — named, unwritten (9.272856ms)
+✔ mid-run failure posture: a conflicted book stops the run; completed stand, remainder untouched, no rollback (6.579334ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 233.747386

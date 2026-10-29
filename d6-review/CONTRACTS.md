@@ -102,7 +102,13 @@ Tables (all `IF NOT EXISTS`):
   never dispatched). Rows are never deleted.
 - d6_phase_state(phase PK, halted_unknown_billing INT DEFAULT 0,
   halt_detail TEXT NULL, updated_at)
-- d6_storage_state(id PK CHECK(id=1), base_bytes INT, updated_at)
+- d6_storage_state(id PK CHECK(id=1), base_bytes INT, updated_at;
+  CORRECTION 2 adds object_count INT NULL, seeded_at INT NULL,
+  provenance_json TEXT NULL — fresh stores are born with them via the
+  CREATE; pre-existing stores (the deployed build's 3-column table)
+  gain them through guarded, idempotent ALTERs in ensureGenSchema —
+  the only swallowed failure is SQLite's duplicate-column error;
+  rows/values are never touched)
 - d6_voice_prompts(plan_id, occurrence_id, character_name, provider,
   recorded_mapping TEXT NULL, created_at, PK(plan_id, occurrence_id))
 
@@ -149,6 +155,17 @@ coord._now(). Methods:
   halt when no unknown attempts remain open for the phase.
 - storageAccounting() → {baseBytes, d6Bytes} where d6Bytes = SUM(size_bytes)
   over execution records in flushed|verified|committed.
+- seedStorageBase({baseBytes, objectCount?, recountedAt?, source?}) →
+  storageSeedState() + {changed, idempotent} (CORRECTION 2): the
+  production seed for the storage guard's base. Throws on any value
+  that is not a non-negative safe integer. A re-seed with the SAME
+  (baseBytes, objectCount) writes nothing and reports
+  idempotent:true; a re-seed with different values replaces the base
+  and APPENDS a provenance entry (new values + the previous ones) to
+  provenance_json — a silent overwrite is impossible by construction.
+- storageSeedState() → {seeded, baseBytes, objectCount, seededAt,
+  provenance[]} read from d6_storage_state (seeded:false + baseBytes 0
+  when no row exists).
 - recoveryScan() → [{execution, action}] with action ∈
   reverify_and_commit (flushed|verified) | reenter_flush (synthesized) |
   reconcile_hold (attempted with a dispatching attempt, or unknown_billing) |
@@ -160,12 +177,26 @@ coord._now(). Methods:
 Input shape (content-plane view, structural only):
 ```
 plane = { books: [{ bookId, chapters: [{ chapterId, chapterIndex,
-  segments: [{ occurrenceId, povKey, charCount, blockHistory: bool }] }],
+  segments: [{ occurrenceId, povKey, charCount, blockHistory: bool,
+               blockRootId?: string|null }] }],
   povs: [{ key, name, provider, voiceId }] }],
   boundOccurrenceIds: Set<string>,
   parkedJob: { jobId, bookId, chapterIndex,
     entries: Map<occurrenceId, "parked-pending"|"parked-ready"> } | null }
 ```
+Adapter planes (generation/content-plane-adapter.mjs) carry
+`blockRootId` through from the content entity (CORRECTION 2): proof 5
+consumes it to name the POLICY_BLOCK lineage root; the eligible-set
+builder ignores it. Adapter POV resolution (CORRECTION 2): a segment/
+chapter `pov` VALUE on live data is a cast NAME; it resolves by exact
+id match, else by exact name match against exactly one cast entry,
+else null (ambiguous/absent names never guess, and a named-but-
+unresolvable speaker is never reassigned to the default voice); the
+(provider, voice_id) default-voice fallback applies only when neither
+segment nor chapter names a speaker. Adapter charCount (CORRECTION 2):
+speechChars only when a number > 0 (live The Goal carries
+speechChars 0 with the real count in textChars), else textChars when
+numeric, else the text length.
 `buildEligibleSet(plane, bookId)` →
 `{ entries: [{occurrenceId, bookId, chapterId, chapterIndex, position,
 povKey, charCount, disposition, reason}], digest }` in reading order.
@@ -181,9 +212,22 @@ census = { bookId → { occurrenceIds: [..], eligibleCount, povKeys: [..] },
 ch3: { structuralIds: [27 ids in order], parkedEntries: Map } }
 Returns { completeness, idStability, povResolution, noSilentSkips,
 ch3Reconciliation: { rows: [{occurrenceId, censusDisposition,
-parkedDisposition, resolution}] (exactly 27), pass }, pass } — every proof
+parkedDisposition, liveParkedDisposition, resolution}] (exactly 27),
+absentOccurrenceId, policyBlockOccurrenceId, parkedAccounting:
+{ censusParkedCount, liveParkedCount, liveOnlyRows, censusOnlyRows },
+pass }, pass } — every proof
 reports named offenders, never just a boolean. Disposition vocabulary:
 bound | parked-pending | parked-ready | other-with-reason.
+CORRECTION 2: policyBlockOccurrenceId is the blockRootId LINEAGE ROOT
+(the self-referential root, or the target the other block-rooted
+occurrences chain to) — never the last block-history segment in scan
+order; planes without lineage ids fall back to the occurrence
+carrying the POLICY_BLOCK failure record, then the first blocked
+segment in structural order. parkedAccounting states the parked job
+on BOTH sides (the live job's rows vs the census's parked entries)
+and names every live-only row and census-only entry with both
+dispositions; naming is reportage, not an offender — a live-only row
+is excluded from generation on both accounts.
 
 ## generation/service.mjs (WS-1) — createGenerationService({coord, env, store, sources})
 
@@ -222,6 +266,28 @@ coordinator content plane in production wiring; tests inject fixtures).
 - planStatus(planId) → {planId, state, stopReason, totals {eligible, done,
   failed, blocked, prompts}, entries:[...]} (plain data; the client words
   it).
+- seedStorageBase(input) → async (G2 HARDENING, ENRICHMENT-DESIGN
+  §3.2; supersedes the CORRECTION 2 caller-figures contract):
+  {outcome: "applied", recounted, ...seedState, changed, idempotent} |
+  {outcome: "rejected", reason, ...seedState}. The invocation is
+  FIGURELESS. Fences in order: HALT — refused `generation_not_halted`
+  unless env GENERATION_HALT is exactly "1" (missing flag fails
+  closed; seeding is a pre-arming act only; the executor/driver
+  never seed implicitly); FIGURELESS — a body presenting baseBytes
+  or objectCount is refused `caller_figures_refused`; CONFIGURATION
+  — the expected base (construction input `expectedStorageBase`;
+  production wiring pins RECORDED_STORAGE_BASE from
+  gen-constants.mjs) must be configured, else
+  `seed_expected_base_not_configured`; RECOUNT — the worker recounts
+  the bucket itself (construction input `recountBucket`, defaulting
+  to env.OPALREADER_STORAGE) via list() fully paginated, refusing
+  errored/incomplete pages (`recount_failed`) and a missing bucket
+  (`recount_unavailable`), writing nothing; COMPARE — zero
+  tolerance: recounted != expected refuses `recount_mismatch` with
+  both figures reported. On equality the store seeds the BUCKET'S
+  OWN figures with source "worker-recount"; Correction 2 provenance
+  semantics unchanged. The store-level seedStorageBase (below) is
+  unchanged — it still takes explicit figures from this one caller.
 - recover() → runs store.recoveryScan() classifications and performs the
   non-spending actions (release_and_fail); returns the scan for the
   executor to continue reverify_and_commit items (executor owns R2).
@@ -250,6 +316,16 @@ Per granted occurrence:
    {status:"removed_provider", povName, provider, recordedMapping} |
    {status:"unmapped_pov"}. removed_provider → record voice prompt
    (d6_voice_prompts), occurrence reported as prompt, ZERO synthesis.
+   G2 (ENRICHMENT-DESIGN Part 2): the cast is read `cast` first with
+   `povs` fallback (the live entity key first — the adapter's
+   dual-read mirrored); styleDirection resolves cast voice →
+   defaultVoice fallback → segment (the fallback voice's recorded
+   style_direction is read, so the defaultVoice title segment
+   synthesizes with its voice's style); a segment NAMING a speaker
+   the cast cannot resolve is unmapped_pov — the defaultVoice
+   fallback applies only when no speaker is named (never a silent
+   substitution). No chapter-pov fallback (deliberate non-fix:
+   entities carry no chapter pov). Proven by tests/d6-work-source.test.mjs.
 5. Synthesis via generation/policy-split.mjs's synthesizeSegment
    (budget = SEGMENT_ATTEMPT_BUDGET − store.segmentAttemptsUsed): every
    provider call is wrapped: reserve attempt (upper from part chars) →
@@ -316,7 +392,11 @@ executor.mjs). Batch payloads (payload.mode === "batch") are REFUSED
 - `worker/worker-entry-prod-d6.js`: like worker-entry-prod.js, PLUS
   hostEnv adds `d6StandardOnly: true` and sendGrant (from
   env.OPALREADER_GENERATION_V2.send) when GENERATION_HALT === "0";
-  DO subclass OpalReaderCoordinatorProdD6 extends the prod class:
+  DO class OpalReaderCoordinatorProd — the EXISTING production
+  class name (CORRECTION 6501450683: NOT a newly named subclass;
+  the D6 entry exports its D6-carrying class under the same name
+  the live script binds, and its constructor bootstraps the
+  generation schema in place via ensureGenSchema):
   internal routes POST /internal/d6/intent (→ service.submitIntent) and
   GET /internal/d6/plan (→ service.planStatus); _execute override using
   createD6Executor; alarm override: super.alarm() → service.recover() +
@@ -325,9 +405,53 @@ executor.mjs). Batch payloads (payload.mode === "batch") are REFUSED
   /v2/commands; GET /v2/d6-plans/<id> forwarded to /internal/d6/plan;
   a `queue` handler (production scope/instance fences) → /internal/execute.
   GENERATION_HALT still gates queue + execute via assertGenerationEnabled.
+  CORRECTION 2 adds the storage-seed route: internal
+  POST /internal/d6/seed-storage (→ service.seedStorageBase) and its
+  public forward POST /v2/d6-seed-storage, behind the same production
+  gate chain as every other public route (scope config → scope header
+  → client token → instance header; the entry itself sets the
+  internal header; the class fetch requires it plus the production
+  scope). An internal route was chosen over a coordinator command
+  type deliberately: the seed lives entirely in D6-owned files (the
+  coordinator's pinned two-hunk gated diff is untouched — on the
+  /v2/commands path the coordinator's env carries no D6 marker, so a
+  command-type fence could not distinguish this surface), and it is
+  fenced equivalently to the existing D6 routes.
+  G2 HARDENING: the seed route additionally requires the
+  MIGRATION-OPERATOR credential through the entry's existing
+  operator admission block (fail-closed 503
+  migration_operator_not_configured when the operator secret is
+  unset or equals the access token; 403 migration_operator_required
+  when the header does not match) — the client gate still runs in
+  full, so the client token is necessary but NOT sufficient. The
+  entry stamps x-opalreader-operator-admitted on the forward
+  (overwritten unconditionally — unforgeable through public
+  routing), and the class fetch for /internal/d6/seed-storage
+  requires the stamp "1" on top of the internal header + scope.
+  SEED-FIX CORRECTION (Rowan design pass 6509192325): the seed
+  route's admission changes to the migration-operator credential
+  ALONE — the production gate skips its client-token check for
+  POST /v2/d6-seed-storage only (scope config → scope header →
+  instance header checks unchanged), exactly like the two Option D
+  operator routes. Rationale: the credential-exchange transport
+  refuses any request carrying two credential surrogates (HTTP 403
+  credential_ambiguity), so the G2 dual-credential shape could
+  never reach the Worker — the same wall that stopped the
+  Oct 23, 2026 D4 pilot, and the Oct 29, 2026 arming attempt's
+  seed call. Every other fence is unchanged: the operator
+  admission block (fail-closed 503 when unset/equal, 403 when the
+  header does not match — its configuration check still requires
+  the access token to be SET and distinct, though no presented
+  client token is consulted for this route), the unforgeable
+  admitted stamp, the class gate, the halt fence, figurelessness,
+  the worker recount, and the zero-tolerance cross-check. All
+  other routes keep their existing admission.
 - `worker/p8/deploy-spec-prod-d6.json`: prod spec + queue producer/consumer
   for opalreader-generation-v2; GENERATION_HALT remains "1"; secret names
-  only (GEMINI_API_KEY listed as a name, never a value).
+  only (GEMINI_API_KEY listed as a name, never a value). CORRECTION
+  6501450683: the COORDINATOR binding keeps the existing class name
+  OpalReaderCoordinatorProd and the spec applies NO new DO class and
+  NO new-class migration (the generation schema evolves in place).
 - `worker/generation/wrangler-queues.md`: the wrangler-style queue config
   block (producers/consumers bindings) mirroring the deploy spec.
 

@@ -1,0 +1,12 @@
+✔ job transition table is exhaustive: declared or rejected, always logged (195.476232ms)
+✔ occurrence transition table is exhaustive (90.926804ms)
+✔ single applier: a stale expected revision is a conflict, never a write (2.163086ms)
+✔ outcome_unknown has no re-dispatch exit in the table (1.311959ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 471.805551
