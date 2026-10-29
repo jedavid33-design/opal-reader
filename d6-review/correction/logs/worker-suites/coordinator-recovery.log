@@ -1,0 +1,21 @@
+✔ seam ii: a grant committed but never sent is delivered after a crash, exactly once (26.696274ms)
+✔ seam iii: executor dies after dispatch -> lease expiry -> outcome_unknown, never re-dispatched (7.544397ms)
+✔ seam iii-a + gap 4: lease expiry auto-adopts cached audio and the JOB completes (9.168523ms)
+✔ seam iii-b: automatic reconciliation records spent-without-audio from a CONFIRMED provider outcome (5.512979ms)
+✔ seam iii-c: no cache, no provider record -> stays unknown until Julie authorizes (8.451037ms)
+✔ seam iv + finding 1: unvalidated success -> outcome_unknown (never stuck), reconciliation recovers it (6.657216ms)
+✔ seam v: a crash mid-report rolls the whole report back; re-report applies cleanly (5.464626ms)
+✔ gap 2: pause/cancel void a queued dispatch before it can spend; freeze only holds it (19.428763ms)
+✔ gap 5: scheduling a 30s retry advances an alarm that was 10 minutes out (10.651928ms)
+✔ finding 2: unacknowledged deliveries are never marked sent (34.481792ms)
+✔ finding 2/5: the watchdog drain with no delivery handler leaves grants visibly unsent (13.098518ms)
+✔ autonomous recovery: a poison schedule row backs off, dies visibly, and never kills the chain (16.035484ms)
+✔ autonomous recovery: alarm handler throwing wholesale still re-arms (finally) (4.669173ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 577.372775

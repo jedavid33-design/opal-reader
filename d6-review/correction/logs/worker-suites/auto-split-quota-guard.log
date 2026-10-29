@@ -1,0 +1,12 @@
+✔ auto-split stages nothing while a watchlist job is quota-parked (2.441132ms)
+✔ auto-split stages nothing while the SLOT job is quota-parked (0.6536ms)
+✔ auto-split still runs when nothing is parked, and a manual tap always reaches the queue entry (1.278498ms)
+✔ auto-split stays off when the chapter is not armed (0.377176ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 150.414992

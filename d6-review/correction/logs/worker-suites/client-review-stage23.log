@@ -1,0 +1,14 @@
+✔ review (1): two funnel instances sharing one storage serialize their durable writes — concurrent discards on different books BOTH survive (25.236685ms)
+✔ review (2a): restart DURING retry setup — setup marked, command issued, id-marking never written: settle still clears the park by payload identity (8.15998ms)
+✔ review (2b): restart during retry setup BEFORE any command was issued — the park is not stuck; an explicit retry still lands it (11.243245ms)
+✔ review (regression): an UNRESOLVED park survives an unrelated applied save with an identical payload — only an explicit retry/discard resolves it (7.215864ms)
+✔ review (3a): settings PENDING — a failed send reports pending (not success, not conflict); the durable command lands after healing (3.571478ms)
+✔ review (3b): settings OUTCOME UNKNOWN — reported as unknown, never dressed as applied; the standing value is untouched (3.470335ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 288.28809

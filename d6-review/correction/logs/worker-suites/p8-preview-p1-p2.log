@@ -1,0 +1,31 @@
+✔ preview P1/P2 source: no editable worker origin and no shared default device ID (3.697656ms)
+✔ preview P1: correct health identity opens the gate before authenticated quota traffic (7.302915ms)
+✔ preview P1: a poisoned arbitrary origin is ignored; requests stay on the pinned staging origin (1.947842ms)
+✔ preview P1: bad health identity (wrong build) stops with zero authenticated requests (5.451126ms)
+✔ preview P1: bad health identity (wrong scope) stops with zero authenticated requests (0.927091ms)
+✔ preview P1: bad health identity (generation active) stops with zero authenticated requests (0.858508ms)
+✔ preview P1: bad health identity (coordinator unbound) stops with zero authenticated requests (0.752409ms)
+✔ preview P1: bad health identity (wrong app) stops with zero authenticated requests (0.590276ms)
+✔ preview P1: bad health identity (malformed JSON) stops with zero authenticated requests (0.879509ms)
+✔ preview P1: bad health identity (HTTP failure) stops with zero authenticated requests (0.655333ms)
+✔ preview P1: bad health identity (fetch failure) stops with zero authenticated requests (0.494211ms)
+✔ preview P2: device identity is generated once per fresh storage and then reused (0.542654ms)
+✔ preview P2: identity mismatch is surfaced before any network or transport creation (0.44017ms)
+✔ preview P2: two fresh-storage clients allocate disjoint command and position IDs with no replay (5.969023ms)
+✔ preview F-B: a blank token is refused before identity, health, transport, or client (0.52007ms)
+✔ preview F-B: a wrong token fails the transport proof with the server's verbatim refusal; no client is composed (0.883255ms)
+✔ preview F-B: an expired token is refused identically — every non-2xx proof fails the same way (0.651157ms)
+✔ preview F-B: a transport/network failure during the proof composes no client (0.580781ms)
+✔ preview F-B: a malformed 200 from quotaView is not proof (1.438187ms)
+✔ preview F-B: a cached quota view in local storage cannot rescue a refused candidate (the stale-cache trap) (0.762724ms)
+✔ preview F-B: a successful re-auth composes the replacement only after its own proof passes (0.792098ms)
+✔ preview F-C: identifier inputs opt out of keyboard correction; all other inputs unchanged (0.677967ms)
+✔ preview F-C: not-found lines name the submitted ID verbatim; the exact-case hint appears only for uppercase (0.499459ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 179.567981

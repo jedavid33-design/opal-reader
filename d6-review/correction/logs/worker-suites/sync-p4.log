@@ -1,0 +1,26 @@
+✔ cursor: sinceSeq is exclusive, sinceSeq=0 is a normal first pull (no spurious resync) (6.765829ms)
+✔ cursor: pinned watermark — a concurrent write mid-pagination is NOT in the window, and arrives next pull (4.588933ms)
+✔ cursor: mismatched family / impossible watermarks are rejected; truncation triggers resync + snapshot convergence (2.24009ms)
+✔ sequence authority survives FULL history truncation (review blocker 1): tip persists, no silent misses (4.335233ms)
+✔ receipts: duplicate command delivery returns the SAME receipt and applies once (lost-ACK safe) (2.63977ms)
+✔ abort isolation: a conflicted book mid-batch leaves its siblings applied and itself untouched (3.444036ms)
+✔ position: deterministic fold in receipt order; replay dedupes by eventId; same id + different payload is a conflict (4.385448ms)
+✔ position: validation — base ahead of tip, unknown occurrence, bad offset all rejected, nothing appended (3.596675ms)
+✔ position: fresh backward seek applies; stale backward is superseded (recorded, surfaced); stale forward folds; gaps surface (8.703355ms)
+✔ tombstones: deletion syncs, post-tombstone writes are rejected in EVERY family, resync keeps the tombstone (4.424366ms)
+✔ sweep dry-run (clean): proves references, keeps shared audio, complete manifest, deletes NOTHING (4.109995ms)
+✔ sweep dry-run FAILS CLOSED: incomplete own binding, incomplete cross-book binding, or a live job each withhold the whole manifest (review blocker 2) (12.070696ms)
+✔ book identity is verified: mismatched identifiers rejected — including writes aimed past a tombstone (review follow-up) (5.072138ms)
+✔ group fences: duplicate entity targets and mixed delete+update groups are rejected whole (re-review blocker) (3.887712ms)
+✔ pushes are atomic PER BOOK: one conflict in a book commits NONE of that book, other books succeed (review concern) (3.162734ms)
+✔ money: no client-writable money family; settings CAS conflict is non-silent; money reads are revisioned (22.662184ms)
+✔ two-device convergence: interleaved edits, position events and a conflict converge to the coordinator's read models (4.672189ms)
+✔ large library: 60 books paginate and converge on a second device (7.924266ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 320.466327

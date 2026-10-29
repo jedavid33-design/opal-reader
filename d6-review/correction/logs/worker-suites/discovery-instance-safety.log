@@ -1,0 +1,11 @@
+✔ R1: reopening a book with fresh chapter objects restores its parked job inside the throttle window (2.663205ms)
+✔ R2: a discovery response landing after a book switch is dropped whole (1.922594ms)
+✔ R1+R2 combined: first discovery in flight across a switch and a same-book reopen lands on the reopened instance (0.8734ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 141.323674

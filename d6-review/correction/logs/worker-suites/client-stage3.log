@@ -1,0 +1,14 @@
+✔ stage3 position: the surface reads the coordinator's fold — a second device sees the position with no local state of its own (9.807201ms)
+✔ stage3 position: a stale backward event is recorded but superseded — and the surface SHOWS it instead of hiding it (4.382955ms)
+✔ stage3 position: journal gaps are surfaced, not smoothed over (3.121642ms)
+✔ stage3 settings: one writer path; a stale writer gets a surfaced conflict — never a merge, never a silent win (7.341131ms)
+✔ stage3 quota (F8): Settings-resident, as-of stamped; a failed refresh keeps the last view and marks it STALE — never zeros (22.23327ms)
+✔ stage3 guard: the surfaces write only through the store's journal and the SetSettings intent — no hand-rolled commands, no local position truth (9.101042ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 210.440288

@@ -1,0 +1,11 @@
+✔ chapter stitch includes only PCM data, never trailing C2PA metadata (4.464487ms)
+✔ mixed WAV formats fail safely instead of creating corrupt narration (2.128713ms)
+✔ invalid RIFF headers are rejected (0.543195ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 140.6473

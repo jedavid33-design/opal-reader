@@ -1,0 +1,12 @@
+  [scale] partition counts (row-cap-bound, small bytes): {"syn-finding-home":2,"syn-forever-pucked":1,"syn-in-her-own-league":3,"syn-pucked":4,"syn-pucked-over":6,"syn-pucked-up":5,"syn-the-goal":2}; total chunks 23
+✔ scale rehearsal: 1,799 synthetic bindings import CHUNKED cold, certify per book, gate — with zero storage writes and the retry cases exercised at scale (879.790168ms)
+✔ scale rehearsal, retry case (c): a sabotaged chunk in the largest attested book rejects durably; chunk-generation discipline repairs it (246.470554ms)
+✔ the committed real-freeze chunk pin: 7 books, 1,799 rows, 25 chunks under the code limits (1.683285ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1321.471037

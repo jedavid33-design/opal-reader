@@ -1,0 +1,15 @@
+✔ guard: phase budget grants AT the exact boundary (settled + in-flight + target upper == budget) (27.595963ms)
+✔ guard: one micro-cent of settled known cost over the boundary refuses with phase_budget (4.877396ms)
+✔ guard: in-flight upper bounds count against the budget; releasing the reservation frees it (5.10671ms)
+✔ guard: unknown-billing halt refuses every grant for the phase until reconcileUnknown (7.543034ms)
+✔ guard: storage projection crossing 10 GB refuses with storage_boundary; plan-less jobs are unguarded (5.3665ms)
+✔ guard: flag ON rejects a batch-lane SubmitJob; flag OFF behaves exactly as before (5.519149ms)
+✔ guard: flag ON with the d6 tables missing fails LOUD (throws), never a silent pass (3.867111ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 224.943944

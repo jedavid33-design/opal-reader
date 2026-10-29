@@ -1,0 +1,11 @@
+✔ I2: every GET route leaves the store byte-identical (40.88688ms)
+✔ API round trip: command receipt and job view agree with the coordinator (6.16614ms)
+✔ F7 derivation: all seven chapter states from one function (0.370626ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 207.574059

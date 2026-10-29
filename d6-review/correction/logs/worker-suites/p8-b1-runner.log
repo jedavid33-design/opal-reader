@@ -1,0 +1,16 @@
+✔ deriver: re-running the carry deriver reproduces the committed pin byte-for-byte (--check) (715.479484ms)
+✔ pin self-consistency: the runner's independent content construction hashes to the carry pin for all seven real books; counts and job sets match the freeze record (928.532661ms)
+✔ pin job sets: Forever Pucked carries exactly one parked_policy (chapter 2); Pucked Over exactly three superseded; the other five are SIGNED empty sets (1.708022ms)
+✔ runner determinism: the same freeze in produces byte-identical plans and hash sheets; a content/pin mismatch refuses to build (157.714351ms)
+✔ FP shape through the REAL production Worker: 1 chunk of 50 + positions + 1 parked job + gate, driven by the runner; PUT 0; GETs match the hash-sheet estimate; a dropped positions response resolves from the stored receipt with no double-apply (85.723735ms)
+✔ PO shape through the REAL production Worker: 6 chunks + positions + 3 superseded jobs + gate, driven by the runner; PUT 0; GETs match the estimate (361.317464ms)
+✔ Option D admission: the carry commands pend under the client credential alone, and only an operator approval — never the submit — executes them (18.674181ms)
+✔ driver discipline: a digest-pending chunk is never sent; a durable rejection halts the book with no retry and no repair (9.086299ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2585.425729

@@ -1,0 +1,47 @@
+✔ legacy cap banner (no stored reason) maps to cap and surfaces when work exists (2.373179ms)
+✔ legacy cap banner with NO blocked work derives no affordance (migration gate) (0.318388ms)
+✔ other legacy banners do not map to cap (0.271718ms)
+✔ stored reason wins over the banner text (0.158268ms)
+✔ base forecast sums repairable blocked segments only (0.302754ms)
+✔ base forecast alone over the cap reports overCap (0.417736ms)
+✔ spent plus base forecast exactly at the cap is not overCap (0.215173ms)
+✔ cap of zero disables the cap check (never overCap) (0.340401ms)
+✔ base forecast can fit the cap while the repair tree does not — helper reports base only (0.311256ms)
+✔ blocked segment whose voice cannot resolve: no throw, no affordance (0.614703ms)
+✔ blocked segment with a non-Gemini voice is not repairable work (0.251988ms)
+✔ blocked segment with no safe split point is not repairable work (0.152138ms)
+✔ user-stopped chapter never gets a Resume, even under the cap (0.108183ms)
+✔ non-cap reasons never get a Resume (0.294061ms)
+✔ armed chapter (flag true) has no pause UI state, even with a stored cap reason (0.107742ms)
+✔ helpers are null-safe (0.080931ms)
+✔ every autoSplitEnabled assignment in the client also assigns the pause reason (6.004056ms)
+✔ cap pause sites store the cap reason; the true sites clear it (0.716034ms)
+✔ banner never claims cap eligibility; Resume defers to the queue-time plan check (0.780921ms)
+✔ Resume click path delegates to the guarded queue entry (0.371787ms)
+✔ queue entry performs the Worker status lookup before any submission (0.203045ms)
+✔ index.html cache-busts the client for this branch (0.079839ms)
+✔ behavior: confirmed-absent server job (404) submits exactly once, with the deterministic id (2.363445ms)
+✔ behavior: cross-device stale snapshot — server already runs the job; adopt, never submit (0.99964ms)
+✔ behavior: unknown submission (submitUnconfirmed) reconciles with the server, never blind-resubmits (0.33319ms)
+✔ behavior: finished server job is adopted through lt (results path), not resubmitted (0.268633ms)
+✔ behavior: server paused_quota blocks the queue and re-pins the quota pause (0.326069ms)
+✔ behavior: server parked job is reconciled, not duplicated (0.275112ms)
+✔ behavior: unverifiable server state fails closed — no submission, clear message (0.396445ms)
+✔ behavior: malformed server status also fails closed (0.266049ms)
+✔ behavior: server-confirmed failed job restarts via the normal submit (a reconciled decision) (0.305979ms)
+✔ behavior: near-cap boundary — base fits, repair tree does not; the queue-time guard decides (0.645358ms)
+✔ ledger: queue staging seeds recordedCost from the verified server status (0.268783ms)
+✔ ledger: Rowan repro — adopting a ready job already paid into synced usage (16.61 incl. 0.18) does not re-credit (1.038037ms)
+✔ ledger (a): adopting ready/partial jobs whose spend is already in synced usage leaves spent unchanged (0.744587ms)
+✔ ledger (b): confirmed-failed restart seeds the retained generated_cost — no re-credit (2.084626ms)
+✔ ledger (c): spend accruing after adoption is credited once, as the increment only (0.525128ms)
+✔ ledger (d): two devices, one synced ledger — adoption adds nothing, later accrual adds only the delta (0.527511ms)
+✔ ledger: fresh 404 submission still seeds zero and accrues normally (regression) (0.355934ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 192.350023

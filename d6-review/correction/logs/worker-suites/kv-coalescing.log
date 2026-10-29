@@ -1,0 +1,65 @@
+Generation status KV mirror write failed Error: KV put() limit exceeded for the day.
+    at Object.onPut (file:///home/hatch/workspace/d6-build/impl/tests/kv-coalescing.test.mjs:272:17)
+    at MockKV.put (file:///home/hatch/workspace/d6-build/impl/tests/support/mock-env.mjs:57:44)
+    at runMirrorAttempt (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:2149:31)
+    at async mirrorGenerationStatus (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:1984:12)
+    at async saveGenerationStatus (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:1805:3)
+    at async Object.fetch (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:4272:9)
+    at async TestContext.<anonymous> (file:///home/hatch/workspace/d6-build/impl/tests/kv-coalescing.test.mjs:277:15)
+    at async Test.run (node:internal/test_runner/test:1409:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+Generation status KV mirror write failed Error: KV put() limit exceeded for the day.
+    at Object.onPut (file:///home/hatch/workspace/d6-build/impl/tests/kv-coalescing.test.mjs:272:17)
+    at MockKV.put (file:///home/hatch/workspace/d6-build/impl/tests/support/mock-env.mjs:57:44)
+    at runMirrorAttempt (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:2149:31)
+    at async mirrorGenerationStatus (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:1984:12)
+    at async saveGenerationStatus (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:1805:3)
+    at async processGenerationJobLocked (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:3051:5)
+    at async processGenerationJob (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:3685:15)
+    at async Object.queue (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:4634:9)
+    at async Object.drain (file:///home/hatch/workspace/d6-build/impl/tests/support/mock-env.mjs:401:7)
+    at async TestContext.<anonymous> (file:///home/hatch/workspace/d6-build/impl/tests/kv-coalescing.test.mjs:283:3)
+Generation status KV mirror write failed Error: KV put() limit exceeded for the day.
+    at Object.onPut (file:///home/hatch/workspace/d6-build/impl/tests/kv-coalescing.test.mjs:341:17)
+    at MockKV.put (file:///home/hatch/workspace/d6-build/impl/tests/support/mock-env.mjs:57:44)
+    at runMirrorAttempt (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:2149:31)
+    at async mirrorGenerationStatus (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:1984:12)
+Generation status KV mirror write failed Error: KV put() limit exceeded for the day.
+    at Object.onPut (file:///home/hatch/workspace/d6-build/impl/tests/kv-coalescing.test.mjs:383:27)
+    at MockKV.put (file:///home/hatch/workspace/d6-build/impl/tests/support/mock-env.mjs:57:44)
+    at runMirrorAttempt (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:2149:31)
+    at async mirrorGenerationStatus (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:1984:12)
+    at async saveGenerationStatus (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:1805:3)
+    at async stepGeminiBatch (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:2735:5)
+    at async processGenerationJobLocked (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:2990:11)
+    at async processGenerationJob (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:3685:15)
+    at async Object.queue (file:///home/hatch/workspace/d6-build/impl/cloudflare-worker.js:4634:9)
+    at async deliverUntil (file:///home/hatch/workspace/d6-build/impl/tests/kv-coalescing.test.mjs:71:5)
+✔ standard generation coalesces KV writes: creation, volume catch-up, terminal only (77.123465ms)
+✔ interrupted generation resumes from R2 state and completes (11.239399ms)
+✔ duplicate Queue deliveries synthesize each segment once (4.93952ms)
+✔ Batch recovery: op assigned, restart, completes without resubmission; assignment mirrored (60.348573ms)
+✔ adaptive splits activate children, mirror the split, and complete (42.282173ms)
+✔ KV quota exhaustion: generation completes on R2; mirror catches up after recovery (11.287561ms)
+✔ R2 write failure surfaces the error and leaves no ghost KV progress (4.618718ms)
+✔ catch-up safety (a): KV down + 100 polls in a minute makes at most one mirror attempt (88.311507ms)
+✔ catch-up safety (b)+(c): stalled writer is fenced; successor's stamps stand; KV converges to newest (25.623695ms)
+✔ catch-up safety (c): writer stalled before its fence check writes nothing after a steal (4.631327ms)
+✔ catch-up safety (d): stamp persistence racing a concurrent watchdog save keeps both (7.795723ms)
+✔ catch-up safety (e): a stale writer's lock release cannot delete its successor's lock (reversed order) (7.130886ms)
+✔ status polling never waits on a stalled KV catch-up write (2.78667ms)
+✔ quota: standard success counts one attempt and sets last-success from the ledger (23.783786ms)
+✔ quota: concurrent last-success updates never move the pointer backward (reversed completion order) (5.277507ms)
+✔ quota: standard 429 counts the attempt, records a failed event, sets no success (14.332239ms)
+✔ quota: cache hit counts no attempt and makes no provider call (5.556495ms)
+✔ quota: batch submission counts one attempt and sets last-success; batch failure now writes a failed ledger event (16.158197ms)
+✔ quota: Pacific-day and rolling-24h windows over R2 markers plus legacy KV keys (read-only union) (2.055473ms)
+✔ quota: tracking reports unavailable (not zero) when R2 storage is missing (1.511136ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 645.954196

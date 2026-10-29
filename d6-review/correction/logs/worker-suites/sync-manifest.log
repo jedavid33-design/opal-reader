@@ -1,0 +1,12 @@
+✔ manifest is small and does not read the legacy cover-heavy index or book content (15.705117ms)
+✔ individual book endpoint supplies the complete book, including its cover (14.577106ms)
+✔ saving book progress compacts legacy index once without removing book covers (36.464737ms)
+✔ deleted books stay out of the manifest and are not returned (6.835593ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 222.497695

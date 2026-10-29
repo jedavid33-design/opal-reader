@@ -1,0 +1,14 @@
+✔ FU1: in the shipped bundle, every book upload routes pe -> Er -> Ee -> _r; _r is called from nowhere else (12.028333ms)
+✔ FU3: restart recovery — a pending command survives, flushes to a surfaced conflict, and the stale working copy converges (22.527891ms)
+✔ durability: restart after DISCARD does not resurrect the park (8.087141ms)
+✔ durability: restart after a successful RETRY keeps the park cleared and the edit applied (13.538688ms)
+✔ durability: a FAILED retry preserves the parked payload across a restart; a later informed retry lands it (12.03339ms)
+✔ FU3b: a parked edit can be discarded — explicitly, by the user's choice only (5.916705ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 262.658686

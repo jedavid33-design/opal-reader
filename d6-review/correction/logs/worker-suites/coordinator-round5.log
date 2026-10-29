@@ -1,0 +1,15 @@
+✔ A1: queue accepted, ACK lost -> uncertain (no void, no release, no re-grant); queue probe confirms -> delivered exactly once (35.273961ms)
+✔ A2: send pending while the alarm runs -> uncertain, not voided; the late ACK resolves it; a second drain never double-invokes (4.730446ms)
+✔ A2b: pause lands while a send is in flight -> the in-flight dispatch settles by report, exactly once (4.67295ms)
+✔ A3: crash after the queue accepted but before the ACK was processed -> new instance reconciles from the queue record (5.50051ms)
+✔ A4: queue probe stays unknown -> bounded checks, then the uncertainty simply stays VISIBLE (no void, no release, no spin) (9.542234ms)
+✔ B1: undelivered grant expires and voids -> the scheduler re-grants and delivers with NO client call (10.39341ms)
+✔ B2: the re-advance respects a freeze — it defers while frozen and fires after thaw (5.904577ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 224.567029

@@ -1,0 +1,26 @@
+✔ census: the shipped bundle's writers match the inventory exactly — 94 pe() sites + fallback writers (25.285167ms)
+✔ outbox: intent + idempotency key are durable BEFORE any dispatch (8.193711ms)
+✔ outbox: a lost ACK replays the SAME command id — the coordinator sees exactly one command (23.124867ms)
+✔ outbox: conflicts are surfaced as outcomes, never dressed as completion (2.734772ms)
+✔ providers: azure/fish generation intents are rejected locally before persistence; their existing audio still plays (2.523405ms)
+✔ cache: sync pulls coordinator deltas; a torn page is rejected whole and changes nothing (5.858007ms)
+✔ cache: truncated server history triggers resync; snapshot converges incl. tombstones (4.963485ms)
+✔ chapter display: bindings without confirmed bytes read Uncertain — never a false Complete; verification earns Complete (4.58031ms)
+✔ chapter display: a policy-blocked binding reads Blocked; a missing binding reads Partial (6.342534ms)
+✔ journal: offline events keep stable device sequence across a restart and reconcile from receipts (5.482594ms)
+✔ atomicity: a crash inside the persistence write leaves NO partial state — no burned id, no orphan intent (4.671337ms)
+✔ atomicity: simultaneous store instances over one storage allocate disjoint command + event ids (3.541862ms)
+✔ bytes: a binding revision change invalidates prior confirmations; a missing-bytes report does too (4.330856ms)
+✔ race: overlapping flushOutbox calls dispatch each pending command exactly once (28.907902ms)
+✔ race: a binding change DURING byte verification discards the confirmation (4.984317ms)
+✔ stable device id: a second device id over the same storage cannot write (2.022874ms)
+✔ money: Settings view carries its as-of revisions; a failed refresh marks stale and keeps the last view (2.554382ms)
+✔ find: works over the content cache with Prosody Lab entirely absent (6.275764ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 303.583003

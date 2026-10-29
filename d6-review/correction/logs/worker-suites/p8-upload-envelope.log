@@ -1,0 +1,142 @@
+node:internal/errors:986
+  const err = new Error(message);
+              ^
+
+Error: Command failed: /usr/bin/node /home/hatch/workspace/d6-build/impl/tools/build-p8-part1.mjs --out /tmp/opal-envelope-28n0bq/dist
+fatal: not a git repository (or any parent up to mount point /home)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+node:internal/errors:986
+  const err = new Error(message);
+              ^
+
+Error: Command failed: git rev-parse HEAD
+fatal: not a git repository (or any parent up to mount point /home)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+
+    at genericNodeError (node:internal/errors:986:15)
+    at wrappedFn (node:internal/errors:540:14)
+    at checkExecSyncError (node:child_process:943:11)
+    at execFileSync (node:child_process:979:15)
+    at git (file:///home/hatch/workspace/d6-build/impl/tools/build-p8-part1.mjs:29:23)
+    at file:///home/hatch/workspace/d6-build/impl/tools/build-p8-part1.mjs:30:22
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  status: 128,
+  signal: null,
+  output: [
+    null,
+    '',
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n'
+  ],
+  pid: 40756,
+  stdout: '',
+  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n'
+}
+
+Node.js v24.22.1
+
+    at genericNodeError (node:internal/errors:986:15)
+    at wrappedFn (node:internal/errors:540:14)
+    at checkExecSyncError (node:child_process:943:11)
+    at execFileSync (node:child_process:979:15)
+    at file:///home/hatch/workspace/d6-build/impl/tests/p8-upload-envelope.test.mjs:33:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  status: 1,
+  signal: null,
+  output: [
+    null,
+    '',
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+      'node:internal/errors:986\n' +
+      '  const err = new Error(message);\n' +
+      '              ^\n' +
+      '\n' +
+      'Error: Command failed: git rev-parse HEAD\n' +
+      'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+      '\n' +
+      '    at genericNodeError (node:internal/errors:986:15)\n' +
+      '    at wrappedFn (node:internal/errors:540:14)\n' +
+      '    at checkExecSyncError (node:child_process:943:11)\n' +
+      '    at execFileSync (node:child_process:979:15)\n' +
+      '    at git (file:///home/hatch/workspace/d6-build/impl/tools/build-p8-part1.mjs:29:23)\n' +
+      '    at file:///home/hatch/workspace/d6-build/impl/tools/build-p8-part1.mjs:30:22\n' +
+      '    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n' +
+      '    at async node:internal/modules/esm/loader:647:26\n' +
+      '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n' +
+      '  status: 128,\n' +
+      '  signal: null,\n' +
+      '  output: [\n' +
+      '    null,\n' +
+      "    '',\n" +
+      "    'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+      "      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+      '  ],\n' +
+      '  pid: 40756,\n' +
+      "  stdout: '',\n" +
+      "  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+      "    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+      '}\n' +
+      '\n' +
+      'Node.js v24.22.1\n'
+  ],
+  pid: 40748,
+  stdout: '',
+  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+    'node:internal/errors:986\n' +
+    '  const err = new Error(message);\n' +
+    '              ^\n' +
+    '\n' +
+    'Error: Command failed: git rev-parse HEAD\n' +
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+    '\n' +
+    '    at genericNodeError (node:internal/errors:986:15)\n' +
+    '    at wrappedFn (node:internal/errors:540:14)\n' +
+    '    at checkExecSyncError (node:child_process:943:11)\n' +
+    '    at execFileSync (node:child_process:979:15)\n' +
+    '    at git (file:///home/hatch/workspace/d6-build/impl/tools/build-p8-part1.mjs:29:23)\n' +
+    '    at file:///home/hatch/workspace/d6-build/impl/tools/build-p8-part1.mjs:30:22\n' +
+    '    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n' +
+    '    at async node:internal/modules/esm/loader:647:26\n' +
+    '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n' +
+    '  status: 128,\n' +
+    '  signal: null,\n' +
+    '  output: [\n' +
+    '    null,\n' +
+    "    '',\n" +
+    "    'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+    "      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+    '  ],\n' +
+    '  pid: 40756,\n' +
+    "  stdout: '',\n" +
+    "  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+    "    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+    '}\n' +
+    '\n' +
+    'Node.js v24.22.1\n'
+}
+
+Node.js v24.22.1
+✖ tests/p8-upload-envelope.test.mjs (218.016213ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 229.915642
+
+✖ failing tests:
+
+test at tests/p8-upload-envelope.test.mjs:1:1
+✖ tests/p8-upload-envelope.test.mjs (218.016213ms)
+  'test failed'

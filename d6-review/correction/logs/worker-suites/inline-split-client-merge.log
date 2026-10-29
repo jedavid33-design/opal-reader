@@ -1,0 +1,12 @@
+✔ a finished inline job expands the root into its leaves and or() applies every result (4.406039ms)
+✔ integrity: leaves whose text does not reproduce the passage change NOTHING (0.388423ms)
+✔ nested trees expand to their terminal leaves in reading order (0.611417ms)
+✔ a non-inline status is ignored (repair jobs and legacy jobs keep their own paths) (0.259149ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 139.503574

@@ -1,0 +1,26 @@
+✔ fix1: instance 'account' is denied in staging and the account DO is never instantiated (7.393089ms)
+✔ fix1: a missing instance header is denied in staging, no DO contact (0.857557ms)
+✔ fix1: any other instance value is denied in staging, no DO contact (2.044898ms)
+✔ fix1: explicit instance 'smoke-p8' is allowed; only the smoke instance is ever resolved (6.112468ms)
+✔ fix1+2: through the entry, the staging cache cannot see production keys and can see its smoke namespace (5.209764ms)
+✔ fix2(a): conditional PUT precondition failure with a matching winner — adopted, no second PUT, no overwrite (0.938588ms)
+✔ fix2(b): a winner whose digest mismatches fails closed and is never overwritten (0.951848ms)
+✔ fix2(c): an indeterminate PUT error fails closed — one conditional attempt, no unconditional retry (0.449174ms)
+✔ fix2(d): winner adoption hydrates the snapshot with the winner's bytes (evict-before-hydrate ordering) (0.54687ms)
+✔ fix2: smoke keyPrefix namespaces every key; the default cache keeps production key shapes (0.692629ms)
+✔ fix2: the deploy spec carries the smoke namespace binding (R2_KEY_PREFIX=smoke-p8/) (0.699639ms)
+✔ F-A: gate refusal (bad token → 401) is CORS-readable only from the allowlisted origin (1.182624ms)
+✔ F-A: gate refusal (bad request scope → 403) is CORS-readable only from the allowlisted origin (0.750876ms)
+✔ F-A: gate refusal (bad env scope → 403 (harness-only leg)) is CORS-readable only from the allowlisted origin (0.5934ms)
+✔ F-A: gate refusal (token not configured → 503 (harness-only leg)) is CORS-readable only from the allowlisted origin (0.603204ms)
+✔ F-A: no gate refusal leaks a token value in body or headers (0.944207ms)
+✔ F-A: browser-shaped sequence — preflight, then a denied request whose refusal is readable verbatim (0.614702ms)
+✔ F-A: success and already-readable paths are unchanged (health, route 404, instance 403, DO 200) (3.23958ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 204.213999

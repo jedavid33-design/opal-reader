@@ -1,0 +1,12 @@
+✔ a daily 429 writes the project park and parks the job, manual-only (51.720951ms)
+✔ while parked, other jobs are gated at the consumer with zero provider calls (10.225207ms)
+✔ cached segments still finish for free during a park (consumer gate sits after cache checks) (12.06019ms)
+✔ Batch submissions are gated during a park; Batch polls are not (17.937226ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 227.886107

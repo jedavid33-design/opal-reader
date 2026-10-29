@@ -1,0 +1,31 @@
+[d6-executor-fi] genstore backing = real: worker/generation/genstore.mjs
+[d6-executor-fi] backing confirmed: real: worker/generation/genstore.mjs
+✔ happy path: synthesize -> flush -> verify -> commit; binding, claim and job all settle (42.61292ms)
+✔ POLICY_BLOCK integration: split inside the executor, stitched WAV committed, attempts logged per part (13.157266ms)
+✔ FI-1 kill after synthesis, before flush: no object, no commit, attempt recorded once; recovery fails flush_interrupted without re-synthesizing (14.729194ms)
+✔ FI-2 kill after flush, before verify completes: object present, no commit; recovery re-verifies and commits, never re-synthesizes (11.390556ms)
+✔ FI-3 verify mismatch (size): no commit, stage=verify surfaced, object preserved and flagged by key (6.704707ms)
+✔ FI-3 verify mismatch (etag): no commit, stage=verify surfaced (5.783935ms)
+✔ FI-4 kill after verify, before commit: recovery commits WITHOUT re-synthesis; commit is idempotent (one binding) (8.240851ms)
+✔ FI-5 R2 write error mid-flush: no commit, no partial object treated as valid, attempt recorded (6.600381ms)
+✔ FI-6 attempted with a dispatching attempt: recovery is a reconcile hold — zero retries, zero provider calls (5.041722ms)
+✔ FI-6 flushed record: scan classifies reverify_and_commit; recovery commits with zero provider calls (6.420671ms)
+✔ FI-6 verified record: recovery commits with zero provider calls (6.145378ms)
+✔ batch refusal: a batch-lane job is refused whole-message with zero provider contact (3.843986ms)
+✔ batch refusal: a batch dispatch payload on a standard job is refused (3.474181ms)
+✔ removed-provider prompt: zero synthesis, prompt row recorded with the recorded mapping (15.024857ms)
+✔ work source discrimination: ok | no_content | unmapped_pov | removed_provider (4.586279ms)
+✔ unknown outcome: non-HTTP throw -> unknown_billing, phase halt set, message stops, later occurrences untouched (8.829735ms)
+✔ quota: 429 quotaExceeded confirms failed_known and returns quotaExhausted for the driver to park (5.375944ms)
+✔ retryable known failure (HTTP 503): failed_known cost 0, repair marker returned, executor does not loop (5.309394ms)
+✔ non-retryable known failure (HTTP 400, not a block): reported once, no repair marker (4.897075ms)
+✔ terminal POLICY_BLOCK through the executor: blocked outcome, no binding, job not halted for others (7.356084ms)
+✔ genstore backing used by this suite (reported, never blurred) (0.282684ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 423.912626

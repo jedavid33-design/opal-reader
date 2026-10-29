@@ -1,0 +1,17 @@
+✔ submit applies once; the same command_id replays the original outcome (8.609894ms)
+✔ a lost acknowledgement is recoverable: crash, re-send, same outcome (seam i) (2.710686ms)
+✔ duplicate job under a new command id is a recorded rejection (2.317536ms)
+✔ unknown command types are refused before recording (1.935433ms)
+✔ freeze directive: mutations reject as frozen, unfreeze restores (3.028642ms)
+✔ pause / resume / cancel flow through the transition table (24.409364ms)
+✔ settings: versioned updates, stale base revision conflicts (3.223355ms)
+✔ gap 1: two devices requesting the same audio share one in-flight operation (7.833871ms)
+✔ RequestSynthesis: cached answer first, otherwise a gated grant (4.011458ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 231.078686

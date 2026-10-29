@@ -1,0 +1,13 @@
+✔ C1: same class identity; spec binds it with no new-class migration (6.02002ms)
+✔ C2: D6 bootstrap over carried state rewrites nothing; D6 operates on it (54.698778ms)
+✔ C3: halted host entry preserves production gates and halts (17.135403ms)
+✔ C4: crafted grant fails exactly as production; batch lane refused (9.238308ms)
+✔ C5: real-entry alarm restart + day-boundary rollover, zero duplicates (29.488001ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 358.324745

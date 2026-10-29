@@ -1,0 +1,13 @@
+✔ many historical terminal jobs from discovery are never polled (3.196024ms)
+✔ a stale terminal response cannot disturb an active slot job (1.695063ms)
+✔ ct keeps polling for an evicted generating job that is in neither slot (0.563395ms)
+✔ ct does not schedule for the evicted job once it is gone, nor for Continue-owned jobs (0.614702ms)
+✔ opening a different book discovers its jobs immediately (per-book throttle) (1.3803ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 135.709423

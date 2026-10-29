@@ -1,0 +1,23 @@
+✔ C1: altered content preseeded via SyncPush (same occurrence IDs, changed cast) + first chunk WITHOUT content refuses migration_content_mismatch pre-prime — zero GETs, zero migration business rows, durable rejected receipt (10.536084ms)
+✔ C1: the same preseed refuses even when the chunk PRESENTS the pin-correct content — the stored entity is the effective content and it mismatches (3.093ms)
+✔ C1 positive control: pin-correct content preseeded via SyncPush is a trustworthy source — chunks without content import against it and complete (9.988864ms)
+✔ C1: a carry-pinned book with NO content source anywhere refuses migration_content_mismatch pre-prime (no priming for an import that cannot be verified) (2.887992ms)
+✔ C1: after a legitimate import + both carries, altering the stored content via SyncPush (same ID membership, reversed order, changed cast) makes the gate refuse flip_gate_content_mismatch with zero gate rows; restoring the pinned content lets the gate apply (14.201532ms)
+✔ C2 control: an untouched complete book (chunks + both carries) still gates (8.990807ms)
+✔ C2: mutating the stored job's chapter_index makes the gate refuse (chapter_index), zero gate rows (12.574291ms)
+✔ C2: mutating the stored job's lane makes the gate refuse (lane), zero gate rows (6.985398ms)
+✔ C2: mutating the stored job's kind makes the gate refuse (kind), zero gate rows (6.862253ms)
+✔ C2: mutating the stored job's revision makes the gate refuse (revision), zero gate rows (7.844586ms)
+✔ C2: a nonzero position tip makes the gate refuse (tip), zero gate rows (7.901543ms)
+✔ C2: a position_events journal row for the book makes the gate refuse (position_events), zero gate rows (7.347211ms)
+✔ C2: playing = 1 on the carried position makes the gate refuse (playing), zero gate rows (12.509464ms)
+✔ C2: superseded_count > 0 on the carried position makes the gate refuse (superseded_count), zero gate rows (6.651547ms)
+✔ C2 scoping: the no-playback baseline binds the gate only — after a successful gate, genuine device position events fold onto the carried state by the normal rules (8.184747ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 309.371745

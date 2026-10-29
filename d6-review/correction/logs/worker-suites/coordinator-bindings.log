@@ -1,0 +1,18 @@
+✔ clean bind: identity matches the recorded cache identity (6.474081ms)
+✔ first write binds and records the identity for future checks (1.965378ms)
+✔ identity mismatch: no bind, conflict visible, correct key still binds after (1.894813ms)
+✔ format invalid and object missing are distinct, and missing is not a conflict (1.704176ms)
+✔ legacy anchoring: a legacy revision binds only its own verified artifact (§1.3) (1.827181ms)
+✔ an existing binding for the occurrence is never silently replaced (2.264647ms)
+✔ byte verification: bytes changed under a key after a bind are caught (finding 3) (1.917457ms)
+✔ byte verification: a stated expected hash must match the actual bytes (1.888343ms)
+✔ gap 3: a new recording with NO verifiable digest does not bind; legacy may (2.172248ms)
+✔ AdoptAudio command: applied when valid, recorded rejection on conflict (3.037496ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 190.056593

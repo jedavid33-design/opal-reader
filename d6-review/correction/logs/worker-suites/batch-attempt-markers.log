@@ -1,0 +1,11 @@
+✔ a Batch submission writes a route:'batch' marker BEFORE the provider POST; polls write nothing (27.764226ms)
+✔ a rejected Batch submission is still counted, and its daily evidence parks the job + writes the park (85.173389ms)
+✔ the quota report's daily attempted total includes Standard + Batch (21.084426ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 306.519356

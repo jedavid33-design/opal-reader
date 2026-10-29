@@ -1,0 +1,22 @@
+✔ transform: legacy anchoring, device-voice, blocked outcome, provenance labels (2.695543ms)
+✔ transform: cast-inferred provenance when the pov has exactly one stamped model (0.400471ms)
+✔ jobs: census-live carries parked, complete-book remnants supersede, drift is held for review (12.031327ms)
+✔ orphans: unreferenced audio is inventoried, never assigned (1.778909ms)
+✔ chapter truth: playable counts r2 + device-voice; blocked counted separately (0.630376ms)
+✔ adjudication: checkpoint history that passes the rival explains it — furthest wins (0.841352ms)
+✔ adjudication: a rival claim the winner's history cannot explain is flagged, winner stands on evidence (0.470225ms)
+✔ adjudication: nothing corroborated — the cloud claim stands as fail-safe, flagged (0.514281ms)
+✔ adjudication: invalid device position is discarded with evidence; tombstone flags but migrates (0.312449ms)
+✔ verifier: a faithful transform passes all seven §5.4 checks (4.818157ms)
+✔ verifier: a missing R2 object is a STOP (check 2), a wrong blocked set is a STOP (check 4) (0.838528ms)
+✔ outbox import: ids, attempts, order and failure stamps preserved byte-for-byte (1.072618ms)
+✔ outbox import + P6 bridge: FIFO flush, attempts continue from imported values, merge honors attempts (3.106429ms)
+✔ rollback: reverse deltas are computed from state and every one is reconciled (1.63999ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 202.182111

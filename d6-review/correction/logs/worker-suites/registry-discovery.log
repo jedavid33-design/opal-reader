@@ -1,0 +1,14 @@
+✔ POST /jobs and Continue staging write registry markers; discovery returns live summaries (27.14073ms)
+✔ legacy backfill: a marker-less parked job (FP Chapter 3 shape) is discovered and the scan runs once (2.143906ms)
+✔ S2: the legacy scan runs even when the book already has a new marker (2.68716ms)
+✔ Rowan review: a failing registry list reports incomplete coverage, never false completeness (2.004787ms)
+✔ healthy discovery reports registry_incomplete: false (3.250496ms)
+✔ S2: a failed marker PUT leaves a durable pending record; discovery reconciles it and never marks the scan done early (2.80618ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 180.816574

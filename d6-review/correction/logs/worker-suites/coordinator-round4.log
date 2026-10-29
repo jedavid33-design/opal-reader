@@ -1,0 +1,14 @@
+✔ blocker 1a: absent queue handler for >15 min -> no phantom unknown; dispatch voided, reservation released, work re-grantable (31.296755ms)
+✔ blocker 1b: freeze for >15 min holds the dispatch (no void, no unknown); thaw delivers it, lease anchored to handoff (6.622524ms)
+✔ blocker 1c: a send attempted after the delivery window closed is fenced — never sent, reservation released, fresh grant works (6.325068ms)
+✔ blocker 1d: watchdog and lease due in the same alarm, work DELIVERED -> truthful unknown, no double-send; creation lease superseded at handoff (4.548984ms)
+✔ blocker 2a: two jobs share an occurrenceId — the other job's confirmed spent evidence settles nothing here (7.575073ms)
+✔ blocker 2b: same job, earlier grant — a confirmed outcome under grant A does not settle grant B's unknown (6.315143ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 215.442893

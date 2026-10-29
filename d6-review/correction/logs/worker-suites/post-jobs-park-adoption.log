@@ -1,0 +1,10 @@
+✔ existing paused_quota job is adopted unchanged during a park; new Gemini job is created parked; neither enqueues (59.506609ms)
+✔ during a park: an all-cached Gemini job still completes as ready; a non-Gemini job stages normally (7.983976ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 196.917896

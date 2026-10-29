@@ -1,0 +1,20 @@
+✔ standard end-to-end: claim -> one call -> verified store -> report -> job complete, claim completed (32.207681ms)
+✔ redelivery of the same message never re-spends (condition 1) (4.747531ms)
+✔ crash after the provider call, before the report: recovery re-reports from the paid intent — still one call (5.931848ms)
+✔ ambiguous standard call: no report, no outcome note, redelivery cannot re-spend (4.397687ms)
+✔ known standard failure: reported once, intent marked, redelivery spends nothing (5.57337ms)
+✔ two consumers, one message: the second stands down (4.983615ms)
+✔ batch happy path: submit once, poll to done across redeliveries, one spend (6.40727ms)
+✔ batch ambiguous submit: fence stands, lookup adopts, missing lookup proves nothing (condition 2) (6.29336ms)
+✔ batch rejection is a KNOWN outcome: fence clears, failure reported, no resubmit (5.525067ms)
+✔ the re-grant trap: a deferred batch occurrence meets its SAME map under a new grant — no second POST (7.647221ms)
+✔ after an evidenced never-accepted resolution, the re-grant is REALLY processed: audited generation-2 attempt completes the job (review fix 2) (9.594121ms)
+✔ cache verification failure is reported as failure, never as playable audio (5.5534ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 272.005947
