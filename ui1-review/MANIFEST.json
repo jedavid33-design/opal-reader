@@ -1,0 +1,109 @@
+{
+ "candidate": {
+  "entry": "app-264.js",
+  "serviceWorker": "sw-ui1.js",
+  "cache": "opalreader-shell-ui1",
+  "buildMarker": "d5b-v2-playback-client-13",
+  "packagingMarker": "ui-pkg-1",
+  "base": "published CORR1 tree, commit 4189e85b21169c039b5088b2996b51f32d1a94af",
+  "rollbackBasis": "4189e85b21169c039b5088b2996b51f32d1a94af (intact as parent; app-263/sw-corr1/cache opalreader-shell-corr1 preserved)"
+ },
+ "deltaPaths": [
+  "app-264.js",
+  "index.html",
+  "modules/composition-ui1.js",
+  "modules/constants-ui1.js",
+  "modules/entry-ui1.js",
+  "modules/runnable-ui1.js",
+  "modules/vendor/client-store-ui1.js",
+  "modules/vendor/client/assembled-client-ui1.js",
+  "modules/vendor/client/projection-ui1.js",
+  "styles-151.css",
+  "sw-ui1.js"
+ ],
+ "tests": {
+  "unitBatteryTreeA": "UNIT BATTERY: 13/13 PASS",
+  "unitBatteryPackage": "UNIT BATTERY: 13/13 PASS",
+  "castCensus": "CAST CENSUS: PASS \u2014 mappings table covers exactly the census's non-Gemini cast voices; unverified flag exact.",
+  "chromiumProofTreeA": "CHROMIUM PROOF: 14/14 PASS",
+  "chromiumProofPackage": "CHROMIUM PROOF: 14/14 PASS",
+  "packageAssemble": "PACKAGE ASSEMBLE: ALL CHECKS PASS"
+ },
+ "files": {
+  "base-index.html": {
+   "bytes": 1399,
+   "sha256": "16c677eb68f3321319730389922daa96d649ed39ac923b5de9d02893785bc0e8",
+   "gitBlob": "7189bed6bca85e2f147d5bc6082c41995eebad88"
+  },
+  "delta/app-264.js": {
+   "bytes": 70789,
+   "sha256": "cd7d6d9c52a1013d52acee8eb73cda3f3bd83c2496b6e151b9f88a46f61b6948",
+   "gitBlob": "609c55b89f3f001a3c9bb9afb4c5e24cde7f7b18"
+  },
+  "delta/index.html": {
+   "bytes": 1396,
+   "sha256": "63a9effcf38d36f2fa151592bccd8864eded8f5c4129ba04b22cc228b8365a3d",
+   "gitBlob": "3b8d7b83c8123935e80ec235b15c358a3637bb73"
+  },
+  "delta/modules/composition-ui1.js": {
+   "bytes": 63969,
+   "sha256": "41a003df00b4b409b24b09a79811dcaae45c2a69089b86813196a69634385444",
+   "gitBlob": "1ddbf5cd6d18291608c99986d5119d8de4008c6d"
+  },
+  "delta/modules/constants-ui1.js": {
+   "bytes": 2747,
+   "sha256": "08cd753f3dab5aa7b61275d78b4542d483bda82c9e8f0bf162c5ecd5179d0ea7",
+   "gitBlob": "2c4d373eea672311f433b22e92e2861b3a1b3cbc"
+  },
+  "delta/modules/entry-ui1.js": {
+   "bytes": 495,
+   "sha256": "542c613aff2e37369f5ba7f646906b58de5cdaa9c16855f669dd45d503c63e5b",
+   "gitBlob": "3444bcefa7c19d547aed8f640fc62709c4058106"
+  },
+  "delta/modules/runnable-ui1.js": {
+   "bytes": 3630,
+   "sha256": "91c9b27c63310c475be862307ac3ccb43feb1ec96622b159ae209efa92b95154",
+   "gitBlob": "c31c2e5db32e3c78138bf4d0f1450bda9603d02b"
+  },
+  "delta/modules/vendor/client-store-ui1.js": {
+   "bytes": 26529,
+   "sha256": "778d4c3367b5f9b65b738ab48ac8c9cfcfce4bb514acb927defc1df0c013e3ad",
+   "gitBlob": "bc4569f62ecbd59a9b893dd947fcfa6a08babcc7"
+  },
+  "delta/modules/vendor/client/assembled-client-ui1.js": {
+   "bytes": 3092,
+   "sha256": "fbb10fb53a9c4fec382d130f981ceb0a3e9e53a8b2a5a9216a29cd4ec4113e19",
+   "gitBlob": "c31a7b689f6b745e2b4967d4d6ca58084b4bdffe"
+  },
+  "delta/modules/vendor/client/projection-ui1.js": {
+   "bytes": 2465,
+   "sha256": "af7a1d1048422b59465271f2eab998e2b89acf9b05794e1c0ac6a9a1b37dc00b",
+   "gitBlob": "cb492e32cd3585680a2869dcaf7f50421fe27934"
+  },
+  "delta/styles-151.css": {
+   "bytes": 34326,
+   "sha256": "4314902af4a04e8fa9755aa79864a383920c55e70f8cd7cd808e75fa0d810b0c",
+   "gitBlob": "c5563d64af27b3c03bb5e5e661f7c554f85dbfa2"
+  },
+  "delta/sw-ui1.js": {
+   "bytes": 9388,
+   "sha256": "6e93de313e4f3d1ea06f7cd58af1ceb3345fc3fd9b14d62867a8975a2fa1adad",
+   "gitBlob": "a502492591d807abebe32e7580040edf8339a012"
+  },
+  "tests/unit-battery.mjs": {
+   "bytes": 12981,
+   "sha256": "7660badc738ad7208886ec75410de5330e1e54186ae660ae8448499d5f0846ab",
+   "gitBlob": "bbc9dc350b4cb140dd46760b45ed4237c9e4cfed"
+  },
+  "tests/cast-census.mjs": {
+   "bytes": 4516,
+   "sha256": "3b09be30555c989d32372335b28a50a41292a764ac18b13448d7c5d274015ad2",
+   "gitBlob": "3ab50fc244cbc40addcad3a8799384b59369951f"
+  },
+  "tests/chromium-proof.mjs": {
+   "bytes": 44220,
+   "sha256": "a4cf98584bf069334799fb1d224035b2ed5332aa590471952dd21f86371c474c",
+   "gitBlob": "52e9d8d34ed7be6851711ce6a72b3e3e62bd781e"
+  }
+ }
+}
