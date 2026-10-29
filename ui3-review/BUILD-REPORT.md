@@ -19,7 +19,7 @@ loopback stub coordinators.
 | Build marker | `d5b-v2-playback-client-14` (**advanced** — behaviour changed this round, per the proposal's identities section; carried by `modules/constants-ui3.js`, so Diagnostics and the startup notice report it truthfully) |
 | Packaging marker | `ui-pkg-3` |
 | Base | published UI2 tree (ui-pkg-2), live commit `b83a6d99b8e3428b462fd328a65cfeab484761ab` (the `base/` tree here is `ui2-fix-build/package/publish`, byte-identical to that commit; its 56 files match the ui-pkg-2 PACKAGE-MANIFEST on record) |
-| Publish tree | 63 paths (56 base + 7 new), publish digest `e379f0a30a75835034a2703afe6c65d9750995562f20e2b69f65f00cdf4131de` (SHA-256 of the sorted `path sha256` lines of `package/PACKAGE-MANIFEST.json`) |
+| Publish tree | 63 paths (56 base + 7 new), publish digest `86719a0f3b7f84b74aa9aaee65f477cf503ec8b6c7e15ae0efd8241f79622dc1` (SHA-256 of the sorted `path sha256` lines of `package/PACKAGE-MANIFEST.json`; supersedes the originally pinned digest — see Correction C-1) |
 | Delta | exactly 8 paths (below) |
 
 ## Item B — W-4: byte-confirmation on playback (the substantive item)
@@ -58,7 +58,10 @@ invoked inside a `try` (a synchronous refusal is swallowed identically), its
 promise is held only by the flight map (below), and rejection settles the map
 entry and nothing else: failures record nothing (the store writes a
 confirmation only after a truthy byte-check — its accepted code), block
-nothing, and are **never retried** — one attempt per play initiation, ever.
+nothing, and are **never retried automatically** — one attempt per play
+initiation; a failed check may be attempted again only by a later
+successful play initiation (see the bound statement below, as corrected
+by Correction C-1).
 If the byte-check succeeds, the store's own serialized, re-checking mutation
 records `state.bytes[cacheKey] = { bindingRevision }` (unchanged accepted
 machinery).
@@ -80,14 +83,20 @@ in-flight entry can never suppress the check a new binding needs; the store's
 record-time re-verification (revision + key compared inside its serialized
 mutation) remains the authority on what gets recorded.
 
-**Per-device bound, stated accurately (condition 3):** with the flight map
-plus the store's persisted per-revision early return, one device issues **at
-most one byte-check GET per (segment, binding object), ever** — concurrent
-starts collapse to one, later starts read the persisted confirmation locally
-at zero network cost. Independent devices hold independent state, so each
-device may check once; network-side worst case is bounded by
-devices × segments × binding objects, paced by real listening. No burst mode
-exists. T6 proves the bound end-to-end in the browser (below).
+**Per-device bound, stated accurately (condition 3; wording corrected by
+Correction C-1):** with the flight map plus the store's persisted
+per-revision early return, one device has **at most one concurrent
+app-initiated verification per (segment, binding object)**; once a check
+succeeds and the confirmation persists, all later starts for that binding
+read it locally at zero network cost. A **failed** check records nothing
+and may be attempted again on a later successful start. Browser/
+network-layer retransmissions (e.g. Chromium re-issuing a connection-reset
+GET below the app layer) sit outside this bound — the app issues one fetch
+per initiation and contains no retry logic. Independent devices hold
+independent state, so each device may check once; successful-check traffic
+is bounded by devices × segments × binding objects, paced by real
+listening. No burst mode exists. T6 proves the concurrency bound
+end-to-end in the browser (below).
 
 ### Preservation (Amendment A-1 condition 1 — hard)
 
@@ -134,7 +143,7 @@ below it (top 362.3 > label bottom 352), text/value paint overlap **0**.
 | `app-266.js` | new | `7709738b69c0` | `app-265.js` with ONLY: the UI3 header/lineage note, the identity block, `PACKAGING_MARKER "ui-pkg-3"`, `register("./sw-ui3.js")`, and its two module pointers moved to entry-ui3 / constants-ui3. |
 | `sw-ui3.js` | new | `424cd8a81ea0` | `sw-ui2.js` with only: cache `opalreader-shell-ui3`, SHELL naming the ui3 closure (app-266, styles-153, composition/constants/entry/runnable-ui3 in place of the ui2/ui1 counterparts), header/purge comments. `PURGE_ON_ACTIVATE` stays `[]`; fetch/activate logic byte-identical. |
 | `styles-153.css` | new | `f063b246c040` | `styles-152.css` + the one appended W-5 section (above). |
-| `modules/composition-ui3.js` | new | `203d331d1db9` | `composition-ui1.js` + the W-4 hook (header note, the `confirmBytesOnPlaying` helper + flight map, one call in `onPlayingChange`) + the constants-ui3 import pointer. Everything else byte-identical. **This is the only behaviour change in the package.** |
+| `modules/composition-ui3.js` | new | `a1d81ff73963` | `composition-ui1.js` + the W-4 hook (header note, the `confirmBytesOnPlaying` helper + flight map, one call in `onPlayingChange`) + the constants-ui3 import pointer. Everything else byte-identical. **This is the only behaviour change in the package.** |
 | `modules/constants-ui3.js` | new | `48adbcbfb8603e` | `constants-ui1.js` with only its identity constants advanced: build marker -14, bundle app-266.js, styles styles-153.css, cache opalreader-shell-ui3. Required: the build marker lives here (composition and the shell both read it for Diagnostics); a ui-pkg-3 package whose constants still said -13/ui1 would be lying in its own diagnostics. |
 | `modules/entry-ui3.js` | new | `c9e522b647df` | `entry-ui1.js` with only its 3 re-export pointers moved (composition-ui3, runnable-ui3, constants-ui3). |
 | `modules/runnable-ui3.js` | new | `d271b4d3df39` | `runnable-ui1.js` with only its createCandidate import moved to composition-ui3. |
@@ -204,8 +213,10 @@ Exit codes for every run: `tests/run-exit-codes.json` (also pinned in the artifa
   initiation while it is still in flight fires **no second GET** (the
   single-flight skip); on release, the one check records the confirmation;
   a third initiation after settle still totals **1 GET** (persisted early
-  return). Bound proven as stated above: ≤1 GET per (segment, binding
-  object) per device.
+  return). Bound proven as stated above (as corrected by Correction C-1):
+  at most one concurrent app-initiated verification per (segment, binding
+  object) per device, with the persisted confirmation suppressing all later
+  app requests for that binding.
 - **TQ (quota immobility, condition 4/6)**: the device state's money view
   (`attemptsToday 0, spentMicroCents 0, monthlyCap 50`) is byte-identical
   before and after the entire W-4 run, and the stub logged **zero**
@@ -295,3 +306,63 @@ Exit codes for every run: `tests/run-exit-codes.json` (also pinned in the artifa
 
 Not done, by scope: no publish, no push to main, no board post. Packaging
 and publish remain Julie's separate gates, after Rowan's source review.
+
+## Correction C-1 (Oct 29, 2026) — comment-only bound correction in composition-ui3.js
+
+Applied under the existing LOCAL-BUILD Go, after Rowan's source review
+PASSED the candidate (board issue #15, comment 6499149890) subject to one
+documentation correction: the design comment above `byteConfirmFlights`
+in `modules/composition-ui3.js` (originally lines 1019–1023) claimed "at
+most ONE byte-check GET per (segment, binding object) per device, ever" —
+an overclaim, because a failed check records nothing and may be attempted
+again on a later successful start, and browser/network-layer
+retransmissions sit outside the app's bound. The comment now states
+Rowan's corrected semantics verbatim in substance: at most one
+CONCURRENT app-initiated verification per key; a persisted successful
+confirmation suppresses all later app requests for that binding on this
+device; a FAILED check records nothing and may be attempted again on a
+later successful start; browser/network-layer retransmissions (e.g. a
+connection-reset GET re-issued below the app layer) are outside the
+bound — the app issues one fetch per initiation and contains no retry
+logic. The same correction was applied to the embedded replacement text
+in `make-src.py` so the src generator stays consistent with `src/`.
+
+**Comment-only proof.** The corrected `composition-ui3.js` differs from
+the pinned candidate (SHA-256
+`203d331d1db9df49cea05a08f0dc170426995b33241963aae3e5a446aba90912`) in
+exactly one unified-diff hunk covering only `//` comment lines (5 lines
+replaced by 10, at the bound comment); stripping all full-line `//`
+comments from both versions leaves byte-identical content — no code line
+changed. New SHA-256:
+`a1d81ff739639fa6a6839649bd7a39d18e54e1a364621982d8c9bf7bb68f0cf0`,
+identical in src/, tree-a/, tree-b/, package/publish/ and package/delta/.
+Candidate identities are unchanged (app-266 / sw-ui3 / styles-153 /
+build `d5b-v2-playback-client-14` / `ui-pkg-3`); the delta is still
+exactly the same 8 paths; publish tree still 63 paths. New publish
+digest: `86719a0f3b7f84b74aa9aaee65f477cf503ec8b6c7e15ae0efd8241f79622dc1`
+(superseding `e379f0a30a75835034a2703afe6c65d9750995562f20e2b69f65f00cdf4131de`).
+
+**Battery rerun on the corrected exact final trees** (one complete run
+each; logs and exit codes re-preserved in `tests/` and pinned in the
+rebuilt review artifact): unit battery 13/13 PASS on tree-a and on
+package/publish (exit 0); cast census PASS (exit 0); Chromium proof
+14/14 PASS on tree-a and on package/publish (exit 0); phone-width proof
+11/11 PASS on tree-a and on package/publish (exit 0); phone-width proof
+against the published base 9/11 PASS (exit 1 — the documented expected
+reproduction: only Q1/Q2 fail, the 1,562 px² label/value paint overlap);
+W-4 proof (T1–T6 + TQ) 7/7 PASS on tree-a and on package/publish
+(exit 0); package static checks ALL CHECKS PASS (exit 0). No regression
+from the originally pinned battery. The browser proofs used the same
+environment-only WebGL policy-switch adaptation as the original build
+(disclosed in the harness notes above); it changes no test semantics.
+
+**Supersession.** This section and the corrected bound statements in the
+body above (the "Per-device bound" paragraph, the fire-and-forget
+discipline paragraph, and the T6 row) supersede every earlier
+"at most one GET ever"-style phrasing in this report, including the
+originally pinned version's claim that one device issues at most one
+byte-check GET per (segment, binding object) ever. The accurate bound
+is the one stated in the corrected comment: one concurrent
+app-initiated verification per key, with a persisted successful
+confirmation suppressing all later app requests for that binding on
+that device.

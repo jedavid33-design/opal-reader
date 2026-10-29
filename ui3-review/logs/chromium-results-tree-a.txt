@@ -11,6 +11,6 @@ PASS C9 Find Text: result card carries human chapter/segment labels, real ids, a
 PASS V1 generation affordances are inert: sheets open with the off-note, Start/Batch disabled, zero network writes, candidate state byte-stable {"newReqs":1}
 PASS V2 cast view: census-shaped rows, recorded mappings + unverified flag, attention order, inert change sheet, no-cast book handled {"names":["Tucker","Sabrina"]}
 PASS V3 accessibility + collapsible persistence: labelled controls, tap targets, state survives reload + reconnect {"dims":{"nav":44,"chapToggle":46.390625,"play":38.390625,"actionsToggle":44}}
-PASS V4 playback: play a segment, humanized status, Next advances to the successor {"st1":"Player: waiting · Chapter 1 · Segment 2 · 0:00 / 0:30","st2":"Player: playing · Chapter 2 · Segment 1 · 0:00 / 0:30"}
+PASS V4 playback: play a segment, humanized status, Next advances to the successor {"st1":"Player: playing · Chapter 1 · Segment 2 · 0:00 / 0:30","st2":"Player: playing · Chapter 2 · Segment 1 · 0:00 / 0:30"}
 
 CHROMIUM PROOF: 14/14 PASS

@@ -19,7 +19,7 @@
   "sw-ui3.js"
  ],
  "publishPathCount": 63,
- "publishDigest": "e379f0a30a75835034a2703afe6c65d9750995562f20e2b69f65f00cdf4131de",
+ "publishDigest": "86719a0f3b7f84b74aa9aaee65f477cf503ec8b6c7e15ae0efd8241f79622dc1",
  "publishDigestMethod": "SHA-256 of the sorted 'path sha256' lines from package/PACKAGE-MANIFEST.json files map",
  "publishFiles": {
   "app-259.js": "9600515baa786f65345cdf9b7b715a57c6b83253f8c195f68d2a28486c0df7c6",
@@ -38,7 +38,7 @@
   "modules/audio-transport.js": "1a79e5c83b77f22644fc2f3e9d66e11b88015fdce6bc6cd3f12a2051e376d775",
   "modules/composition-corr1.js": "02068d3310543b060753b676283f6d282ee5ba35b5cf8f09490925a28efeddfa",
   "modules/composition-ui1.js": "41a003df00b4b409b24b09a79811dcaae45c2a69089b86813196a69634385444",
-  "modules/composition-ui3.js": "203d331d1db9df49cea05a08f0dc170426995b33241963aae3e5a446aba90912",
+  "modules/composition-ui3.js": "a1d81ff739639fa6a6839649bd7a39d18e54e1a364621982d8c9bf7bb68f0cf0",
   "modules/composition.js": "831960ec99f8401dbc8b035241d9641083ca250543bc31f661033091a766c0e8",
   "modules/constants-corr1.js": "e902bafebe75155f6e8feca192a86783264835a77b9a8f5a039ed7c96641c80b",
   "modules/constants-ui1.js": "08cd753f3dab5aa7b61275d78b4542d483bda82c9e8f0bf162c5ecd5179d0ea7",
@@ -151,7 +151,7 @@
     "exitCode": 0,
     "log": "tests/phone-results-tree-a.txt"
    },
-   "run": "UI3 candidate (ui-pkg-3) full battery \u2014 exact final trees, Oct 29 2026",
+   "run": "UI3 candidate (ui-pkg-3) full battery \u2014 Correction C-1 rerun on the corrected exact final trees, Oct 29 2026",
    "unitPackage": {
     "command": "node tests/unit-battery-package.mjs",
     "exitCode": 0,
@@ -176,9 +176,9 @@
  },
  "files": {
   "BUILD-REPORT.md": {
-   "bytes": 20249,
-   "sha256": "fbd111fc20ea60dcc15362fdf3954f18b39db6e778aa493863561ffd7bfc35f0",
-   "gitBlob": "c6d36826f8344674999785200f845e92e61db1c7"
+   "bytes": 24731,
+   "sha256": "eae1c0c4c3248a756f71ac0e4dafd0462cea71fdd6f5e683ff1412419aa71add",
+   "gitBlob": "ee64f597a99caead93e21b7207fdcead6e9b5938"
   },
   "base-index.html": {
    "bytes": 1419,
@@ -187,8 +187,8 @@
   },
   "PACKAGE-MANIFEST.json": {
    "bytes": 7178,
-   "sha256": "9b9e80989fd9e5df031a0cca2ec0dbb34f69243fe884799cdced3cc1a1313ef6",
-   "gitBlob": "7c1530357c7a4e36411504e7bd8f7858f2fd603e"
+   "sha256": "3782ae0389ca5cc8a015d4241bbb7db22fcdf7e38c9f0162cc8a72c3556d4513",
+   "gitBlob": "dc3bcb057ed07fa1b6608154ef90a602ed7f1c37"
   },
   "delta/app-266.js": {
    "bytes": 72286,
@@ -201,9 +201,9 @@
    "gitBlob": "5f09eb48a1a1fe185a5c82f42bf10f027297502a"
   },
   "delta/modules/composition-ui3.js": {
-   "bytes": 67346,
-   "sha256": "203d331d1db9df49cea05a08f0dc170426995b33241963aae3e5a446aba90912",
-   "gitBlob": "0b17090ac2ba3fadc8ea50b09d0d4fb6d6dff78d"
+   "bytes": 67654,
+   "sha256": "a1d81ff739639fa6a6839649bd7a39d18e54e1a364621982d8c9bf7bb68f0cf0",
+   "gitBlob": "48b479d45ccb49ac34f05479fe0ebdd48d860e02"
   },
   "delta/modules/constants-ui3.js": {
    "bytes": 2834,
@@ -272,8 +272,8 @@
   },
   "logs/chromium-results-tree-a.txt": {
    "bytes": 2725,
-   "sha256": "894d9f07ba977c06acbcbe2acea1a69bb1df5c21b0769963199bd7f24c38245c",
-   "gitBlob": "8e30f9e4418105b0740e5e86cb704047517bcbb2"
+   "sha256": "dd446fb44bda6ee7eb55ea61c266054b7ccded2c4ebaa60173860b2a716133d4",
+   "gitBlob": "963b279a2bfe59a05d4e3e5f8e5d7830d306596f"
   },
   "logs/chromium-results-package.txt": {
    "bytes": 2725,
@@ -312,13 +312,13 @@
   },
   "logs/assemble-results.txt": {
    "bytes": 2430,
-   "sha256": "41b1c2c9dabb90bf0d5b93cddea69048cbdd9736482731ab4b39b6dad079c7fa",
-   "gitBlob": "c0253866b9f1fa895ec5f1a58181f9e1b822e09b"
+   "sha256": "b6d4bdd79ec6d0774ffbd4946f877769a343f1198b9ca3f15f17f22ce31c39d2",
+   "gitBlob": "ab911d232920452bf68bf5ae6e7b7e0af754bfd3"
   },
   "logs/run-exit-codes.json": {
-   "bytes": 1781,
-   "sha256": "f6ab3f017ded5fceb8493469dd2af5cc9f353e0bd44144b77232e519826e5203",
-   "gitBlob": "19c33848a9817b1cbdb22330fac4f7ffdeaea111"
+   "bytes": 1905,
+   "sha256": "ad62c056a654feffc338bc8e5d6cf60f7879e0e7c6312e72d96b362dec84f75c",
+   "gitBlob": "629b3caaf9c5f9e8a8968e3b3b85b20cc19f42f8"
   }
  }
 }

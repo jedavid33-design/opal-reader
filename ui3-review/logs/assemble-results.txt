@@ -17,7 +17,7 @@ PASS app-266 closure routes through modules/constants-ui3.js
 PASS app-266 closure routes through modules/entry-ui3.js
 PASS app-266 closure routes through modules/runnable-ui3.js
 PASS app-266 closure uses NO ui1 composition/constants/entry/runnable (bad: [])
-PASS app-266 closure reuses the ui1 store/client modules + shared player (got ['modules/vendor/client/projection-ui1.js', 'modules/vendor/client/assembled-client-ui1.js', 'modules/player.js', 'modules/vendor/client-store-ui1.js'])
+PASS app-266 closure reuses the ui1 store/client modules + shared player (got ['modules/vendor/client/assembled-client-ui1.js', 'modules/player.js', 'modules/vendor/client-store-ui1.js', 'modules/vendor/client/projection-ui1.js'])
 PASS app-265 (rollback) import closure resolves (missing: None)
 PASS app-265 closure untouched by ui3 (bad: [])
 PASS app-264 (rollback) import closure resolves (missing: None)

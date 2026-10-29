@@ -48,7 +48,7 @@
   "modules/audio-transport.js": "1a79e5c83b77f22644fc2f3e9d66e11b88015fdce6bc6cd3f12a2051e376d775",
   "modules/composition-corr1.js": "02068d3310543b060753b676283f6d282ee5ba35b5cf8f09490925a28efeddfa",
   "modules/composition-ui1.js": "41a003df00b4b409b24b09a79811dcaae45c2a69089b86813196a69634385444",
-  "modules/composition-ui3.js": "203d331d1db9df49cea05a08f0dc170426995b33241963aae3e5a446aba90912",
+  "modules/composition-ui3.js": "a1d81ff739639fa6a6839649bd7a39d18e54e1a364621982d8c9bf7bb68f0cf0",
   "modules/composition.js": "831960ec99f8401dbc8b035241d9641083ca250543bc31f661033091a766c0e8",
   "modules/constants-corr1.js": "e902bafebe75155f6e8feca192a86783264835a77b9a8f5a039ed7c96641c80b",
   "modules/constants-ui1.js": "08cd753f3dab5aa7b61275d78b4542d483bda82c9e8f0bf162c5ecd5179d0ea7",

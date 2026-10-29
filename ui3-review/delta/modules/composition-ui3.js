@@ -1016,9 +1016,14 @@ export async function createCandidate({ token, storage, shellStorage, owner, fet
   // cacheKey/format/sizeBytes; no binding revision reaches the
   // token), and a re-bind to a different object changes the key,
   // so a stale in-flight entry can never suppress the check a new
-  // binding needs. Bound: at most ONE byte-check GET per (segment,
-  // binding object) per device, ever — concurrent starts collapse,
-  // later starts read the persisted confirmation locally.
+  // binding needs. Bound: at most one CONCURRENT app-initiated
+  // verification per key; a persisted successful confirmation
+  // suppresses all later app requests for that binding on this
+  // device. A FAILED check records nothing and may be attempted
+  // again on a later successful start. Browser/network-layer
+  // retransmissions (e.g. a connection-reset GET re-issued below
+  // the app layer) are outside this bound — the app issues one
+  // fetch per initiation and contains no retry logic.
   // Independent devices hold independent state, so each device may
   // check once.
   const byteConfirmFlights = new Map();
