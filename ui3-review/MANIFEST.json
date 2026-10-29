@@ -1,0 +1,324 @@
+{
+ "candidate": {
+  "entry": "app-266.js",
+  "serviceWorker": "sw-ui3.js",
+  "cache": "opalreader-shell-ui3",
+  "buildMarker": "d5b-v2-playback-client-14",
+  "packagingMarker": "ui-pkg-3",
+  "base": "published UI2 tree (ui-pkg-2), live commit b83a6d99b8e3428b462fd328a65cfeab484761ab",
+  "rollbackBasis": "b83a6d99b8e3428b462fd328a65cfeab484761ab (intact as parent; app-265.js/sw-ui2.js/cache opalreader-shell-ui2 preserved byte-identical in the publish tree; ui-pkg-1 and CORR1 closures likewise intact)"
+ },
+ "deltaPaths": [
+  "app-266.js",
+  "index.html",
+  "modules/composition-ui3.js",
+  "modules/constants-ui3.js",
+  "modules/entry-ui3.js",
+  "modules/runnable-ui3.js",
+  "styles-153.css",
+  "sw-ui3.js"
+ ],
+ "publishPathCount": 63,
+ "publishDigest": "e379f0a30a75835034a2703afe6c65d9750995562f20e2b69f65f00cdf4131de",
+ "publishDigestMethod": "SHA-256 of the sorted 'path sha256' lines from package/PACKAGE-MANIFEST.json files map",
+ "publishFiles": {
+  "app-259.js": "9600515baa786f65345cdf9b7b715a57c6b83253f8c195f68d2a28486c0df7c6",
+  "app-262.js": "e1993e85038ab6a880e880b09684b33697bf17ac00e9dda98cb11b56a8ef3828",
+  "app-263.js": "dc8313a42b286962cc6c457d823b87c222f43ee073bad5d2d967e604e84940aa",
+  "app-264.js": "cd7d6d9c52a1013d52acee8eb73cda3f3bd83c2496b6e151b9f88a46f61b6948",
+  "app-265.js": "207a0918588e9e38ccbb26f602f692c90820a4771ed9d8f5fc127c4beed6eab0",
+  "app-266.js": "7709738b69c0cf15bc8f312e0425b2b3c0e896c5ab9050422b62ccdc0bc2a7d9",
+  "apple-touch-icon.png": "bb97e623846a8027f0266577af48c300fb9e9c748e326ffcf5c9671cc39e9c43",
+  "icon-192.png": "d1b68e36fd6b3cd543d6473d23e1cfb4d290335c079e2aa96cceb9bc7767bbe8",
+  "icon-512.png": "7905ea3005cbf62572b98e80191789fc33e2bcd0717b26b866ca6185e42dd2d4",
+  "icon.png": "82bef7aa3d6e35cb0062318994a579e954ea2893dfb437f07d74db06158c347e",
+  "icon.svg": "fd4e03e102db119a8231338e6d08abe38d7f222be8f846f8369ba53fbdedd903",
+  "index.html": "a3bf01936147aaba49aecd88149d68487cbb5e27d02700588cbc7e89ea2355a6",
+  "manifest.webmanifest": "8e32559c0d64f7cce56bf4edafdad47f06f846ffed724a15c0c838bcb5cdcda3",
+  "modules/audio-transport.js": "1a79e5c83b77f22644fc2f3e9d66e11b88015fdce6bc6cd3f12a2051e376d775",
+  "modules/composition-corr1.js": "02068d3310543b060753b676283f6d282ee5ba35b5cf8f09490925a28efeddfa",
+  "modules/composition-ui1.js": "41a003df00b4b409b24b09a79811dcaae45c2a69089b86813196a69634385444",
+  "modules/composition-ui3.js": "203d331d1db9df49cea05a08f0dc170426995b33241963aae3e5a446aba90912",
+  "modules/composition.js": "831960ec99f8401dbc8b035241d9641083ca250543bc31f661033091a766c0e8",
+  "modules/constants-corr1.js": "e902bafebe75155f6e8feca192a86783264835a77b9a8f5a039ed7c96641c80b",
+  "modules/constants-ui1.js": "08cd753f3dab5aa7b61275d78b4542d483bda82c9e8f0bf162c5ecd5179d0ea7",
+  "modules/constants-ui3.js": "48adbcbfb8603e58cf9b71bf4de648b1a9b81cc31daf07c481a55f7f7ac62905",
+  "modules/constants.js": "d42b100d41b99495eb3b743dc44795e7f352c3d1303e7a622f93852967eb403f",
+  "modules/device-identity.js": "45956a174c9f357054696ba6faa741374d3a93782168341905472196b5845536",
+  "modules/diagnostics.js": "d1dff86da1ba2d52748410db623e78a25f0a958946ffb76f679f2cde18ed664c",
+  "modules/entry-corr1.js": "f12ffaacae56db33b6ea53bf6335f7c0feeef151f2863c33dcf2ed4697120b44",
+  "modules/entry-ui1.js": "542c613aff2e37369f5ba7f646906b58de5cdaa9c16855f669dd45d503c63e5b",
+  "modules/entry-ui3.js": "c9e522b647df7e5d65a78533b1b8e51ec6fdc8b4dc91b10ea4bc83411a720278",
+  "modules/entry.js": "0a3e5835ebbe0035db33caefbd69ca126b5ae8b13173351097a17dc6dccc1837",
+  "modules/lifecycle.js": "650cf75cdc5b6a51ed4dd4d8a492b6302b3b227cf64ce69bcab50d2cbd8c77c1",
+  "modules/ownership.js": "bf4e2578756e25406d4629f6b5bbd61c4dc66cb6a4b34993747694f76f9f70cd",
+  "modules/player.js": "e63e0558993878a395b28e0efbc504680fdc556d43647ab4bc697bf50f4cde39",
+  "modules/position-reporter.js": "56c73e2d6cbcbcfa1ac80e2881a0ccd62db52b59cfd987e0c594713f96026563",
+  "modules/runnable-corr1.js": "da359c4bd92dfc0f16680edfee66871cf61d63260205eb2d5b41d9933163951a",
+  "modules/runnable-ui1.js": "91c9b27c63310c475be862307ac3ccb43feb1ec96622b159ae209efa92b95154",
+  "modules/runnable-ui3.js": "d271b4d3df3930711f63492bb85ece4c9eed643c91965539d9f31659e5389b1a",
+  "modules/runnable.js": "b778fef800223c8d93130cbb0304d06bdb7676cf752731300c63424d85ab4496",
+  "modules/screens.js": "adec290e48e80bb8f1ee194700733d93403a4a57ff2ff85cbdd3346ae757defd",
+  "modules/storage-adapter.js": "d41ae89c6001bab105ae89ba75815b90b2b844b49fc5444865c2467f4718bf64",
+  "modules/vendor/client-store-corr1.js": "ff26ed32cbec68a7869e2fcb9e0b9e1f1ba0a1cba0e9b0d34ef46bab7fbfe3ba",
+  "modules/vendor/client-store-ui1.js": "778d4c3367b5f9b65b738ab48ac8c9cfcfce4bb514acb927defc1df0c013e3ad",
+  "modules/vendor/client-store.js": "fd022051e026c1477b57271715e4d882c10a23626716935cb93a611dc07fc5d7",
+  "modules/vendor/client/assembled-client-corr1.js": "1125f15b7b64e279e9f3dbd5730519e185f4c75b4ed11f47322c09061b810fa6",
+  "modules/vendor/client/assembled-client-ui1.js": "fbb10fb53a9c4fec382d130f981ceb0a3e9e53a8b2a5a9216a29cd4ec4113e19",
+  "modules/vendor/client/assembled-client.js": "ede3b6d0d9990d9a4a2ebe7688647be7528af2f9a4a1bc9a1dd14f03401159c7",
+  "modules/vendor/client/funnel.js": "5937587fa32ed44ab87eb478b8a9c67eb8ae8bfc27d458d64f5aac1d9e61c983",
+  "modules/vendor/client/http-transport.js": "e32b85307176928f5abf1da48678eade91304db9fdc80abd725216e8d75652b0",
+  "modules/vendor/client/projection-corr1.js": "aace690a81d1eb647ab13663b4be067c4e31682a1b7135fbf2fadc46c54889ce",
+  "modules/vendor/client/projection-ui1.js": "af7a1d1048422b59465271f2eab998e2b89acf9b05794e1c0ac6a9a1b37dc00b",
+  "modules/vendor/client/projection.js": "3ff5e38d8a7b22586b936b63c5e90587e5e3b130dddb8f57f53d9e04e071cbad",
+  "modules/vendor/client/removals.js": "94d71b3f1880ab32d0a414b354aef2923a8efedf1690e0570fce9fbfbd084a8e",
+  "modules/vendor/client/shelf-bridge.js": "bc0a5879fbf4a6f455170ead8e0fbe1aa19d82126df4eb631bd0ebad9112ec8e",
+  "modules/vendor/client/surfaces.js": "d079cca5981e2e487e281fb5cc949b200f41d07dd52faf08d61239a63ec24a18",
+  "styles-149.css": "4decdd7eafe54d93f24baa1d5240aa588de5c1625fe5620f9dd1f3223362f154",
+  "styles-150.css": "637fdcdea38a3b4e007d27929fb763647e1eddcca90b2023302daf0314a97d4c",
+  "styles-151.css": "4314902af4a04e8fa9755aa79864a383920c55e70f8cd7cd808e75fa0d810b0c",
+  "styles-152.css": "3ff48365c5d9db188c9c49b1a63cef3b2cfbebd720ae5630d499116b6394a425",
+  "styles-153.css": "f063b246c040989bf9943642675d8f103fb7c4bf9a59cb05028be72bff3dab0f",
+  "sw-207.js": "c4e0815582091acc68c77e5352ac0b7d7a172b055fa7dcf85134ee0f8ef4de99",
+  "sw-corr1.js": "ab4eb55b74f35acb7e0abfe9da87a25ed7800881fec70b8eacb5c112b9829c9f",
+  "sw-d5c3.js": "e00a4d773621c37000ebffcea92c7cb0ddebe99b80bd707ec56d6367d1d99491",
+  "sw-ui1.js": "6e93de313e4f3d1ea06f7cd58af1ceb3345fc3fd9b14d62867a8975a2fa1adad",
+  "sw-ui2.js": "3f17ec3d761729fb90d21d2cb5499f9c8fbf8abbfc1080884a2752565524ff50",
+  "sw-ui3.js": "424cd8a81ea04c494809e307e6de440fae0be2c28316727753f098385d2be881"
+ },
+ "bridgeSha256": "bc0a5879fbf4a6f455170ead8e0fbe1aa19d82126df4eb631bd0ebad9112ec8e",
+ "storeSha256": "778d4c3367b5f9b65b738ab48ac8c9cfcfce4bb514acb927defc1df0c013e3ad",
+ "tests": {
+  "unitBatteryTreeA": "UNIT BATTERY: 13/13 PASS",
+  "unitBatteryPackage": "UNIT BATTERY: 13/13 PASS",
+  "castCensus": "CAST CENSUS: PASS \u2014 mappings table covers exactly the census's non-Gemini cast voices; unverified flag exact.",
+  "chromiumProofTreeA": "CHROMIUM PROOF: 14/14 PASS",
+  "chromiumProofPackage": "CHROMIUM PROOF: 14/14 PASS",
+  "phoneWidthTreeA": "PHONE-WIDTH PROOF (tree-a): 11/11 PASS",
+  "phoneWidthPackage": "PHONE-WIDTH PROOF (package/publish): 11/11 PASS",
+  "phoneWidthBasePublished": "PHONE-WIDTH PROOF (base): 9/11 PASS",
+  "w4ProofTreeA": "W-4 PROOF (tree-a): 7/7 PASS",
+  "w4ProofPackage": "W-4 PROOF (package/publish): 7/7 PASS",
+  "packageAssemble": "PACKAGE ASSEMBLE: ALL CHECKS PASS",
+  "pinnedLogs": [
+   "logs/unit-results.txt",
+   "logs/unit-results-package.txt",
+   "logs/chromium-results-tree-a.txt",
+   "logs/chromium-results-package.txt",
+   "logs/phone-results-tree-a.txt",
+   "logs/phone-results-package.txt",
+   "logs/phone-results-base.txt",
+   "logs/w4-results-tree-a.txt",
+   "logs/w4-results-package.txt",
+   "logs/cast-census-results.txt",
+   "logs/assemble-results.txt",
+   "logs/run-exit-codes.json"
+  ],
+  "exitCodes": {
+   "castCensus": {
+    "command": "node tests/cast-census.mjs",
+    "exitCode": 0,
+    "log": "tests/cast-census-results.txt"
+   },
+   "chromiumPackage": {
+    "command": "UI3_TREE=package/publish node tests/chromium-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/chromium-results-package.txt"
+   },
+   "chromiumTreeA": {
+    "command": "UI3_TREE=tree-a node tests/chromium-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/chromium-results-tree-a.txt"
+   },
+   "packageAssemble": {
+    "command": "python3 package-assemble.py",
+    "exitCode": 0,
+    "log": "package/assemble-results.txt"
+   },
+   "phoneBase": {
+    "command": "UI3_TREE=base node tests/phone-width-proof.mjs",
+    "exitCode": 1,
+    "log": "tests/phone-results-base.txt",
+    "note": "EXPECTED FAILURE \u2014 the reproduction run against the published ui-pkg-2 tree. Only the two new W-5 rows fail (Q1/Q2: the Settings quota row's label text paints across the value box by 1,562 px^2 at both 390 and 360; the label column is crushed to 0 width and the value is not stacked). All 9 UI2 rows pass there, as they should: ui-pkg-2 fixed W-1/W-2/W-3."
+   },
+   "phonePackage": {
+    "command": "UI3_TREE=package/publish node tests/phone-width-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/phone-results-package.txt"
+   },
+   "phoneTreeA": {
+    "command": "UI3_TREE=tree-a node tests/phone-width-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/phone-results-tree-a.txt"
+   },
+   "run": "UI3 candidate (ui-pkg-3) full battery \u2014 exact final trees, Oct 29 2026",
+   "unitPackage": {
+    "command": "node tests/unit-battery-package.mjs",
+    "exitCode": 0,
+    "log": "tests/unit-results-package.txt"
+   },
+   "unitTreeA": {
+    "command": "node tests/unit-battery.mjs",
+    "exitCode": 0,
+    "log": "tests/unit-results.txt"
+   },
+   "w4Package": {
+    "command": "UI3_TREE=package/publish node tests/w4-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/w4-results-package.txt"
+   },
+   "w4TreeA": {
+    "command": "UI3_TREE=tree-a node tests/w4-proof.mjs",
+    "exitCode": 0,
+    "log": "tests/w4-results-tree-a.txt"
+   }
+  }
+ },
+ "files": {
+  "BUILD-REPORT.md": {
+   "bytes": 20249,
+   "sha256": "fbd111fc20ea60dcc15362fdf3954f18b39db6e778aa493863561ffd7bfc35f0",
+   "gitBlob": "c6d36826f8344674999785200f845e92e61db1c7"
+  },
+  "base-index.html": {
+   "bytes": 1419,
+   "sha256": "414d24ff45d91f2fdb48f91e12ee00cf9afab2227f0d279ef0f6b8ec1efab71f",
+   "gitBlob": "46db7ccd908c317f6e46dabd7bce770395ea62a4"
+  },
+  "PACKAGE-MANIFEST.json": {
+   "bytes": 7178,
+   "sha256": "9b9e80989fd9e5df031a0cca2ec0dbb34f69243fe884799cdced3cc1a1313ef6",
+   "gitBlob": "7c1530357c7a4e36411504e7bd8f7858f2fd603e"
+  },
+  "delta/app-266.js": {
+   "bytes": 72286,
+   "sha256": "7709738b69c0cf15bc8f312e0425b2b3c0e896c5ab9050422b62ccdc0bc2a7d9",
+   "gitBlob": "50f6ab88ddc113d151e2ac2d6ed9d979804d4c77"
+  },
+  "delta/index.html": {
+   "bytes": 1419,
+   "sha256": "a3bf01936147aaba49aecd88149d68487cbb5e27d02700588cbc7e89ea2355a6",
+   "gitBlob": "5f09eb48a1a1fe185a5c82f42bf10f027297502a"
+  },
+  "delta/modules/composition-ui3.js": {
+   "bytes": 67346,
+   "sha256": "203d331d1db9df49cea05a08f0dc170426995b33241963aae3e5a446aba90912",
+   "gitBlob": "0b17090ac2ba3fadc8ea50b09d0d4fb6d6dff78d"
+  },
+  "delta/modules/constants-ui3.js": {
+   "bytes": 2834,
+   "sha256": "48adbcbfb8603e58cf9b71bf4de648b1a9b81cc31daf07c481a55f7f7ac62905",
+   "gitBlob": "567f7b389753de467f54cfef242d95245c859298"
+  },
+  "delta/modules/entry-ui3.js": {
+   "bytes": 495,
+   "sha256": "c9e522b647df7e5d65a78533b1b8e51ec6fdc8b4dc91b10ea4bc83411a720278",
+   "gitBlob": "a6779d4bb388de5c4507d5e7e22df9bf20fa3752"
+  },
+  "delta/modules/runnable-ui3.js": {
+   "bytes": 3630,
+   "sha256": "d271b4d3df3930711f63492bb85ece4c9eed643c91965539d9f31659e5389b1a",
+   "gitBlob": "2745332a427c98e8afe7b75ee57227dcf4c45820"
+  },
+  "delta/styles-153.css": {
+   "bytes": 37966,
+   "sha256": "f063b246c040989bf9943642675d8f103fb7c4bf9a59cb05028be72bff3dab0f",
+   "gitBlob": "e0b85afe07126f2b3d1c521fc8c75ab529b96b1e"
+  },
+  "delta/sw-ui3.js": {
+   "bytes": 9483,
+   "sha256": "424cd8a81ea04c494809e307e6de440fae0be2c28316727753f098385d2be881",
+   "gitBlob": "575bed708b44e824137e33cf0195b98cbfb1bcd4"
+  },
+  "tests/unit-battery.mjs": {
+   "bytes": 12981,
+   "sha256": "7660badc738ad7208886ec75410de5330e1e54186ae660ae8448499d5f0846ab",
+   "gitBlob": "bbc9dc350b4cb140dd46760b45ed4237c9e4cfed"
+  },
+  "tests/unit-battery-package.mjs": {
+   "bytes": 12999,
+   "sha256": "2c3504047161a08384f782827b19e609979126374ca60b266d1ce9184a55e858",
+   "gitBlob": "c0f0437dc3f28270b1d5cf3b52c504ba5a37e270"
+  },
+  "tests/cast-census.mjs": {
+   "bytes": 4526,
+   "sha256": "027dee5991e14b83978ad9f00200c8d566105131a705eac75681ff8f1c0b8155",
+   "gitBlob": "44bbf3d81de9a0055628d1cea4cfa417ebfd33c8"
+  },
+  "tests/chromium-proof.mjs": {
+   "bytes": 45235,
+   "sha256": "1d169dea43e98d688fe780874328f6ebd51745a817f2d971457d2743710d9d39",
+   "gitBlob": "6ff1b8a1587a936401cb48351f223dc9c6f7e70b"
+  },
+  "tests/phone-width-proof.mjs": {
+   "bytes": 32904,
+   "sha256": "ca5dd1dbbf1dbb1951f7746c888d6ec21770e2dd1daabdf3f2a769373223a8e7",
+   "gitBlob": "d1dd98ed05253b28e8bcbbef17d186978bbfd435"
+  },
+  "tests/w4-proof.mjs": {
+   "bytes": 25888,
+   "sha256": "98d072ec4cad9b83fc1d79016e1d795f238706d2c01da099e311aabbf30317f0",
+   "gitBlob": "c238b13d277c241837572f91c2594c6743f63fea"
+  },
+  "logs/unit-results.txt": {
+   "bytes": 1019,
+   "sha256": "c580bb26e19cf6f967c6d74b7040e70363f7f0367bc8b273f713cb1dc45d463f",
+   "gitBlob": "937233f989e65d46fbcea4330732cf6aff3b54ba"
+  },
+  "logs/unit-results-package.txt": {
+   "bytes": 1019,
+   "sha256": "c580bb26e19cf6f967c6d74b7040e70363f7f0367bc8b273f713cb1dc45d463f",
+   "gitBlob": "937233f989e65d46fbcea4330732cf6aff3b54ba"
+  },
+  "logs/chromium-results-tree-a.txt": {
+   "bytes": 2725,
+   "sha256": "894d9f07ba977c06acbcbe2acea1a69bb1df5c21b0769963199bd7f24c38245c",
+   "gitBlob": "8e30f9e4418105b0740e5e86cb704047517bcbb2"
+  },
+  "logs/chromium-results-package.txt": {
+   "bytes": 2725,
+   "sha256": "dd446fb44bda6ee7eb55ea61c266054b7ccded2c4ebaa60173860b2a716133d4",
+   "gitBlob": "963b279a2bfe59a05d4e3e5f8e5d7830d306596f"
+  },
+  "logs/phone-results-tree-a.txt": {
+   "bytes": 7151,
+   "sha256": "341bff1cd0ea333c1e865f9b5618847711d867208309c1c6b564fd4e6c9044f2",
+   "gitBlob": "2d9e732158791e1b25e1ad513bff5e3bd0b5ebed"
+  },
+  "logs/phone-results-package.txt": {
+   "bytes": 7160,
+   "sha256": "8ec9f097ddc68249ec1a41e68f033fbb85ee2a33be8bc57097c3ab9915227607",
+   "gitBlob": "045e0c9b572b0e67cd8a37b14fe9daf1a9a8831a"
+  },
+  "logs/phone-results-base.txt": {
+   "bytes": 6896,
+   "sha256": "450388a5a92dd2c1284e1f1daa5c447cfa1faaeb76b22a377a18b98a0c9b0d35",
+   "gitBlob": "b294ee7d6464da2e41eb753967842b49c1d39c32"
+  },
+  "logs/w4-results-tree-a.txt": {
+   "bytes": 1848,
+   "sha256": "777514a449af8b5059f9ac5c21060f5b05cb7e50a6f9dbeb440f2a87190ef095",
+   "gitBlob": "d3bb95fe8ea312a0be1e0d3421e266d11bf4b8b1"
+  },
+  "logs/w4-results-package.txt": {
+   "bytes": 1857,
+   "sha256": "7feedf314fb53122ad3e580274c78776b7a7c7afc0c5e7cb8fed10c6224f5ec5",
+   "gitBlob": "ccd1573da6a63c5ac5775f9a6c41372d32452609"
+  },
+  "logs/cast-census-results.txt": {
+   "bytes": 1375,
+   "sha256": "8865b7c02be39354b12653097c34069476458e53b6a4fc24f7bebc852df1b57a",
+   "gitBlob": "edf9bafc07adb5e1bd5c18c303a83e716b838fce"
+  },
+  "logs/assemble-results.txt": {
+   "bytes": 2430,
+   "sha256": "41b1c2c9dabb90bf0d5b93cddea69048cbdd9736482731ab4b39b6dad079c7fa",
+   "gitBlob": "c0253866b9f1fa895ec5f1a58181f9e1b822e09b"
+  },
+  "logs/run-exit-codes.json": {
+   "bytes": 1781,
+   "sha256": "f6ab3f017ded5fceb8493469dd2af5cc9f353e0bd44144b77232e519826e5203",
+   "gitBlob": "19c33848a9817b1cbdb22330fac4f7ffdeaea111"
+  }
+ }
+}

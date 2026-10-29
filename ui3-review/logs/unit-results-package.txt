@@ -1,0 +1,15 @@
+PASS U1 chapterDisplay keys chapters by chapterId (divergent adjacent chapters)
+PASS U2 syncFamilyDrain converges 1,799 bindings in one call (18 pages)
+PASS U3 drain stops truthfully on a non-contiguous first page; cache byte-identical (empty)
+PASS U4 network failure at page 6: cursor 500 kept, chapters read Sync incomplete (never Not generated)
+PASS U5 zero-progress page: drain stops with no_progress
+PASS U6 >40-page family: drain stops at cap with page_cap, cursor 4000
+PASS U7 restart resumes from persisted cursor; entity count exact
+PASS U8 resyncRequired page drains via snapshot to the watermark
+PASS U9 pre-drain state keeps Not generated semantics (no false Sync incomplete)
+PASS U10 first-page network failure (tip 0): drainStatus marks Sync incomplete
+PASS U11 two devices (separate storage) keep separate cursors
+PASS U12 torn page at seq 250: applied prefix intact, drain reports non_contiguous_page
+PASS U13 findText hit carries the chapter's chapterId (Rowan correction 2b)
+
+UNIT BATTERY: 13/13 PASS

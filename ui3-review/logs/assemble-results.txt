@@ -1,0 +1,35 @@
+PASS base path count == 56 (got 56)
+PASS delta classification == declared 8 paths (got ['app-266.js', 'index.html', 'modules/composition-ui3.js', 'modules/constants-ui3.js', 'modules/entry-ui3.js', 'modules/runnable-ui3.js', 'styles-153.css', 'sw-ui3.js'])
+PASS new paths are exactly the 7 declared new files
+PASS publish path count == 63 (got 63)
+PASS non-delta publish paths byte-identical to base (bad: [])
+PASS index line count unchanged
+PASS index diff == exactly the 2 pointer lines + the notice marker line (got 3 diffs)
+PASS sw-ui3 SHELL == packaged ui3 closure (30 entries)
+PASS sw-ui3 SHELL closure count == 30 (got 30)
+PASS sw-ui3 PURGE_ON_ACTIVATE == [] (ui2/ui1/corr1/v1 caches preserved)
+PASS sw-ui2.js (rollback) SHELL fully resolvable in publish tree (missing: [])
+PASS sw-ui1.js (rollback) SHELL fully resolvable in publish tree (missing: [])
+PASS sw-corr1.js (rollback) SHELL fully resolvable in publish tree (missing: [])
+PASS app-266 import closure resolves (missing: None)
+PASS app-266 closure routes through modules/composition-ui3.js
+PASS app-266 closure routes through modules/constants-ui3.js
+PASS app-266 closure routes through modules/entry-ui3.js
+PASS app-266 closure routes through modules/runnable-ui3.js
+PASS app-266 closure uses NO ui1 composition/constants/entry/runnable (bad: [])
+PASS app-266 closure reuses the ui1 store/client modules + shared player (got ['modules/vendor/client/projection-ui1.js', 'modules/vendor/client/assembled-client-ui1.js', 'modules/player.js', 'modules/vendor/client-store-ui1.js'])
+PASS app-265 (rollback) import closure resolves (missing: None)
+PASS app-265 closure untouched by ui3 (bad: [])
+PASS app-264 (rollback) import closure resolves (missing: None)
+PASS app-264 closure untouched by ui2/ui3 (bad: [])
+PASS app-263 import closure resolves (missing: None)
+PASS app-263 closure untouched by ui1/ui2/ui3 (bad: [])
+PASS client store module byte-identical to the accepted ui-pkg-2 store (SHA-256 pinned)
+PASS app-266 carries ui-pkg-3 and registers sw-ui3.js
+PASS constants-ui3 carries build marker d5b-v2-playback-client-14
+PASS composition-ui3 imports constants-ui3 and carries the W-4 hook calling the store's verifyBindingBytes
+PASS app-265 (rollback) still carries ui-pkg-2 and registers sw-ui2.js
+PASS frozen Shelf bridge byte-identical (SHA-256 pinned)
+
+wrote package/PACKAGE-MANIFEST.json; publish=63 paths, delta=8 paths
+PACKAGE ASSEMBLE: ALL CHECKS PASS
