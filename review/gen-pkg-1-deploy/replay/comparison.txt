@@ -1,0 +1,17 @@
+== cmp: replay outputs vs pinned artifacts (same checkout) ==
+IDENTICAL  assembled-envelope.bin
+IDENTICAL  assembled-metadata.json
+IDENTICAL  parts-manifest.json
+IDENTICAL  proof-result.json
+IDENTICAL  proof-result-drop-seventh.json
+IDENTICAL  proof-result-typo-enforce.json
+IDENTICAL  proof-result-wrong-entry.json
+== sha256 of replay outputs ==
+2f5ce34ee47b822de9829890ae9878447c361d5f89abbe5440852d0a4f39e5f1  /tmp/d7pin/out-pos/assembled-envelope.bin
+e08b06bc840810739ef5a2fbd5279c6670c1759235fa830121964507f162a9fd  /tmp/d7pin/out-pos/assembled-metadata.json
+754876a832864fdf07e615a75a300f9b44472de5123e0c5ee141950f9eef4aeb  /tmp/d7pin/out-pos/parts-manifest.json
+== checkout candidate/worker treehash ==
+fc5891f6f2c7568c4c454ca1c5acd4218a77d03bb2c158a95ea76d6a6e68a229  (56 files)  /tmp/d7pin/checkout2/opal-reader-739fe3ada6b0f5489547e89482e48808840dd7a1/review/gen-pkg-1-deploy/candidate/worker
+== checkout candidate/worker per-file manifest vs staged ==
+CHECKOUT MANIFEST == STAGED MANIFEST
+e522ee6d05c55f6a85edc4c66bd9ecbc884bfb12510b4e0d06f6403660b0acc0  /tmp/d7pin/manifest-checkout.txt

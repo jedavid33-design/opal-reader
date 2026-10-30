@@ -1,0 +1,12 @@
+# clean-checkout manifest — D7-1 replay of the pinned evidence package
+commit: 739fe3ada6b0f5489547e89482e48808840dd7a1
+commit parent: a6288de5926057536e78f46cc7e195205f334c8a
+source: https://codeload.github.com/jedavid33-design/opal-reader/tar.gz/739fe3ada6b0f5489547e89482e48808840dd7a1
+tarball sha256: 8752baccf1dfc7ce72b9605c2713fe4597e880eff4226a951b88adf6b133f2c8
+tarball bytes: 12362044
+tarball root: opal-reader-739fe3ada6b0f5489547e89482e48808840dd7a1/
+extracted fresh into a clean temp dir; no prior checkout reused.
+candidate/worker in checkout: 56 files
+candidate/worker treehash (established method): fc5891f6f2c7568c4c454ca1c5acd4218a77d03bb2c158a95ea76d6a6e68a229
+candidate/worker per-file manifest sha256: e522ee6d05c55f6a85edc4c66bd9ecbc884bfb12510b4e0d06f6403660b0acc0 (== staged manifest == local source manifest)
+harness: review/gen-pkg-1-deploy/replay/proof-d6-envelope-replay.mjs, sha256 a1cc05c4af9e114ef7fcb36fdb0de37044918f62f84a4f4b5b5281d498ccd930, 21479 bytes
