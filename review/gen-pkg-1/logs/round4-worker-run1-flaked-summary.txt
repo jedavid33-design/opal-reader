@@ -1,0 +1,4 @@
+suite files: 120  pass: 97  fail: 23
+tests: 936  pass: 913  fail: 23
+assertion failures:
+/home/hatch/workspace/gen-pkg-1/logs/round4/worker-final/per-file/p8-d3-resource-proofs.test.mjs.log

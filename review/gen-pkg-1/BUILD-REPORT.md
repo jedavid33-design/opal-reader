@@ -995,6 +995,213 @@ all three.
   as they were, and the deploy-gate sequence above still
   requires Julie's separate authorization at each step.
 
+## Round-4 corrections (Rowan round-4 source review, comment 6513553263)
+
+Rowan's round-4 review verified the round-3 corrections and
+withheld sign-off on two remaining blockers. **R4-1 is
+corrected and fully verified below. R4-2 is NOT implemented:
+both shapes Rowan specified were tested empirically and both
+break the baseline D6 continuity suite, so the work STOPPED
+at that fix under the standing constraint (a fix that breaks
+a baseline suite stops and reports; baseline suites are never
+edited silently) — the evidence and the decision required are
+recorded in full.** Nothing in this round was deployed,
+published, or recorded against production; no production plan
+was reconciled, retired, retried, or driven; the entry file
+is byte-identical to round 3.
+
+### R4-1 — halted_unknown is an enduring driver-level stop
+
+**The defect (as Rowan found it).** Round 3 made
+`halted_unknown` fence at ADMISSION, but the DRIVER still
+selected halted plans: `driveOnce()` picked every plan whose
+state was not complete/partial/retired, and once
+`reconcileUnknownAttempt` cleared the phase's last
+unknown-billing flag, the driver's phase-halt check passed
+and it flipped the plan back to `active`
+(`plan.state === "halted_unknown"` → `setPlanState(...,
+"active", null)`) and continued into grant/outbox dispatch —
+silently ending the halt on the next alarm, without
+`retireHaltedPlan` or any explicit act, and potentially
+making a later retirement fail `plan_not_halted_unknown`.
+The round-3 halted-fence suite never invoked `driveOnce`
+between reconcile and retire, so the gap was invisible to it.
+
+**The fix** (`worker/generation/service.mjs`, `driveOnce`
+only). `halted_unknown` is excluded at SELECTION:
+`WHERE state NOT IN ('complete', 'partial', 'retired',
+'halted_unknown')`, and the reactivation flip is deleted —
+there is no code path in the driver that selects, mutates,
+reactivates, grants for, or dispatches a halted plan, on any
+pass, however often the alarm fires. The ONLY transition out
+of `halted_unknown` remains `retireHaltedPlan` (to `retired`,
+itself terminal in the driver); any later restart over the
+plan's occurrences requires a fresh approved intent under all
+fences. Phase-level handling for OTHER plans is unchanged: a
+selected plan whose phase is halted still transitions INTO
+`halted_unknown` and stops — the exclusion governs plans
+already halted, never the act of halting. `recover()` needed
+no change (an unknown_billing execution classifies as
+`reconcile_hold`; recovery performs no action on it).
+
+**The test** (`genpkg1-halted-fence.test.mjs`, one ADDITIVE
+test + a header amendment note — a candidate suite; now
+7/7). The halted plan is built through the real machinery
+(chapter scope over ch-1), then, in the exact interleaving
+round 3 missed: reconcile the final unknown (phase halt
+clears — the dangerous window) → `driveOnce()` three times
+plus one full alarm cycle (`recover()` + `driveOnce()`) →
+the halted plan is not even present in any drive's outcomes;
+its plan row, plan jobs, grants, attempt log, execution
+records, outbox, and phase accounting are BYTE-IDENTICAL /
+unchanged; the admission fence still rejects an overlapping
+submission naming it → a non-overlapping plan in the SAME
+(now un-halted) phase is admitted and DRIVES normally in the
+same window, with the halted plan still byte-identical →
+retirement AFTER the drives APPLIES (no
+`plan_not_halted_unknown`) → the retired plan remains inert
+under further drives → the parked Ch 3 job and its
+occurrences are byte-identical throughout.
+
+**Negative control.** With the round-3 driver shape
+temporarily restored (selection without the exclusion + the
+flip), exactly the new R4-1 test fails and all six round-3
+tests still pass — which is precisely how the defect
+survived round 3. The fix was then restored and the suite
+re-verified 7/7.
+
+### R4-2 — STOPPED: both specified shapes break the baseline continuity suite (decision required)
+
+**The requirement.** The production entry's `d6Service`
+selects the phase-policy mode from
+`env.OPALREADER_PHASE_POLICY === "enforce"`, so a missing,
+changed, or omitted binding at deploy time silently restores
+legacy admission. Rowan's shapes: enforce unconditionally in
+production construction, OR reject all D6 submission with a
+503/configuration error whenever the value is not exactly
+`"enforce"`.
+
+**The experiment (performed, then fully reverted).**
+Unconditional enforcement was implemented in `d6Service`
+(shape 1) and the entry-touching suites were run:
+
+- **`d6-correction` (BASELINE): 3 of 5 tests FAIL — C2, C3,
+  C5.** All three stage a budgeted `forever-pucked` intent
+  through the REAL production entry/class against an EMPTY
+  registry and assert admission (`created: true`; C2 via the
+  class's `/internal/d6/intent` route, C3 via the public
+  `/v2/commands` route, C5 via the public route + the real
+  class alarm, which then dispatches 0 grants instead of 1).
+  Under enforcement the submissions are rejected
+  `phase_unbound` — first-use admission is exactly what these
+  tests exercise. C2/C3/C5 are the D6 CONTINUITY proofs over
+  carried, production-shaped state; they predate phase policy
+  entirely, and their fixture envs carry no
+  `OPALREADER_PHASE_POLICY`.
+- `genpkg1-phase-enforce` (candidate): its round-3
+  fixture-contrast test fails, as expected — that suite is
+  amendable, and is not the blocker.
+- Everything else entry-touching passes unchanged
+  (d6-correction2 10/10, d6-seed-hardening 12/12,
+  genpkg1-phase-policy 10/10, genpkg1-diagnostics 9/9).
+
+Shape 2 (503 on submission whenever the flag is not exactly
+`"enforce"`) refuses the IDENTICAL submissions — C2/C3 assert
+HTTP 200 + `created: true` on them and C5 asserts the
+dispatch — so the same three baseline tests fail; a
+construction-throwing variant breaks strictly more (every
+flag-less fixture world that constructs the service for any
+route). The experiment was reverted completely: the entry is
+byte-identical to round 3 (SHA-256 `9bfe48e404fbdf0bb741…`),
+and d6-correction + genpkg1-phase-enforce re-verified green
+after the revert.
+
+**Why an env flag on the fixtures would not fix C5.** C5
+submits TWO books (`book-a`, `book-b`) claiming the SAME
+budgeted phase through the entry. Registry law binds one
+phase to ONE book: even with a binding recorded in-fixture,
+the second book's claim is `phase_bound_to_other_book` (and
+`phase_unbound` before any recording). C5's premise — two
+books sharing one budgeted phase via legacy history rules —
+is the behavior the registry law exists to forbid, so C5
+needs re-staging (distinct phases, or unbudgeted intents),
+not just a deployment flag.
+
+**The decision required (Rowan's / Julie's).** Either
+(a) authorize a DISCLOSED amendment of the d6-correction
+fixture worlds (record the binding in-fixture for C2/C3;
+re-stage C5's phase usage) as an explicit baseline-suite
+change owned by that authorization — the suites would then
+stage the enforce deployment shape they currently omit; or
+(b) Rowan specifies a different production-construction
+boundary that pre-policy fixture worlds do not trip. Until
+one is chosen, the round-3 construction stands, with its
+known residual, stated plainly: runtime admission depends on
+the deployment carrying `OPALREADER_PHASE_POLICY=enforce`.
+The mitigations already in place are the ones the deploy
+gate owns: the pinned spec carries the binding, and the
+spec's arming preconditions require confirming `enforce` in
+the deployed bindings by read-back BEFORE the binding
+recording and client publication. Rowan's request to update
+deploy-envelope validation for the binding is noted as part
+of whichever resolution is chosen (the validator,
+`tools/validate-prod-envelope.mjs`, has no phase-policy
+handling today). The deploy-spec binding itself is unchanged
+this round, as instructed.
+
+### Battery (round-4 final trees)
+
+- Targeted: `genpkg1-halted-fence` **7/7** (incl. the new
+  R4-1 interleaving test + negative control above);
+  entry-experiment tallies as recorded under R4-2.
+- Worker full battery, one complete clean run on the exact
+  final tree: **120 suite files: 98 pass / 22 fail — the
+  failing set is BYTE-IDENTICAL to the recorded 22-name
+  baseline; 936 tests: 914 pass; zero assertion failures.**
+  (936 = round 3's 935 + the one new R4-1 test.) Logs:
+  `~/workspace/gen-pkg-1/logs/round4/worker-final/`.
+  DISCLOSED FLAKE: the first round-4 battery run failed one
+  additional suite, `p8-d3-resource-proofs`, on its RSS-delta
+  assertion (129.6 MiB measured vs the pinned 128 MiB
+  threshold — a memory-pressure artifact of the long
+  sequential run; the suite exercises the pre-D6 migration
+  import path, untouched by this round). It passes 2/2 in
+  isolation and passed in the clean re-run; the flaked run's
+  summary + failing list are preserved at
+  `~/workspace/gen-pkg-1/logs/round4/worker-run1-flaked/` and
+  pinned alongside the final logs.
+- Client: NO client change this round. Batteries re-run on
+  the unchanged trees: store unit **13/13**; generation unit
+  **13/13**; Chromium proof **14/14 with 0 page exceptions**
+  on tree-a AND on `gen/package/publish`. Logs:
+  `~/workspace/gen-pkg-1/logs/round4/`. Shelf bridge
+  re-verified in the publish tree: `bc0a5879…`, byte-identical.
+- Tree hashes (established digest method): worker
+  `1dc883adc71661e31cb6a510a1a87ab9272ccfd3eb91556f79072433662a3056`
+  (374 files — same count as round 3; the delta is exactly
+  `worker/generation/service.mjs` (R4-1; SHA-256
+  `b5c644043eb4199147…`) and
+  `tests/genpkg1-halted-fence.test.mjs` (SHA-256
+  `0f0227113c97229d1f…`)); client publish
+  `365ecbddf0bc17066c1eed5a6349735a290070482a50cddccda96c7a1e31dbd8`
+  (81 paths — IDENTICAL to round 3, proving the client tree
+  is untouched).
+
+### Disclosures
+
+- **R4-2 is unresolved and needs a decision (above).** The
+  pinned build therefore still contains the round-3
+  env-selected phase-policy construction Rowan flagged; it
+  is pinned unchanged deliberately, with the evidence, rather
+  than with a silent baseline edit or a red battery.
+- The only candidate-suite amendment this round is the
+  halted-fence suite's additive R4-1 test + header note. No
+  baseline suite was edited.
+- Nothing was deployed, published, or recorded against
+  production in this round; the production registry remains
+  unwritten, the Ch 2 halt and the parked Ch 3 job are
+  exactly as they were.
+
 ## Pin
 
 Pinned to `jedavid33-design/opal-reader` branch `ui1-review` (review only;
@@ -1019,5 +1226,22 @@ the same branch with parent `b8fe8c0ee496332ea059cb05686ba7e73cb793eb`
 (the round-1 completed-report head), same `review/gen-pkg-1/` layout,
 plus the two new worker suites, the amended round-1 suites, and the
 round-2 logs. The re-pin commit SHA is recorded in the builder's
+completion message, and the branch head was verified by independent
+read-back after the push.
+
+**Round-3 re-pin:** the round-3 artifacts were re-pinned on the same
+branch with parent `cba2625c8ae1275fd7168c7dc155356d67ffbd56`, same
+`review/gen-pkg-1/` layout, plus the two new worker suites and the
+round-3 logs. Head `58b4af076c4a28e71c60471bd9433ddc7e2778f9`,
+verified by independent read-back.
+
+**Round-4 re-pin:** the round-4 artifacts were re-pinned on the same
+branch with parent `58b4af076c4a28e71c60471bd9433ddc7e2778f9` (the
+round-3 head), same `review/gen-pkg-1/` layout: the updated report,
+the R4-1-corrected `worker/generation/service.mjs`, the extended
+`worker-tests/genpkg1-halted-fence.test.mjs`, and the round-4 logs
+(incl. the disclosed flaked battery run's summary + failing list).
+The entry, deploy spec, and all client blobs are carried forward
+unchanged. The re-pin commit SHA is recorded in the builder's
 completion message, and the branch head was verified by independent
 read-back after the push.

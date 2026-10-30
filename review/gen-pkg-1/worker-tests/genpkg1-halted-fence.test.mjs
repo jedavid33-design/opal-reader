@@ -44,6 +44,22 @@
 // confirmed/unknown attempt → markUnknownBilling (phase halt) →
 // drive (plan halts) — mirroring the production Ch 2 halt's
 // structure with synthetic data only.
+//
+// ROUND-4 AMENDMENT (R4-1, Rowan round-4 review comment
+// 6513553263): the round-3 suite never invoked driveOnce
+// between reconciliation and retirement — and in the round-3
+// build that gap hid a defect: driveOnce SELECTED halted plans
+// and flipped them back to 'active' once reconciliation cleared
+// the phase's unknown-billing flag, silently ending the halt on
+// the next alarm. Round 4 makes 'halted_unknown' an enduring
+// driver-level stop (excluded at selection in the driver), and
+// the final test below exercises exactly the interleaving the
+// round-3 suite missed: reconcile → drive once and repeatedly
+// (plus a recover+drive alarm cycle) → still halted, still
+// fencing, byte-identical → retirement still applies (no
+// plan_not_halted_unknown) → retired stays inert under further
+// drives. This is a candidate suite, not a baseline suite; the
+// amendment is additive (one new test + this note).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createGenStore } from "../worker/generation/genstore.mjs";
@@ -265,6 +281,120 @@ test("R3-2: after retirement a fresh submission over the same occurrences is adm
     "the driver never selects, grants against, or mutates a retired plan");
   assert.ok(w.h.rows("grants").some(g => g.job_id.startsWith(fresh.planId)),
     "the fresh plan drives normally");
+});
+
+test("R4-1: reconciliation NEVER resumes the halted plan in the driver — drives after reconcile leave it halted, byte-identical, and fencing; retirement after the drives still applies", async () => {
+  const w = await makeWorld({ parked: true });
+  const parkedJob = () => snap(w.h.rows("jobs").find(j => j.job_id === PARKED_JOB));
+  const parkedOcc = () => snap(w.h.rows("occurrences").filter(o => o.job_id === PARKED_JOB));
+  const beforeJob = parkedJob(); const beforeOcc = parkedOcc();
+
+  // A chapter-scoped halt over ch-1 (e0, e2): a segment in ch-2
+  // stays non-overlapping, so other-plan handling in the SAME
+  // phase can be proven in the post-reconcile window.
+  const halted = await haltPlan(w, {
+    commandId: "h-15", bookId: BOOK, scope: "chapter", chapterIndex: 1,
+    keepGoing: false, phase: "forever-pucked", lane: "standard",
+  }, "e0");
+  const haltedJobs = () => snap(w.h.rows("d6_plan_jobs").filter(r => r.plan_id === halted.planId));
+  const haltedGrants = () => snap(w.h.rows("grants").filter(g => g.job_id === halted.jobId));
+
+  // Step 1 of clearance: reconcile the final unknown. The phase
+  // halt clears — this is exactly the state in which the
+  // round-3 driver flipped the plan back to 'active'.
+  const rec = w.service.reconcileUnknownAttempt(halted.attemptId,
+    { knownCostMicro: 12000, outcome: "failed_known" });
+  assert.equal(rec.outcome, "applied");
+  assert.equal(rec.haltCleared, true);
+  assert.equal(w.h.rows("d6_phase_state").find(r => r.phase === "forever-pucked").halted_unknown_billing, 0,
+    "the phase billing flag is cleared — the dangerous window is open");
+  assert.equal(planRow(w.h, halted.planId).state, "halted_unknown");
+
+  // Post-reconcile snapshots: everything the driver must not
+  // touch, across arbitrarily many alarm passes.
+  const postRec = {
+    plan: snap(planRow(w.h, halted.planId)),
+    jobs: haltedJobs(),
+    grants: haltedGrants(),
+    allGrants: w.h.rows("grants").length,
+    attempts: snap(w.h.rows("d6_attempt_log")),
+    executions: snap(w.h.rows("d6_execution_records")),
+    outbox: snap(w.h.rows("outbox")),
+    accounting: snap(w.store.phaseAccounting("forever-pucked")),
+  };
+
+  // Drive once and repeatedly, including one full alarm cycle
+  // (recover + driveOnce, the production alarm's shape).
+  for (let i = 0; i < 3; i++) {
+    const outcomes = await w.service.driveOnce();
+    assert.ok(!outcomes.some(o => o.planId === halted.planId),
+      `drive ${i + 1}: the halted plan is not even selected`);
+  }
+  w.service.recover();
+  const alarmOutcomes = await w.service.driveOnce();
+  assert.ok(!alarmOutcomes.some(o => o.planId === halted.planId),
+    "the alarm cycle does not select the halted plan either");
+
+  const plan = planRow(w.h, halted.planId);
+  assert.equal(plan.state, "halted_unknown",
+    "still halted after reconcile + repeated drives — no automatic resume");
+  assert.equal(plan.stop_reason, "phase_halted_unknown_billing");
+  assert.equal(snap(plan), postRec.plan, "the halted plan's row is byte-identical");
+  assert.equal(haltedJobs(), postRec.jobs, "its plan jobs are byte-identical");
+  assert.equal(haltedGrants(), postRec.grants, "no new grant was issued for its job");
+  assert.equal(w.h.rows("grants").length, postRec.allGrants, "no new grants at all");
+  assert.equal(snap(w.h.rows("d6_attempt_log")), postRec.attempts, "no new attempts");
+  assert.equal(snap(w.h.rows("d6_execution_records")), postRec.executions,
+    "the unknown-billing execution record is untouched — no new dispatch");
+  assert.equal(snap(w.h.rows("outbox")), postRec.outbox, "nothing was queued for dispatch");
+  assert.equal(snap(w.store.phaseAccounting("forever-pucked")), postRec.accounting,
+    "phase spending is unchanged");
+
+  // The fence still rejects an overlapping submission after the
+  // drives (clearance was not inferred by the driver either).
+  const fenced = await w.service.submitIntent({
+    commandId: "h-16", bookId: BOOK, scope: "chapter", chapterIndex: 1,
+    keepGoing: true, phase: "forever-pucked", lane: "standard",
+  });
+  assert.equal(fenced.reason, "plan_overlap_conflict");
+  assert.equal(fenced.conflict.planId, halted.planId);
+
+  // Safe phase-level handling for OTHER plans is preserved: a
+  // non-overlapping plan in the same (now un-halted) phase is
+  // admitted and DRIVES normally in the same window — while the
+  // halted plan remains untouched.
+  const other = await w.service.submitIntent({
+    commandId: "h-17", bookId: BOOK, scope: "segment", occurrenceId: "e3",
+    keepGoing: false, phase: "forever-pucked", lane: "standard",
+  });
+  assert.equal(other.created, true);
+  await w.service.driveOnce();
+  assert.ok(w.h.rows("grants").some(g => g.job_id.startsWith(other.planId)),
+    "the other plan drives and is granted in the same window");
+  assert.equal(planRow(w.h, halted.planId).state, "halted_unknown");
+  assert.equal(snap(planRow(w.h, halted.planId)), postRec.plan,
+    "...and the halted plan is STILL byte-identical afterwards");
+  assert.equal(haltedGrants(), postRec.grants, "still no grant for the halted plan's job");
+
+  // The interleaving Rowan named: an alarm ran between
+  // reconcile and retirement — retirement must STILL apply
+  // (it must not fail plan_not_halted_unknown because a drive
+  // flipped the state first).
+  const retired = w.service.retireHaltedPlan({
+    planId: halted.planId, note: "cleared after drives (fixture)", source: "test-operator",
+  });
+  assert.equal(retired.outcome, "applied",
+    "retirement applies after the reconcile→drive interleaving");
+  assert.equal(retired.state, "retired");
+  const retiredRow = snap(planRow(w.h, halted.planId));
+  await w.service.driveOnce();
+  await w.service.driveOnce();
+  assert.equal(snap(planRow(w.h, halted.planId)), retiredRow,
+    "the retired plan remains inert under further drives");
+
+  assert.equal(parkedJob(), beforeJob, "the parked job row is byte-identical throughout");
+  assert.equal(parkedOcc(), beforeOcc, "its occurrence rows are byte-identical");
+  assert.equal(w.h.rows("jobs").find(j => j.job_id === PARKED_JOB).state, "parked_policy");
 });
 
 test("R3-2: the parked Ch 3 job is byte-identical throughout the halt → fence → reconcile → retire → re-admit lifecycle", async () => {

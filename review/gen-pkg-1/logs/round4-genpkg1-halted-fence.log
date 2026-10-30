@@ -1,0 +1,15 @@
+✔ R3-2: a halted_unknown plan fences same- and different-semantics submissions from two devices — zero new plans or grants (38.887489ms)
+✔ R3-2: non-overlapping submissions remain admissible beside a halted plan (8.025434ms)
+✔ R3-2: clearance is never inferred — the fence survives reconciliation and the phase-halt flip; only retirement clears it (9.18881ms)
+✔ R3-2: retirement refuses unknown plans and non-halted plans, by name (3.707885ms)
+✔ R3-2: after retirement a fresh submission over the same occurrences is admitted — and the retired plan is never driven again (14.574372ms)
+✔ R4-1: reconciliation NEVER resumes the halted plan in the driver — drives after reconcile leave it halted, byte-identical, and fencing; retirement after the drives still applies (14.736325ms)
+✔ R3-2: the parked Ch 3 job is byte-identical throughout the halt → fence → reconcile → retire → re-admit lifecycle (12.596383ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 282.172227

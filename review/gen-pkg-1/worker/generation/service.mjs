@@ -628,8 +628,28 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
     // 'retired' (R3-2) joins the terminal exclusions: a retired
     // plan is closed by an operator act and the driver must never
     // grant against it or flip it back to active.
+    //
+    // R4-1 (Rowan round-4 review, comment 6513553263):
+    // 'halted_unknown' is an ENDURING DRIVER-LEVEL STOP, excluded
+    // at SELECTION — the driver never selects, mutates,
+    // reactivates, grants for, or dispatches a halted plan, on
+    // any pass, however often the alarm fires. Rounds 1–3
+    // selected halted plans and flipped them back to 'active'
+    // once the phase's unknown-billing flag cleared (the
+    // reconcileUnknown side effect), which silently ended the
+    // halt on the next alarm — before any operator retirement,
+    // and in a way that could also make a later retirement fail
+    // with plan_not_halted_unknown. That flip is GONE. The ONLY
+    // transition out of 'halted_unknown' is retireHaltedPlan
+    // (to 'retired', itself terminal here); any later restart
+    // over the plan's occurrences requires a fresh approved
+    // intent under all fences. Phase-level handling for OTHER
+    // plans is unchanged: a selected plan whose phase is halted
+    // still transitions INTO 'halted_unknown' below and stops —
+    // the exclusion governs plans already halted, never the
+    // act of halting.
     const plans = coord._all(
-      `SELECT * FROM d6_plans WHERE state NOT IN ('complete', 'partial', 'retired')
+      `SELECT * FROM d6_plans WHERE state NOT IN ('complete', 'partial', 'retired', 'halted_unknown')
         ORDER BY created_at, plan_id`);
     for (const plan of plans) {
       const out = { planId: plan.plan_id };
@@ -640,8 +660,6 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
         out.state = "halted_unknown"; out.stopReason = "phase_halted_unknown_billing";
         continue;
       }
-      if (plan.state === "halted_unknown")
-        setPlanState(plan.plan_id, "active", null);
       // Storage guard for the plan (fail-closed, whole-plan
       // projection including remaining eligible characters).
       const proj = d6StorageProjection(coord, plan.plan_id);
