@@ -17,6 +17,46 @@ incorporated as **Exhibit A (§2.5)** with its reconciliation, and the
 decision rule now carries an explicit aggregate-evidence sufficiency
 question for Rowan's ruling (§2.4–§2.5).
 
+**Correction (Oct 30, 2026, per Rowan's focused HOLD, issue #15
+comment 6533798118 — both corrections applied in this revision):**
+
+- **HOLD 1 (evidence honesty).** Two certainty claims in the
+  original §2.5 are **RETRACTED** as too strong and are removed
+  wherever they appeared: (i) that Exhibit A **"refutes
+  no_charge"**; (ii) that **"no alternative attribution
+  exists"** for the window remainder. The corrected conclusion
+  (§2.5, restated): Exhibit A establishes a Google-confirmed
+  **account/day aggregate** ($0.20 net for Oct 24–30, all on
+  Oct 29, rounded to cents) and is **consistent with** the
+  unknown attempt having been charged — among several
+  distributions — but it **proves neither `no_charge` nor
+  `failed_known` at 19,652 micro-cents**. Under §2.4, the only
+  justified branch **on the evidence currently in hand is STOP
+  — no reconciliation call**. The §2.5 arithmetic is retained
+  only as an illustration of one possible distribution, labeled
+  non-attributive. The attribution research (§7, companion
+  document `BILLING-ATTRIBUTION-RESEARCH.md`) shows no
+  allocation of the day aggregate reaches per-attempt proof.
+- **HOLD 2 (read-back contract).** §3 Steps 3 and 6 and the
+  footprint narrative are corrected to the deployed code:
+  `genstore.reconcileUnknown` updates `d6_attempt_log`,
+  possibly `d6_phase_state`, and writes `d6_reconcile_audit` —
+  it does **not** call `transitionExecution` and does **not**
+  update `d6_execution_records`; `retireHaltedPlan` changes
+  plan state/audit only. A successful reconcile is therefore
+  expected to leave the settled attempt's execution in state
+  `unknown_billing` as historical provenance; expecting a
+  transition to `failed` would falsely STOP a valid settlement.
+- **Status consequence.** **§6 is NOT submitted as a go** on
+  the current evidence. The run described in §3 does not
+  proceed until a Rowan-accepted basis exists: either
+  provider-attributed evidence at the §2.4 standard (§7
+  research), or the separately designed, transparently marked
+  uncertainty disposition outlined in §8 — which itself needs
+  Rowan's ruling, a code change, source review, a halted
+  deploy, and Julie's fresh approval before any use. **Julie
+  needs to provide nothing further for this revision.**
+
 **References.** Rowan's B1/B2/B3 source PASS + the standing
 provider-evidence requirement (6532307605); deploy operational-plan
 PASS (6532917893); Julie's deploy approval (6533012361); deploy
@@ -49,6 +89,17 @@ ch2-halt-diagnosis.md`, Oct 29, 2026). Deployed remedy source:
 
 That is the entire scope: **two bounded operator calls, each with
 read-backs, inside one attended run.**
+
+**Current status of that objective (per the Correction block
+above):** on the evidence currently in hand, no settlement
+branch fires under §2.4 — the justified branch is **STOP**
+(Rowan, 6533798118) — so this run does not take place on
+Exhibit A. §3 remains the binding run specification for when
+a Rowan-accepted basis exists: provider-attributed evidence
+(§7 research), or the §8 uncertainty disposition **if** it is
+separately designed, reviewed, built, deployed, and approved.
+Nothing in this document performs, schedules, or requests the
+run today.
 
 **Explicitly NOT in scope** (each remains its own later, separate
 proposal and Julie gate):
@@ -122,6 +173,28 @@ Independently of messages, the plan driver never selects a
 
 ## §2 The billing-evidence requirement
 
+**Evidence classes — kept separate throughout (per Rowan's
+HOLD 1, 6533798118).** Everything cited in this section is one
+of two kinds, and the two are never blended:
+
+- **(a) Google-confirmed:** exactly one datum so far — the
+  account/day aggregate in Exhibit A (§2.5): **$0.20 net for
+  Oct 24–30, 2026, all of it on Oct 29, rounded to cents**,
+  read from Google's own AI Studio billing view. Google has
+  confirmed nothing at per-request granularity for this
+  account (§7 research: no surface Google offers can
+  attribute an Oct 29 charge to a single request
+  retroactively).
+- **(b) Application-recorded:** every per-attempt figure in
+  our own records — the attempt log's outcomes and costs
+  (including the 8 failures' cost 0 and the smoke's settled
+  $0.017749) and all grant-time estimates — was written by our
+  system under its own conventions (known failures are
+  confirmed at cost 0 by construction; settled costs are the
+  system's estimator outputs). These are our records of the
+  run, **not** provider confirmation of what Google billed
+  for any individual attempt.
+
 **Rule (Rowan, 6532307605, carried into 6533495004).** The operator
 must hold **independent provider billing evidence** before
 asserting `no_charge` or any known cost. The reconcile route's API
@@ -140,8 +213,12 @@ the run stops at the §3 Step 1 gate.**
 - The attempt is the plan's **only** attempt-log row in phase
   `confirmed` with outcome `unknown` and cost NULL — exactly one
   such row exists (diagnostics at D4 of the deploy: 51 Ch 2
-  confirmed attempts = 50 known + this 1 unknown; the plan's other
-  8 attempted executions settled `failed_known` at cost 0).
+  confirmed attempts = 50 known + this 1 unknown). The plan's
+  other 8 attempted executions are **recorded in the local
+  attempt ledger** as `failed_known` at cost 0 — a (b)-class
+  local accounting convention (the executor confirms every
+  known failure at cost 0 by construction), **not** provider
+  confirmation that Google billed $0.00 for any of them.
 - Its execution is the plan's only execution in state
   `unknown_billing`; it was the last execution attempted in the
   Oct 29, 2026 run (the executor stopped the message at the first
@@ -170,13 +247,13 @@ the run stops at the §3 Step 1 gate.**
   unknown attempt's grant-time ledger estimate was **19,652 units
   (≈ $0.0197)** — the job's flat per-occurrence estimate
   (`ceil(mean(expectedCostMicro))` over the 18 entries). It is an
-  **estimate written at grant time**, and on the operator's say-so
-  it must never be recorded as the known cost. Whether the
-  aggregate provider reconciliation in §2.5 — where all nine of
-  the run's attempts reconcile against the window remainder at
-  this same per-attempt figure — makes 19,652 the *attributable*
-  cost of this attempt is precisely Rowan's sufficiency question
-  (§2.4–§2.5); this proposal does not pre-decide it. The attempt's recorded
+  **estimate written at grant time**, and it must never be
+  recorded as the known cost. **Rowan has ruled on the
+  sufficiency question (6533798118): the §2.5 aggregate does
+  NOT make 19,652 — or any other figure — the attributable
+  known cost of this attempt.** The uniform-estimate
+  reconciliation in §2.5 is one possible distribution of the
+  day's spend among several (§7), nothing more. The attempt's recorded
   upper bound (`upperMicroCents` on the attempt row, chars/10 rate)
   is read fresh at Step 0 and bounds any attributable charge.
 
@@ -199,18 +276,31 @@ unaccounted call:
   them in the run record with the evidence reference.
   **This primary evidence has in fact been provided** — Julie's
   AI Studio billing screenshot of Oct 30, 2026, incorporated as
-  Exhibit A in §2.5. It is *aggregate* (window-level) evidence;
-  its sufficiency for the charged branch of §2.4 is the open
-  question put to Rowan there.
+  Exhibit A in §2.5. It is *aggregate* (window-level) evidence,
+  and **Rowan has ruled (6533798118) that it is NOT sufficient
+  for the charged branch of §2.4**: it establishes a day-level
+  aggregate, not a per-attempt known cost. It stands as
+  contextual evidence (§2.5 as corrected). No finer-grained
+  provider record that could attribute the charge exists or
+  can be obtained retroactively (§7 research).
 - **Known items the window must reconcile against:** (a) the G10
-  smoke segment, settled **$0.017749** (one successful request,
-  earlier the same evening, ~22:36Z); (b) the 8 failed Ch 2 calls,
-  provider-classified known failures recorded at cost 0
-  (content-refusal class — no audio produced); (c) the 1 unknown
-  attempt — the only call whose charge is in question. There was
-  no other generation activity on the account that evening (the
-  queue has been paused and generation halted since; the Ch 2 run
-  and the smoke are the Oct 29 generation record).
+  smoke segment, **recorded settled at $0.017749 in our own
+  ledger** — a (b)-class figure: one successful request earlier
+  the same evening (~22:36Z), its cost being our estimator's
+  output, not a Google line item; (b) the 8 failed Ch 2 calls —
+  classified `failed_known` in the local attempt ledger and
+  recorded there at cost 0 **by local convention** (§2.1);
+  their response character (HTTP 200, no audio content part)
+  is established by the diagnosis and the B1 evidence, but
+  **what Google billed for them, if anything, is not
+  established by any record we hold**; (c) the 1 unknown
+  attempt — the only call whose charge is in question. Per our
+  records (a (b)-class statement), there was no other
+  generation activity on the account that evening — the Ch 2
+  run and the smoke are the Oct 29 generation record, and the
+  queue has been paused and generation halted since; that
+  premise is itself part of what an attribution would have to
+  independently support, not a Google-confirmed fact.
 - **Aggregate cross-check (supporting, never sufficient alone):**
   the prepay balance history — **$20.00 top-up added Oct 17,
   2026; balance $17.83 verified by Julie's screenshot Oct 29,
@@ -224,8 +314,11 @@ unaccounted call:
 Only Julie can access her Google account's billing records; Wren
 has no connector to them. **She has already taken these steps and
 provided the screenshot (Exhibit A, §2.5)**; they are recorded
-here as the exhibit's provenance, and as the fallback if Rowan
-requires a finer-grained record. Concrete steps, on her phone or iPad:
+here as the exhibit's provenance. Rowan did require a
+finer-grained basis (6533798118); the §7 research establishes
+that none can be obtained retroactively for Oct 29, 2026, so
+**no further step of Julie's is requested or expected** — the
+steps below stand as provenance only. Concrete steps, on her phone or iPad:
 
 1. Open **Google AI Studio** (aistudio.google.com), signed in with
    the Google account that owns the Gemini API key → open the
@@ -282,15 +375,20 @@ Notes on the vocabulary (from the deployed store,
   and the reconciled figures) so the settlement stays traceable
   to its evidence.
 - **The evidence in hand is aggregate, not a per-request line
-  item.** The table above is written for evidence that attributes
-  a charge to the attempt. How the charged branch applies to the
-  window-aggregate exhibit actually provided — via remainder
-  attribution — and whether that suffices, is stated in §2.5 and
-  is **Rowan's ruling to make in her review of this proposal**.
-  Until she rules, no branch of this rule is treated as fired:
-  if she rules the aggregate insufficient, the STOP branch
-  governs by default and the run does not proceed on this
-  evidence.
+  item — and Rowan has ruled (6533798118).** The table above is
+  written for evidence that attributes a charge to the attempt.
+  The window-aggregate exhibit actually provided (Exhibit A,
+  §2.5) does not perform that attribution: **neither `no_charge`
+  nor `failed_known` at any figure is proven by it**, and the
+  §7 allocation research confirms no defensible allocation of
+  the day aggregate reaches per-attempt proof. **On the
+  current evidence, the only branch of this rule that fires is
+  the STOP branch: no settlement is recorded, no call is made,
+  the plan stays `halted_unknown`.** A settlement under this
+  rule requires evidence of a kind §7 shows Google cannot
+  supply retroactively for Oct 29 — or the different,
+  separately governed disposition outlined in §8, which does
+  not operate under this rule's known-cost claim at all.
 
 ### 2.5 Evidence in hand — Exhibit A (provided Oct 30, 2026)
 
@@ -310,64 +408,70 @@ below are the adjudication-relevant facts read from it:
 - (A month-to-date spend-cap card also appears in the shot; it
   is context only and plays no part in this adjudication.)
 
-**Reconciliation** (operator's arithmetic, from the record):
+**What the exhibit is (corrected statement of strength).**
+Exhibit A is **(a)-class evidence of exactly one fact**: Google
+billed this account **$0.20 net in total for Oct 24–30, 2026,
+all of it on Oct 29** (list $0.40 − savings $0.20, figures
+rounded to cents). It is valuable contextual evidence: it
+bounds the day's total Gemini spend and corroborates that
+Oct 29 carried real, non-trivial charges. It is **not** a
+per-request record, and — per Rowan's ruling (6533798118) —
+it does not attribute any charge, or absence of charge, to
+the unknown attempt.
 
-- Oct 29, 2026 was the account's only provider-activity day in
-  the window: the G10 smoke + the Chapter 2 run are the day's
-  entire generation record.
-- Smoke (Forever Pucked Ch 4 Seg 1): settled cost independently
-  recorded at **$0.017749**.
-- Remainder attributable to Chapter 2: $0.20 − $0.018 ≈
-  **$0.18**.
-- Chapter 2 made exactly **9 provider attempts** (8 failed + 1
-  unknown); the per-attempt grant-time estimate is **$0.019652**
-  (19,652 units). 9 × $0.019652 = **$0.176868 ≈ the remainder**
-  (the screenshot total is rounded to the cent, so exact
-  micro-cent agreement is neither expected nor required).
-- **The aggregate therefore refutes a `no_charge` settlement**:
-  the window's charges are consistent with all nine attempts —
-  including the unknown one — having been charged at ~their
-  estimated cost (~$0.0197). The `no_charge` branch of §2.4
-  cannot honestly fire on this evidence.
+**One possible distribution — ILLUSTRATION ONLY,
+non-attributive.** The arithmetic below was the original
+filing's reconciliation. It is retained **solely** as an
+illustration of *one* distribution of the day total that is
+consistent with the aggregate; it is **not** an attribution
+and supports no settlement:
 
-**The sufficiency question for Rowan.** Does this
-window-aggregate + remainder attribution satisfy the
-independent-provider-evidence requirement to settle the unknown
-attempt as **`failed_known` at the attributable cost 19,652** —
-the same per-attempt figure the other eight attempts reconcile
-at — or does she require a different treatment (for example, a
-finer-grained per-request billing record before any figure is
-recorded, or another disposition she names)? The considerations
-on the table:
+- Oct 29, 2026 was, per our records, the account's only
+  provider-activity day in the window: the G10 smoke + the
+  Chapter 2 run are the day's entire generation record
+  (a (b)-class premise).
+- Smoke (Forever Pucked Ch 4 Seg 1): recorded settled in our
+  ledger at **$0.017749** (a (b)-class estimator figure).
+- Remainder for Chapter 2 under this illustration:
+  $0.20 − $0.018 ≈ **$0.18**.
+- Chapter 2 made exactly **9 provider attempts** (8 failed +
+  1 unknown); the flat per-attempt grant-time estimate is
+  **$0.019652** (19,652 units). 9 × $0.019652 = **$0.176868
+  ≈ the remainder** (the screenshot total is rounded to the
+  cent, so exact agreement is neither expected nor required).
 
-- *For sufficiency:* the attribution is closed, not open-ended —
-  the window contains exactly one day of activity, the day
-  contains exactly two known activities, the smoke's cost is
-  independently settled, and the remainder matches nine attempts
-  at a uniform per-attempt figure with no residual left
-  unexplained. No alternative attribution of the remainder
-  exists on the record.
-- *Against / to be checked:* the recorded cost would be the
-  grant-time estimate figure, adopted via reconciliation rather
-  than read from a per-request line; the screenshot total is
-  rounded to the cent, so the reconciliation is approximate at
-  the sub-cent level; and the no-other-usage premise rests on
-  the assumptions below.
-- *Assumptions Rowan is asked to check:* (i) **no other Gemini
-  usage occurred on Oct 29, 2026** — v1 generation was frozen on
-  Oct 28, Batch was never armed, and the D6 plan inventory for
-  the day is exactly {smoke, Chapter 2, Chapter 3 parked}; (ii)
-  the per-attempt estimates are computed at the same intro (net)
-  rates the screenshot's net total reflects; (iii) the eight
-  failed attempts were in fact charged (the reconciliation is
-  consistent with that, but the aggregate cannot show it
-  per-attempt).
+**Retracted claims (named, per HOLD 1).** The original filing
+asserted on the basis of the illustration above that the
+aggregate **"refutes a `no_charge` settlement"** and that
+**"no alternative attribution of the remainder exists."**
+**Both assertions are retracted.** They were wrong: the
+remainder can be distributed across the nine Chapter 2
+attempts in many ways — including distributions in which the
+unknown attempt was charged nothing and the eight failures
+absorbed the whole remainder, and distributions in which the
+charges fall unevenly — and the exhibit cannot select among
+them. The 8 failures' cost-0 is a **local ledger record**
+(§2.1), not provider confirmation they were billed $0; the
+proposal's illustration silently assumed they were charged at
+the estimate, which is the very fact in question.
 
-**Until Rowan rules, the indicated-but-unconfirmed settlement
-is:** `failed_known`, `knownCostMicro: 19652`, with the
-reconcile `note` carrying this exhibit's reference and figures.
-If she rules the aggregate insufficient, the §2.4 STOP branch
-governs and §3 does not proceed on this evidence.
+**Corrected conclusion.** The aggregate is **consistent
+with** the unknown attempt having been charged — the
+illustrated distribution is one of several that fit — and it
+**proves neither `no_charge` nor `failed_known` at 19,652
+micro-cents** (nor at any other exact figure: a cent-rounded
+aggregate over ten requests cannot certify a sub-cent
+per-request amount). **Under §2.4, the only justified branch
+on the evidence currently in hand is STOP — no
+reconciliation call.** Rowan's ruling (6533798118) is
+recorded here as the disposition of the sufficiency question
+the original filing posed: **the aggregate is insufficient
+for a known per-attempt cost.** The avenues that remain are
+researched in §7 (provider attribution — concluded: not
+obtainable at proof standard) and §8 (a transparently marked
+uncertain/estimated-accounting disposition, outlined as an
+option for Rowan's ruling and Julie's approval — not a
+decided path).
 
 ---
 
@@ -429,18 +533,27 @@ settlement, given before the run; the evidence itself is what she
 supplies under §2.3 — if the evidence she can obtain cannot fire
 a branch, that is a STOP outcome, not a judgment call for the
 operator.)
-**Status of this gate today:** the checkpoint is satisfiable at
-execution — Exhibit A is already in hand (§2.5). What the
-checkpoint must verify when the run comes is (a) the exhibit on
-file matches §2.5's recorded figures, and (b) **Rowan's
-sufficiency ruling is on record** (without it, the aggregate
-evidence fires no branch and the run stops here), and (c)
-Julie's §6 approval has been given. The settlement instruction
-the operator carries into Step 2 is the one §2.4 produces *as
-ruled by Rowan* — currently indicated as `failed_known` @
-19,652, pending her ruling.
+**Status of this gate today: NOT satisfiable — the run stops
+here on current evidence.** Rowan's sufficiency ruling is on
+record (6533798118): Exhibit A is insufficient for a known
+per-attempt cost, and §7's research concludes no provider
+record obtainable retroactively can attribute the charge.
+The evidence in hand therefore fires **only the STOP branch**
+of §2.4, and **Step 2 must not be reached**. This step becomes
+passable only if a Rowan-accepted basis later exists —
+provider-attributed evidence at the §2.4 standard, or the §8
+uncertainty disposition after its own design, review, build,
+deploy, and Julie-approval chain. When a run does occur, the
+checkpoint verifies (a) the evidence/basis on file matches
+what Rowan accepted, (b) her acceptance is on record, and
+(c) Julie's fresh approval of that run has been given. §6 of
+this revision is **not** that approval and is not submitted
+as one.
 
 **Step 2 — The reconcile call (exactly one).**
+*(Unreachable on the evidence currently in hand — Step 1
+stops the run; see its status note. Specified here, unchanged,
+for the future run this proposal governs.)*
 `POST /v2/d6-reconcile-unknown` via the operator connector, body:
 
 ```json
@@ -471,16 +584,57 @@ Step 3 verifies exactly that.) Any `rejected` outcome, non-200,
 or malformed/ambiguous response → §4 containment.
 
 **Step 3 — Reconcile read-back (read-only).**
-- Diagnostics for the plan again: the attempt now reads settled —
-  for `failed_known`: outcome `failed_known`, cost = the settled
-  knownCostMicro; for `no_charge`: attempt row `failed_known` @ 0
-  with the distinct settlement outcome carried by the Step 2
-  response + audit record. **Zero** `confirmed`/`unknown` attempt
-  rows remain for the plan; zero reserved/dispatching.
-- Plan status: still `halted_unknown` (by design — reconciliation
-  never resumes a plan, R4-1). The reconciled execution's state
-  transition `unknown_billing → failed` is the designed exit in
-  the store's transition table; no other execution moved.
+- Diagnostics for the plan again: the attempt now reads settled
+  **in `d6_attempt_log`** — for `failed_known`: outcome
+  `failed_known`, cost = the settled knownCostMicro; for
+  `no_charge`: attempt row `failed_known` @ 0 with the distinct
+  settlement outcome carried by the Step 2 response + audit
+  record. Zero reserved/dispatching.
+- **"Zero open unknowns" is defined by attempt rows** — zero
+  `d6_attempt_log` rows for the plan with `phase = 'confirmed'`
+  AND `outcome = 'unknown'`. That is the deployed retire
+  guard's own test (`service.mjs` `retireHaltedPlan`, which
+  counts exactly those rows and refuses with
+  `unknown_billing_open` while any remain) and the phase
+  accounting's `unknownOpen` (`genstore.mjs` `phaseAccounting`
+  counts the same rows phase-wide). It is **not** defined by
+  execution state.
+- **Execution records: EXPECT NO CHANGE — this is the
+  corrected read-back contract (HOLD 2, 6533798118), verified
+  against the deployed source.** `genstore.reconcileUnknown`
+  (`worker/generation/genstore.mjs`, the `reconcileUnknown`
+  function) writes exactly three things: the `d6_attempt_log`
+  UPDATE (outcome, cost, timestamp), a conditional
+  `d6_phase_state` UPDATE clearing the phase's
+  unknown-billing flag when its last open unknown closes, and
+  the `d6_reconcile_audit` INSERT — all in one transaction. It
+  does **not** call `transitionExecution` (that function is
+  exercised by the executor's commit/fail/unknown-marking
+  paths, not by the reconciler) and contains no write to
+  `d6_execution_records`. `retireHaltedPlan`
+  (`worker/generation/service.mjs`) likewise changes only
+  plan state + its audit row. **The settled attempt's
+  execution therefore remains in state `unknown_billing`
+  after a successful reconcile, as historical provenance, and
+  the plan-status read will still show it so — that reading
+  is EXPECTED, not a discrepancy and not a STOP.** (The
+  original filing expected a transition `unknown_billing →
+  failed`; that transition exists in the store's
+  `EXEC_TRANSITIONS` table but no reconcile/retire code path
+  performs it — Rowan's correction, verified by Wren against
+  the source.) Distinguish the two records: the **attempt is
+  financially reconciled** (its billing question is settled
+  in the attempt log + audit); the **execution remains an
+  execution that ended without usable audio** — its state is
+  run-time history and is not rewritten by a financial
+  settlement. Test/source citation: the reconciler's write
+  set above (`genstore.mjs` `reconcileUnknown`; wrapper
+  `service.mjs` `reconcileUnknownAttempt`) and the B2 suite
+  `tests/ch2fix-reconcile-route.test.mjs` (9/9 at the B2 pin;
+  Rowan SOURCE PASS 6532307605), which pins the (cost,
+  outcome) validation and the zero-movement refusals.
+- Plan status: still `halted_unknown` (by design —
+  reconciliation never resumes a plan, R4-1).
 - Quota view **unchanged** {0, 371485, 19} — expected, not a
   discrepancy: the coordinator ledger is grant-time estimates and
   never trues up (§2.1; diagnosis Q2). The settlement lives in the
@@ -533,15 +687,25 @@ exhaustively:
 4. the plan row: `halted_unknown` → `retired`, stopReason →
    `retired_unknown_billing` (+ updated timestamp);
 5. one `d6_plan_retirements` audit row (new; table lazily
-   created by Step 4 if absent).
+   created by Step 4 if absent);
+6. **`d6_execution_records`: NO change — an expected-unchanged
+   item, enumerated so its absence of movement is verified,
+   not overlooked.** Every execution row is identical to
+   Step 0, including the settled attempt's execution, which
+   remains in state `unknown_billing` as historical
+   provenance (Step 3's corrected contract: neither the
+   reconciler nor retirement writes execution records). A
+   read-back showing that execution still `unknown_billing`
+   is the expected result of a successful run.
 
 Unchanged, explicitly: worker build + etag; `GENERATION_HALT
 "1"`; queue PAUSED with the same sole consumer; settings
 revision 1; quota view; watermarks 18 / 1800; the other two
 plans (smoke `complete`; Ch 3 `parked_policy`, fingerprint
 `b991f18a…` recomputed exact); the plan's other 50 confirmed
-attempts and its other 8 executions; grants and conflicts (the two
-recorded `schedule_dead` rows). Any difference beyond the five
+attempts and all 9 of its attempted executions' records (per
+item 6); grants and conflicts (the two
+recorded `schedule_dead` rows). Any difference beyond the six
 enumerated items → the run record reports it as an unresolved
 deviation to Julie and Rowan (§4); nothing is "fixed" inside
 this run.
@@ -578,7 +742,12 @@ one:
 - **STOP conditions elsewhere:** any Step 0 mismatch; the §2.4
   STOP branch at Step 1; any Step 3 surprise (settlement did not
   land as instructed, unknowns remain, collateral movement); any
-  Step 6 difference beyond the five enumerated footprint items.
+  Step 6 difference beyond the six enumerated footprint items.
+  **Explicitly NOT a STOP:** the Step 3 / Step 6 read-back
+  showing the settled attempt's execution still in state
+  `unknown_billing` — that is the deployed reconciler's
+  expected output (Step 3's corrected contract), and treating
+  it as a failure would falsely condemn a valid settlement.
   In every STOP case the run record states what the read-backs
   show, and the turn returns to Julie (and Rowan, for review)
   before anything further.
@@ -630,6 +799,19 @@ one:
 
 ## §6 Julie's approval — exact text of the ask
 
+> **STATUS: NOT SUBMITTED.** Per Rowan's HOLD (6533798118),
+> the text below is **not** presented to Julie as a go, and
+> no approval is sought on the current evidence: the §2.4
+> STOP branch governs (Exhibit A insufficient for a known
+> cost; §7 attribution research negative at proof standard).
+> The text is retained, corrected, so the exact scope of a
+> *future* ask is on record for the run if a Rowan-accepted
+> basis comes to exist — provider-attributed evidence (§7),
+> or the §8 uncertainty disposition after its own design /
+> review / build / deploy chain, which would carry its own
+> differently-worded ask. Julie needs to provide nothing
+> further for this revision.
+
 > **Approve the Chapter 2 adjudication run — one attended run,
 > exactly as proposed:** (1) I will settle the one unknown-billing
 > attempt on plan `plan:603ab416bd67ab1b25de97be` with a single
@@ -649,11 +831,144 @@ one:
 > generation or provider contact, Chapter 3, quarantine release,
 > any other plan or attempt, any deploy or client change.
 >
-> **Already in hand from you:** the Google billing evidence
-> (§2.5, Exhibit A — your Oct 30 AI Studio screenshot), so this
-> run's evidence gate can be satisfied once Rowan rules the
-> aggregate reconciliation sufficient. If she instead requires
-> a finer-grained record, I will come back to you with exactly
-> what is needed before anything proceeds.
+> **Evidence basis (corrected):** your Google billing
+> evidence (§2.5, Exhibit A — your Oct 30 AI Studio
+> screenshot) is in hand and stands as context, but Rowan has
+> ruled it **insufficient to record a known cost** for the
+> unknown attempt, and the attribution research (§7) shows
+> no finer-grained provider record can be obtained for that
+> day. This approval text therefore takes effect only if a
+> basis Rowan accepts exists when the ask is actually made;
+> on the evidence as it stands, the run stops at its evidence
+> gate and nothing is recorded.
+
+---
+
+## §7 Billing-attribution research — summary
+
+Full research: companion document
+**`BILLING-ATTRIBUTION-RESEARCH.md`** (pinned alongside this
+proposal). Question put by Rowan (6533798118): can a provider
+billing/usage record attribute charge or no-charge to the
+unknown attempt — by request, narrow timestamp/model/SKU, or
+"another defensible independently checked allocation with
+sufficient precision"? Findings, in brief:
+
+1. **What Google can provide tops out at day/SKU
+   granularity.** The AI Studio billing view (Exhibit A's
+   surface) shows date-range totals with API-key and model
+   filters — day aggregates; all ten Oct 29 requests share
+   one key and one model, so the filters cannot separate
+   them. Cloud Billing Reports group by project / service /
+   SKU (the smallest attribution dimensions Google offers;
+   API keys are not a billing dimension, and there is no
+   per-request dimension). A SKU-level view for Oct 29
+   (input-token vs audio-output-token totals) would refine
+   the day's bounds but still aggregates all ten requests.
+   BigQuery billing export is likewise SKU × time-window,
+   must be enabled prospectively, and is not established as
+   available for this AI Studio prepay account. Request
+   labels exist only on Vertex AI (not used; prospective
+   only). Per-response usage metadata was never received
+   for the unknown attempt and was not retained by the old
+   build for the failures. **No retroactive per-request
+   attribution for Oct 29, 2026 exists.**
+2. **Published pricing makes per-attempt charges inherently
+   uneven.** `gemini-3.8-flash-tts` (Standard, intro pricing
+   through Dec 31, 2026): text input **$0.50 / 1M tokens**;
+   audio output **$9.00 / 1M audio tokens** at 25 tokens per
+   second of audio — i.e. **$0.000225 per audio second**,
+   exactly the deployed system's 225-micro-cent rate constant
+   (≈ $0.81 per audio hour). Billing is token-metered per
+   response, never flat per request: equal charges for nine
+   different-length attempts would be a coincidence, not a
+   default.
+3. **The allocation exercise (full arithmetic in the
+   companion doc) does not reach proof.** The uniform-estimate
+   distribution (illustrated in §2.5) approximately fits the
+   aggregate but assumes the fact in question. A literal
+   published-metering allocation (refusals bill input tokens
+   only ≈ $0.0002 each; the unknown billed for full audio)
+   sums to only ≈ **$0.04** — roughly **$0.16 short** of the
+   day total — so *some* unmodeled charging occurred (the
+   leading candidate: audio generated server-side and
+   metered although not delivered in the response — the same
+   mechanism that would bill the timed-out unknown attempt).
+   The one distribution the evidence **excludes** is
+   unknown-pays-everything (≈ $0.18 would exceed the
+   attempt's recorded upper bound ~5.7× and the model's
+   per-request output cap). Every value for the unknown
+   attempt in **[0, its upper bound]** remains achievable by
+   some distribution consistent with all records. A
+   cent-rounded aggregate over ten requests cannot certify
+   an exact micro-cent figure in any event.
+4. **Conclusion:** no allocation reaches per-attempt proof
+   at the standard §2.4 requires. On the current route
+   vocabulary, the STOP branch is final for this evidence.
+   The remaining path is a different disposition, outlined
+   in §8 as an option — not a recommendation smuggled past
+   the evidence rule.
+
+## §8 OPTION for Rowan's ruling — a transparently marked uncertain/estimated-accounting disposition
+
+*Outlined at Rowan's invitation (6533798118: "Wren may
+propose a separately reviewed, transparently marked
+uncertain/estimated-accounting resolution"). This is an
+**option for Rowan to rule on and Julie to approve**, not a
+decided path and not part of §3/§6. Nothing here is built.*
+
+- **What it would record.** A new settlement class —
+  working name **`estimated_unverified`** — under which the
+  attempt is closed for plan-retirement purposes while its
+  cost is recorded as an **estimate, permanently flagged as
+  provider-unverified**, never as a known cost. The audit
+  record would carry: the estimate figure and its basis
+  (the attempt's own-length estimator value, or its recorded
+  upper bound if the design chooses the conservative
+  treatment — a design question for Rowan's review), the
+  evidence references (Exhibit A; the §7 research conclusion
+  that per-request attribution is unobtainable), the
+  operator, and the authorizations. Any surface that reads
+  the settlement (diagnostics, phase accounting) would show
+  the estimate **with** its unverified flag; no reader could
+  mistake it for a `failed_known` charge.
+- **Budget honesty.** Phase-budget accounting would count
+  the estimate (or upper bound) against the phase as
+  settled-with-flag — the books err conservative (spend is
+  never understated by the disposition) while the flag
+  preserves the truth that Google never confirmed the
+  figure.
+- **Code change: REQUIRED.** The deployed vocabulary
+  (`SETTLEMENT_OUTCOMES = success / failed_known /
+  no_charge`, with the (cost, outcome) pair validation in
+  `genstore.reconcileUnknown`) cannot honestly record an
+  estimate: every numeric cost it accepts becomes a *known*
+  cost by construction. The disposition therefore needs a
+  source change: the new outcome + pair validation, its
+  `phaseAccounting` treatment, the audit representation,
+  and tests (including negatives: the estimated class can
+  never be produced by the existing known-cost branches,
+  and an estimated settlement's read-backs are visibly
+  distinct everywhere). The retire guard's test (zero
+  `confirmed`/`unknown` attempt rows) works unchanged once
+  the attempt carries the new outcome.
+- **Gates it would need (none waived).** Repo-only build →
+  full battery → Rowan source review → Julie's approval of
+  the design → halted pause-first deploy under its own
+  operational plan (the pattern of the Oct 30 deploy) →
+  only then an adjudication run under the new disposition
+  (fresh pre-state reads, the run's own §6-style approval
+  from Julie) → retirement in that same bounded run.
+- **How retirement then proceeds.** Exactly §3 Steps 4–6,
+  unchanged, once the attempt is settled under the new
+  class; the retirement note would reference the estimated
+  disposition so the plan's history stays honest end-to-end.
+- **The null alternative, stated plainly.** Doing nothing
+  is safe and costs nothing: the plan stays `halted_unknown`,
+  fenced, inert. Its real price is that the halted plan
+  continues to own its 18 segments at the admission fence —
+  **Chapter 2 cannot be regenerated until the plan is
+  retired under some disposition** — which is a legitimate
+  thing for Julie to weigh, not a pressure to choose §8.
 
 — Wren
