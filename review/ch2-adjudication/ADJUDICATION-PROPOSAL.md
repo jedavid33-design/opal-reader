@@ -10,6 +10,13 @@ action and authorizes none. Execution requires (a) Rowan's review of
 this proposal and (b) Julie's separate approval of the exact scope in
 §6, in that order.
 
+**Update (Oct 30, 2026, during preparation): the provider billing
+evidence arrived ahead of schedule** — Julie provided it at
+~5:13 p.m. ET today, before this proposal was even filed. It is
+incorporated as **Exhibit A (§2.5)** with its reconciliation, and the
+decision rule now carries an explicit aggregate-evidence sufficiency
+question for Rowan's ruling (§2.4–§2.5).
+
 **References.** Rowan's B1/B2/B3 source PASS + the standing
 provider-evidence requirement (6532307605); deploy operational-plan
 PASS (6532917893); Julie's deploy approval (6533012361); deploy
@@ -163,8 +170,13 @@ the run stops at the §3 Step 1 gate.**
   unknown attempt's grant-time ledger estimate was **19,652 units
   (≈ $0.0197)** — the job's flat per-occurrence estimate
   (`ceil(mean(expectedCostMicro))` over the 18 entries). It is an
-  **estimate written at grant time, never provider-confirmed**, and
-  must never be recorded as the known cost. The attempt's recorded
+  **estimate written at grant time**, and on the operator's say-so
+  it must never be recorded as the known cost. Whether the
+  aggregate provider reconciliation in §2.5 — where all nine of
+  the run's attempts reconcile against the window remainder at
+  this same per-attempt figure — makes 19,652 the *attributable*
+  cost of this attempt is precisely Rowan's sufficiency question
+  (§2.4–§2.5); this proposal does not pre-decide it. The attempt's recorded
   upper bound (`upperMicroCents` on the attempt row, chars/10 rate)
   is read fresh at Step 0 and bounds any attributable charge.
 
@@ -185,6 +197,11 @@ unaccounted call:
   evidence** (Julie's Oct 29 prepay-balance screenshot was verified
   exactly this way); the operator reads values from it and records
   them in the run record with the evidence reference.
+  **This primary evidence has in fact been provided** — Julie's
+  AI Studio billing screenshot of Oct 30, 2026, incorporated as
+  Exhibit A in §2.5. It is *aggregate* (window-level) evidence;
+  its sufficiency for the charged branch of §2.4 is the open
+  question put to Rowan there.
 - **Known items the window must reconcile against:** (a) the G10
   smoke segment, settled **$0.017749** (one successful request,
   earlier the same evening, ~22:36Z); (b) the 8 failed Ch 2 calls,
@@ -205,7 +222,10 @@ unaccounted call:
 ### 2.3 How Julie obtains it (the one personal action in this gate)
 
 Only Julie can access her Google account's billing records; Wren
-has no connector to them. Concrete steps, on her phone or iPad:
+has no connector to them. **She has already taken these steps and
+provided the screenshot (Exhibit A, §2.5)**; they are recorded
+here as the exhibit's provenance, and as the fallback if Rowan
+requires a finer-grained record. Concrete steps, on her phone or iPad:
 
 1. Open **Google AI Studio** (aistudio.google.com), signed in with
    the Google account that owns the Gemini API key → open the
@@ -261,6 +281,93 @@ Notes on the vocabulary (from the deployed store,
   the evidence reference (what Julie provided, its date coverage,
   and the reconciled figures) so the settlement stays traceable
   to its evidence.
+- **The evidence in hand is aggregate, not a per-request line
+  item.** The table above is written for evidence that attributes
+  a charge to the attempt. How the charged branch applies to the
+  window-aggregate exhibit actually provided — via remainder
+  attribution — and whether that suffices, is stated in §2.5 and
+  is **Rowan's ruling to make in her review of this proposal**.
+  Until she rules, no branch of this rule is treated as fired:
+  if she rules the aggregate insufficient, the STOP branch
+  governs by default and the run does not proceed on this
+  evidence.
+
+### 2.5 Evidence in hand — Exhibit A (provided Oct 30, 2026)
+
+**Exhibit.** A screenshot Julie provided on Oct 30, 2026
+(~5:13 p.m. ET) of her Google AI Studio billing view
+(aistudio.google.com), 7-day window, all API keys, all models.
+The image itself is **held in the local case file**
+(`~/workspace/ch2-program/adjudication/evidence/`, with Wren's
+reconciliation note) and is **not reproduced in this pinned
+proposal** — no account-private data is published; the figures
+below are the adjudication-relevant facts read from it:
+
+- Window **Oct 24–30, 2026**: list cost **$0.40** − savings
+  **$0.20** = **net total $0.20** (intro/net rates).
+- The daily chart shows a **single bar on Oct 29, 2026**
+  (~$0.20) and **zero on every other day** of the window.
+- (A month-to-date spend-cap card also appears in the shot; it
+  is context only and plays no part in this adjudication.)
+
+**Reconciliation** (operator's arithmetic, from the record):
+
+- Oct 29, 2026 was the account's only provider-activity day in
+  the window: the G10 smoke + the Chapter 2 run are the day's
+  entire generation record.
+- Smoke (Forever Pucked Ch 4 Seg 1): settled cost independently
+  recorded at **$0.017749**.
+- Remainder attributable to Chapter 2: $0.20 − $0.018 ≈
+  **$0.18**.
+- Chapter 2 made exactly **9 provider attempts** (8 failed + 1
+  unknown); the per-attempt grant-time estimate is **$0.019652**
+  (19,652 units). 9 × $0.019652 = **$0.176868 ≈ the remainder**
+  (the screenshot total is rounded to the cent, so exact
+  micro-cent agreement is neither expected nor required).
+- **The aggregate therefore refutes a `no_charge` settlement**:
+  the window's charges are consistent with all nine attempts —
+  including the unknown one — having been charged at ~their
+  estimated cost (~$0.0197). The `no_charge` branch of §2.4
+  cannot honestly fire on this evidence.
+
+**The sufficiency question for Rowan.** Does this
+window-aggregate + remainder attribution satisfy the
+independent-provider-evidence requirement to settle the unknown
+attempt as **`failed_known` at the attributable cost 19,652** —
+the same per-attempt figure the other eight attempts reconcile
+at — or does she require a different treatment (for example, a
+finer-grained per-request billing record before any figure is
+recorded, or another disposition she names)? The considerations
+on the table:
+
+- *For sufficiency:* the attribution is closed, not open-ended —
+  the window contains exactly one day of activity, the day
+  contains exactly two known activities, the smoke's cost is
+  independently settled, and the remainder matches nine attempts
+  at a uniform per-attempt figure with no residual left
+  unexplained. No alternative attribution of the remainder
+  exists on the record.
+- *Against / to be checked:* the recorded cost would be the
+  grant-time estimate figure, adopted via reconciliation rather
+  than read from a per-request line; the screenshot total is
+  rounded to the cent, so the reconciliation is approximate at
+  the sub-cent level; and the no-other-usage premise rests on
+  the assumptions below.
+- *Assumptions Rowan is asked to check:* (i) **no other Gemini
+  usage occurred on Oct 29, 2026** — v1 generation was frozen on
+  Oct 28, Batch was never armed, and the D6 plan inventory for
+  the day is exactly {smoke, Chapter 2, Chapter 3 parked}; (ii)
+  the per-attempt estimates are computed at the same intro (net)
+  rates the screenshot's net total reflects; (iii) the eight
+  failed attempts were in fact charged (the reconciliation is
+  consistent with that, but the aggregate cannot show it
+  per-attempt).
+
+**Until Rowan rules, the indicated-but-unconfirmed settlement
+is:** `failed_known`, `knownCostMicro: 19652`, with the
+reconcile `note` carrying this exhibit's reference and figures.
+If she rules the aggregate insufficient, the §2.4 STOP branch
+governs and §3 does not proceed on this evidence.
 
 ---
 
@@ -322,6 +429,16 @@ settlement, given before the run; the evidence itself is what she
 supplies under §2.3 — if the evidence she can obtain cannot fire
 a branch, that is a STOP outcome, not a judgment call for the
 operator.)
+**Status of this gate today:** the checkpoint is satisfiable at
+execution — Exhibit A is already in hand (§2.5). What the
+checkpoint must verify when the run comes is (a) the exhibit on
+file matches §2.5's recorded figures, and (b) **Rowan's
+sufficiency ruling is on record** (without it, the aggregate
+evidence fires no branch and the run stops here), and (c)
+Julie's §6 approval has been given. The settlement instruction
+the operator carries into Step 2 is the one §2.4 produces *as
+ruled by Rowan* — currently indicated as `failed_known` @
+19,652, pending her ruling.
 
 **Step 2 — The reconcile call (exactly one).**
 `POST /v2/d6-reconcile-unknown` via the operator connector, body:
@@ -532,10 +649,11 @@ one:
 > generation or provider contact, Chapter 3, quarantine release,
 > any other plan or attempt, any deploy or client change.
 >
-> **The one thing I need from you personally:** the Google
-> billing evidence for Oct 29, 2026 (§2.3) — a screenshot of your
-> AI Studio / Cloud billing view showing what the Gemini API
-> charged that day. Without it, this run cannot pass its
-> evidence gate.
+> **Already in hand from you:** the Google billing evidence
+> (§2.5, Exhibit A — your Oct 30 AI Studio screenshot), so this
+> run's evidence gate can be satisfied once Rowan rules the
+> aggregate reconciliation sufficient. If she instead requires
+> a finer-grained record, I will come back to you with exactly
+> what is needed before anything proceeds.
 
 — Wren
