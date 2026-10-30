@@ -13,14 +13,23 @@
 // ONE book authorized to ride it, consulted by admission BEFORE
 // any plan or ledger state moves.
 //
-// ESTABLISHMENT IS THE SWITCH. While the registry is empty, the
-// deployment predates the registry and admission applies the
+// ESTABLISHMENT IS THE SWITCH — with one round-3 hardening
+// (R3-1, Rowan round-3 review, comment 6512804398). While the
+// registry is empty, a NON-enforcement construction applies the
 // legacy round-1 history rules — the explicit legacy/service-
 // fixture behavior Rowan sanctioned preserving (the existing D6
 // suites stage two books under one phase inside registry-free
-// fixture databases, and they keep doing so, untouched). The
+// fixture databases, and they keep doing so, untouched). An
+// ENFORCEMENT-BOUND construction (the production entry under its
+// deployment configuration — service.mjs phasePolicyMode) never
+// applies the legacy rules: the registry rules below govern from
+// the first served request, and while the registry is still
+// empty every budgeted-phase claim fails closed (phase_unbound)
+// until the operator records the binding. There is no exposure
+// window between Worker deployment and binding recording. The
 // moment ANY binding is recorded, the registry is the COMPLETE
-// authority for every budgeted phase, on every submission path:
+// authority for every budgeted phase, on every submission path,
+// in every construction:
 //   * a bound book's phase is DERIVED from its registry row —
 //     a missing phase is rejected (phase_required) and any
 //     different phase is rejected (phase_mismatch);
@@ -38,17 +47,22 @@
 // THE WRITER. recordPhaseBinding (exposed on the service as
 // bindPhaseBook) is the only writer. Recording a binding is a
 // gated operator act, in the same class as the storage seed:
-// this build wires NO client route to it and records NOTHING in
-// production. The gen-pkg-1 deploy gate records the production
-// pair — phase "forever-pucked" ↔ book
-// 5c589095-f812-48a2-8ab2-03ba2791f2b2 — BEFORE the client build
-// is published; a phase must enter the budget registry
-// (PHASE_BUDGET_MICRO_CENTS) and this binding registry together.
-// Standing production note: until that act, production admission
-// remains under the legacy rules, where Forever Pucked is
-// already history-bound by its admitted plans — the registry
-// replaces that derivation with an independent one, it does not
-// widen anything.
+// since round 3 the pinned production entry wires exactly ONE
+// surface to it — the operator-only POST /v2/d6-phase-binding
+// route (migration-operator credential alone, the
+// skipClientToken operator class; the internal route requires
+// the entry's operator-admitted stamp; no client path exists) —
+// and this build records NOTHING in production: no binding has
+// been recorded anywhere outside test fixtures. The gen-pkg-1
+// deploy gate records the production pair — phase
+// "forever-pucked" ↔ book 5c589095-f812-48a2-8ab2-03ba2791f2b2 —
+// through that route under Julie's deploy authorization, BEFORE
+// the client build is published; because the deployed Worker is
+// enforcement-bound, admission fails closed on budgeted claims
+// from its first request until that recording lands, so the
+// sequence has no bypass window. A phase must enter the budget
+// registry (PHASE_BUDGET_MICRO_CENTS) and this binding registry
+// together.
 //
 // The table follows the binding-projection pattern (round 0):
 // its DDL lives HERE, not in GEN_SCHEMA — the correction suites

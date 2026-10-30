@@ -71,6 +71,27 @@
 //     binding projection that publishes committed audio to the
 //     sync plane (generation/binding-projection.mjs, driven from
 //     the executor's commit sites and the alarm's driveOnce sweep).
+//   * gen-pkg-1 ROUND 3 (Rowan round-3 review 6512804398) adds:
+//     (a) phase-policy ENFORCEMENT — d6Service derives
+//     phasePolicyMode "enforce" from the deployment configuration
+//     (OPALREADER_PHASE_POLICY, set to "enforce" by the pinned
+//     deploy spec), so this entry's admission applies the
+//     phase→book registry rules from the first served request and
+//     a budgeted-phase claim with no recorded binding fails
+//     CLOSED (phase_unbound) — no legacy window between deploy
+//     and binding recording; and (b) two OPERATOR-ONLY POST
+//     surfaces in the diagnostics fence class (admitted on the
+//     migration-operator credential alone — the production gate
+//     skips the client token for them — with the entry's
+//     operator-admitted stamp required again at the class gate):
+//     POST /v2/d6-phase-binding (record the phase→book binding,
+//     idempotent, with read-back; the deploy gate's recording
+//     path for forever-pucked ↔ the Forever Pucked book) and
+//     POST /v2/d6-retire-halted-plan (the R3-2 clearance: retire
+//     a halted_unknown plan after its unknown attempts are
+//     reconciled). Neither surface is reachable on the client
+//     token, and neither has been exercised against production —
+//     each USE is a separate Julie authorization.
 //   * A queue handler consumes the v2 queue into /internal/execute.
 //     GENERATION_HALT still gates queue + execute via
 //     assertGenerationEnabled, independently at each layer.
@@ -142,6 +163,17 @@ function d6Service(coord, env) {
     // worker's own R2 binding — the invocation supplies neither.
     expectedStorageBase: RECORDED_STORAGE_BASE,
     recountBucket: env.OPALREADER_STORAGE,
+    // R3-1: phase-policy enforcement is a DEPLOYMENT property.
+    // The pinned deploy spec (p8/deploy-spec-prod-d6.json) sets
+    // OPALREADER_PHASE_POLICY to "enforce" as a plain-text
+    // binding, so the deployed Worker constructs every service
+    // enforcement-bound and budgeted-phase admission fails
+    // closed from the first served request. The var is set by
+    // the deployment, never by a request; any other value (or
+    // its absence, as in every test fixture) leaves the service
+    // in the legacy construction the D6 suites stage against.
+    phasePolicyMode: env.OPALREADER_PHASE_POLICY === "enforce"
+      ? "enforce" : "legacy",
   });
 }
 
@@ -250,6 +282,60 @@ export class OpalReaderCoordinatorProd extends ProductionCoordinatorBase {
         await cache.flush();
         return result && result.outcome === "rejected"
           ? json(400, result) : json(200, result);
+      }
+      if (url.pathname === "/internal/d6/phase-binding" && request.method === "POST") {
+        // gen-pkg-1 round 3 (R3-1): the phase→book binding
+        // recording path Rowan required to be OPERABLE in the
+        // pinned entry. Same fence as the seed/diagnostics
+        // routes: the OPERATOR-ADMITTED STAMP is required — the
+        // public entry stamps it only after the
+        // migration-operator credential has been presented, and
+        // overwrites any client-supplied value unconditionally.
+        // The recorded source is stamped HERE ("operator-route"),
+        // never taken from the caller's body, and the response
+        // carries the READ-BACK binding from the store itself:
+        // on success it proves what was recorded (and that a
+        // re-record was an idempotent no-op); on a conflict
+        // refusal it shows the binding that stands.
+        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
+          return json(403, { error: "migration_operator_required" });
+        const cache = await this._cache();
+        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+        const body = await request.json().catch(() => null);
+        const service = d6Service(coord, d6HostEnv(this.env, cache));
+        const result = service.bindPhaseBook({
+          phase: body ? body.phase : undefined,
+          bookId: body ? body.bookId : undefined,
+          source: "operator-route",
+        });
+        const binding = body && typeof body.phase === "string"
+          ? service.getPhaseBinding(body.phase) : null;
+        await cache.flush();
+        return json(200, { ...result, binding });
+      }
+      if (url.pathname === "/internal/d6/retire-halted-plan" && request.method === "POST") {
+        // gen-pkg-1 round 3 (R3-2): the halted-plan clearance.
+        // Same operator fence as the phase-binding route above
+        // (operator-admitted stamp required at this class gate).
+        // The service refuses unless the plan is halted_unknown
+        // AND its unknown attempts have been reconciled first;
+        // the transition writes its audit row in the same
+        // transaction. Exercising this route against any
+        // production plan is a separate Julie authorization —
+        // nothing here performs it.
+        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
+          return json(403, { error: "migration_operator_required" });
+        const cache = await this._cache();
+        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+        const body = await request.json().catch(() => null);
+        const result = await d6Service(coord, d6HostEnv(this.env, cache))
+          .retireHaltedPlan({
+            planId: body ? body.planId : undefined,
+            note: body && typeof body.note === "string" ? body.note : null,
+            source: "operator-route",
+          });
+        await cache.flush();
+        return json(200, result);
       }
       if (url.pathname === "/internal/d6/seed-storage" && request.method === "POST") {
         // CORRECTION 2 + G2 HARDENING: the storage seed. Beyond the
@@ -370,8 +456,22 @@ async function fetchHandler(request, env) {
   // build has no path to this surface.
   const isDiagnosticsRoute = request.method === "GET" &&
     url.pathname === "/v2/d6-diagnostics";
+  // gen-pkg-1 round 3: the two operator write surfaces — the
+  // phase-binding recording (R3-1) and the halted-plan
+  // retirement (R3-2) — join the diagnostics route's fence
+  // class: the production gate skips the client token for them
+  // (admission is on the migration-operator credential ALONE,
+  // exactly as for the Option D operator routes), the operator
+  // admission block below requires that credential in addition,
+  // and the class gate requires the stamped admission again.
+  // The everyday client token alone is refused on both.
+  const isPhaseBindingRoute = request.method === "POST" &&
+    url.pathname === "/v2/d6-phase-binding";
+  const isRetirePlanRoute = request.method === "POST" &&
+    url.pathname === "/v2/d6-retire-halted-plan";
   const denied = productionGate(request, env, cors,
-    { skipClientToken: isOperatorRoute || isDiagnosticsRoute });
+    { skipClientToken: isOperatorRoute || isDiagnosticsRoute
+        || isPhaseBindingRoute || isRetirePlanRoute });
   if (denied) return denied;
   const instance = request.headers.get("x-opalreader-instance");
   if (instance !== PRODUCTION_INSTANCE)
@@ -398,7 +498,8 @@ async function fetchHandler(request, env) {
   const isSeedRoute = request.method === "POST" &&
     url.pathname === "/v2/d6-seed-storage";
   let operatorAdmitted = false;
-  if (isOperatorRoute || isSeedRoute || isDiagnosticsRoute) {
+  if (isOperatorRoute || isSeedRoute || isDiagnosticsRoute
+      || isPhaseBindingRoute || isRetirePlanRoute) {
     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
     if (!operatorToken || !env.OPALREADER_ACCESS_TOKEN ||
         operatorToken === env.OPALREADER_ACCESS_TOKEN)
@@ -493,6 +594,31 @@ async function fetchHandler(request, env) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(seedBody ?? {}),
+    }));
+  }
+  // gen-pkg-1 round 3 operator surfaces (admitted above;
+  // forward() stamps the admission the class gate checks). The
+  // bodies pass through minus any pretense of authority: the
+  // internal phase-binding route stamps its own recorded source
+  // and answers with the store's read-back binding, and the
+  // retirement route's service fences (halted state + reconciled
+  // attempts) run inside the coordinator regardless.
+  if (isPhaseBindingRoute) {
+    let bindBody = null;
+    try { bindBody = await request.json(); } catch { bindBody = null; }
+    return forward(new Request("https://do.internal/internal/d6/phase-binding", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(bindBody ?? {}),
+    }));
+  }
+  if (isRetirePlanRoute) {
+    let retireBody = null;
+    try { retireBody = await request.json(); } catch { retireBody = null; }
+    return forward(new Request("https://do.internal/internal/d6/retire-halted-plan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(retireBody ?? {}),
     }));
   }
   return forward(new Request(url.toString(), request));

@@ -715,6 +715,286 @@ here fabricates it.
   `a84344d43b12b17d47763e8ada1f119609a91c5a1a510dac34ea8355de9321d5`
   (81 paths).
 
+## Round-3 corrections (Rowan round-3 source review, comment 6512804398)
+
+Rowan's round-3 review resolved R2-1-after-binding, R2-2's
+active/parked fence, and R2-3, and withheld sign-off on two
+blockers. Both are corrected here. Nothing in this round was
+deployed, published, or recorded against production: the FP
+binding exists only in test fixtures, and no production plan
+was reconciled, retired, retried, or driven.
+
+### R3-1 — the phase-policy bootstrap fails CLOSED in production, and the recording path is operable
+
+**The hole.** Round 2 selected the permissive legacy history
+rules whenever `d6_phase_bindings` was empty — a state reachable
+through the public production `/v2/commands` route — and the
+only writer (`bindPhaseBook`) had no route in the pinned entry,
+so the planned recording act was not operable as written and
+the legacy window would have been open exactly while it was
+performed.
+
+**The boundary mechanism.** Enforcement is now a CONSTRUCTION
+property of the service. `createGenerationService` takes a
+`phasePolicyMode` option (default `"legacy"`). The production
+entry's single service-construction site (`d6Service` in
+`worker/worker-entry-prod-d6.js`) derives it from the deployment
+configuration: `phasePolicyMode: env.OPALREADER_PHASE_POLICY ===
+"enforce" ? "enforce" : "legacy"`, and the pinned deploy spec
+(`worker/p8/deploy-spec-prod-d6.json`) gains the plain-text
+binding `OPALREADER_PHASE_POLICY = "enforce"` (plus a `d6_delta`
+entry and a deploy-gate arming precondition recording the
+sequence below). This is the trusted server-side boundary
+Rowan required, and it is the same kind of boundary this
+codebase already uses for every other production property —
+scope, instance, the halt flag, the storage base, and both
+credentials are all deploy-configuration, never request data.
+No request, command, or intent field can select the mode:
+`submitIntent` destructures its known inputs only, and the mode
+is fixed at construction from the server's own configuration.
+Direct construction (every test fixture, the legacy D6 suites)
+keeps the `"legacy"` default, which is exactly what preserves
+the baselines: the fixture envs that submit through the real
+entry (d6-correction C2/C3/C5) never set the var, so they run
+the legacy construction they were written against, unchanged.
+
+**Enforce-mode semantics.** In an enforcement-bound
+construction the registry rules govern from the first served
+request, registry empty included (`admitPhase` consults the
+legacy rules only when the construction is non-enforce AND the
+registry is unestablished):
+
+- a submission naming a budgeted phase (per
+  `PHASE_BUDGET_MICRO_CENTS`) with NO recorded binding for that
+  phase is rejected `phase_unbound` — fail closed, no plan, no
+  ledger/attempt/grant movement, and no binding written by the
+  submission (first-use binding does not exist under
+  enforcement, for the production book itself included);
+- a binding naming a different book → `phase_bound_to_other_book`;
+- the bound book with a missing/null phase → `phase_required`;
+  with a different phase → `phase_mismatch`;
+- an invented phase → `phase_not_budgeted`;
+- a null phase with no budgeted claim keeps the round-1/2
+  unbudgeted behavior (genuinely unbudgeted work is not
+  blocked);
+- `capabilities()` in enforce mode reports a phase's book from
+  the registry row ONLY — the round-1/2 plan-history fallback is
+  never presented as the phase's book under enforcement, so the
+  capabilities view and admission cannot disagree in the
+  carried-state window (production plans exist, binding not yet
+  recorded): the phase reports `bookId: null` until the
+  operator records the binding.
+
+**The recording route.** `POST /v2/d6-phase-binding` (body
+`{phase, bookId}`) is wired in the pinned entry in the
+diagnostics/Option-D fence class, exactly: the production gate
+skips the client token for it (admission is on the
+migration-operator credential ALONE); the entry's operator
+admission block refuses an unconfigured operator secret with
+503 `migration_operator_not_configured` and a missing/wrong
+operator credential with 403 `migration_operator_required`
+(stamping `x-opalreader-operator-admitted` only on success, and
+overwriting any client-supplied stamp unconditionally); the
+internal `POST /internal/d6/phase-binding` refuses any request
+without that stamp (403 `migration_operator_required`) — the
+internal header + scope alone do not suffice, proven by direct
+call. The route invokes `bindPhaseBook` with a SERVER-STAMPED
+source (`"operator-route"`; a caller-supplied source is
+ignored) and every response — applied, idempotent re-record,
+and conflict refusal alike — carries the READ-BACK binding read
+from the store via the new `getPhaseBinding` handle, so a
+recording is verified from the server's own state and a refusal
+shows the binding that stands. Same pair → success no-op
+(`changed:false, idempotent:true`); different book for a bound
+phase → `phase_binding_conflict`, original stands. No client
+route reaches it: the everyday client token alone is refused
+403, proven at entry level.
+
+**The deploy-time sequence this enables.** New Worker (with
+`OPALREADER_PHASE_POLICY=enforce` in its bindings) serves →
+budgeted admission fails closed from the FIRST request → the
+operator records `forever-pucked` ↔
+`5c589095-f812-48a2-8ab2-03ba2791f2b2` through the route under
+Julie's separate deploy authorization, verified by read-back →
+client publication follows. There is no window — before,
+during, or after the recording — in which a production
+construction applies the legacy rules. (The upload envelope is
+re-derived from the updated spec at that gate, as always; the
+spec's binding count is now seven.)
+
+### R3-2 — halted_unknown fences until explicitly cleared
+
+**The fence change.** `PLAN_FENCE_TERMINAL` is now
+`["complete", "partial", "retired"]`: a `halted_unknown` plan
+fences its overlapping eligible occurrences exactly like an
+active/parked plan — rejection `plan_overlap_conflict` naming
+the halted plan and its semantics (the round-2 conflict shape
+is unchanged: planId, bookId, scope, lane, keepGoing, phase,
+overlapCount). Convergence still runs first, so the halted
+plan's own identical resubmission returns the halted plan
+(`created:false, state:"halted_unknown"`) rather than a
+conflict. Non-overlapping submissions remain admissible.
+`complete`/`partial` remain non-fencing.
+
+**The clearance mechanism.** Clearance is an explicit
+two-step operator act, never an inference:
+
+1. **Reconcile** the plan's unknown attempts — the pre-existing
+   `genstore.reconcileUnknown`, now also exposed on the service
+   as `reconcileUnknownAttempt` (applied/rejected shapes like
+   `bindPhaseBook`). When the phase's last open unknown
+   resolves, the PHASE halt clears in the same transaction —
+   and that is ALL it does: the plan stays `halted_unknown` and
+   keeps fencing (proven: submissions after reconciliation +
+   halt flip are still rejected).
+2. **Retire** the plan — `retireHaltedPlan({planId, note,
+   source})`: refuses a missing plan (`plan_not_found`), any
+   non-halted state (`plan_not_halted_unknown`), and —
+   critically — any plan whose own confirmed/unknown attempt
+   rows are still open (`unknown_billing_open` + count), so
+   retirement can never paper over an unresolved charge. On
+   success, ONE transaction writes the audit row (new
+   lazily-ensured table `d6_plan_retirements`, the
+   phase-bindings precedent — deliberately not in GEN_SCHEMA,
+   and ensured only on the retire path so store snapshots in
+   the correction suites are unaffected) and moves the plan to
+   the new terminal state `retired` with stop reason
+   `retired_unknown_billing`. `driveOnce` never selects a
+   retired plan.
+
+The retirement IS routed — `POST /v2/d6-retire-halted-plan` →
+internal `/internal/d6/retire-halted-plan` under the identical
+operator fence class as the binding route — so this round
+cannot repeat the "mechanism unreachable in the pinned entry"
+defect; the per-attempt reconciliation handle is service-level
+only, because per-attempt reconciliation is pre-existing D6
+machinery with its own suites and operator surface decisions
+belong to the fix-package gate, whereas plan-ownership
+clearance was the missing operable act. Exercising either
+against any production plan remains Julie's separate
+authorization; both are exercised here only in fixtures.
+
+**Client (one small correctness change).** The client must not
+treat a retired plan as live: `TERMINAL_PLAN_STATES` gains
+`"retired"` (it drives live-plan detection/rerouting in the
+shell), `planStatusText` renders it as a closed run, and
+`STOP_REASON_TEXT` gains `retired_unknown_billing`
+("the charge was checked and the run was closed"). GU8 asserts
+all three.
+
+### New and amended tests (round-3 final trees)
+
+- **`genpkg1-phase-enforce.test.mjs` (new, 11/11)** — service
+  level: enforce + registry absent → `phase_unbound` for the
+  production book's own claim and an unrelated book's claim,
+  `phase_not_budgeted` for an invented phase, zero state
+  movement; null-phase unbudgeted admission preserved; the
+  legacy-construction contrast (same claim admitted); enforce
+  `capabilities` reports registry-or-null against a store whose
+  plans carry the phase. Entry level, through the REAL
+  `D6Entry.fetch` + production DO class with the enforce
+  deployment configuration: registry absent → client claims on
+  `forever-pucked` rejected fail-closed over `/v2/commands`
+  (0 plans / 0 ledger / 0 grants in the DO store); the
+  recording route refuses no-credential, client-token-only, and
+  wrong-operator calls (403), fails closed when the operator
+  secret is unconfigured (503), and refuses a direct internal
+  call without the stamp (403); the operator records
+  `forever-pucked` → `5c589095-f812-48a2-8ab2-03ba2791f2b2`
+  (the real production book id, as a fixture identifier over
+  synthetic content) → read-back matches with the server-stamped
+  source; re-record is idempotent; a conflicting book is refused
+  with the standing binding shown; after binding, the mapped
+  book is admitted and the phase is closed to everyone else
+  (`phase_bound_to_other_book`, `phase_required`); and the
+  no-enforce contrast world keeps the legacy bootstrap through
+  the same entry.
+- **`genpkg1-halted-fence.test.mjs` (new, 6/6)** — the halted
+  plan is built through the REAL machinery (submit → drive →
+  grant → execution → reserved → dispatching →
+  confirmed/unknown → `markUnknownBilling` → drive →
+  `halted_unknown`/`phase_halted_unknown_billing`, the Ch 2
+  shape with synthetic data): identical resubmission converges
+  on the halted plan; different-keepGoing and different-scope
+  submissions from a second service instance ("two devices")
+  are both rejected `plan_overlap_conflict` naming the halted
+  plan, with zero new plans/grants/attempts and the halted
+  plan's rows + the execution record byte-identical;
+  non-overlapping segment admission still works beside a halted
+  chapter plan; retirement before reconciliation is refused
+  (`unknown_billing_open`); after reconciliation the fence
+  SURVIVES (clearance not inferred from reconciliation or the
+  phase-halt flip); retirement then applies with its audit row;
+  retirement refuses unknown/non-halted plans by name; after
+  retirement a fresh submission over the same occurrences is
+  admitted and drives, and the retired plan's row stays
+  byte-identical across further drives; the parked Ch 3 job and
+  its occurrence rows are byte-identical throughout the whole
+  lifecycle, still `parked_policy`, never in any plan's eligible
+  set.
+- **`genpkg1-overlap-fence.test.mjs` (amended, 10/10)** — the
+  round-2 halted test's premise is REVERSED per R3-2, with the
+  reversal disclosed in place (header bullet + amendment note
+  on the test): it now asserts the fresh different-semantics
+  intent is rejected `plan_overlap_conflict` naming the halted
+  plan, while keeping round 2's other half — the halted plan's
+  row/jobs byte-identical, no grants for it. This is a
+  candidate suite, not a baseline suite; no baseline suite was
+  edited.
+- **`generation-unit.mjs` GU8 (extended)** — retired terminal
+  membership + closed-run status text, as above.
+
+### Battery (round-3 final trees)
+
+- Worker: **120 suite files: 98 pass / 22 fail** — the failing
+  set is BYTE-IDENTICAL to the recorded 22-name baseline (same
+  file, same order: 20 legacy-fixture ENOENT + 2 git-required
+  envelope suites); **zero assertion failures** anywhere
+  (913/935 tests pass; the two new suites add 17 tests, all
+  passing, inside the 98; the amended fence suite stays 10/10).
+  Logs: `~/workspace/gen-pkg-1/logs/round3/worker-final/`.
+- Client: store unit battery **13/13**; generation unit
+  **13/13**; Chromium proof **14/14 with 0 page exceptions** on
+  tree-a AND on `gen/package/publish` (the canonical publish
+  tree). Logs: `~/workspace/gen-pkg-1/logs/round3/`.
+- Shelf bridge SHA-256 re-verified in the publish tree after
+  the client rebuild: `modules/vendor/client/shelf-bridge.js` =
+  `bc0a5879fbf4a6f455170ead8e0fbe1aa19d82126df4eb631bd0ebad9112ec8e`,
+  byte-identical, as required.
+- Tree hashes (same digest method as rounds 1–2): worker
+  `5a40c0c935aa1042c1cc8dc729e15ebe97f014864e9ef4b9948181c5106e18fe`
+  (374 files — 372 + the two new suites); client publish
+  `365ecbddf0bc17066c1eed5a6349735a290070482a50cddccda96c7a1e31dbd8`
+  (81 paths; moved from round 2 only by the
+  `modules/generation-surface.js` retired handling).
+
+### Disclosures
+
+- The deploy-spec edit adds a seventh binding; no baseline
+  suite asserts this spec's binding count (d6-correction's spec
+  assertions are targeted and pass unchanged), and the two
+  envelope suites that validate emitted upload metadata fail at
+  baseline for an unrelated environmental reason (they require
+  a git repository) — unchanged by this round.
+- Two assertions in the new halted-fence suite were corrected
+  during authoring before first green — both were test-premise
+  errors, not code defects: the non-overlap probe must carry
+  the book's phase (a null-phase submission for a history-bound
+  book is `phase_required` by design), and parked segments
+  appear in plan entries as EXCLUDED rows (the fence/driver
+  read eligible entries only), so the parked assertion checks
+  eligibility, not row absence.
+- `retireHaltedPlan`'s audit table is created lazily inside
+  the retire path only; a store that never retires a plan
+  never grows it, and the correction suites' schema snapshots
+  (taken at construction) are unaffected — verified by the
+  battery above.
+- Nothing was deployed, published, or recorded against
+  production in this round; the production registry remains
+  unwritten, the Ch 2 halt and the parked Ch 3 job are exactly
+  as they were, and the deploy-gate sequence above still
+  requires Julie's separate authorization at each step.
+
 ## Pin
 
 Pinned to `jedavid33-design/opal-reader` branch `ui1-review` (review only;

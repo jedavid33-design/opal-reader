@@ -19,11 +19,16 @@
 //   * "active" = every state the driver can still grant against
 //     without a fresh operator decision: 'active' and the
 //     parked_* family (parks resume on their own in driveOnce);
-//   * terminal plans do NOT fence — 'complete' / 'partial', and
-//     'halted_unknown' (a halt grants again only after a gated
-//     reconciliation, so it must not block a fresh intent; the
-//     fence reads the halted plan and never resumes or alters
-//     it — asserted byte-identical below);
+//   * terminal plans do NOT fence — 'complete' / 'partial'
+//     (and, since round 3, 'retired': the operator-cleared
+//     terminal state). 'halted_unknown' FENCED-EXEMPT in round
+//     2's design (a halt grants again only after a gated
+//     reconciliation, so it "must not block a fresh intent");
+//     ROUND 3 REVERSED THAT PREMISE — see the amendment note on
+//     the halted test below and service.mjs: a halted plan now
+//     fences until an explicit operator reconciliation +
+//     retirement clears its ownership (R3-2, Rowan round-3
+//     review, comment 6512804398);
 //   * non-overlapping sets still admit (later runs over newly
 //     eligible segments stay possible);
 //   * the parked Ch 3 JOB (coordinator-level, parked_policy) is
@@ -208,7 +213,22 @@ test("R2-2: terminal plans (complete, partial) do not fence", async () => {
   assert.equal(w.h.rows("d6_plans").length, 3);
 });
 
-test("R2-2: a halted_unknown plan does not fence a fresh intent — and is left byte-identical (never resumed)", async () => {
+// AMENDED IN ROUND 3 — PREMISE REVERSED BY ROWAN'S R3-2.
+// Round 2 asserted a halted_unknown plan does NOT fence ("it
+// must not block a future fresh intent"). Rowan's round-3 review
+// (comment 6512804398) held that a halted plan's unresolved
+// occurrences must stay fenced until an explicit operator
+// reconciliation + retirement clears ownership: otherwise a new
+// paid plan can mint over the same occurrences while the halt's
+// billing is still unresolved. This test now asserts the
+// round-3 contract — the fresh intent is REJECTED as
+// plan_overlap_conflict naming the halted plan — while keeping
+// round 2's other half intact: the fence and the rejected intent
+// never resume, alter, or grant against the halted plan (its row
+// and jobs stay byte-identical). The full clearance lifecycle
+// (real unknown-billing record → fence → reconcile → retire →
+// admission) is proven in genpkg1-halted-fence.test.mjs.
+test("R3-2 (amends R2-2): a halted_unknown plan FENCES a fresh intent — and is left byte-identical (never resumed)", async () => {
   const w = await makeWorld();
   const a = await w.service.submitIntent({
     commandId: "f-17", bookId: BOOK, scope: "book", keepGoing: true,
@@ -223,10 +243,16 @@ test("R2-2: a halted_unknown plan does not fence a fresh intent — and is left 
     commandId: "f-18", bookId: BOOK, scope: "book", keepGoing: false,
     phase: "forever-pucked", lane: "standard",
   });
-  assert.equal(b.created, true, "a halted plan must not block a future fresh intent");
-  assert.notEqual(b.planId, a.planId);
+  assert.equal(b.outcome, "rejected");
+  assert.equal(b.reason, "plan_overlap_conflict",
+    "a halted_unknown plan fences its overlapping occurrences until operator clearance (R3-2)");
+  assert.equal(b.conflict.planId, a.planId);
+  assert.equal(b.conflict.phase, "forever-pucked");
+  assert.equal(b.conflict.keepGoing, true);
+  assert.equal(b.conflict.scope, "book");
+  assert.equal(w.h.rows("d6_plans").length, 1, "no new plan was created over the halted plan's set");
   assert.equal(JSON.stringify(w.h.rows("d6_plans").find(p => p.plan_id === a.planId)), haltedRow,
-    "the halted plan's row is byte-identical — the fence and the fresh intent never resume or alter it");
+    "the halted plan's row is byte-identical — the fence and the rejected intent never resume or alter it");
   assert.equal(JSON.stringify(w.h.rows("d6_plan_jobs").filter(r => r.plan_id === a.planId)), haltedJobs,
     "no new jobs were attached to the halted plan");
   assert.equal(w.h.rows("grants").filter(g => g.job_id.startsWith(a.planId)).length, 0,

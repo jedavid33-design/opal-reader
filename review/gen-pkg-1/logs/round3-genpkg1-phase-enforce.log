@@ -1,0 +1,19 @@
+✔ R3-1: enforce construction, registry ABSENT — a budgeted claim fails closed (phase_unbound), nothing moves (7.88965ms)
+✔ R3-1: enforce construction — null phase with no budgeted claim keeps the unbudgeted behavior (7.215909ms)
+✔ R3-1: legacy construction, registry ABSENT — the same claim is admitted (the boundary is construction, not the request) (3.986923ms)
+✔ R3-1: enforce capabilities never derives the phase's book from plan history — registry row or null (7.703932ms)
+✔ R3-1 entry: registry ABSENT + enforce — a client claim on forever-pucked is rejected fail-closed over the public route (21.400626ms)
+✔ R3-1 entry: the recording route refuses everything except the operator credential (5.823149ms)
+✔ R3-1 entry: operator credential unconfigured — the route fails closed (503), nothing recorded (3.373954ms)
+✔ R3-1 entry: the internal route refuses a direct call without the entry's operator-admitted stamp (2.903787ms)
+✔ R3-1 entry: the operator records forever-pucked → the Forever Pucked book — read-back, idempotency, conflict refusal (7.219204ms)
+✔ R3-1 entry: after the binding — the mapped book is admitted, the phase is closed to everyone else (11.064855ms)
+✔ R3-1 entry: WITHOUT the deployment's enforce setting, the same entry keeps the legacy bootstrap (fixture contrast) (9.177422ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 258.373673

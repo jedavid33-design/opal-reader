@@ -20,8 +20,13 @@
 //     token lives only in this closure's memory — the same posture
 //     as the shell's other transports.
 
+// "retired" joined the terminal set in round 3 (R3-2): it is
+// the server state an operator-cleared halted_unknown plan ends
+// in. Without it here, the shell's live-plan detection would
+// treat a retired plan as still live and keep rerouting its
+// book's Generate action to the Generation view forever.
 export const TERMINAL_PLAN_STATES = Object.freeze(
-  ["complete", "partial", "failed", "cancelled", "superseded"]);
+  ["complete", "partial", "failed", "cancelled", "superseded", "retired"]);
 
 export function isTerminalPlanState(state) {
   return TERMINAL_PLAN_STATES.includes(state);
@@ -38,6 +43,7 @@ const STOP_REASON_TEXT = Object.freeze({
   storage_boundary: "storage is nearly full",
   phase_halted_unknown_billing: "a charge needs checking before it can continue",
   unknown_billing: "a charge needs checking before it can continue",
+  retired_unknown_billing: "the charge was checked and the run was closed",
   nothing_eligible: "there was nothing left to generate",
   incomplete: "some segments did not finish",
 });
@@ -62,6 +68,7 @@ export function planStatusText(plan) {
     case "parked_budget": return `Stopped — ${reason ?? "the book's budget was reached"}`;
     case "parked_storage": return `Stopped — ${reason ?? "storage is nearly full"}`;
     case "halted_unknown": return `Stopped — ${reason ?? "a charge needs checking"}`;
+    case "retired": return `Closed — ${reason ?? "the charge was checked and the run was closed"}`;
     default: return `Status: ${String(plan.state ?? "unknown").replaceAll("_", " ")}`;
   }
 }

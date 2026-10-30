@@ -60,11 +60,29 @@ const JOB_TERMINAL = Object.freeze(
 
 export function createGenerationService({ coord, env = {}, store = null, sources = {},
                                           expectedStorageBase = null,
-                                          recountBucket = undefined }) {
+                                          recountBucket = undefined,
+                                          phasePolicyMode = "legacy" }) {
   if (!coord) throw new Error("createGenerationService requires a coordinator");
   store = store || createGenStore(coord);
   store.ensureSchema();
   const builder = sources.buildEligibleSet || realBuildEligibleSet;
+  // R3-1 (Rowan round 3, comment 6512804398): the phase-policy
+  // ENFORCEMENT boundary. "enforce" is selected ONLY by trusted
+  // server-side construction: the production entry
+  // (worker-entry-prod-d6.js d6Service) derives it from the
+  // deployment configuration (the OPALREADER_PHASE_POLICY var the
+  // pinned deploy spec sets to "enforce"), so the deployed Worker
+  // applies the registry rules from its first served request —
+  // including while the binding registry is still empty, where a
+  // budgeted-phase claim fails CLOSED (phase_unbound). Direct
+  // construction (every test fixture, the legacy D6 suites)
+  // defaults to "legacy": the round-1/2 behavior, in which the
+  // registry rules engage once a binding is recorded and the
+  // history rules govern before that. No request, command, or
+  // intent field can select the mode — submitIntent destructures
+  // its known inputs only, and the mode is fixed here, at
+  // construction, from the server's own configuration.
+  const enforcePhasePolicy = phasePolicyMode === "enforce";
 
   function planRow(planId) {
     return coord._oneOrNull(`SELECT * FROM d6_plans WHERE plan_id = ?`, planId);
@@ -166,15 +184,16 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   }
 
   // B1 (Rowan gen-pkg-1 source review round 1, comment
-  // 6511518715) + R2-1 (round 2, comment 6511950562): the phase a
-  // plan rides is SERVER authority, never caller trust, evaluated
-  // before any plan or ledger state moves. Two modes, selected by
-  // SERVER STATE — never by anything in the submission:
+  // 6511518715) + R2-1 (round 2, comment 6511950562) + R3-1
+  // (round 3, comment 6512804398): the phase a plan rides is
+  // SERVER authority, never caller trust, evaluated before any
+  // plan or ledger state moves. The governing rules are selected
+  // by SERVER STATE and SERVER CONFIGURATION — never by anything
+  // in the submission:
   //
-  // REGISTRY MODE (the phase→book registry in phase-policy.mjs
-  // has been established — see that module for the establishment
-  // rule and the deploy-gate act that records the production
-  // binding): the binding is DERIVED from the registry alone.
+  // REGISTRY RULES (admitPhaseRegistry below): the binding is
+  // DERIVED from the phase→book registry (phase-policy.mjs)
+  // alone.
   //   * a book the registry binds to a budgeted phase may only
   //     ever submit under that exact phase — a missing/null phase
   //     is rejected (phase_required) and any different phase is
@@ -185,27 +204,43 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   //     (phase_bound_to_other_book) and a budgeted phase with no
   //     recorded book is rejected (phase_unbound) — other books
   //     cannot claim the Forever Pucked envelope, and first-use
-  //     binding no longer exists;
+  //     binding does not exist under these rules;
   //   * an invented phase (outside PHASE_BUDGET_MICRO_CENTS) is
   //     rejected (phase_not_budgeted); no phase runs unbudgeted.
+  // The registry rules govern whenever the registry has been
+  // established (any binding recorded), in ANY construction —
+  // and, since round 3, ALSO from the start in an
+  // enforcement-bound construction (phasePolicyMode "enforce":
+  // the production entry under its deployment configuration),
+  // where the still-empty registry simply means every budgeted
+  // claim fails closed as phase_unbound until the operator
+  // records the binding through the gated route. There is no
+  // window — not even between Worker deployment and binding
+  // recording — in which a production construction applies the
+  // legacy rules.
   //
-  // LEGACY MODE (registry not yet established — every pre-
-  // registry deployment and fixture database): the round-1 rules
-  // in admitPhaseLegacy below, where a book's binding is the
-  // phase of the plans this service has already admitted for it
-  // and an unbound book presenting a registry phase establishes
-  // its binding with the plan it creates. This is the explicit
-  // legacy/service-fixture behavior Rowan sanctioned preserving;
-  // it is reachable ONLY while no binding has ever been
-  // recorded, and no submission can select it.
+  // LEGACY MODE (non-enforcement construction AND registry not
+  // yet established — every pre-registry fixture database and
+  // the legacy D6 suites): the round-1 rules in admitPhaseLegacy
+  // below, where a book's binding is the phase of the plans this
+  // service has already admitted for it and an unbound book
+  // presenting a registry phase establishes its binding with the
+  // plan it creates. This is the explicit legacy/service-fixture
+  // behavior Rowan sanctioned preserving; it is reachable ONLY
+  // where no binding has ever been recorded AND the construction
+  // is not enforcement-bound, and no submission can select it.
   //
   // The admitted phase — derived in admitPhase, not the caller's
   // raw value — is what the plan stores and what intent identity
   // (B2) binds.
   function admitPhase(bookId, callerPhaseRaw) {
     const callerPhase = callerPhaseRaw ?? null;
-    if (!phaseRegistryEstablished(coord))
+    if (!enforcePhasePolicy && !phaseRegistryEstablished(coord))
       return admitPhaseLegacy(bookId, callerPhase);
+    return admitPhaseRegistry(bookId, callerPhase);
+  }
+
+  function admitPhaseRegistry(bookId, callerPhase) {
     const own = phaseBindingForBook(coord, bookId);
     if (own) {
       if (callerPhase === null)
@@ -250,10 +285,19 @@ export function createGenerationService({ coord, env = {}, store = null, sources
 
   // The service handle on the registry writer (phase-policy.mjs
   // recordPhaseBinding): recording a phase→book binding is a
-  // gated operator act — no client route reaches this method in
-  // this build (the deploy gate performs the production
-  // recording). Returns the service's usual applied/rejected
-  // shapes; a conflict or malformed request moves nothing.
+  // gated operator act. Since round 3 (R3-1) it IS reachable in
+  // the pinned production entry — through exactly one surface:
+  // the operator-only POST /v2/d6-phase-binding route, admitted
+  // on the migration-operator credential alone (the
+  // skipClientToken operator class, like the Option D operator
+  // routes and the diagnostics read) and forwarded to the
+  // internal route, which requires the entry's operator-admitted
+  // stamp. No client route reaches this method: the everyday
+  // client token alone is refused at the entry with
+  // migration_operator_required, and the internal route refuses
+  // any request the entry has not stamped. Returns the service's
+  // usual applied/rejected shapes; a conflict or malformed
+  // request moves nothing.
   function bindPhaseBook(input) {
     try {
       const r = recordPhaseBinding(coord, input || {});
@@ -270,6 +314,121 @@ export function createGenerationService({ coord, env = {}, store = null, sources
     }
   }
 
+  // Read-back for the registry: the recorded binding row for one
+  // phase, or null. The operator route returns this alongside
+  // every bindPhaseBook verdict, so a recording is verified from
+  // the server's own state — never from the request's echo — and
+  // a conflict refusal shows the binding that stands.
+  function getPhaseBinding(phase) {
+    const row = phaseBindingFor(coord, phase);
+    if (!row) return null;
+    return {
+      phase: row.phase, bookId: row.book_id, source: row.source,
+      createdAt: row.created_at, updatedAt: row.updated_at,
+    };
+  }
+
+  // The service handle on the store's unknown-billing
+  // reconciliation (genstore.reconcileUnknown — the pre-existing
+  // D6 operator mechanism): records the now-known cost for one
+  // confirmed/unknown attempt; when it was the phase's last open
+  // unknown, the phase halt clears in the same transaction.
+  // Operator-side only — no client route reaches it in this
+  // build; it is the first half of the R3-2 clearance workflow
+  // (reconcile the attempts, then retireHaltedPlan below).
+  // Errors from the store map onto rejected reasons; a refusal
+  // moves nothing.
+  function reconcileUnknownAttempt(attemptId, opts = {}) {
+    try {
+      const r = store.reconcileUnknown(attemptId, opts || {});
+      return {
+        outcome: "applied", attemptId,
+        attemptOutcome: r.attempt ? r.attempt.outcome : null,
+        attemptCostMicroCents: r.attempt ? r.attempt.cost_micro_cents : null,
+        haltCleared: !!r.haltCleared,
+      };
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      if (msg.startsWith("attempt_not_found"))
+        return { outcome: "rejected", reason: "attempt_not_found" };
+      if (msg.startsWith("attempt_not_unknown"))
+        return { outcome: "rejected", reason: "attempt_not_unknown" };
+      if (msg.startsWith("reconcile_"))
+        return { outcome: "rejected", reason: msg.split(":")[0] };
+      throw e;
+    }
+  }
+
+  // ---- R3-2 clearance: retiring a halted_unknown plan ---------
+  // The retirement audit lives in its own lazily-ensured table
+  // (the phase-policy precedent: DDL beside its only writer,
+  // never in GEN_SCHEMA — the correction suites pin the
+  // bootstrap's table set — and ensured ONLY here, so a store
+  // that never retires a plan never grows the table).
+  const PLAN_RETIREMENT_SCHEMA = `
+CREATE TABLE IF NOT EXISTS d6_plan_retirements (
+  plan_id TEXT PRIMARY KEY, note TEXT, source TEXT,
+  created_at INTEGER NOT NULL);
+`;
+  function ensurePlanRetirementSchema() {
+    coord.sql.exec(PLAN_RETIREMENT_SCHEMA);
+  }
+
+  // retireHaltedPlan({ planId, note, source }) — the explicit
+  // operator clearance that ends a halted_unknown plan's fence
+  // ownership (R3-2). Semantics:
+  //   * ONLY a plan currently in state 'halted_unknown' can be
+  //     retired (anything else: plan_not_halted_unknown; an
+  //     unknown id: plan_not_found);
+  //   * the plan's own unknown attempts must be RECONCILED FIRST
+  //     (reconcileUnknownAttempt / genstore.reconcileUnknown):
+  //     while any confirmed/unknown attempt row remains open for
+  //     the plan, retirement is refused (unknown_billing_open) —
+  //     retirement never papers over an unresolved charge;
+  //   * the transition (state -> 'retired', stop_reason
+  //     'retired_unknown_billing') and the audit row are written
+  //     in ONE transaction; 'retired' is terminal everywhere:
+  //     driveOnce never selects it, and the admission fence no
+  //     longer counts it — ownership is cleared, so a later fresh
+  //     intent over the same occurrences may be admitted by the
+  //     ordinary rules;
+  //   * retirement is NEVER inferred: no submission, keepGoing
+  //     change, or phase-halt flip performs or implies it. In
+  //     the pinned production entry it is reachable only through
+  //     the operator-only POST /v2/d6-retire-halted-plan route
+  //     (the same operator fence class as the phase-binding
+  //     route); its USE against any production plan remains
+  //     Julie's separate authorization.
+  function retireHaltedPlan(input) {
+    const { planId, note = null, source = null } = input || {};
+    if (typeof planId !== "string" || planId.length === 0)
+      return { outcome: "rejected", reason: "plan_id_required" };
+    const plan = planRow(planId);
+    if (!plan) return { outcome: "rejected", reason: "plan_not_found" };
+    if (plan.state !== "halted_unknown")
+      return { outcome: "rejected", reason: "plan_not_halted_unknown", state: plan.state };
+    const open = coord._one(
+      `SELECT COUNT(*) AS n FROM d6_attempt_log
+        WHERE plan_id = ? AND phase = 'confirmed' AND outcome = 'unknown'`,
+      planId).n;
+    if (open > 0)
+      return { outcome: "rejected", reason: "unknown_billing_open", openUnknown: open };
+    const t = coord._now();
+    coord._tx(() => {
+      ensurePlanRetirementSchema();
+      coord.sql.exec(
+        `INSERT INTO d6_plan_retirements (plan_id, note, source, created_at)
+         VALUES (?, ?, ?, ?)`,
+        planId, note ?? null, source ?? null, t);
+      setPlanState(planId, "retired", "retired_unknown_billing");
+    });
+    return {
+      outcome: "applied", planId,
+      fromState: "halted_unknown", state: "retired",
+      stopReason: "retired_unknown_billing", note: note ?? null,
+    };
+  }
+
   // R2-2 (Rowan round 2, comment 6511950562): the ACTIVE
   // OVERLAPPING-OCCURRENCE FENCE. B2 put execution semantics
   // inside intent identity, so a different-semantics request over
@@ -284,22 +443,34 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   // stretch as the convergence lookup and the plan insert, so
   // two racing submissions cannot both pass it.
   //
-  // A plan FENCES while the driver can still grant against it
-  // without a fresh operator decision: state 'active' and the
-  // parked_* family (quota/cap/storage parks resume on their own
-  // in driveOnce). Terminal plans do NOT fence: 'complete' and
-  // 'partial' are finished, and a 'halted_unknown' plan can grant
-  // again only after an operator reconciles its unknown billing
-  // — a separately gated act — so a halt must not block a fresh
-  // intent. The fence never resumes, alters, or unblocks the
-  // halted plan; it only reads plan state. The parked JOB (a
-  // coordinator-level job in state parked_policy — Forever
-  // Pucked Ch 3) is a different mechanism entirely: its
-  // occurrences never enter an eligible set (the builder marks
-  // them excluded_parked / excluded_ch3), so they can neither
-  // fence nor be fenced, and nothing here touches that job.
+  // A plan FENCES while it owns unresolved work over its
+  // eligible occurrences: state 'active', the parked_* family
+  // (quota/cap/storage parks resume on their own in driveOnce),
+  // and — since round 3 (R3-2, Rowan round-3 review comment
+  // 6512804398) — 'halted_unknown'. Round 2 treated a halted plan
+  // as non-fencing because it grants again only after a gated
+  // reconciliation; Rowan's correction: that still let a NEW paid
+  // plan mint over the halt's unresolved occurrences, where a
+  // later reconciliation could put both plans' execution surfaces
+  // over the same content. A halted_unknown plan therefore fences
+  // its overlapping occurrences until an explicit operator
+  // reconciliation + retirement (retireHaltedPlan) clears its
+  // ownership — clearance is never inferred from a new command, a
+  // changed keepGoing, or an eventual phase-halt flip (the fence
+  // reads PLAN STATE, not the phase halt: a reconciled-but-not-
+  // retired plan still in 'halted_unknown' keeps fencing).
+  // Terminal plans do NOT fence: 'complete' and 'partial' are
+  // finished, and 'retired' is the cleared terminal state the
+  // operator transition above produces. The fence never resumes,
+  // alters, or unblocks the halted plan; it only reads plan
+  // state. The parked JOB (a coordinator-level job in state
+  // parked_policy — Forever Pucked Ch 3) is a different mechanism
+  // entirely: its occurrences never enter an eligible set (the
+  // builder marks them excluded_parked / excluded_ch3), so they
+  // can neither fence nor be fenced, and nothing here touches
+  // that job.
   const PLAN_FENCE_TERMINAL = Object.freeze(
-    ["complete", "partial", "halted_unknown"]);
+    ["complete", "partial", "retired"]);
   function activeOverlapConflict(bookId, eligibleIds) {
     const want = new Set(eligibleIds);
     const plans = coord._all(
@@ -454,8 +625,11 @@ export function createGenerationService({ coord, env = {}, store = null, sources
 
   async function driveOnce() {
     const outcomes = [];
+    // 'retired' (R3-2) joins the terminal exclusions: a retired
+    // plan is closed by an operator act and the driver must never
+    // grant against it or flip it back to active.
     const plans = coord._all(
-      `SELECT * FROM d6_plans WHERE state NOT IN ('complete', 'partial')
+      `SELECT * FROM d6_plans WHERE state NOT IN ('complete', 'partial', 'retired')
         ORDER BY created_at, plan_id`);
     for (const plan of plans) {
       const out = { planId: plan.plan_id };
@@ -696,9 +870,13 @@ export function createGenerationService({ coord, env = {}, store = null, sources
       // R2-1: once the phase→book registry is established, the
       // phase's book is the registry's — the authoritative link,
       // reported even before any plan exists. In legacy mode the
-      // link is read from admitted plans, as in round 1.
+      // link is read from admitted plans, as in round 1. R3-1:
+      // in an enforcement-bound construction the history-derived
+      // link is never presented as the phase's book — the
+      // registry row or nothing (null until the operator records
+      // the binding), matching admission exactly.
       const binding = phaseBindingFor(coord, phase);
-      const plan = binding ? null : coord._oneOrNull(
+      const plan = (binding || enforcePhasePolicy) ? null : coord._oneOrNull(
         `SELECT book_id FROM d6_plans WHERE phase = ?
           ORDER BY created_at DESC LIMIT 1`, phase);
       phases.push({
@@ -994,6 +1172,7 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   }
 
   return { submitIntent, driveOnce, planStatus, seedStorageBase, recover,
-           bindPhaseBook,
+           bindPhaseBook, getPhaseBinding,
+           reconcileUnknownAttempt, retireHaltedPlan,
            listPlans, capabilities, eligibilityQuote, attemptDiagnostics };
 }

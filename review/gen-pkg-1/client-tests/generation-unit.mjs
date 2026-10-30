@@ -116,8 +116,13 @@ await row("GU8", "planStatusText: states and stop reasons in plain words", async
   eq(planStatusText({ state: "complete", totals: { eligible: 0, done: 0 } }), "Done — nothing was left to generate", "empty complete");
   assert(planStatusText({ state: "parked_quota", stopReason: "quota_estimate_exhausted" }).includes("quota is used up"), "quota");
   assert(planStatusText({ state: "halted_unknown", stopReason: "unknown_billing" }).includes("charge needs checking"), "unknown billing");
+  // Round 3 (R3-2): a retired plan is terminal and reads as a
+  // closed run — never as a live plan the shell would reroute to.
+  assert(planStatusText({ state: "retired", stopReason: "retired_unknown_billing" }).includes("Closed"), "retired reads closed");
+  assert(planStatusText({ state: "retired", stopReason: "retired_unknown_billing" }).includes("charge was checked"), "retired reason in plain words");
   eq(stopReasonText("some_new_reason"), "some new reason", "unknown reasons pass through, never invented");
   assert(isTerminalPlanState("complete") && !isTerminalPlanState("active") && !isTerminalPlanState("parked_quota"), "terminal set");
+  assert(isTerminalPlanState("retired") && !isTerminalPlanState("halted_unknown"), "round 3: retired is terminal, halted_unknown is not");
 });
 
 await row("GU9", "findActivePlan: scope/chapter matching, terminal plans ignored", async () => {
