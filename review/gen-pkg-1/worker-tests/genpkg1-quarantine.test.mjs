@@ -315,6 +315,14 @@ test("Q6: plan-less legacy work — halted grant attempts are refused AND durabl
 
   // After re-arm both jobs stay fenced until individually
   // released; a FRESH post-re-arm synthesis is normal work.
+  // D8 amendment (disclosed; no assertion changed): the fake
+  // clock advances across the re-arm, as real time does. The
+  // D8-2 halt-epoch fence is timestamp-based by design — it
+  // distinguishes halt-era births from post-re-arm births by
+  // their recorded times — and this scenario's "fresh post-re-arm
+  // synthesis" premise is a real-time one; in a single frozen
+  // millisecond the two are indistinguishable BY CONSTRUCTION.
+  h.advance(60_000);
   const { coord: coord2, svc: svc2 } = rearmed(w);
   for (const jobId of ["synth:s1", "legacy-2"]) {
     const g = await coord2.requestGrant(jobId);
@@ -499,16 +507,42 @@ test("Q9: real entry — legacy grant-producing commands are refused at admissio
   assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM jobs`).get().n, 0,
     "the refused synthesis staged nothing");
   assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM grants`).get().n, 0);
-  // A plain SubmitJob (stages a queued job; produces no grant)
-  // and ordinary commands are NOT refused — behavior unchanged.
+  // D8-2 amendment (Rowan review 6525035570; disclosed — this
+  // assertion REPLACES the D7-2-era one): a plain SubmitJob is
+  // refused at admission while halted too. D7-2 admitted it
+  // (staging only, no grant) and relied on the guard marking it
+  // at a first halted grant attempt; Rowan's D8-2 showed that
+  // mark is unreachable when the attempt is refused before the
+  // guard (park/quota/cap) or only happens after re-arm — so
+  // staging itself is now refused, and nothing is staged.
   const sub = await w.call("/v2/commands", { method: "POST", body: {
     command_id: "q9-s3", type: "SubmitJob",
     payload: { jobId: "legacy-e2", bookId: FP_ID, chapterIndex: 0, lane: "standard",
                occurrences: [{ occurrenceId: "e0", revisionKey: "fp-e0" }],
                data: { estMicroCents: 1000 } },
   }});
-  assert.equal(sub.status, 200);
-  assert.equal((await sub.json()).outcome, "applied");
+  assert.equal(sub.status, 423);
+  assert.deepEqual(await sub.json(), { error: "generation_halted" });
+  assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM jobs`).get().n, 0,
+    "the refused SubmitJob staged nothing");
+  // RequestRepair — the same staging shape under a repair kind —
+  // joins the refusal set (D8-2).
+  const repair = await w.call("/v2/commands", { method: "POST", body: {
+    command_id: "q9-s4", type: "RequestRepair",
+    payload: { jobId: "legacy-e2r", bookId: FP_ID, chapterIndex: 0, lane: "standard",
+               occurrences: [{ occurrenceId: "e0", revisionKey: "fp-e0" }],
+               data: { estMicroCents: 1000 } },
+  }});
+  assert.equal(repair.status, 423);
+  assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM jobs`).get().n, 0,
+    "the refused RequestRepair staged nothing");
+  // Ordinary NON-generation commands are NOT refused — behavior
+  // unchanged (a settings write rides the same dispatch).
+  const settings = await w.call("/v2/commands", { method: "POST", body: {
+    command_id: "q9-s5", type: "SetSettings",
+    payload: { baseRevision: 0, data: { monthlyCap: 50 } },
+  }});
+  assert.equal(settings.status, 200);
   assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM grants`).get().n, 0);
 });
 

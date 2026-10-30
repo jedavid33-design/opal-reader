@@ -25,9 +25,9 @@ import {
   recordPhaseBinding,
 } from "./phase-policy.mjs";
 import {
-  ensureQuarantineSchema, heldQuarantine, quarantineHoldRow,
+  ensureQuarantineSchema, quarantineHoldRow,
   quarantineHoldRowSafe, recordQuarantineHold, applyQuarantineRelease,
-  quarantineView,
+  quarantineView, heldQuarantineStrict, noteHaltObservation,
 } from "./quarantine.mjs";
 
 // Voice mappings, recorded only (proposal §6.4): a voice-prompt row
@@ -687,6 +687,13 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
     }
     const planId = `plan:${intentKey.slice(0, 24)}`;
     const t = coord._now();
+    // D8-2: an intent submission is itself a halt observation
+    // for the epoch ledger (quarantine.mjs) — noted before the
+    // insert so a halt that begins with this submission opens
+    // its epoch with this moment inside it. Best-effort here (as
+    // in driveOnce): the ledger's strict noting point is the
+    // grant guard.
+    try { noteHaltObservation(coord, env); } catch { /* guard notes strictly */ }
     coord._tx(() => {
       coord.sql.exec(
         `INSERT INTO d6_plans
@@ -781,6 +788,15 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
 
   async function driveOnce() {
     const outcomes = [];
+    // D8-2 (Rowan review 6525035570): this pass is one of the
+    // halt-epoch ledger's observation points (quarantine.mjs).
+    // The class alarm runs driveOnce every watchdog cycle, so
+    // noting here is what bounds the epochs' unobserved slivers
+    // in production. Noting is best-effort at THIS surface: a
+    // ledger fault must not stop the driver from reaching the
+    // grant guard, which notes strictly inside the grant
+    // transaction and fails closed there.
+    try { noteHaltObservation(coord, env); } catch { /* guard notes strictly */ }
     // 'retired' (R3-2) joins the terminal exclusions: a retired
     // plan is closed by an operator act and the driver must never
     // grant against it or flip it back to active.
@@ -818,10 +834,26 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
       // was never moved by the driver). The skip is reported
       // truthfully on the pass outcome: approvalRequired, never
       // a suggestion that work is in flight.
-      if (heldQuarantine(coord, "plan", plan.plan_id)) {
+      //
+      // D8-1 (Rowan review 6525035570): the skip reads the hold
+      // STRICTLY (schema ensured, heldQuarantineStrict) — and a
+      // read FAILURE is treated as held-for-driving: the plan is
+      // skipped and the outcome is stamped quarantineCheckFailed,
+      // so a database fault can never let the driver walk a
+      // possibly-held plan into the grant step. (The grant guard
+      // behind the step is itself strict, so this is defense in
+      // depth: the failure is surfaced on the pass outcome, not
+      // just as a thrown grant.)
+      let heldRow = null, quarantineCheckFailed = false;
+      try {
+        ensureQuarantineSchema(coord.sql);
+        heldRow = heldQuarantineStrict(coord, "plan", plan.plan_id);
+      } catch { quarantineCheckFailed = true; }
+      if (heldRow || quarantineCheckFailed) {
         out.state = plan.state;
         out.quarantined = true;
         out.approvalRequired = true;
+        if (quarantineCheckFailed) out.quarantineCheckFailed = true;
         continue;
       }
       // Unknown-billing halt for the plan's phase: no granting.

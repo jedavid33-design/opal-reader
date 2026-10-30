@@ -1,0 +1,18 @@
+✔ Q1: a plan born while halted is admitted per C3's contract AND born quarantined (11.155351ms)
+✔ Q2: duplicate submission (incl. a second service instance) converges — one plan, one hold (3.906663ms)
+✔ Q3: born while HALT === '0' is never marked; a MISSING halt value counts as halted (7.029669ms)
+✔ Q4: after re-arm, EVERY grant path refuses the held plans; unmarked work proceeds (32.84447ms)
+✔ Q5: release is per-plan, idempotent, audited — and the ONLY clearance (11.409653ms)
+✔ Q6: plan-less legacy work — halted grant attempts are refused AND durably marked (10.047518ms)
+✔ Q7: release is NOT a reconcile — halted_unknown is refused; Ch2/Ch3 fixture shapes stay byte-identical (4.134535ms)
+✔ Q8: real entry — halted intent is admitted + born quarantined; the plan view tells the truth (21.298243ms)
+✔ Q9: real entry — legacy grant-producing commands are refused at admission while halted; other commands unchanged (14.07974ms)
+✔ Q10: real entry — the release route is operator-only, audited, idempotent, read-back verified (10.672827ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 313.589605

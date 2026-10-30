@@ -1,0 +1,15 @@
+✔ D8-1a: a failing hold SELECT at the grant guard THROWS — zero spend, hold intact; an unmarked plan is refused the same way (35.959184ms)
+✔ D8-1b: a failing hold SELECT for a held plan-less job THROWS — zero spend, hold intact (7.27675ms)
+✔ D8-1c: executor refuses a crafted message when the hold read fails — quarantine_check_failed, zero provider contact (5.227605ms)
+✔ D8-1d: driver treats a failed hold read as held-for-driving (quarantineCheckFailed) and never reaches a grant (5.379944ms)
+✔ D8-2a: real entry refuses plain SubmitJob + RequestRepair while halted (public AND class level); re-arm spends nothing on the held intent plan (26.690315ms)
+✔ D8-2b: jobs whose halted attempts died before the guard (park, quota) are epoch-fenced after re-arm; pre-halt work is not (12.029162ms)
+✔ D8-2c: production-class alarm audit — the base alarm cannot grant staged or held work; the guard sees every base grant path (21.312594ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 287.211259

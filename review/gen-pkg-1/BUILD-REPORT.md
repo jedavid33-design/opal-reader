@@ -1957,3 +1957,269 @@ re-arm, no plan release, no Ch 2 reconciliation/retirement/
 retry, no Ch 3 resume, no Batch arming, no generation, no
 spending. The release route has never been invoked against
 production; its tests use synthetic operator auth only.
+
+## D8 corrections — fail-closed hold reads + plan-less staging fence (Rowan review 6525035570)
+
+Repo-only, under Julie's existing D7-2 approval (comment
+6524562842). Rowan accepted the D7-2 proof replay (D7-1) and
+the birth-mark architecture, and withheld implementation
+sign-off on two blockers. This round corrects both, re-runs the
+proofs, and re-pins. Deploy Gates 1–3 are untouched and remain
+Julie's separate decisions behind Rowan's re-review.
+
+### D8-1 — quarantine lookups FAIL CLOSED
+
+The defect: `quarantineHoldRowSafe` swallowed ANY error into
+null, and `heldQuarantine` (built on it) fed the grant guard,
+the driver skip, and the executor defense — an arbitrary SELECT
+failure masqueraded as "no hold" and a held plan could be
+granted on a sick store.
+
+The correction (`worker/generation/quarantine.mjs`,
+`grant-guards.mjs`, `service.mjs`, `d6-executor.mjs`):
+
+- New `heldQuarantineStrict`: the hold read used at every
+  spending/execute fence. It never swallows; callers ensure the
+  schema first, so a genuinely absent table is created and then
+  read (absence after ensure = no hold, legitimately); any
+  ERROR propagates.
+- `quarantineHoldRowSafe` is tightened, not deleted: it now
+  returns null ONLY for a genuine "no such table" error
+  (`isNoSuchTableError`) and rethrows everything else. Its only
+  remaining consumers are the read-only views (`planStatus`,
+  `getQuarantine`), where Rowan permits the pre-bootstrap
+  "no hold" rendering.
+- Grant guard: schema ensured, then STRICT plan/job hold reads
+  inside `_issueGrant`'s transaction — a failure throws and the
+  transaction rolls the attempt back: no grant, no ledger, no
+  outbox mutation is possible past a broken read.
+- Driver: the skip check ensures + reads strictly; a failure is
+  treated as held-for-driving and surfaced on the outcome as
+  `quarantineCheckFailed: true` (never a silent clean skip, and
+  the plan is never driven to a grant — the guard is the
+  documented backstop regardless).
+- Executor: on a store-backed coordinator the pre-claim defense
+  ensures + reads strictly; a failure refuses the message with
+  the NEW, disclosed reason `{ refused: "quarantine_check_failed" }`
+  BEFORE claim, execution record, or provider contact. The
+  throw-safe read survives only for store-less coordinator
+  doubles (unit fixtures with no store a hold could live in).
+
+Fault-injection proof (new suite `genpkg1-quarantine-d8`,
+D8-1a–d, sabotage = the harness SqlFacade wrapped so every
+SELECT on `d6_quarantine_holds` throws): held plan grant
+attempt THROWS with zero grants/ledger/outbox and the hold row
+unchanged; an UNMARKED plan under the same fault also throws
+(an error is never "no hold" for anyone) and grants cleanly
+once the fault clears; held plan-less job identical; executor
+refuses `quarantine_check_failed` with zero provider calls and
+zero execution records, then `plan_quarantined` after the fault
+clears; driver reports `quarantineCheckFailed` and never
+reaches a grant.
+
+### D8-2 — plan-less work staged while halted can never become spendable via a generic re-arm
+
+Rowan's two sub-findings: (i) the D7-2 entry still ADMITTED
+plain `SubmitJob` / `RequestRepair` while halted — plan-less
+jobs with NO birth mark; the guard-time mark was the only
+fence, and (ii) that mark is unreachable when the halted
+attempt is refused BEFORE the guard (quota park / daily quota
+/ monthly cap all run earlier in `_issueGrant`).
+
+Three layered mechanisms (`worker/worker-entry-prod-d6.js`,
+`grant-guards.mjs`, `quarantine.mjs`, `service.mjs`):
+
+1. **Admission refusal (Rowan's focused option).** A shared
+   predicate (`isHaltRefusedCommand`) now refuses, at BOTH the
+   public entry and the coordinator class, while
+   GENERATION_HALT !== "0": `RequestSynthesis`, `RequestResume`,
+   `RequestRepair`, and plain `SubmitJob` WITHOUT
+   `payload.data.d6Intent` — 423 `{ error: "generation_halted" }`.
+   `SubmitJob` WITH `data.d6Intent` is NOT refused: it forwards
+   to the intent route, admitted + birth-marked (C3 intact).
+   All reads/sync/settings/other commands are unchanged.
+2. **Halt-epoch ledger (the durable answer to (b)).** New
+   lazily ensured tables `d6_halt_epochs` + `d6_quarantine_meta`
+   in `quarantine.mjs` (NOT in `gen-schema.mjs` — C2's pinned
+   bootstrap set is untouched). Halt-state observations are
+   noted at the three authoritative surfaces (the grant guard,
+   inside its transaction; `driveOnce`; `submitIntent`), closing
+   the "the guard never ran during the halt" gap for any halt
+   the machinery witnessed. An epoch's suspect window runs from
+   the last observed unhalted moment (0 if none — fail-closed)
+   to the last observed halted moment. Guard fence: a plan-less
+   job that is still `queued`, was born inside a suspect window,
+   and has NEVER been adjudicated (no hold row in any state) is
+   durably marked (`reason: "born_while_halted"`,
+   `source: "halt_epoch"`) and refused `job_quarantined` in the
+   same transaction. A held row already refused it above; a
+   RELEASED row is the operator's completed clearance and is
+   never re-imposed (this exemption is itself pinned by Q6).
+   Honest scope, stated plainly: client-reachable staging is
+   refused unconditionally by (1); store-staged rows are fenced
+   for every halt the machinery observed — in production every
+   halt, since the class alarm fires each watchdog cycle and
+   intent/grant traffic notes observations too. A row staged AND
+   granted entirely inside a halt window the machinery never
+   observed is reachable only from the operator plane, whose
+   holder also holds the release credential. Observation
+   boundaries cut fail-closed: births after the last unhalted
+   observation but before the halt physically began are
+   over-fenced (operator-releasable); births after the last
+   halted observation are indistinguishable from legitimate
+   post-re-arm births and are not fenced.
+3. **Retained defense-in-depth.** The D7-2 guard-time durable
+   job-mark for plan-less jobs reaching the guard while halted
+   is unchanged, and the guard's held checks still run first.
+
+Adversarial results: (a) D8-2a — real-entry plain SubmitJob +
+RequestRepair refused at HALT=1 at BOTH levels, intent admitted
++ born held, generic re-arm before any grant attempt, then
+class alarm + direct flagged requestGrant → zero
+grants/ledger/outbox/dispatches. (b) D8-2b — store-staged jobs
+whose halted attempts died at the quota park and at the daily
+quota (premise asserted: NO mark exists after either attempt)
+are epoch-fenced after re-arm + limit reset; a pre-halt job in
+the same store grants normally; operator release clears one
+job and not the other. (c) d6-correction C3 + Q1/Q8 + D8-2a's
+intent leg. (d) battery proof below. (e) Q2/Q5 unmodified;
+D8-2b's release-A-not-B at job level; Q6's release flow
+(exemption above).
+
+### Production-class alarm audit (Rowan's path audit) — BYPASS REACHABLE IN PRINCIPLE; FENCED
+
+The audit question: the real `OpalReaderCoordinatorProd`
+constructs its superclass with the raw env; `super.alarm()`
+runs FIRST; the base alarm and the `/v2/commands` dispatch
+build their coordinators from that env via a host-env spread
+carrying NO D6 flags — so did any base `_issueGrant` path run
+unguarded?
+
+Verdict: **yes, the path was unguarded.** The guard flags
+existed only on the separately constructed D6 service
+coordinators (`d6HostEnv`). The base alarm's coordinator could
+issue grants the guard never saw. Reachability of HARM today
+was limited by job state (watchdog `retry_grant` acts only on
+'generating' jobs; a held plan's jobs are never granted, hence
+never 'generating'; the production deploy spec does not bind
+the base alarm's outbox sendGrant) — but the unguarded path
+itself was real, proven by counterfactual: the pre-D6 base
+class's alarm fired over the audit store grants the held
+plan's probe job (grants/ledger/outbox 0 → 1;
+`logs/d8/alarm-counterfactual.mjs` + output).
+
+The fence (no `coordinator.mjs` edit): the D6 production class
+now stamps `d6StandardOnly` + `d6HaltFence` onto its own env
+AFTER `super(state, env)`:
+`this.env = { ...this.env, d6StandardOnly: true, d6HaltFence: true }`.
+Every coordinator the class builds for post-construction
+operations — base alarm schedule processing, API dispatch —
+inherits the flags through the existing host-env spreads, so
+the guard (plan/phase checks, hold fence, halt fence, epoch
+fence) runs on every grant path the class operates. The
+constructor ARGUMENT is deliberately not decorated:
+`this.coordinator` is built from it, is a plain schema/settings
+handle no production grant path uses (its only production use
+is the constructor's `ensureGenSchema` call), and the baseline
+suites pin its plain behavior (C2's construction snapshot,
+C4's batch-lane premise) — decorating it breaks C4, verified:
+the seam chosen is the minimal one that fences every real path
+and no pinned handle.
+
+Proof (D8-2c, the REAL production class throughout): env flags
+present on the class, absent on `this.coordinator`; staged
+queued job + held plan + due retry_grant/watchdog rows inert
+across a halted real-class alarm; the 'generating' probe linked
+to the held plan refused INSIDE `super.alarm()` (zero movement,
+halted and re-armed); positive control — a legitimate plan-less
+'generating' job born before the halt grants through the same
+base-alarm path and drains via the D6 queue wiring (the path is
+guarded, not broken).
+
+### Files changed (worker only; client untouched)
+
+- `worker/generation/quarantine.mjs` — strict hold read +
+  no-such-table-only safe read + halt-epoch ledger.
+- `worker/generation/grant-guards.mjs` — strict reads in the
+  guard; halt observation; epoch fence.
+- `worker/generation/service.mjs` — driver strict skip with
+  `quarantineCheckFailed`; halt observations at `driveOnce` /
+  `submitIntent`.
+- `worker/generation/d6-executor.mjs` — strict pre-claim reads;
+  `quarantine_check_failed` refusal.
+- `worker/worker-entry-prod-d6.js` — shared admission predicate
+  (SubmitJob/RequestRepair refused while halted, both levels);
+  production-class env fence.
+- `coordinator.mjs` NOT edited. No new bindings. No client
+  change (publish digest unchanged:
+  `97e280948341e0d993975f46ebf089c10e9a2dfdc74487783ff80dd2069cc398`).
+
+### Candidate-suite amendments (disclosed, one by one)
+
+1. `tests/genpkg1-quarantine.test.mjs` Q9 — the plain-SubmitJob
+   block's D7-2-era expectation (admitted, 200/applied) is
+   REPLACED by the D8-2 behavior (423 `generation_halted`,
+   nothing staged); a RequestRepair 423 case and a
+   non-generation-command (SetSettings, 200) case are added.
+   No assertion deleted: the replaced assertion asserted the
+   exact behavior Rowan's D8-2 ordered removed.
+2. `tests/genpkg1-quarantine.test.mjs` Q6 — one fixture line
+   added (`h.advance(60_000)` across the re-arm) with an
+   explanatory comment; NO assertion changed. The epoch fence
+   is timestamp-based by design; Q6's scenario ("fresh
+   post-re-arm synthesis is normal work") is a real-time
+   premise that a single frozen fake millisecond cannot
+   express. The run also exposed — and the guard now pins — the
+   rule that an operator-RELEASED subject is never re-fenced by
+   the epoch.
+3. NEW sibling suite `tests/genpkg1-quarantine-d8.test.mjs`
+   (7 tests: D8-1a–d, D8-2a–c) — additive only.
+No baseline suite edited; no assertion anywhere deleted,
+skipped, or lowered outside amendment 1's disclosed replacement.
+
+### Batteries
+
+- Targeted: d6-correction 5/5 UNMODIFIED; d6-correction2 10/10;
+  d6-grant-guards 7/7; d6-seed-hardening 12/12; d6-executor-fi
+  21/21; genpkg1-quarantine 10/10 (amendments above);
+  genpkg1-quarantine-d8 7/7; genpkg1-phase-enforce 12/12;
+  genpkg1-phase-policy 10/10; genpkg1-diagnostics 9/9;
+  genpkg1-surfaces 5/5; genpkg1-projection 7/7;
+  genpkg1-intent-idempotency 4/4; d6-service 5/5;
+  d6-integration 3/3; d6-parked-inertness 1/1.
+- Full worker battery on the final tree (`logs/d8/worker-final/`):
+  123 suite files, 101 pass / 22 fail; 959 tests, 937 pass;
+  failing set BYTE-IDENTICAL to the recorded 22-name baseline
+  (`logs/d7-2q/baseline-22.txt`); ZERO assertion failures (all
+  22 are the pre-existing infrastructure failures).
+- Client: untouched — batteries not re-run (no client delta).
+
+### Digests / pin
+
+- Worker tree: 377 → 378 files (one new test file; no new
+  worker source files). Digest method (documented; the D7-2
+  lineage digest used a method not reproducible from its
+  record, so this round states its own): sorted relative
+  paths, lines `${sha256(content)} ${path}`, SHA-256 of the
+  manifest — pre-D8 tree (reconstructed byte-exact from the
+  D7-2 pin's delta blobs + untouched files)
+  `5e03071ab765dc82e5978e37e0a926af645586494ff03ffda67dcbfa1e0d6904`;
+  D8 tree
+  `30a954c45831e4c95f596b8eb6442944b35e11c19bfadce59d27b712dffec84a`.
+  The pin's git tree diff below is the authoritative delta.
+- Envelope: re-proven against the corrected candidate after
+  the pin (the proof stamps the pin SHA); result + new
+  envelope SHA-256 recorded in `logs/d8/envelope-hashes.txt`
+  and in the builder's completion message. No new bindings.
+- Re-pin: new commit on `ui1-review`, parent = the fresh-read
+  head at pin time, changing ONLY `review/gen-pkg-1/**`;
+  `review/gen-pkg-1-deploy/**` preserved byte-identical. Pin
+  SHA + read-back proof in the builder's completion message.
+
+### NOT authorized / NOT done (unchanged gates)
+
+No deploy, no production contact, no board posts by the
+builder, no production registry/binding write, no client
+publication, no re-arm, no quarantine release against
+production, no Ch 2 reconciliation/retirement/retry, no Ch 3
+resume, no Batch arming, no generation, no spending.

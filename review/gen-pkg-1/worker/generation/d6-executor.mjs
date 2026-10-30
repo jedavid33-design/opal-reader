@@ -52,7 +52,9 @@
 // (bounded by REPAIR_MAX_RETRIES and the shared 12-attempt segment
 // budget in the genstore attempt log).
 import { fingerprintFor } from "../executor.mjs";
-import { heldQuarantine } from "./quarantine.mjs";
+import {
+  heldQuarantine, heldQuarantineStrict, ensureQuarantineSchema,
+} from "./quarantine.mjs";
 import { synthesizeSegment, stitchWav, TerminalBlock } from "./policy-split.mjs";
 import { FlushError } from "./flush-store.mjs";
 import { noteCommitted as noteBindingCommitted } from "./binding-projection.mjs";
@@ -486,12 +488,17 @@ export function createD6Executor({ coord, coordinator, store, providers, flushSt
     // issued (or issued before a hold existed): if the job's plan
     // (message-carried, job-data, or the d6_plan_jobs link) or the
     // job itself is under a HELD quarantine, refuse BEFORE any
-    // claim, execution record, or provider contact. The reads are
-    // throw-safe (heldQuarantine): on a store where the lazily
-    // ensured quarantine table was never created there is no hold
-    // to find, and claim discipline below proceeds exactly as
-    // before — this layer can only ever refuse work that a
-    // server-stamped hold names.
+    // claim, execution record, or provider contact.
+    //
+    // D8-1 (Rowan review 6525035570): on a store-backed
+    // coordinator the reads are STRICT — the schema is ensured
+    // (so a never-created table is a proven "no hold", not an
+    // error) and any read failure refuses the message with
+    // { refused: "quarantine_check_failed" } BEFORE claim: a
+    // database fault must never read as an all-clear at an
+    // execute fence. The throw-safe read survives only for
+    // coordinator doubles without a SQL store (unit fixtures),
+    // where there is no store a hold could live in.
     if (jobId) {
       let qPlanId = planIdFor(jobId, msg);
       if (!qPlanId && typeof c._oneOrNull === "function") {
@@ -501,9 +508,22 @@ export function createD6Executor({ coord, coordinator, store, providers, flushSt
           if (link) qPlanId = link.plan_id;
         } catch { /* link is optional bookkeeping here */ }
       }
-      if ((qPlanId && heldQuarantine(c, "plan", qPlanId)) ||
-          heldQuarantine(c, "job", jobId))
+      const storeBacked = typeof c._oneOrNull === "function" &&
+        !!c.sql && typeof c.sql.exec === "function";
+      if (storeBacked) {
+        let heldPlan = null, heldJob = null;
+        try {
+          ensureQuarantineSchema(c.sql);
+          heldPlan = qPlanId ? heldQuarantineStrict(c, "plan", qPlanId) : null;
+          heldJob = heldQuarantineStrict(c, "job", jobId);
+        } catch {
+          return { refused: "quarantine_check_failed" };
+        }
+        if (heldPlan || heldJob) return { refused: "plan_quarantined" };
+      } else if ((qPlanId && heldQuarantine(c, "plan", qPlanId)) ||
+                 heldQuarantine(c, "job", jobId)) {
         return { refused: "plan_quarantined" };
+      }
     }
 
     const claim = c.claimGrant({ grantId, consumerId: cid });

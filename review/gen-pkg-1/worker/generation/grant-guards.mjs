@@ -15,11 +15,15 @@
 //      with the retries/orphans allowance) reaches the 10 GB R2
 //      free-tier boundary ("storage_boundary").
 // Jobs without a plan are not plan-guarded ({ ok: true }) — with
-// ONE D7-2 exception (below): under the production entry's halt
-// fence (env.d6HaltFence), a plan-less job attempting a grant
-// while GENERATION_HALT !== "0" is refused AND durably
-// quarantined, so work staged by a legacy command while halted
-// can never become grantable through a later generic re-arm.
+// the D7-2/D8 exceptions (below): under the production entry's
+// halt fence (env.d6HaltFence), a plan-less job attempting a
+// grant while GENERATION_HALT !== "0" is refused AND durably
+// quarantined (D7-2), and a plan-less job born inside a recorded
+// halt epoch is marked + refused on its first guarded attempt
+// whenever it happens (D8-2) — so work staged by a legacy
+// command while halted can never become grantable through a
+// later generic re-arm, even when its halt-era attempts were
+// refused before ever reaching this guard.
 // If the flag is on but the d6 tables are missing, the lookups
 // THROW — loud, never a silent pass (the D6 service ensures the
 // schema at construction).
@@ -29,7 +33,8 @@ import {
   RETRIES_ORPHANS_ALLOWANCE, R2_FREE_TIER_BYTES,
 } from "./gen-constants.mjs";
 import {
-  ensureQuarantineSchema, heldQuarantine, recordQuarantineHold,
+  ensureQuarantineSchema, heldQuarantineStrict, quarantineHoldRow,
+  recordQuarantineHold, noteHaltObservation, haltEpochSuspect,
 } from "./quarantine.mjs";
 
 export function d6PlanForJob(coord, jobId) {
@@ -87,10 +92,25 @@ export function d6GrantGuard(coord, job) {
   // ensured HERE, after d6PlanForJob — so the fail-loud contract
   // above is untouched (a store missing the core d6 tables still
   // throws from the plan lookup before this DDL can mask it).
+  //
+  // D8-1 (Rowan review 6525035570): the hold reads here are
+  // STRICT (heldQuarantineStrict). The D7-2 build read them
+  // through a catch-all helper, so an arbitrary SELECT failure
+  // masqueraded as "no hold" and the guard could continue to a
+  // grant. Now the schema is ensured and any read error THROWS
+  // inside _issueGrant's transaction — the grant, ledger
+  // reservation, and outbox rows roll back with it. An error is
+  // never "no hold" at a spending fence.
+  //
+  // D8-2 (same review): every guarded grant attempt also notes
+  // the halt observation for the epoch ledger (quarantine.mjs) —
+  // inside this same transaction, so the ledger commits or rolls
+  // back with the grant decision it informs.
   ensureQuarantineSchema(coord.sql);
-  if (found && heldQuarantine(coord, "plan", found.plan.plan_id))
+  noteHaltObservation(coord, coord.env);
+  if (found && heldQuarantineStrict(coord, "plan", found.plan.plan_id))
     return { ok: false, reason: "plan_quarantined" };
-  if (heldQuarantine(coord, "job", jobId))
+  if (heldQuarantineStrict(coord, "job", jobId))
     return { ok: false, reason: "job_quarantined" };
 
   if (!found) {
@@ -115,6 +135,43 @@ export function d6GrantGuard(coord, job) {
         reason: "grant_attempt_while_halted", source: "grant_guard",
       });
       return { ok: false, reason: "generation_halted" };
+    }
+    // D8-2 EPOCH FENCE (Rowan review 6525035570, blocker D8-2):
+    // the halt-branch mark above fires only when a grant attempt
+    // REACHES this guard while halted — but _issueGrant checks
+    // the quota park, the daily quota, and the monthly cap BEFORE
+    // this guard, so a halt-era attempt can be refused early and
+    // leave the job unmarked; and an attempt that only ever
+    // happens after a generic re-arm never sees the halt branch
+    // at all. The halt-EPOCH ledger (quarantine.mjs) closes that
+    // hole durably: a plan-less job still in its pre-grant
+    // 'queued' state whose birth falls inside a recorded halt
+    // epoch is marked NOW — atomically, in this transaction,
+    // whenever the first guarded attempt happens — and refused
+    // as quarantined. Entry admission (worker-entry-prod-d6.js)
+    // refuses the client-reachable staging commands while halted
+    // outright; this fence is for the rows that exist in the
+    // store despite that (staged under the pre-D8 entry, or
+    // written by an operator-plane path). Jobs born before the
+    // epoch are never suspect; jobs in any post-grant state are
+    // outside this fence (the state-independent hold fence above
+    // governs held subjects). One epoch-suspect job is fenced
+    // until the operator releases THAT job — never by a generic
+    // re-arm. The fence adjudicates a subject's birth ONCE: a job
+    // that already HAS a hold row is not re-adjudicated — a held
+    // row already refused it above, and a RELEASED row is the
+    // operator's completed clearance, which the epoch must never
+    // silently re-impose.
+    if (coord.env.d6HaltFence === true &&
+        coord.env.GENERATION_HALT === "0" &&
+        job && job.state === "queued" &&
+        !quarantineHoldRow(coord, "job", jobId) &&
+        haltEpochSuspect(coord, job.created_at)) {
+      recordQuarantineHold(coord, {
+        subjectKind: "job", subjectId: jobId,
+        reason: "born_while_halted", source: "halt_epoch",
+      });
+      return { ok: false, reason: "job_quarantined" };
     }
     return { ok: true };
   }

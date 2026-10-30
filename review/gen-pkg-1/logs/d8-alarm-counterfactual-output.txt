@@ -1,0 +1,5 @@
+bind: 200
+intent: 200 true plan:292ffb3ed97dc342fb1b49b9
+before base alarm: { grants: 0, ledger: 0, outbox: 0 }
+after BASE-class alarm: { grants: 1, ledger: 1, outbox: 1 }
+COUNTERFACTUAL CONFIRMED: the unguarded base alarm GRANTS the held plan's probe job — the D8-2c fence is decisive.

@@ -4,10 +4,12 @@ Status: LOCAL, repo-only. This addendum corrects the representation
 of Gates 2 and 3 in `DEPLOY-PLAN-DRAFT.md` under the D7-2
 birth-mark + grant-quarantine design (Rowan ruling, board issue
 #15 comment 6524426826; Julie's approval of the build, comment
-6524562842). It authorizes nothing. The deployment plan remains
-on HOLD pending Rowan's re-review of the quarantine build and
-Julie's separate Gate 1 decision; Gates 2 and 3 remain separate
-Julie decisions after that.
+6524562842), as corrected by the D8 build under Rowan's review
+of the D7-2 build (comment 6525035570) — see the D8 section at
+the end of this addendum. It authorizes nothing. The deployment
+plan remains on HOLD pending Rowan's re-review of the corrected
+build and Julie's separate Gate 1 decision; Gates 2 and 3 remain
+separate Julie decisions after that.
 
 ## What D7-2 changed about the shape of the problem
 
@@ -39,11 +41,15 @@ conflated:
   held plans absolutely, the driver skips them, and the executor
   refuses their jobs, all independent of the halt flag's current
   value. A generic re-arm therefore grants NOTHING that was
-  staged while halted. Plan-less jobs that attempt a grant while
-  halted (legacy RequestSynthesis / RequestResume shapes) are
-  refused at admission through the real entry (423
-  `generation_halted`) and refused + durably marked at the guard
-  on flagged coordinator paths.
+  staged while halted. Plan-less generation work is refused at
+  admission through the real entry while halted (423
+  `generation_halted`) — RequestSynthesis / RequestResume since
+  D7-2, and plain SubmitJob / RequestRepair since D8-2 (below) —
+  and any plan-less job that nevertheless reaches the grant
+  guard while halted is refused + durably marked there; a
+  plan-less job born inside a recorded halt epoch is fenced by
+  the guard's halt-epoch ledger even when its halt-era grant
+  attempts were refused before the guard ever ran.
 
 ## Corrected Gate 2 representation
 
@@ -135,3 +141,111 @@ Any item the inventory cannot classify stops the re-arm. The
 inventory is a verification layer over the code fence, not a
 substitute for it: if the two ever disagree, the code fence is
 what runs, and the disagreement itself is a stop.
+
+## D8 corrections (Rowan review 6525035570) — what they change in this plan
+
+Rowan accepted the D7-2 birth-mark architecture and the C3
+preservation, and withheld implementation sign-off on two
+blockers. The D8 build (same approval, comment 6524562842;
+repo-only) corrects both. Nothing in this section authorizes
+anything; Gates 1–3 and every release remain separate Julie
+decisions, and this plan still requires Rowan's re-review of
+the corrected proofs before Gate 1 is put to Julie.
+
+### D8-1 — hold reads fail closed
+
+Every quarantine hold read at a spending or execute fence is
+now strict: the grant guard (inside the grant transaction),
+the driver's skip, and the executor's pre-claim defense ensure
+the schema and read the hold such that ANY schema or read
+failure throws/refuses BEFORE any grant, ledger reservation,
+outbox row, or provider contact. The D7-2 catch-all read
+("any error means no hold") survives only on read-only views
+(plan status/summary), and there only for a genuinely absent
+table. Proven by fault injection (candidate suite
+genpkg1-quarantine-d8, tests D8-1a–d): a forced hold-SELECT
+failure against a held plan and a held plan-less job yields a
+thrown refusal with zero grants/ledger/outbox/provider calls
+and the hold row byte-unchanged; the executor refuses with the
+distinct reason `quarantine_check_failed`.
+
+### D8-2 — plan-less staging can no longer become spendable, on any path
+
+Three mechanisms, layered:
+
+1. **Admission refusal, extended.** While GENERATION_HALT !==
+   "0", the public entry AND the coordinator class refuse every
+   generation-producing legacy command — plain SubmitJob
+   (without `data.d6Intent`) and RequestRepair now join
+   RequestSynthesis / RequestResume at 423 `generation_halted`.
+   The D6 intent shape stays admitted + birth-held (C3 intact,
+   d6-correction 5/5 unmodified). Reads, sync, settings, and all
+   other commands are behavior-unchanged.
+2. **Halt-epoch fence at the guard.** For rows already in the
+   store (staged under a pre-D8 entry or by an operator-plane
+   path), the guard consults a lazily ensured halt-epoch ledger
+   (`d6_halt_epochs`): a still-queued plan-less job born inside
+   a recorded halt epoch — including jobs whose halt-era grant
+   attempts were refused BEFORE the guard by the quota park,
+   daily quota, or monthly cap — is durably marked
+   (`born_while_halted`, source `halt_epoch`) and refused at its
+   first post-re-arm guarded attempt, until the operator
+   releases THAT job. A subject already adjudicated (held or
+   released) is never re-adjudicated by the epoch; work born
+   before the halt is never suspect.
+3. **Production-class alarm audit — bypass found in principle,
+   fenced.** Rowan's path audit was warranted: the production
+   DO class constructed its superclass with the raw env, so the
+   coordinators behind `super.alarm()` (watchdog retry_grant,
+   repair machinery) and the `/v2/commands` API dispatch ran
+   `_issueGrant` with the D6 guard flags ABSENT — the guard
+   existed only on the separately constructed D6 service
+   coordinators. A counterfactual run proves reachability: the
+   pre-D6 base class's alarm, fired over a store holding a held
+   plan plus a 'generating'-state plan-linked probe job with a
+   due retry_grant row, ISSUES the grant (grants/ledger/outbox
+   0 → 1). No production state can create that probe's state
+   combination today (a held plan's jobs are never granted,
+   hence never 'generating'), but the unguarded path itself was
+   real. The D8 fence is minimal and outside the frozen
+   coordinator: the D6 production class stamps both guard flags
+   onto its own env after construction, so every coordinator the
+   class builds for its post-construction operations runs the
+   guard. (The constructor's own coordinator deliberately keeps
+   the plain construction env — a schema/settings handle no
+   production grant path uses, whose plain behavior the
+   baseline suites pin.) Test D8-2c proves the fenced class:
+   staged + held subjects are inert across halted and re-armed
+   real-class alarms, the probe is refused inside
+   `super.alarm()`, and a legitimate pre-existing job still
+   grants through the same path — guarded, not broken.
+
+### Gates 2 and 3, restated with the corrected proofs
+
+- **Gate 2 (phase-binding write)** creates registry + admission
+  only, exactly as corrected above; under D8 the admission it
+  enables is narrower still: only D6 intents are admitted while
+  halted, every one born quarantined; legacy staging commands
+  are refused outright. The binding write releases nothing.
+- **Gate 3 (client publication)** publishes the client at
+  publish digest
+  `97e280948341e0d993975f46ebf089c10e9a2dfdc74487783ff80dd2069cc398`
+  (unchanged by D8 — the corrections are worker-only; held plans
+  render "Waiting — needs approval before it can start").
+  Publication releases nothing and creates no spend path: a
+  device-submitted plan while halted is born quarantined, and
+  the client's legacy command shapes are refused at admission
+  while halted in any case.
+- **Re-arm** restores spend authority only for work that was
+  never quarantined and never epoch-suspect; the pre-re-arm
+  exhaustive inventory (previous section) stands unchanged, and
+  now also enumerates any `d6_halt_epochs` rows so an open or
+  unclosed epoch is a named inventory item, not a surprise.
+- **Proofs on the corrected candidate**: d6-correction C1–C5
+  5/5 unmodified; genpkg1-quarantine 10/10 (two disclosed D8
+  amendments); genpkg1-quarantine-d8 7/7 (new); full worker
+  battery 123 suite files, 101 pass / 22 fail with the failing
+  set byte-identical to the recorded 22-name baseline and zero
+  assertion failures; actual-D6-envelope proof re-run against
+  the corrected candidate (see the D8 build report for the new
+  envelope SHA-256; no new bindings).
