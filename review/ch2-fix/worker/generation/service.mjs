@@ -417,6 +417,11 @@ export function createGenerationService({ coord, env = {}, store = null, sources
         outcome: "applied", attemptId,
         attemptOutcome: r.attempt ? r.attempt.outcome : null,
         attemptCostMicroCents: r.attempt ? r.attempt.cost_micro_cents : null,
+        // B2: the SETTLEMENT outcome (success / failed_known /
+        // no_charge) — distinct from attemptOutcome for a
+        // no-charge settlement, whose attempt log records
+        // failed_known @ 0.
+        settlementOutcome: r.settlementOutcome ?? null,
         haltCleared: !!r.haltCleared,
       };
     } catch (e) {

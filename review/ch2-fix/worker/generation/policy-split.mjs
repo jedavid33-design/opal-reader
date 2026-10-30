@@ -192,11 +192,33 @@ export function stitchWav(parts) {
 // can exceed the 120 s fetch window is a timeout risk BY
 // CONSTRUCTION. Pre-splitting every segment above
 // 120 s × 10 chars/s = 1,200 chars — through splitText, the same
-// exact-concat machinery as the policy path — guarantees every
-// single provider call's worst-case audio (≤120 s at the pinned
-// bound; ~75 s at the realized 15.96 chars/s) fits the window.
-// Unknown billing stays fail-closed: this reduces the incidence
-// of timeout-unknowns, it never reclassifies one after the fact.
+// exact-concat machinery as the policy path — bounds every
+// single provider call's AUDIO-DURATION component at ≤120 s
+// under the pinned bound (~75 s at the realized 15.96 chars/s).
+//
+// B3 HONESTY (Rowan HOLD, Oct 30, 2026 — the claim corrected
+// here previously said this "guarantees" each call fits the
+// window; it does not, and no chars threshold can): the 120 s
+// fetch ceiling applies to the WHOLE request, whose latency is
+// the audio-duration component PLUS provider queueing and
+// processing latency, time-to-first-byte, and network transfer
+// — none of which any chars/second model in this codebase
+// bounds. Margin analysis: at the pinned slowest rate the
+// margin is exactly ZERO (1,200 chars ⇒ up to 120 s of audio
+// alone); at the realized rate it is ~45 s of headroom for all
+// non-synthesis latency combined. A lower threshold would widen
+// only the duration-component margin while leaving the
+// unbounded components untouched, so it cannot convert this
+// into a guarantee either. DECISION (Rowan's option (b)):
+// PRE_SPLIT_MAX_CHARS stays 1,200 as an INCIDENCE-REDUCTION
+// threshold — shorter calls are less likely to die on the
+// ceiling — and the residual risk is carried, by design, by
+// the fail-closed backstop: a call that still times out is
+// classified unknown-billing (never reclassified, never
+// assumed free), halts the phase, and is settled explicitly
+// through the operator reconcile path (fix 2). Unknown billing
+// stays fail-closed: this reduces the incidence of
+// timeout-unknowns, it never reclassifies one after the fact.
 export const PRE_SPLIT_MAX_CHARS = 1200;
 
 // preSplitText(text, maxChars) -> [chunk, ...]: every chunk is

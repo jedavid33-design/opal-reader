@@ -1,6 +1,6 @@
 # Chapter 2 Fix Package — Build Report (Workstream B)
 
-**Status: BUILD COMPLETE, battery-verified. PIN + BOARD FILING PENDING — `ui1-review` head moved during the build (see §6).**
+**Status: BUILD COMPLETE, battery-verified; pinned `22a849a8…` and filed for source review (issue #15 comment 6531884520). Rowan's review returned a HOLD with three focused items (B1/B2/B3); corrections are applied and recorded in §8, with a fresh battery, for an evidence-only re-pin and re-review.** (§6 records the original pin stop; the pin was subsequently made as a child of `8bd9d4ac…` on the parent agent's confirmation — see the run record.)
 Authorization: Julie, Oct 30, 2026 (Chapter 2 program; board record 6531496748, issue #15, `jedavid33-design/opal-roundtable`).
 Base: copy of `~/workspace/gen-pkg-1/worker-build/` (the live gen-pkg-1 worker source; the gen-pkg-1 tree was never edited in place) at `~/workspace/ch2-program/fix/worker-build/`, verified byte-identical to the base before edits (792 files, `diff -rq` clean).
 Diagnosis of record: `~/workspace/d6-build/deploy-evidence/followon-fp/ch2-halt-diagnosis.md`. Halted plan: `plan:603ab416bd67ab1b25de97be` — 8 failed, 1 unknown_billing, 9 never attempted, 0 committed.
@@ -33,7 +33,7 @@ Scope discipline: repo-only build. **No production contact. No board posts. Clie
 
 ## 3. Fix 3 — Long-segment timeout incidence (pre-dispatch split)
 
-**Diagnosis basis:** the unknown-billing attempt is most likely the 120 s `AbortSignal.timeout(120000)` on the Gemini fetch. At the cost model's pinned slowest speaking rate (10 chars/s, `upperBoundAttemptMicro`), 120 s of fetch window corresponds to **1,200 chars** — that is the threshold: `PRE_SPLIT_MAX_CHARS = 1200` (`worker/generation/policy-split.mjs` line 200; derivation comment in code). At the realized 15.96 chars/s a 1,200-char call is ~75 s of audio, comfortably inside the window. **Unknown billing stays fail-closed** — no timeout is reclassified; this reduces incidence, and fix 2 is the settlement path for any unknown that still occurs.
+**Diagnosis basis:** the unknown-billing attempt is most likely the 120 s `AbortSignal.timeout(120000)` on the Gemini fetch. At the cost model's pinned slowest speaking rate (10 chars/s, `upperBoundAttemptMicro`), 120 s of fetch window corresponds to **1,200 chars** — that is the threshold: `PRE_SPLIT_MAX_CHARS = 1200` (`worker/generation/policy-split.mjs`; derivation comment in code). At the realized 15.96 chars/s a 1,200-char call is ~75 s of audio. **CORRECTED per B3 (§8.3): the threshold bounds only the audio-duration component of request latency; it is NOT a guarantee that a ≤1,200-char request completes within the 120 s ceiling** — end-to-end latency includes unbounded provider/network components. **Unknown billing stays fail-closed** — no timeout is reclassified; this reduces incidence, and fix 2 is the settlement path for any unknown that still occurs.
 
 **Changes:**
 - `worker/generation/policy-split.mjs` — **additions only** (+80/−0 vs base): `PRE_SPLIT_MAX_CHARS` (line 200), `preSplitText` (line 207; recursive `splitText` halving — chunks concatenate exactly, in order), `synthesizeLongSegment` (line 282; per-chunk `synthesizeSegment` over one **shared** budget object, so the pinned 12-attempt per-segment ceiling binds across the whole segment). `synthesizeSegment` itself is **byte-identical to the base** (verified by diff).
@@ -61,6 +61,52 @@ SHA-256 of the nine files: recorded in the filing (and reproducible from the pin
 ## 6. PIN STATUS — STOPPED per instructions (head moved)
 
 The task specified pinning as a child of `ui1-review` head `548a0ffefdd263643506ed26fd984aa8dbb449b4`, STOP if the head moved. Verified via the GitHub API during this build: `ui1-review` lives in `jedavid33-design/opal-reader`; its head is now **`8bd9d4ac748d9d8c68fc5d9bda8af769c971f315`** — exactly one commit ahead (compare: ahead_by 1, behind_by 0), sole parent `548a0ffe…`, message *"rearm-fence: design packet + redelivery trace evidence (Chapter 2 program, Workstream A)"*, committed 2026-10-30T19:22:21Z. That is the parallel Workstream A pin landing during this build — a clean linear advance, no divergence. Per the stop condition, **no pin was made and no board filing was posted** (the filing reports the pin hash). The corrected tree + this report are complete locally and can be pinned as a child of `8bd9d4ac…` in one step on the parent's confirmation.
+
+## 8. Corrections — Rowan HOLD B1/B2/B3 (Oct 30, 2026)
+
+Rowan's source review of pin `22a849a8…` accepted the architecture (pre-split seam, operator fencing, driver non-resumption, unchanged baseline failure set) and held the package on three focused items. All three are corrected below; the corrected tree was re-run through the FULL battery (§8.4). Disclosed candidate-suite amendments: confined to this package's own three `ch2fix-*` suites (headers/fixtures/assertions as itemized per fix). **Zero baseline-suite edits; the failing-suite set is unchanged (§8.4).**
+
+### 8.1 B1 — Ambiguous HTTP-200 no-audio response (adapters.mjs)
+
+**Defect Rowan found:** fix 1 as first built marked EVERY no-audio interactions 200 `contentBlocked: true`, even with no refusal signal — spending extra provider calls splitting an ambiguous response and recording an uncertain outcome as a known zero-cost policy block.
+
+**Correction:** the branch now applies the generateContent branch's evidence standard. It collects the structured signal fields (`finishReason`/`blockReason`/`status`, top-level and per model-output step) and any text parts, and throws `contentBlocked` ONLY on sufficiently clear policy-refusal evidence: a prohibited/policy/block signal in the structured fields, or refusal language in a text part (`blockReason` remains `PROHIBITED_CONTENT` when a prohibited signal is present, else `POLICY_BLOCK`). With NO such evidence the response is **unclassified**: the adapter throws a plain error (`code: "no_audio_unclassified"`) with NEITHER `contentBlocked` NOR `httpStatus` set — the same shape as a transport throw — so the executor confirms the attempt as unknown-billing (cost null) and halts the phase fail-closed. An ambiguous response never fuels a split and is never recorded as a known zero-cost block.
+
+**Tests** — `tests/ch2fix-adapter-block.test.mjs` now **9/9** (+3): structured policy signal with no text → blocked; no-audio with no evidence (bare empty output; benign `STOP` + non-refusal text) → unclassified shape, exactly 1 call; splitter does NOT engage on the unclassified shape (error rethrown untouched after exactly 1 call, budget −1). Prior tests unchanged and passing: text-refusal → `POLICY_BLOCK`; `PROHIBITED_CONTENT` signal parity; clean 200 untouched; 500/400/transport classifications unchanged; end-to-end splitter engagement; `TerminalBlock` termination.
+
+### 8.2 B2 — Reconciliation contract (genstore.mjs, service.mjs, worker-entry-prod-d6.js)
+
+**Defects Rowan found:** (i) `knownCostMicro: null` was accepted with `outcome: "success"` (recorded as success @ 0); (ii) the route treated `planId` as optional.
+
+**Correction — a validated settlement contract.** The settlement outcomes are now a distinct vocabulary — `"success"`, `"failed_known"`, `"no_charge"` — validated as a (cost, outcome) PAIR in the store before anything moves:
+- finite number ≥ 0 (a known cost) → outcome `"success"` (default) or `"failed_known"`; `success` REQUIRES the finite known cost. A numeric cost with `"no_charge"` refuses.
+- exactly `null` (proven no-charge) → the ONLY consistent outcome is the new distinct value **`"no_charge"`** (default when outcome is omitted at the store layer). Null with `"success"` or `"failed_known"` refuses as `reconcile_settlement_inconsistent`. On the attempt log a no-charge settlement records `failed_known` @ 0 (the attempt-log vocabulary has no no-charge value; phase accounting treats it as settled zero — the baseline-pinned behavior, unchanged); the distinct settlement outcome is preserved on the audit row's `final_outcome` and surfaced in the service/route result as `settlementOutcome`.
+- malformed costs (non-number, NaN, infinite, negative — the latter two previously slipped the store's typeof check) refuse as `reconcile_cost_invalid`; outcomes outside the settlement vocabulary (incl. `"policy_block"`, which is an attempt classification, not a settlement) refuse as `reconcile_outcome_invalid`. All refusals throw inside the transaction: zero state movement, zero audit rows.
+- **Route:** `planId` is now REQUIRED (`plan_id_required`) and `outcome` is REQUIRED (`outcome_required`); the store verifies the planId against the attempt's server-stamped `plan_id` linkage (`reconcile_plan_mismatch` — unchanged mechanism, now always exercised). The service layer keeps its prior shape for its existing callers (the gen-pkg-1 clearance flow passes explicit numeric settlements; its suite passes unmodified).
+
+**Tests** — `tests/ch2fix-reconcile-route.test.mjs` now **9/9** (+2, fixtures amended to carry the now-required fields — disclosed in the suite header): missing/empty planId → `plan_id_required`; absent outcome → `outcome_required`; **contradictory settlements (null+success, null+failed_known, numeric+no_charge) → rejected with the attempt byte-identical, the phase halt standing, and ZERO audit rows**; applied no-charge asserts `settlementOutcome: "no_charge"` + audit `final_outcome: "no_charge"` against the attempt log's `failed_known` @ 0; known-cost success asserts audit parity. **The mandatory R4-1 regression is unchanged and passes in both halt states** (route reconcile → 3× `driveOnce()` + alarm: plan byte-identical, still `halted_unknown`, zero new attempts/executions/queue messages, `retireHaltedPlan` still applies). Baseline-pinned store defaults are preserved and verified by the unmodified baseline suites (`d6-genstore`: bare number → success, bare null → `failed_known` @ 0; `d6-grant-guards`; `genpkg1-halted-fence`).
+
+### 8.3 B3 — Timeout threshold honesty (policy-split.mjs comments; threshold UNCHANGED)
+
+**Rowan's point:** `PRE_SPLIT_MAX_CHARS = 1200` was justified as 120 s × 10 chars/s, but that bounds only the audio-duration component; generation has additional latency, so 1200 cannot guarantee completion within the 120 s fetch ceiling. **Decision: Rowan's option (b)** — keep 1200, correct every guarantee claim to an incidence-reduction claim, name the backstop. Justification (also recorded in the code comment at `PRE_SPLIT_MAX_CHARS`):
+- Margin analysis: at the pinned slowest rate the margin is exactly ZERO (1,200 chars ⇒ up to 120 s of audio alone); at the realized 15.96 chars/s a max-size call is ~75 s of audio, leaving ~45 s of headroom for ALL non-synthesis latency (provider queueing/processing, time-to-first-byte, network) combined.
+- No lower threshold can produce a guarantee either: it would widen only the duration-component margin while the other components remain unbounded by anything in the code. A guarantee claim would be false at any threshold.
+- The residual risk is therefore carried by design: a call that still times out classifies unknown-billing (fail-closed, phase halts) and is settled explicitly through fix 2's reconcile path. Preserved invariants: unknown-billing fail-closed behavior; exact text concatenation; identical voice on every chunk; the shared segment-wide 12-attempt ceiling (`synthesizeSegment` remains byte-identical to base — comment-only change in this file).
+- Wording corrected in: the `policy-split.mjs` pre-split comment (the former "guarantees … fits the window" sentence), §3 above, the `ch2fix-presplit` suite header + first test name (no assertion changes). The executor's existing comment already used incidence language ("make that outcome rarer") and is unchanged.
+
+**Tests** — `tests/ch2fix-presplit.test.mjs` **9/9** (unchanged assertions).
+
+### 8.4 Battery (corrected tree, one complete run)
+
+Runner: `~/workspace/ch2-program/fix/logs/run-worker-battery-b1b2b3.py`; logs: `~/workspace/ch2-program/fix/logs/b1b2b3/` (+ `b1b2b3-run.out`); runner exit code 0.
+
+- **126 suite files: 104 pass / 22 fail. 986 tests: 964 pass / 22 fail. Assertion failures: NONE.**
+- The 22 failing suites are **exactly** the recorded D8 baseline set — verified by set diff against the fix package's own final run (`logs/final/failing-files.txt`), which was itself set-diffed against the D8 baseline. Delta vs the original fix-package battery reconciles exactly: +5 tests (B1 +3, B2 +2), all passing; no suite changed pass/fail status.
+- **Zero baseline-suite edits.** Candidate-suite amendments: the three `ch2fix-*` suites only, as disclosed in §8.1–§8.3 and in each suite's header.
+
+### 8.5 Delta of this correction round (vs pin `22a849a8…`)
+
+Modified (8): `worker/host/adapters.mjs`, `worker/generation/genstore.mjs`, `worker/generation/service.mjs`, `worker/generation/policy-split.mjs` (comment-only), `worker/worker-entry-prod-d6.js`, `tests/ch2fix-adapter-block.test.mjs`, `tests/ch2fix-presplit.test.mjs` (comment/name only), `tests/ch2fix-reconcile-route.test.mjs`. Unchanged from the original package: `worker/generation/d6-executor.mjs` (byte-identical to its pinned version). SHA-256 of all nine package files: recorded in the re-review filing.
 
 ## 7. Gates that remain Julie's (unchanged by this package)
 

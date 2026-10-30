@@ -8,6 +8,18 @@
 // diagnosis's prime-suspect branch (Q5 (b)): eight segments
 // failed identically on exactly one call each.
 //
+// B1 CORRECTION (Rowan HOLD, Oct 30, 2026): the first version
+// marked EVERY no-audio 200 as contentBlocked. That is now
+// gated on evidence, mirroring the generateContent branch's
+// standard: a prohibited/policy/block signal in the structured
+// fields, or refusal language in a text part. A no-audio 200
+// WITHOUT refusal evidence is UNCLASSIFIED — thrown with
+// neither contentBlocked nor httpStatus — so the executor
+// keeps it on the conservative unknown-billing path (attempt
+// confirmed cost-null, phase halts fail-closed), the splitter
+// never engages, and no extra provider calls are spent. The
+// B1 tests below pin both sides of that line.
+//
 // Synthetic responses only; the fetch stub records every request
 // so call counts, texts, and voice identity are asserted exactly.
 // No voice substitution is possible anywhere in this path: every
@@ -58,6 +70,23 @@ const signalRefusalResponse = () => jsonResponse(200, {
   id: "req-refused-signal",
   steps: [{ type: "model_output", finishReason: "PROHIBITED_CONTENT", content: [] }],
 });
+const policySignalResponse = () => jsonResponse(200, {
+  id: "req-refused-policy-signal",
+  steps: [{ type: "model_output", blockReason: "POLICY_BLOCK", content: [] }],
+});
+// No audio and NO refusal evidence of any kind: no signal
+// fields, no text — an ambiguous empty response.
+const bareNoAudioResponse = () => jsonResponse(200, {
+  id: "req-bare",
+  steps: [{ type: "model_output", content: [] }],
+});
+// No audio, a benign finish signal, and text that is NOT a
+// refusal — still ambiguous, still not splitting evidence.
+const ambiguousNoAudioResponse = () => jsonResponse(200, {
+  id: "req-ambiguous",
+  steps: [{ type: "model_output", finishReason: "STOP",
+    content: [{ type: "text", text: "Here is the narration you requested." }] }],
+});
 
 const occ = (text) => ({
   occurrenceId: "occ-ch2fix",
@@ -85,6 +114,48 @@ test("fix1: an explicit PROHIBITED_CONTENT signal maps blockReason PROHIBITED_CO
     assert.equal(err.blockReason, "PROHIBITED_CONTENT");
     return true;
   });
+});
+
+test("fix1/B1: a policy signal in the structured fields (no text) is sufficient refusal evidence", async () => {
+  const { fetchImpl } = interactionsFetch(() => policySignalResponse());
+  const adapters = createProviderAdapters(ENV, fetchImpl);
+  await assert.rejects(adapters.synthesize(occ("any text")), (err) => {
+    assert.equal(err.contentBlocked, true);
+    assert.equal(err.blockReason, "POLICY_BLOCK");
+    return true;
+  });
+});
+
+test("fix1/B1: no-audio WITHOUT refusal evidence is unclassified — unknown-billing shape, NOT a known zero-cost block", async () => {
+  for (const shape of [bareNoAudioResponse, ambiguousNoAudioResponse]) {
+    const { calls, fetchImpl } = interactionsFetch(() => shape());
+    const adapters = createProviderAdapters(ENV, fetchImpl);
+    await assert.rejects(adapters.synthesize(occ("any text")), (err) => {
+      assert.ok(!err.contentBlocked,
+        "no contentBlocked flag: the splitter must not engage and the attempt must not be recorded as a policy block");
+      assert.ok(!err.httpStatus,
+        "no httpStatus: the executor's classification keeps this attempt on the unknown-billing path (cost null), not failed_known at cost 0");
+      assert.equal(err.code, "no_audio_unclassified");
+      return true;
+    });
+    assert.equal(calls.length, 1, "exactly one provider call — nothing was retried or split");
+  }
+});
+
+test("fix1/B1: the splitter does NOT engage on an unclassified no-audio response — one call, error rethrown untouched", async () => {
+  const { calls, fetchImpl } = interactionsFetch(() => bareNoAudioResponse());
+  const adapters = createProviderAdapters(ENV, fetchImpl);
+  const payload = { provider: "gemini", model: "gemini-3.8-flash-tts", text: "A comfortably long synthetic sentence that would split easily if splitting were (incorrectly) offered.", voice: "Zephyr", styleDirection: "warm" };
+  const budget = { remaining: 12 };
+  await assert.rejects(
+    synthesizeSegment({
+      synthesize: (p) => adapters.synthesize({ occurrenceId: "occ-ch2fix", payload: p }),
+      payload, budget,
+    }),
+    (err) => err && err.code === "no_audio_unclassified",
+    "the unclassified error propagates untouched for the executor's unknown-billing handling");
+  assert.equal(calls.length, 1, "no extra provider calls were spent splitting an ambiguous response");
+  assert.equal(budget.remaining, 11, "exactly one attempt was consumed");
 });
 
 test("fix1: a clean interactions response is unchanged — one call, audio returned as-is", async () => {

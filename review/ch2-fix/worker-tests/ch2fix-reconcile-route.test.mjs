@@ -8,6 +8,21 @@
 // token; admission on the migration-operator credential alone;
 // the operator-admitted stamp required again at the class gate).
 //
+// B2 AMENDMENTS (Rowan HOLD, Oct 30, 2026 — disclosed; this is
+// the package's own candidate suite): the settlement contract
+// is now a validated (knownCostMicro, outcome) pair. The route
+// REQUIRES planId and an explicit outcome; the settlement
+// vocabulary gains the distinct "no_charge" outcome, which is
+// the ONLY outcome a null cost may settle under — null +
+// "success" (previously accepted by the store and recorded as
+// success @ 0) is refused as reconcile_settlement_inconsistent,
+// as are null + "failed_known" and numeric + "no_charge". The
+// audit row's final_outcome now records the SETTLEMENT outcome
+// ("no_charge"), while the attempt log still records
+// failed_known @ 0. Fixtures below were amended to carry the
+// now-required planId/outcome fields; the R4-1 regression is
+// unchanged in substance and still passes.
+//
 // The mandatory half of this suite is the R4-1 REGRESSION in the
 // exact sequence the round-4 review missed: reconcile a halted
 // plan's unknown attempt THROUGH THE NEW ROUTE, then run drive
@@ -149,7 +164,7 @@ async function reconcileViaEntry(w, body, { operator = OPERATOR_TOKEN, access = 
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 
-const SETTLE = { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: null, note: "provider console: no charge" };
+const SETTLE = { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: null, outcome: "no_charge", note: "provider console: no charge" };
 
 test("fix2 fence: no operator token, client token alone, and unstamped internal calls are all refused", async () => {
   const w = entryWorld();
@@ -173,17 +188,53 @@ test("fix2 validation: malformed settlements are refused and move nothing (absen
   const before = JSON.stringify(attemptRow(w.db));
   let r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID });
   assert.equal(r.body?.reason, "known_cost_required", "knownCostMicro must be present and explicit");
-  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, knownCostMicro: "free" });
+  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: "free" });
   assert.equal(r.body?.reason, "known_cost_invalid");
-  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, knownCostMicro: -5 });
+  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: -5 });
   assert.equal(r.body?.reason, "known_cost_invalid", "negative costs are refused");
-  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, knownCostMicro: null, outcome: "policy_block" });
-  assert.equal(r.body?.reason, "outcome_invalid", "only success / failed_known settlements are accepted here");
+  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: null, outcome: "policy_block" });
+  assert.equal(r.body?.reason, "outcome_invalid", "policy_block is not a settlement outcome");
   r = await reconcileViaEntry(w, { knownCostMicro: null });
   assert.equal(r.body?.reason, "attempt_id_required");
   assert.equal(JSON.stringify(attemptRow(w.db)), before, "every refusal left the attempt untouched");
   assert.equal(phaseRow(w.db).halted_unknown_billing, 1, "the phase halt still stands");
   assert.equal(auditRows(w.db).length, 0);
+});
+
+test("fix2/B2: planId is REQUIRED on the route, and outcome is REQUIRED and explicit", async () => {
+  const w = entryWorld();
+  const before = JSON.stringify(attemptRow(w.db));
+  let r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, knownCostMicro: null, outcome: "no_charge" });
+  assert.equal(r.body?.outcome, "rejected");
+  assert.equal(r.body?.reason, "plan_id_required", "a settlement without the intended planId is refused outright");
+  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: "", knownCostMicro: null, outcome: "no_charge" });
+  assert.equal(r.body?.reason, "plan_id_required", "an empty planId is no planId");
+  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: null });
+  assert.equal(r.body?.reason, "outcome_required", "the settlement outcome must be stated, never defaulted, on this route");
+  assert.equal(JSON.stringify(attemptRow(w.db)), before, "refusals moved nothing");
+  assert.equal(auditRows(w.db).length, 0, "no audit rows from refused calls");
+});
+
+test("fix2/B2: contradictory settlements refuse with ZERO state movement and ZERO audit rows", async () => {
+  const w = entryWorld();
+  const beforeAttempt = JSON.stringify(attemptRow(w.db));
+  const beforePlan = JSON.stringify(planRow(w.db));
+  // The B2 headline: null (proven no-charge) can NEVER settle
+  // as "success" — success is a claim of a known-cost
+  // completion, and a null cost asserts no charge at all.
+  let r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: null, outcome: "success" });
+  assert.equal(r.body?.outcome, "rejected");
+  assert.equal(r.body?.reason, "reconcile_settlement_inconsistent", "null + success is a contradiction");
+  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: null, outcome: "failed_known" });
+  assert.equal(r.body?.reason, "reconcile_settlement_inconsistent",
+    "null settles ONLY under the distinct no_charge outcome — failed_known would erase the distinction");
+  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: 1200, outcome: "no_charge" });
+  assert.equal(r.body?.reason, "reconcile_settlement_inconsistent",
+    "a numeric known cost contradicts a no-charge settlement");
+  assert.equal(JSON.stringify(attemptRow(w.db)), beforeAttempt, "the attempt is byte-identical — still unknown, still cost-null");
+  assert.equal(JSON.stringify(planRow(w.db)), beforePlan, "the plan is untouched");
+  assert.equal(phaseRow(w.db).halted_unknown_billing, 1, "the phase halt still stands");
+  assert.equal(auditRows(w.db).length, 0, "a refused settlement writes NO audit row");
 });
 
 test("fix2 plan guard: a planId that does not own the attempt refuses with reconcile_plan_mismatch", async () => {
@@ -201,6 +252,8 @@ test("fix2 applied: a proven no-charge settles the attempt, clears the phase hal
   assert.equal(r.status, 200);
   assert.equal(r.body?.outcome, "applied");
   assert.equal(r.body?.haltCleared, true, "this was the phase's last open unknown");
+  assert.equal(r.body?.settlementOutcome, "no_charge", "the settlement outcome is the distinct no-charge value (B2)");
+  assert.equal(r.body?.attemptOutcome, "failed_known", "the attempt log records failed_known — its vocabulary has no no-charge value");
   const a = attemptRow(w.db);
   assert.equal(a.outcome, "failed_known");
   assert.equal(a.cost_micro_cents, 0, "proven no-charge settles at exactly 0");
@@ -210,7 +263,8 @@ test("fix2 applied: a proven no-charge settles the attempt, clears the phase hal
   assert.equal(audit[0].attempt_id, ATTEMPT_ID);
   assert.equal(audit[0].plan_id, PLAN_ID);
   assert.equal(audit[0].phase, PHASE);
-  assert.equal(audit[0].final_outcome, "failed_known");
+  assert.equal(audit[0].final_outcome, "no_charge",
+    "B2: the audit row preserves the distinct settlement outcome even though the attempt log says failed_known");
   assert.equal(audit[0].final_cost_micro_cents, 0);
   assert.equal(audit[0].note, "provider console: no charge");
   assert.equal(audit[0].source, "operator-route", "the source is stamped by the route, not caller-supplied");
@@ -220,12 +274,16 @@ test("fix2 applied: a proven no-charge settles the attempt, clears the phase hal
 
 test("fix2 store preconditions through the route: unknown attempts only, exactly once", async () => {
   const w = entryWorld();
-  let r = await reconcileViaEntry(w, { attemptId: "att-does-not-exist", knownCostMicro: null });
+  let r = await reconcileViaEntry(w, { attemptId: "att-does-not-exist", planId: PLAN_ID, knownCostMicro: null, outcome: "no_charge" });
   assert.equal(r.body?.reason, "attempt_not_found");
-  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, knownCostMicro: 4242 });
+  r = await reconcileViaEntry(w, { attemptId: ATTEMPT_ID, planId: PLAN_ID, knownCostMicro: 4242, outcome: "success" });
   assert.equal(r.body?.outcome, "applied");
-  assert.equal(attemptRow(w.db).outcome, "success", "a numeric cost defaults to the success outcome");
+  assert.equal(r.body?.settlementOutcome, "success");
+  assert.equal(attemptRow(w.db).outcome, "success", "a finite known cost settles under the stated success outcome");
   assert.equal(attemptRow(w.db).cost_micro_cents, 4242);
+  const audit = auditRows(w.db);
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].final_outcome, "success", "for a known-cost settlement the audit outcome matches the attempt outcome");
   r = await reconcileViaEntry(w, SETTLE);
   assert.equal(r.body?.reason, "attempt_not_unknown", "a settled attempt cannot be reconciled twice");
   assert.equal(auditRows(w.db).length, 1, "still exactly one audit row");

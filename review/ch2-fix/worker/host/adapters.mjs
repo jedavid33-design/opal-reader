@@ -237,28 +237,45 @@ export function createProviderAdapters(env = {}, fetchFn = globalThis.fetch) {
         .flatMap((s) => s?.content || [])
         .filter((p) => p?.type === "audio" && p?.data).at(-1);
       if (!audioPart?.data) {
-        // CH2 FIX PACKAGE (fix 1 — 3.8 block mapping): on the
-        // interactions surface, a content refusal arrives as an
-        // HTTP-200 response whose model output carries NO audio
-        // (a text refusal and/or block-signal fields instead).
-        // The pre-fix code threw a plain 502 here, so the refusal
-        // was classified as a known provider failure and the
+        // CH2 FIX PACKAGE (fix 1 — 3.8 block mapping, corrected
+        // per Rowan's B1 HOLD, Oct 30, 2026): on the interactions
+        // surface, a content refusal arrives as an HTTP-200
+        // response whose model output carries NO audio. The
+        // pre-fix code threw a plain 502 here, so a refusal was
+        // classified as a known provider failure and the
         // recursive POLICY_BLOCK splitting path (policy-split.mjs,
         // feature law F3) NEVER engaged — the Ch 2 halt's eight
         // identical one-call failures (see the Oct 29, 2026 halt
-        // diagnosis, Q5 branch (b)). Mirror the generateContent
-        // branch below: a no-audio 200 on this audio-only request
-        // IS the refusal outcome, so map it to the same
-        // contentBlocked result the splitting path consumes,
-        // carrying whatever block signal the response exposed.
-        // No voice substitution, no text change: the splitter
-        // retries the SAME payload with the text cut, verbatim.
-        // Genuine provider errors still arrive as non-200s and
-        // keep their existing classification via
-        // throwProviderError above (incl. its 400 policy-regex
-        // mapping); a malformed 200 body still throws from
-        // response.json() with neither flag — billing-unknown,
-        // fail-closed, exactly as before.
+        // diagnosis, Q5 branch (b)).
+        //
+        // But no-audio alone is NOT proof of a refusal: the first
+        // version of this fix marked EVERY no-audio 200 as
+        // contentBlocked, which would have spent extra provider
+        // calls splitting an ambiguous response and recorded an
+        // uncertain outcome as a known zero-cost policy block.
+        // So this branch applies the generateContent branch's
+        // evidence standard (below): splitting is enabled ONLY
+        // on sufficiently clear policy-refusal evidence in the
+        // response — a prohibited/policy/block signal in the
+        // structured finish/block/status fields, or refusal
+        // language in a text part. With that evidence, throw the
+        // same contentBlocked result the splitting path consumes
+        // (blockReason PROHIBITED_CONTENT when a prohibited
+        // signal is present, else POLICY_BLOCK). No voice
+        // substitution, no text change: the splitter retries the
+        // SAME payload with the text cut, verbatim.
+        //
+        // WITHOUT that evidence the response is UNCLASSIFIED:
+        // throw with NEITHER contentBlocked NOR httpStatus set —
+        // the same shape as a transport throw or a malformed-JSON
+        // 200 — so the executor confirms the attempt as
+        // unknown-billing (cost null) and halts the phase
+        // fail-closed, exactly as before this package. An
+        // ambiguous response is never recorded as a known
+        // zero-cost block and never fuels a split. Genuine
+        // provider errors still arrive as non-200s and keep
+        // their existing classification via throwProviderError
+        // above (incl. its 400 policy-regex mapping).
         const outputSteps = (data?.steps || []).filter((s) => s?.type === "model_output");
         const signalText = [
           data?.finishReason, data?.blockReason, data?.status,
@@ -268,12 +285,23 @@ export function createProviderAdapters(env = {}, fetchFn = globalThis.fetch) {
           .flatMap((s) => s?.content || [])
           .filter((p) => p?.type === "text" && typeof p.text === "string")
           .map((p) => p.text).join(" ").trim().slice(0, 200);
+        const signalEvidence = /prohibit|policy|block/i.test(signalText);
+        const refusalEvidence = /can(?:not|'t)\b|unable to|not able to|refus|prohibit|polic|violat|not allowed/i
+          .test(refusalText);
         const detail = [signalText, refusalText].filter(Boolean).join(" — ");
-        throw httpError("gemini", 502,
-          `Gemini 3.8 TTS returned no audio.${detail ? ` Block signal: ${detail}` : ""}`,
-          { noRetry: true, providerInternal: true, contentBlocked: true,
-            blockReason: /prohibited/i.test(signalText) ? "PROHIBITED_CONTENT" : "POLICY_BLOCK",
-            finishReason: "NO_AUDIO" });
+        if (signalEvidence || refusalEvidence) {
+          throw httpError("gemini", 502,
+            `Gemini 3.8 TTS returned no audio.${detail ? ` Block signal: ${detail}` : ""}`,
+            { noRetry: true, providerInternal: true, contentBlocked: true,
+              blockReason: /prohibited/i.test(signalText) ? "PROHIBITED_CONTENT" : "POLICY_BLOCK",
+              finishReason: "NO_AUDIO" });
+        }
+        const unclassified = new Error(
+          `Gemini 3.8 TTS returned no audio and no policy-refusal signal; ` +
+          `the response is unclassified (billing unknown).${detail ? ` Response detail: ${detail}` : ""}`);
+        unclassified.provider = "gemini";
+        unclassified.code = "no_audio_unclassified";
+        throw unclassified;
       }
       bytes = decodeBase64(audioPart.data);
     } else {

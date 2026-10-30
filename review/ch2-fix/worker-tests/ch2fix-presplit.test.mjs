@@ -13,6 +13,20 @@
 // sits far below the fetch ceiling; and fix 2's operator route
 // is the settlement path for any unknown that still occurs.
 //
+// B3 (Rowan HOLD, Oct 30, 2026): the threshold is NOT a
+// completion guarantee and this suite asserts none. 1,200
+// chars bounds only the audio-duration component (≤120 s at
+// the pinned 10 chars/s — zero margin at that bound; ~75 s at
+// the realized rate, ~45 s of headroom); end-to-end latency
+// adds provider queueing/processing, time-to-first-byte, and
+// network time that no chars model bounds, so a ≤1,200-char
+// call can still time out. The threshold is kept at 1,200 as
+// incidence reduction (Rowan's option (b)); the residual is
+// carried by the fail-closed unknown-billing classification
+// plus fix 2's reconcile path. Full analysis: the
+// PRE_SPLIT_MAX_CHARS comment in policy-split.mjs and
+// BUILD-REPORT §8.3.
+//
 // SEAM (decided by the baseline battery, disclosed here and in
 // the build report): the pre-split lives at the EXECUTOR's
 // pre-dispatch seam (synthesizeLongSegment, called from
@@ -73,7 +87,7 @@ const payload = (text) => ({
   voice: "Zephyr", styleDirection: "", text,
 });
 
-test("fix3: the threshold is the fetch ceiling at the pinned slowest rate (120 s × 10 chars/s = 1200)", () => {
+test("fix3/B3: the threshold is the fetch ceiling at the pinned slowest rate (120 s × 10 chars/s = 1200) — a duration bound, NOT a completion guarantee", () => {
   assert.equal(PRE_SPLIT_MAX_CHARS, 1200);
 });
 

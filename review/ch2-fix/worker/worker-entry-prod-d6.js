@@ -165,9 +165,11 @@
 //     stamp required again at the class gate). The settlement
 //     terms are explicit and validated (attemptId required;
 //     knownCostMicro present and either a finite number >= 0 or
-//     exactly null — a proven no-charge; outcome, when present,
-//     only "success" or "failed_known"; an optional planId must
-//     match the attempt's plan), the store refuses any attempt
+//     exactly null — a proven no-charge; outcome REQUIRED, one
+//     of the settlement outcomes "success" / "failed_known" /
+//     "no_charge", with the (cost, outcome) pair consistent —
+//     B2: null never settles as "success"; planId REQUIRED and
+//     verified against the attempt's plan), the store refuses any attempt
 //     that is not confirmed/unknown and moves nothing on a
 //     refusal, and an audit row is written in the settlement
 //     transaction (genstore d6_reconcile_audit). The route is
@@ -595,10 +597,20 @@ export class OpalReaderCoordinatorProd extends ProductionCoordinatorBase {
         //     malformed value is refused (known_cost_required /
         //     known_cost_invalid) — a malformed request can
         //     never silently become a no-charge settlement;
-        //   * outcome, when present, is only "success" or
-        //     "failed_known" (outcome_invalid otherwise);
-        //   * planId, when present, must match the attempt's
-        //     plan (the store refuses reconcile_plan_mismatch);
+        //   * outcome is REQUIRED and must be one of the
+        //     settlement outcomes "success" / "failed_known" /
+        //     "no_charge" (outcome_required / outcome_invalid
+        //     otherwise), and the (cost, outcome) PAIR must be
+        //     consistent — null cost only with "no_charge", a
+        //     numeric cost never with "no_charge", and "success"
+        //     only with a finite known cost (B2: the store
+        //     refuses contradictions as
+        //     reconcile_settlement_inconsistent; in particular
+        //     null + "success" can never settle);
+        //   * planId is REQUIRED (plan_id_required) and must
+        //     own the attempt — the store verifies it against
+        //     the attempt's server-stamped plan linkage and
+        //     refuses reconcile_plan_mismatch;
         //   * the attempt must be confirmed/unknown (the store
         //     refuses attempt_not_found / attempt_not_unknown).
         // On success the store settles the attempt and writes
@@ -619,20 +631,23 @@ export class OpalReaderCoordinatorProd extends ProductionCoordinatorBase {
         const reject = (reason) => json(200, { outcome: "rejected", reason });
         if (!body || typeof body.attemptId !== "string" || body.attemptId.length === 0)
           return reject("attempt_id_required");
+        if (typeof body.planId !== "string" || body.planId.length === 0)
+          return reject("plan_id_required");
         if (!("knownCostMicro" in body))
           return reject("known_cost_required");
         const kcm = body.knownCostMicro;
         if (!(kcm === null || (typeof kcm === "number" && Number.isFinite(kcm) && kcm >= 0)))
           return reject("known_cost_invalid");
-        if (body.outcome !== undefined && body.outcome !== null
-            && body.outcome !== "success" && body.outcome !== "failed_known")
+        if (body.outcome === undefined || body.outcome === null)
+          return reject("outcome_required");
+        if (body.outcome !== "success" && body.outcome !== "failed_known"
+            && body.outcome !== "no_charge")
           return reject("outcome_invalid");
         const result = d6Service(coord, d6HostEnv(this.env, cache))
           .reconcileUnknownAttempt(body.attemptId, {
             knownCostMicro: kcm,
-            outcome: body.outcome ?? null,
-            planId: typeof body.planId === "string" && body.planId.length > 0
-              ? body.planId : null,
+            outcome: body.outcome,
+            planId: body.planId,
             note: typeof body.note === "string" ? body.note : null,
             source: "operator-route",
           });

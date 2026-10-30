@@ -324,22 +324,55 @@ CREATE TABLE IF NOT EXISTS d6_reconcile_audit (
     sql.exec(RECONCILE_AUDIT_SCHEMA);
   }
 
-  // Operator reconciliation mechanism for one unknown attempt:
-  // { knownCostMicro: <number>, outcome? } records the now-known
-  // cost under a known outcome (default: "success" when a cost is
-  // supplied — the caller may pass outcome "failed_known" for a
-  // charged-but-failed call); { knownCostMicro: null } records a
-  // proven no-charge as failed_known with cost 0. When no unknown
-  // attempts remain open for the attempt's phase, the phase halt
-  // clears in the same transaction.
+  // Operator reconciliation mechanism for one unknown attempt.
+  //
+  // SETTLEMENT CONTRACT (tightened per Rowan's B2 HOLD,
+  // Oct 30, 2026). A settlement is a (knownCostMicro, outcome)
+  // pair, validated TOGETHER before anything moves:
+  //   * outcome vocabulary — the SETTLEMENT outcomes are
+  //     "success", "failed_known", and "no_charge". (Distinct
+  //     from the attempt-log outcomes in KNOWN_OUTCOMES:
+  //     "policy_block" is not a settlement — a reconcile asserts
+  //     a billing fact, not a block classification.)
+  //   * knownCostMicro a finite number >= 0 — a KNOWN cost.
+  //     outcome may be "success" (the default) or
+  //     "failed_known" (a charged-but-failed call); the attempt
+  //     is recorded under that outcome at that cost. "success"
+  //     REQUIRES the finite known cost: success is a claim that
+  //     the call completed at a known price.
+  //   * knownCostMicro exactly null — a PROVEN NO-CHARGE: the
+  //     operator has established from the provider's records
+  //     that nothing was billed. The ONLY consistent settlement
+  //     outcome is "no_charge" (the default when outcome is
+  //     omitted). null with ANY other outcome — above all
+  //     "success", which the pre-B2 code accepted and recorded
+  //     as success at cost 0 — is a contradiction and is refused
+  //     (reconcile_settlement_inconsistent), as is a numeric
+  //     cost paired with "no_charge". On the attempt log a
+  //     no-charge settlement records failed_known at cost 0
+  //     (the attempt-log vocabulary has no no-charge value, and
+  //     phase accounting treats failed_known @ 0 as settled
+  //     zero); the settlement outcome "no_charge" itself is
+  //     preserved distinctly on the audit row's final_outcome.
+  //   * a malformed cost (non-number, NaN, infinite, negative)
+  //     refuses as reconcile_cost_invalid; an outcome outside
+  //     the settlement vocabulary refuses as
+  //     reconcile_outcome_invalid. Every refusal throws inside
+  //     the transaction: zero state movement, zero audit rows.
+  // When no unknown attempts remain open for the attempt's
+  // phase, the phase halt clears in the same transaction.
   // CH2 FIX PACKAGE (fix 2): opts additionally accepts
   // { planId?, note?, source? } — when planId is supplied, the
   // attempt must belong to that plan (reconcile_plan_mismatch;
-  // a guard against settling an attempt from the wrong plan);
-  // note/source are recorded on the audit row above. The
-  // settlement preconditions are unchanged and remain the whole
-  // fence at this layer: the attempt must exist and be
+  // a guard against settling an attempt from the wrong plan;
+  // the operator route REQUIRES it — see the entry). The
+  // attempt's plan_id was stamped server-side when the attempt
+  // was reserved, never caller-supplied, so this check verifies
+  // ownership against the server's own linkage. note/source
+  // are recorded on the audit row above. The remaining
+  // preconditions are unchanged: the attempt must exist and be
   // confirmed/unknown — anything else refuses and moves nothing.
+  const SETTLEMENT_OUTCOMES = Object.freeze(["success", "failed_known", "no_charge"]);
   function reconcileUnknown(attemptId, { knownCostMicro = null, outcome = null, planId = null, note = null, source = null } = {}) {
     return coord._tx(() => {
       const row = attemptRow(attemptId);
@@ -348,14 +381,23 @@ CREATE TABLE IF NOT EXISTS d6_reconcile_audit (
         throw new Error(`attempt_not_unknown: ${attemptId} (${row.phase}/${row.outcome})`);
       if (planId !== null && planId !== undefined && row.plan_id !== planId)
         throw new Error(`reconcile_plan_mismatch: attempt ${attemptId} belongs to ${row.plan_id}, not ${planId}`);
-      let finalOutcome, finalCost;
+      if (knownCostMicro !== null && knownCostMicro !== undefined &&
+          (typeof knownCostMicro !== "number" || !Number.isFinite(knownCostMicro) || knownCostMicro < 0))
+        throw new Error(`reconcile_cost_invalid: ${knownCostMicro}`);
+      if (outcome !== null && outcome !== undefined && !SETTLEMENT_OUTCOMES.includes(outcome))
+        throw new Error(`reconcile_outcome_invalid: ${outcome}`);
+      let settlementOutcome, finalOutcome, finalCost;
       if (knownCostMicro === null || knownCostMicro === undefined) {
-        finalOutcome = outcome || "failed_known";
+        settlementOutcome = outcome ?? "no_charge";
+        if (settlementOutcome !== "no_charge")
+          throw new Error(`reconcile_settlement_inconsistent: knownCostMicro null (proven no-charge) requires outcome "no_charge", got "${settlementOutcome}"`);
+        finalOutcome = "failed_known";
         finalCost = 0;
       } else {
-        if (typeof knownCostMicro !== "number")
-          throw new Error("reconcile_cost_must_be_number_or_null");
-        finalOutcome = outcome || "success";
+        settlementOutcome = outcome ?? "success";
+        if (settlementOutcome === "no_charge")
+          throw new Error(`reconcile_settlement_inconsistent: outcome "no_charge" requires knownCostMicro null, got ${knownCostMicro}`);
+        finalOutcome = settlementOutcome;
         finalCost = knownCostMicro;
       }
       if (!KNOWN_OUTCOMES.includes(finalOutcome))
@@ -383,15 +425,19 @@ CREATE TABLE IF NOT EXISTS d6_reconcile_audit (
         }
       }
       // The audit row lands in the same transaction (fix 2).
+      // Its final_outcome records the SETTLEMENT outcome
+      // (success / failed_known / no_charge) — for a no-charge
+      // settlement this is where the distinct value lives,
+      // since the attempt log itself records failed_known @ 0.
       ensureReconcileAuditSchema();
       sql.exec(
         `INSERT INTO d6_reconcile_audit
            (attempt_id, plan_id, phase, final_outcome,
             final_cost_micro_cents, note, source, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        attemptId, row.plan_id ?? null, planPhase, finalOutcome,
+        attemptId, row.plan_id ?? null, planPhase, settlementOutcome,
         finalCost, note ?? null, source ?? null, now());
-      return { attempt: attemptRow(attemptId), haltCleared };
+      return { attempt: attemptRow(attemptId), haltCleared, settlementOutcome };
     });
   }
 
