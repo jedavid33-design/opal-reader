@@ -15,6 +15,18 @@ focused re-review. It builds on Rowan's D0 STOP disposition
 Rowan accepted in part. **No Reader code, no baseline suite,
 and no prior evidence is changed by this amendment.**
 
+**Revision note.** This text incorporates the three narrow
+procedural corrections of Rowan's focused review of the
+original amendment filing (6528867886): **OB-1** — the
+executable order is fixed to Step P → Step D0 → Step D1 →
+Step R → Step D2 → Step D3 → Step D4 → Step S (§3);
+**OB-2** — Step P STOP semantics are "no subsequent
+mutation", with the queue state recorded UNKNOWN unless a
+trustworthy read-back establishes it (§3 Step P, §4);
+**OB-3** — supersessions **S9/S10** (§2) replace the
+remaining blanket "live grant" STOP phrases in addendum
+§§C/D with the scoped S3 criterion. Nothing else changed.
+
 **Authorization status — read first.** This amendment changes
 the signed live sequence: the queue-delivery pause moves from
 D2 (inside the gate) to a new Step P **before** D0. Per
@@ -75,20 +87,30 @@ amendment.
 | S6 | Addendum §D.3 | "grants arrays unchanged from D0, **all terminal**" | Grant-lifecycle §1.2 correction: grants arrays at D4 must be **unchanged from the fresh D0** — same grant IDs, same `issued` states, same revisions. "All terminal" is deleted; it was the same error as S1/S3 on the post-state side. |
 | S7 | Main plan, in-flight assessment ¶(a) | "with **every grant in a terminal state** and no non-terminal execution beyond the one named Ch 2 `unknown_billing` artifact" | "with every inventoried grant satisfying the per-grant non-dispatchability criterion (addendum §B.4 as superseded by Amendment Option B §2/S3, applied under Step P containment) and no non-terminal execution beyond the one named Ch 2 `unknown_billing` artifact". The remainder of the in-flight assessment — closed inventory, two identical samples ≥10 minutes apart, Ch 2 `halted_unknown`, Ch 3 `parked_policy` + fingerprint, settings revision still 1, unknown inventory item = STOP, no in-flight variant — stands unchanged. |
 | S8 | Main plan, D2 step 1 | "Pause queue delivery first" **as a D2 act** | The pause is performed at **Step P** (§3), before D0, under the authorization named there. D2 retains the pause as a **verified precondition**: immediately before the upload, queue delivery is read back and must still show `delivery_paused == true`; any other reading is a STOP (unexplained state movement; §4). The D2 upload itself, its multipart form, and its metadata (including GENERATION_HALT `"1"`) are unchanged. |
+| S9 | Addendum §C, STOP sentence | "**Any** active plan, **live grant**, non-terminal execution (beyond the named Ch 2 artifact), moved ledger, moved watermark, or queue-state change = **STOP**" — the term "live grant" in §C's STOP conditions | In §C's STOP conditions, "live grant" is replaced by: **any non-inventory grant, any change to the two inventoried grant IDs/states/revisions, or failure of the S3 per-grant non-dispatchability assessment under verified queue containment**. Every other §C STOP condition stands verbatim in effect: any active plan, any non-terminal execution (beyond the named Ch 2 artifact), any moved ledger, any moved watermark, or any queue-state change = STOP. Scoped exactly as S3: the two inventoried grants in their recorded states only; live grants are **not** waived generally. Operative at Step R (§3), whose cross-reference is updated to this superseded phrasing. |
+| S10 | Addendum §D, final STOP conditions | "Addendum STOP conditions (in addition to the plan's): any plan ID outside the §A inventory at D0 or D4; **any live grant**; any `reserved`/`dispatching` attempt; diagnostics totals differing from D0; the parked Chapter 3 fingerprint differing from the G8/G9 record" — the term "any live grant" in §D's STOP conditions | In §D's STOP conditions, "any live grant" is replaced by: **any non-inventory grant, any change to the two inventoried grant IDs/states/revisions, or failure of the S3 per-grant non-dispatchability assessment under verified queue containment**. Every other §D STOP condition stands verbatim in effect: any plan ID outside the §A inventory at D0 or D4; any `reserved`/`dispatching` attempt; diagnostics totals differing from D0; the parked Chapter 3 fingerprint differing from the G8/G9 record. §D.3's "all terminal" remains corrected by S6. Scoped exactly as S3; live grants are **not** waived generally. Operative at Step D4 (§3), whose cross-reference is updated to this superseded phrasing. |
 
 **No other signed language is superseded.** In particular:
 the STOP-on-unknown-plan/job/grant rule; the two-sample
 ≥10-minute stability rule; the byte-verified rollback-archive
-requirement; D1 in full; D3; D4 (as corrected by S6); the
-rollback section; and the Gate 2 / Gate 3 sections and their
-separate-decision status.
+requirement; D1 in full; D3; D4 (as corrected by S6, and
+with §D's final STOP conditions as superseded by S10); the
+§C re-check (with its STOP sentence as superseded by S9);
+the rollback section; and the Gate 2 / Gate 3 sections and
+their separate-decision status.
 
 ---
 
 ## 3. The executable sequence (Option B)
 
-Steps run in this exact order. "Authorization" names whose
-word covers the step; all steps after Step P run under the
+Steps run in this exact order — the only order this
+document states anywhere: **Step P → Step D0 → Step D1 →
+Step R → Step D2 → Step D3 → Step D4 → Step S**. The §C
+quiescence re-check (Step R) runs **after** D1 and
+**immediately before** D2's upload, exactly as signed §C
+requires, preserving its ≥10-minute sampling across the
+D0 → re-check interval. "Authorization" names whose word
+covers the step; all steps after Step P run under the
 single Julie production authorization for this changed
 procedure (see Authorization status), which is sought only
 after Rowan accepts this amendment.
@@ -126,14 +148,26 @@ after Rowan accepts this amendment.
 - **STOP handling.** If the PUT fails, errors, or the
   read-back shows anything other than
   `delivery_paused == true` (including the read-back itself
-  failing): **STOP before anything else.** No other step has
-  run; nothing else has been mutated; the gate does not
-  start. The failure is recorded and reported. A retry of
-  the pause is permitted only after the failure is explained
-  and the queue state has been read back as still-enabled;
-  an unexplained or repeated failure ends the attempt
-  (§4). If a PUT's outcome is ambiguous (transport error
-  after send) but the read-back shows
+  failing): **STOP before anything else.** The guarantee on
+  this path is **no subsequent mutation** — no later step
+  runs and nothing further is changed — **not** "no
+  mutation": a transport error can follow a successful
+  pause, so the queue may already be paused even though
+  Step P has STOPped. The queue state is therefore recorded
+  as **UNKNOWN** unless a trustworthy read-back establishes
+  it: if a read-back shows `delivery_paused == true`, the
+  state is recorded **PAUSED** and retained PAUSED; if it
+  shows delivery enabled, the state is recorded **ENABLED**;
+  if no trustworthy read-back is available, the state is
+  reported **UNKNOWN** and resolved through a read-only
+  recheck before any further Julie-authorized production
+  step. There is **no automatic retry and no unpause** on
+  this path, and no upload. A re-attempt of the pause is a
+  new attempt under §4 — permitted only after the failure
+  is explained and a trustworthy read-back has established
+  the queue state; an unexplained or repeated failure ends
+  the attempt (§4). If a PUT's outcome is ambiguous
+  (transport error after send) but the read-back shows
   `delivery_paused == true`, the pause counts as effected
   and the anomaly is recorded in the gate record.
 
@@ -252,18 +286,6 @@ samples**.
   PAUSED, old build live); the discrepancy is investigated
   and explained before any further step is even proposed.
 
-### Step R — §C immediate pre-upload quiescence re-check (read-only)
-
-Exactly the signed plan's §C, unchanged, with one
-consequential clarification from S5/S8: the re-check repeats
-addendum §B.2–B.7 as superseded (so the queue read must
-again show delivery **PAUSED**), and the grants assessment
-is the S3 criterion, not the deleted all-terminal test.
-Every value identical to the fresh D0 record (wall-clock
-fields excepted); the §B.3 ≥10-minute two-sample rule may
-be satisfied across the D0 → re-check interval as the
-signed §C provides. Any movement = **STOP**.
-
 ### Step D1 — Envelope re-verification (no production contact)
 
 Exactly the signed plan's D1, unchanged in full: (a)
@@ -279,6 +301,27 @@ ancestor, never the moving tip. **Plus** the adversarial
 spoofed-planId test (a message-carried planId must not
 conceal a held plan when job linkage says otherwise), run in
 the local test environment only. Any mismatch = **STOP**.
+
+### Step R — §C immediate pre-upload quiescence re-check (read-only)
+
+Runs **after Step D1 completes and immediately before
+Step D2's upload**, exactly where signed §C places it. The
+signed plan's §C, with the named amendments only: the
+consequential clarification from S5/S8 (the re-check
+repeats addendum §B.2–B.7 as superseded, so the queue read
+must again show delivery **PAUSED**), and the **S9**
+supersession — the grants assessment is the S3 per-grant
+non-dispatchability criterion under verified queue
+containment, not the deleted all-terminal test, and §C's
+"live grant" STOP term applies only as replaced by S9
+(any non-inventory grant, any change to the two inventoried
+grant IDs/states/revisions, or failure of the S3 assessment
+= STOP); every other §C STOP condition stands verbatim in
+effect. Every value identical to the fresh D0 record
+(wall-clock fields excepted); the §B.3 ≥10-minute
+two-sample rule may be satisfied across the D0 → re-check
+interval as the signed §C provides. Any movement =
+**STOP**.
 
 ### Step D2 — Upload (pause verified, then upload)
 
@@ -349,7 +392,13 @@ corrected by S6:
   the one consumer on `opalreader-api-v2-prod`; producers
   unchanged. Neighbors unchanged.
 - Any line differing = **STOP** (signed plan's Gate 1 STOP
-  conditions, as corrected by §2).
+  conditions, as corrected by §2 — including addendum §D's
+  final STOP conditions with "any live grant" applied only
+  as superseded by **S10**: any non-inventory grant, any
+  change to the two inventoried grant IDs/states/revisions,
+  or failure of the S3 assessment under verified queue
+  containment = STOP; all other §D STOP conditions stand
+  verbatim in effect).
 
 ### Step S — Playback/sync smoke (Julie-attended, while halted)
 
@@ -373,13 +422,23 @@ generated; nothing has been spent.
 ## 4. State left on any STOP — the left-paused rule
 
 - **STOP at Step P** (pause failed / read-back mismatch):
-  nothing was mutated; the system is exactly as found
-  (old build `ac451df8` live, GENERATION_HALT `"0"`, queue
-  delivery as found). The attempt ends; any new attempt
-  requires the failure to be explained and, if the pause
-  itself must be re-attempted under changed circumstances,
+  **no subsequent mutation** is made and no later step
+  runs — but the system is **not** asserted to be exactly
+  as found: a PUT that fails or errors may nonetheless
+  have paused the queue. The queue state is recorded as
+  **UNKNOWN** unless a trustworthy read-back establishes
+  it — PAUSED is retained PAUSED, ENABLED is recorded
+  ENABLED, and an unavailable read-back is reported
+  UNKNOWN and resolved through a read-only recheck before
+  any further Julie-authorized production step. Neither
+  the old enabled queue state nor a generation-halted
+  state is promised for an unverified state. The old build
+  `ac451df8` remains live; there is no automatic retry and
+  no unpause. The attempt ends; any new attempt requires
+  the failure to be explained and, if the pause itself
+  must be re-attempted under changed circumstances,
   Julie's word.
-- **STOP at any later step** (D0, R, D1, D2, D3, D4, or S):
+- **STOP at any later step** (D0, D1, R, D2, D3, D4, or S):
   the system is left with queue delivery **PAUSED** — on
   the old build if the stop precedes the upload, or halted
   on the new build (GENERATION_HALT `"1"`) if it follows.
