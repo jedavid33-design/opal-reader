@@ -23,6 +23,20 @@ durable plan and job WITH its quarantine hold state, per
 `DEPLOY-PLAN-ADDENDUM-D7.md` — stands alongside this
 addendum.
 
+**D9-P alignment note (2026-10-30; Rowan, comment
+6526887322, item D9-P2):** the main plan's D0 in-flight
+assessment previously demanded two reads of a "D6 plan list"
+before upload — a surface the live build does not have. The
+main plan now mandates THIS addendum's closed-inventory
+method (§A–§C) for the pre-upload assessment, preserving its
+STOP-on-unknown-plan/job, all-terminal-grants, unchanged
+quota/attempts (two samples ≥10 minutes apart), archived
+live-part/hash, and quiescence conditions. The plan-list and
+diagnostics verification in §D applies at **D4 only**, on the
+candidate, where those surfaces exist. The two documents
+state one method; neither is to be read as requiring a
+plan-list read against the live build.
+
 ---
 
 ## A. The recorded production inventory (the closed set)

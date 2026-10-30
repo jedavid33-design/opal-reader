@@ -26,6 +26,15 @@ condition A is complete for THIS candidate and filed in this
 package (`ENVELOPE-PROOF-REPORT.md`: 27 modules, 18/18 PASS,
 three negative proofs FAIL as required, candidate tree
 byte-identical, clean-checkout replay record in `replay/`).
+**D9-P corrections (2026-10-30; Rowan, comment 6526887322):**
+D1's branch-head check rewritten (D9-P1 — the immutable
+source pin, the pinned evidence/replay record, and branch
+ancestry are now verified as three separate checks; the pin
+is an ancestor of the branch, never its moving tip), and
+D0's in-flight assessment corrected to the addendum's
+closed-inventory method (D9-P2 — the live build has no
+plan-list surface; plan-list/diagnostics verification is
+reserved for D4 on the candidate).
 
 ## The decisions Julie will be asked, in order
 
@@ -79,13 +88,33 @@ a moved value is a STOP until explained.**
 
 This plan deploys only into a quiescent system, which is the
 current state and must be **re-verified immediately before the
-upload**: (a) two reads of the D6 plan list + `/v2/quota`,
-minutes apart, show **no active plan** and **no change** in
-attempts/spent; (b) Ch 2 still `halted_unknown`, Ch 3 still
-`parked_policy` with the recorded fingerprint; (c) no SyncPush
-or settings command in flight (settings revision still 1).
-If anything is active or moving, the deploy waits — there is
-no "explicitly justified in-flight" variant of this plan.
+upload** by the method `DEPLOY-PLAN-ADDENDUM-D0D4.md` §A–§C
+specifies. The live build (`ac451df8`) has **no plan-list
+surface and no diagnostics surface** — both arrive only with
+the candidate — so the pre-upload assessment does NOT read a
+plan list. It enumerates the **closed production inventory**
+(addendum §A: every D6 plan and job ever created in
+production, from the deploy/arming/smoke/follow-on records)
+and proves quiescence from: (a) per-plan reads of both
+inventoried plans and per-job reads of all three inventoried
+jobs, each matching its §A expected state exactly, with
+**every grant in a terminal state** and no non-terminal
+execution beyond the one named Ch 2 `unknown_billing`
+artifact; (b) two `/v2/settings` + `/v2/quota` samples taken
+**at least one full watchdog cycle (≥10 minutes) apart**,
+identical across both samples — no inventoried plan active,
+and **no change** in quota attempts/spent; (c) Ch 2 still
+`halted_unknown`, Ch 3 still `parked_policy` with the
+recorded fingerprint; (d) no SyncPush or settings command in
+flight (settings revision still 1). **Any plan, job, or grant
+discovered that is not in the closed inventory is a STOP**:
+the inventory is incomplete, quiescence cannot be certified,
+and the discrepancy is investigated and explained before the
+gate proceeds. If anything is active or moving, the deploy
+waits — there is no "explicitly justified in-flight" variant
+of this plan. Exhaustive plan-list and diagnostics
+verification is reserved for D4, where those surfaces exist
+on the candidate (addendum §D).
 
 ### D1 — Envelope re-verification (no production contact)
 
@@ -93,13 +122,55 @@ Re-run the proof harness against the candidate tree at gate
 time (the pinned replay harness
 `replay/proof-d6-envelope-replay.mjs` in this package, run
 from a clean checkout of the evidence commit, per
-`replay/README-replay.md`). The assembled envelope must be
-byte-identical to the proof artifact (SHA-256
+`replay/README-replay.md` — the explicit
+`--candidate-worker-dir "$PWD/candidate/worker"` invocation
+is mandatory). **What deploys is the immutable source pin's
+tree — never the moving `ui1-review` branch tip.** The pin
+`f3b6e6e9…` is an *ancestor* of the branch, not its tip: the
+review-only evidence commits (the D9-E package, its replay
+record, the D9-P corrections, and any later reviewed evidence
+commits) legitimately advance the tip beyond it, so a
+branch-tip equality check against the pin can never pass and
+is not the check. D1 verifies three distinct things, each
+separately:
+
+(a) **The immutable source pin.** Commit
+`f3b6e6e9fd7a44532ceef86e484a79e466b36d4d` exists, and its
+signed subtree `review/gen-pkg-1/**` is byte-identical to
+the signed record (106 blobs; subtree SHA
+`a6c057dc4d705bfd1ae0b86cfbff1563bfcc280c`). The candidate
+worker tree taken from the pinned evidence copy
+(`candidate/worker/`, 57 files) matches
+`candidate/candidate-worker-manifest.txt` per-file
+(manifest hash
+`de43523e5e912b1809d79147c23b5b90d1a66cb9fdb8508b6b9a7f5b6ecb3d0d`),
+and the candidate tree digest still reads `30a954c4…`
+(D8 pin-record method; full local tree, 378 files). This
+source-integrity check is unchanged in strength from every
+prior round.
+
+(b) **The pinned evidence/replay record.** The evidence
+commits `f21238df2b92361e7d93395556b3cafae8972502` (D9-E
+package) and `0ebc53a4861414978fb52b596bc58646e3bbaf2d`
+(replay record) sit in the branch's ancestry with the
+recorded parents, and the envelope assembled by the gate-time
+replay is byte-identical to the proof artifact: envelope
+SHA-256
 `9cb9d0da0d0790e2a5a0e558c6ff50d6958c83ab2942e487830e6132c15cd9ce`
-/ metadata `e08b06bc…`), the candidate tree digest must still
-be `30a954c4…` (D8 pin-record method; full local tree,
-378 files), and the `ui1-review` ref must still read
-`f3b6e6e9…`. **Any mismatch = STOP** (Rowan, condition A).
+/ metadata `e08b06bc…`.
+
+(c) **Branch ancestry / expected reviewed head.** The
+`ui1-review` ref reads the expected reviewed head — the head
+recorded in the D9-P corrections board filing, or a later
+head whose every intervening commit Rowan has reviewed —
+and `f3b6e6e9…` is an ancestor of that head. Any unexpected
+change to the branch (an unreviewed commit, rewritten
+history, or a head that does not descend from the pin)
+requires a fresh review and is a **STOP** until Rowan clears
+it.
+
+**Any mismatch in (a), (b), or (c) = STOP** (Rowan,
+condition A, as corrected by D9-P1, comment 6526887322).
 D1 also carries Rowan's D9-E operational note (comment
 6526547700): an adversarial replay test must check that a
 message-carried planId cannot conceal a held plan when the

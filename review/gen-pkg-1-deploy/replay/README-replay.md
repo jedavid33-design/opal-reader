@@ -23,13 +23,23 @@ visible in this branch's history.)
   Same 18 checks (E1–E18) and same three negative variants as
   the filed harness; differences are only in candidate
   resolution and output placement:
-  - candidate worker dir: explicit `--candidate-worker-dir <dir>`,
-    VALIDATED (must contain `worker-entry-prod-d6.js`,
+  - candidate worker dir: the explicit
+    `--candidate-worker-dir <dir>` argument is **MANDATORY**
+    (VALIDATED: must contain `worker-entry-prod-d6.js`,
     `p8/deploy-spec-prod-d6.json`, `host/build-identity.mjs`;
-    refuses with exit 2 otherwise), or the pinned-layout default
-    `../gen-pkg-1/worker` relative to the harness file (the
-    delta-pinned partial tree — use the explicit tested path
-    against `candidate/worker`);
+    refuses with exit 2 otherwise). **Do not rely on the
+    harness's no-argument default** (D9-P documentation
+    correction, 2026-10-30): the code's fallback resolves
+    `../gen-pkg-1/worker` relative to the harness file, which
+    in this pinned layout is
+    `review/gen-pkg-1-deploy/gen-pkg-1/worker` — a path that
+    does not exist. (An earlier version of this README
+    described that default as pointing at the pinned partial
+    tree; that description was wrong.) The harness code is
+    deliberately unchanged — changing it would invalidate the
+    filed proof run — so the only supported invocation is the
+    explicit one in "Exact replay commands" below, against
+    this package's complete `candidate/worker`;
   - ALL outputs go to `--out <dir>` (default a fresh `os.tmpdir()`
     subdir) — never into the evidence tree.
   - D9-E change vs the D7-1 harness: the stamped PIN only
@@ -96,7 +106,10 @@ stands as recorded in the D7/D8 filings.
   dir announcements).
 
 **Exact replay commands** (from a clean checkout of the commit
-that pins this package; `<CO>` = checkout root):
+that pins this package; `<CO>` = checkout root). The
+`--candidate-worker-dir` argument is REQUIRED on every
+invocation — there is no supported no-argument run (see the
+D9-P correction note above):
 
 ```
 cd <CO>/review/gen-pkg-1-deploy
