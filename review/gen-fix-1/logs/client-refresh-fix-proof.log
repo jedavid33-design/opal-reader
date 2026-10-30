@@ -1,0 +1,8 @@
+PASS GF-1 boot under sw-genfix1, connect, library renders; gen-fix-1 identities {"marker":"d5b-v2-generation-client-3"}
+PASS GF-2 book screen: ONLY terminal plans (halted_unknown + complete) — halted plan renders, NO 15s poll {"line":"Chapter 2 — Stopped — a charge needs checking before it can continueSettled $0.30 so far — plus a charge that isn't confirmed yet · Standard lane · this chapter only · audio published 0"}
+PASS GF-3 Generation view: ONLY terminal plans — NO 5s refresh; sheet does not reroute for the halted plan {"line":"Fixture Forever · Chapter 2 — Stopped — a charge needs checking before it can continueSettled $0.30 so far — plus a charge that isn't confirmed yet · Standard lane · this chapter only · audio published 0"}
+PASS GF-4 book screen: a genuinely live (active) plan appears — the 15s poll DOES run {"fetches":1}
+PASS GF-5 Generation view: with the live plan present, the 5s refresh DOES run {"fetches":1}
+PASS GF-6 nothing submitted anywhere; state + Shelf fingerprint byte-stable {"bytes":8784}
+
+REFRESH-FIX CHROMIUM PROOF: 6/6 PASS; page exceptions: 0

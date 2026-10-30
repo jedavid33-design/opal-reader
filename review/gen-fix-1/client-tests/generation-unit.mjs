@@ -1,0 +1,242 @@
+// gen-fix-1 — generation-surface unit battery (node, no DOM).
+// The gen-pkg-1 battery carried forward against the CORRECTED
+// module (modules/generation-surface-genfix1.js), with ONE
+// disclosed amendment (GU8: the round-3 terminal-set premise for
+// halted_unknown is reversed by the gen-fix-1 correction — see
+// the comment at the assertion) and ONE added row (GU14: the
+// correction's predicate-level regression coverage). Exercises
+// the module against a scripted fetch: request shapes + headers
+// for every surface, the submit command's exact contract, and
+// the pure renderers (lane options, exclusion lines, plan status
+// text, active-plan matching, phase lookup, money formatting).
+// Any failure exits nonzero.
+import { createGenerationClient, laneOptions, exclusionLines, formatMicroCents,
+  phaseForBook, findActivePlan, planStatusText, stopReasonText, isTerminalPlanState,
+  rejectionText, planSemanticsText, planMoneyText, TERMINAL_PLAN_STATES }
+  from "../tree-a/modules/generation-surface-genfix1.js";
+
+const rows = [];
+function row(id, name, fn) {
+  return Promise.resolve().then(fn).then(
+    () => { rows.push([id, "PASS"]); console.log("PASS", id, name); },
+    (e) => { rows.push([id, "FAIL"]); console.log("FAIL", id, name, "-", e?.message ?? e); });
+}
+function assert(c, m) { if (!c) throw new Error(m); }
+function eq(a, b, m) { if (a !== b) throw new Error(`${m}: ${JSON.stringify(a)} !== ${JSON.stringify(b)}`); }
+
+const calls = [];
+let responder = () => ({ ok: true, status: 200, body: {} });
+function fetchFn(url, opts = {}) {
+  calls.push({ url, opts });
+  const r = responder(url, opts);
+  return Promise.resolve({
+    ok: r.ok, status: r.status,
+    json: async () => r.body,
+  });
+}
+const client = createGenerationClient({ baseUrl: "http://stub/api-v2/", token: "tok-1", scope: "production", instance: "account", fetchFn });
+
+await row("GU1", "capabilities request: path + gate headers, token in header only", async () => {
+  calls.length = 0;
+  responder = () => ({ ok: true, status: 200, body: { generationState: "enabled", lanes: {}, phases: [] } });
+  await client.capabilities();
+  eq(calls.length, 1, "one call");
+  assert(calls[0].url.endsWith("/v2/generation/capabilities"), calls[0].url);
+  eq(calls[0].opts.headers["x-opalreader-token"], "tok-1", "token header");
+  eq(calls[0].opts.headers["x-opalreader-scope"], "production", "scope header");
+  eq(calls[0].opts.headers["x-opalreader-instance"], "account", "instance header");
+  assert(!calls[0].url.includes("tok-1"), "token never in the URL");
+});
+
+await row("GU2", "quote request: exact query params per scope", async () => {
+  calls.length = 0;
+  responder = () => ({ ok: true, status: 200, body: { eligibleCount: 0 } });
+  await client.quote({ bookId: "b1", scope: "chapter", chapterIndex: 2 });
+  assert(calls[0].url.includes("bookId=b1") && calls[0].url.includes("scope=chapter") && calls[0].url.includes("chapterIndex=2"), calls[0].url);
+  assert(!calls[0].url.includes("occurrenceId"), "no occurrenceId for chapter scope");
+  calls.length = 0;
+  await client.quote({ bookId: "b1", scope: "segment", occurrenceId: "occ-9" });
+  assert(calls[0].url.includes("occurrenceId=occ-9") && !calls[0].url.includes("chapterIndex"), calls[0].url);
+});
+
+await row("GU3", "submit: the exact SubmitJob command contract", async () => {
+  calls.length = 0;
+  responder = () => ({ ok: true, status: 200, body: { outcome: "applied", planId: "plan:x" } });
+  const receipt = await client.submitIntent({
+    commandId: "cmd-1", bookId: "b1", lane: "standard",
+    intent: { scope: "book", keepGoing: true, phase: "forever-pucked" },
+  });
+  eq(receipt.planId, "plan:x", "receipt planId");
+  eq(calls.length, 1, "one POST");
+  eq(calls[0].opts.method, "POST", "method");
+  const body = JSON.parse(calls[0].opts.body);
+  eq(body.command_id, "cmd-1", "command_id");
+  eq(body.type, "SubmitJob", "type");
+  eq(body.payload.bookId, "b1", "payload bookId");
+  eq(body.payload.lane, "standard", "payload lane");
+  const di = body.payload.data.d6Intent;
+  assert(di && di.scope === "book" && di.keepGoing === true && di.phase === "forever-pucked", `d6Intent ${JSON.stringify(di)}`);
+  assert(!("eligibleIds" in di) && !("occurrences" in di), "client never ships an eligible set");
+});
+
+await row("GU4", "listAllPlans pages through cursors and stops", async () => {
+  responder = (url) => {
+    if (url.includes("cursor=CUR2")) return { ok: true, status: 200, body: { plans: [{ planId: "p2" }], nextCursor: null } };
+    return { ok: true, status: 200, body: { plans: [{ planId: "p1" }], nextCursor: "CUR2" } };
+  };
+  const plans = await client.listAllPlans();
+  eq(plans.map((p) => p.planId).join(","), "p1,p2", "both pages");
+});
+
+await row("GU5", "HTTP errors surface as coded errors (no silent success)", async () => {
+  responder = () => ({ ok: false, status: 409, body: { error: "conflict_x" } });
+  let err = null;
+  try { await client.capabilities(); } catch (e) { err = e; }
+  assert(err && err.code === "conflict_x" && err.status === 409, `error shape: ${err?.code}`);
+});
+
+await row("GU6", "laneOptions: batch carries its server reason; admitted lane has none", async () => {
+  const opts = laneOptions({ lanes: { standard: { admitted: true }, batch: { admitted: false, reason: "batch_not_armed" } } });
+  const bat = opts.find((o) => o.lane === "batch");
+  eq(bat.admitted, false, "batch not admitted");
+  assert(bat.reason.includes("Batch isn't enabled yet"), bat.reason);
+  const std = opts.find((o) => o.lane === "standard");
+  eq(std.admitted, true, "standard admitted");
+  eq(std.reason, null, "no reason when admitted");
+  const bare = laneOptions(null);
+  assert(bare.every((o) => !o.admitted), "missing capabilities fail closed");
+});
+
+await row("GU7", "exclusionLines: plain words from server tallies only", async () => {
+  const lines = exclusionLines({ exclusions: { bound_already: 2, voice_prompt: 1, parked: 3, other: 0 } });
+  eq(lines.length, 3, "three lines");
+  assert(lines[0].startsWith("2 already have audio"), lines[0]);
+  assert(lines[1].startsWith("3 are parked"), lines[1]);
+  assert(lines[2].startsWith("1 needs a voice choice first"), lines[2]);
+  eq(exclusionLines({ exclusions: {} }).length, 0, "no tallies, no lines");
+  eq(exclusionLines(null).length, 0, "null quote safe");
+});
+
+await row("GU8", "planStatusText: states and stop reasons in plain words", async () => {
+  eq(planStatusText({ state: "active", totals: { eligible: 5, done: 2 } }), "Working — 2 of 5 done", "active");
+  eq(planStatusText({ state: "complete", totals: { eligible: 0, done: 0 } }), "Done — nothing was left to generate", "empty complete");
+  assert(planStatusText({ state: "parked_quota", stopReason: "quota_estimate_exhausted" }).includes("quota is used up"), "quota");
+  assert(planStatusText({ state: "halted_unknown", stopReason: "unknown_billing" }).includes("charge needs checking"), "unknown billing");
+  // Round 3 (R3-2): a retired plan is terminal and reads as a
+  // closed run — never as a live plan the shell would reroute to.
+  assert(planStatusText({ state: "retired", stopReason: "retired_unknown_billing" }).includes("Closed"), "retired reads closed");
+  assert(planStatusText({ state: "retired", stopReason: "retired_unknown_billing" }).includes("charge was checked"), "retired reason in plain words");
+  eq(stopReasonText("some_new_reason"), "some new reason", "unknown reasons pass through, never invented");
+  // D7-2 (additive): a server-held plan reads as waiting for
+  // approval on BOTH server shapes — never as "Working".
+  eq(planStatusText({ state: "active", approvalRequired: true, totals: { eligible: 5, done: 0 } }),
+    "Waiting — needs approval before it can start", "held summary shape");
+  eq(planStatusText({ state: "active", quarantine: { held: true }, totals: { eligible: 5, done: 0 } }),
+    "Waiting — needs approval before it can start", "held status shape");
+  eq(planStatusText({ state: "active", approvalRequired: false, totals: { eligible: 5, done: 2 } }),
+    "Working — 2 of 5 done", "unheld active still reads working");
+  assert(isTerminalPlanState("complete") && !isTerminalPlanState("active") && !isTerminalPlanState("parked_quota"), "terminal set");
+  // AMENDED by gen-fix-1 (disclosed; the Q9/Q6 candidate-suite
+  // amendment discipline): round 3 asserted halted_unknown is
+  // NOT terminal. That premise is what produced the published
+  // build's refresh loop — a halted plan cannot advance on its
+  // own (no driver selects it; its only exits are operator
+  // reconcile and retire), so the shell's live-plan treatment
+  // only ever polled and rerouted forever. The correction
+  // reverses this assertion: halted_unknown IS terminal.
+  // (Diagnosis board 6530278010; Julie's build authorization
+  // 6530302659.) The status/money TEXT for halted plans is
+  // unchanged — GU8/GU13 still pin it above and below.
+  assert(isTerminalPlanState("retired") && isTerminalPlanState("halted_unknown"), "gen-fix-1: retired AND halted_unknown are terminal");
+});
+
+await row("GU9", "findActivePlan: scope/chapter matching, terminal plans ignored", async () => {
+  const plans = [
+    { planId: "a", bookId: "b1", scope: "chapter", chapterIndex: 1, state: "complete" },
+    { planId: "b", bookId: "b1", scope: "chapter", chapterIndex: 2, state: "active" },
+    { planId: "c", bookId: "b1", scope: "book", state: "parked_quota" },
+    { planId: "d", bookId: "b2", scope: "book", state: "active" },
+  ];
+  eq(findActivePlan(plans, { bookId: "b1", scope: "chapter", chapterIndex: 1 }), null, "terminal chapter plan ignored");
+  eq(findActivePlan(plans, { bookId: "b1", scope: "chapter", chapterIndex: 2 })?.planId, "b", "active chapter plan found");
+  eq(findActivePlan(plans, { bookId: "b1", scope: "book" })?.planId, "c", "parked (non-terminal) plan counts as in-flight");
+  eq(findActivePlan(plans, { bookId: "b1", scope: "segment" }), null, "no cross-scope match");
+  eq(findActivePlan(null, { bookId: "b1", scope: "book" }), null, "null safe");
+});
+
+await row("GU10", "phaseForBook + formatMicroCents: server data only", async () => {
+  const caps = { phases: [{ phase: "forever-pucked", bookId: "FP" }, { phase: "other", bookId: "ZZ" }] };
+  eq(phaseForBook(caps, "FP"), "forever-pucked", "phase by book");
+  eq(phaseForBook(caps, "gb"), null, "unbudgeted book -> null phase");
+  eq(phaseForBook(null, "FP"), null, "null caps safe");
+  eq(formatMicroCents(17749), "$0.02", "smoke amount");
+  eq(formatMicroCents(13500000), "$13.50", "phase budget");
+  eq(formatMicroCents(0), "$0.00", "zero");
+  eq(formatMicroCents(1.5), "—", "non-integer refused");
+});
+
+await row("GU11", "rejectionText: every server rejection says 'nothing was started' (round-1 B1; round-2 R2-1/R2-2 reasons added)", async () => {
+  for (const r of ["phase_required", "phase_mismatch", "phase_not_budgeted", "phase_bound_to_other_book", "phase_unbound", "plan_overlap_conflict", "lane_not_allowed", "scope_invalid"])
+    assert(rejectionText(r).includes("Nothing was started."), `${r} states nothing started`);
+  assert(rejectionText("phase_required").includes("budget phase"), "phase_required names the cause");
+  assert(rejectionText("phase_mismatch").includes("doesn't match"), "phase_mismatch names the cause");
+  assert(rejectionText("phase_bound_to_other_book").includes("different book"), "phase_bound_to_other_book names the cause");
+  assert(rejectionText("plan_overlap_conflict").includes("already running"), "plan_overlap_conflict names the cause");
+  assert(rejectionText("some_future_reason").includes("Nothing was started."), "unknown reasons fall back safely, never 'Started'");
+  assert(!rejectionText("phase_required").startsWith("Started"), "a rejection never reads as a start");
+});
+
+await row("GU12", "planSemanticsText: a plan's own lane + continuation, never the sheet's (round-1 B2)", async () => {
+  eq(planSemanticsText({ lane: "standard", scope: "book", keepGoing: true }),
+    "Standard lane · continues through the rest of the book", "book keepGoing");
+  eq(planSemanticsText({ lane: "standard", scope: "book", keepGoing: false }),
+    "Standard lane · does not continue on its own", "book without keepGoing");
+  eq(planSemanticsText({ lane: "batch", scope: "book", keepGoing: true }),
+    "Batch lane · continues through the rest of the book", "batch lane named");
+  eq(planSemanticsText({ lane: "standard", scope: "chapter" }),
+    "Standard lane · this chapter only", "chapter scope");
+  eq(planSemanticsText({ lane: "standard", scope: "segment" }),
+    "Standard lane · this segment only", "segment scope");
+  eq(planSemanticsText(null), "", "null safe");
+});
+
+await row("GU13", "planMoneyText: settled is known-settled accounting; unknown charges called out (round-1 money)", async () => {
+  eq(planMoneyText({ state: "active", settledMicroCents: 17749 }), "Settled $0.02",
+    "settled figure, ledger vocabulary");
+  eq(planMoneyText({ state: "halted_unknown", settledMicroCents: 300000 }),
+    "Settled $0.30 so far — plus a charge that isn't confirmed yet",
+    "halted_unknown: settled distinguished from the unconfirmed charge — never a final total, never a bill (synthetic figure, round-2 R2-3)");
+  assert(!/bill|spent|charged at/i.test(planMoneyText({ state: "halted_unknown", settledMicroCents: 1 })),
+    "no provider-bill language anywhere");
+  eq(planMoneyText(null), "", "null safe");
+});
+
+await row("GU14", "gen-fix-1: halted_unknown is terminal for matching; halted plan never reroutes, still renders", async () => {
+  // The whole corrected set, and the states that must stay live.
+  for (const s of ["complete", "partial", "failed", "cancelled", "superseded", "retired", "halted_unknown"])
+    assert(isTerminalPlanState(s), `${s} terminal`);
+  eq(TERMINAL_PLAN_STATES.length, 7, "exactly seven terminal states");
+  for (const s of ["active", "parked_quota", "generating", "queued"])
+    assert(!isTerminalPlanState(s), `${s} still live`);
+  // A book whose only plan is halted: NO active plan at any
+  // scope — the Generate sheet no longer reroutes, and neither
+  // shell poll (both gated on a non-terminal plan existing)
+  // can start. The browser-level proof is GF-2/GF-3.
+  const halted = { planId: "h", bookId: "b1", scope: "chapter", chapterIndex: 1, lane: "standard",
+    keepGoing: false, state: "halted_unknown", stopReason: "phase_halted_unknown_billing" };
+  eq(findActivePlan([halted], { bookId: "b1", scope: "chapter", chapterIndex: 1 }), null, "halted plan is not active at its own scope");
+  eq(findActivePlan([halted], { bookId: "b1", scope: "book" }), null, "halted plan is not active at book scope");
+  eq(findActivePlan([halted], { bookId: "b1", scope: "segment", occurrenceId: "x" }), null, "halted plan is not active at segment scope");
+  // Mixed list: the genuinely live plan is still found.
+  const live = { planId: "live", bookId: "b1", scope: "chapter", chapterIndex: 2, state: "active" };
+  eq(findActivePlan([halted, live], { bookId: "b1", scope: "chapter", chapterIndex: 2 })?.planId, "live", "live plan still found beside a halted one");
+  // Rendering is NOT filtered by the terminal set: the halted
+  // plan keeps its exact plain-language status and money text.
+  assert(planStatusText({ state: "halted_unknown", stopReason: "phase_halted_unknown_billing" }).includes("a charge needs checking"), "halted status text intact");
+  eq(planMoneyText({ state: "halted_unknown", settledMicroCents: 300000 }),
+    "Settled $0.30 so far — plus a charge that isn't confirmed yet", "halted money text intact");
+});
+
+const failed = rows.filter((r) => r[1] !== "PASS");
+console.log(`\nGENERATION UNIT BATTERY: ${rows.length - failed.length}/${rows.length} PASS`);
+process.exit(failed.length ? 1 : 0);

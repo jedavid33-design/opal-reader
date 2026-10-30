@@ -1,0 +1,11 @@
+$ python3 assemble.py
+tree paths: 89 (base 81); delta vs base: ['app-269.js', 'index.html', 'modules/composition-genfix1.js', 'modules/constants-genfix1.js', 'modules/entry-genfix1.js', 'modules/generation-surface-genfix1.js', 'modules/runnable-genfix1.js', 'styles-156.css', 'sw-genfix1.js']
+assemble: OK — twin trees byte-identical
+$ python3 package-assemble.py
+package: publish 89 paths; delta 9 paths ['app-269.js', 'index.html', 'modules/composition-genfix1.js', 'modules/constants-genfix1.js', 'modules/entry-genfix1.js', 'modules/generation-surface-genfix1.js', 'modules/runnable-genfix1.js', 'styles-156.css', 'sw-genfix1.js']
+package: bridge byte-identical; SW SHELL == import closure; PURGE empty
+package-assemble: OK
+$ treehash base (must reproduce the gen-pkg-1 publish digest 97e28094…)
+97e280948341e0d993975f46ebf089c10e9a2dfdc74487783ff80dd2069cc398  (81 files)  base
+$ treehash package/publish (the gen-fix-1 publish digest)
+cd7d589a101d511f14abee3c3343b383ca6b5f0ae7bc7a24d8c0557885e717a8  (89 files)  package/publish

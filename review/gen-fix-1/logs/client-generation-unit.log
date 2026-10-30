@@ -1,0 +1,16 @@
+PASS GU1 capabilities request: path + gate headers, token in header only
+PASS GU2 quote request: exact query params per scope
+PASS GU3 submit: the exact SubmitJob command contract
+PASS GU4 listAllPlans pages through cursors and stops
+PASS GU5 HTTP errors surface as coded errors (no silent success)
+PASS GU6 laneOptions: batch carries its server reason; admitted lane has none
+PASS GU7 exclusionLines: plain words from server tallies only
+PASS GU8 planStatusText: states and stop reasons in plain words
+PASS GU9 findActivePlan: scope/chapter matching, terminal plans ignored
+PASS GU10 phaseForBook + formatMicroCents: server data only
+PASS GU11 rejectionText: every server rejection says 'nothing was started' (round-1 B1; round-2 R2-1/R2-2 reasons added)
+PASS GU12 planSemanticsText: a plan's own lane + continuation, never the sheet's (round-1 B2)
+PASS GU13 planMoneyText: settled is known-settled accounting; unknown charges called out (round-1 money)
+PASS GU14 gen-fix-1: halted_unknown is terminal for matching; halted plan never reroutes, still renders
+
+GENERATION UNIT BATTERY: 14/14 PASS
