@@ -21,6 +21,16 @@
 // request (and once Batch is armed, lane sits inside the identity
 // hash, so a differing lane mints its own plan the same way
 // keepGoing does here).
+//
+// Round-2 amendment (Rowan comment 6511950562, R2-2): two tests
+// below originally asserted that a semantics change MINTS a
+// second plan while the first is still active over the same
+// set. R2-2 supersedes that: the active overlapping-occurrence
+// fence rejects the second submission while the first plan is
+// active, and the distinct plan is minted once the first is
+// terminal. The tests now assert exactly that sequence; their
+// B1/B2 subject (binding establishment, identity distinction,
+// convergence) is unchanged.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { makeHarness } from "./helpers/do-harness.mjs";
@@ -168,6 +178,21 @@ test("B1+B2: a registry phase establishes the book's binding; afterwards the boo
     phase: null, lane: "standard",
   });
   assert.equal(a.created, true);
+  // Round 2 (R2-2): while plan A is ACTIVE, the same-set phase
+  // run is fenced — two live plans must never own the same
+  // eligible occurrences. The binding-establishment sequence
+  // therefore completes A first (its state set directly here;
+  // the fence's contract is over plan state, and the driven
+  // completion path is proven in the fence + idempotency
+  // suites).
+  const fenced = await w.service.submitIntent({
+    commandId: "est-2a", bookId: BOOK, scope: "book", keepGoing: true,
+    phase: "forever-pucked", lane: "standard",
+  });
+  assert.equal(fenced.reason, "plan_overlap_conflict",
+    "round 2: an active plan fences the same set regardless of the phase change");
+  assert.equal(fenced.conflict.planId, a.planId);
+  w.h.db.prepare(`UPDATE d6_plans SET state = 'complete' WHERE plan_id = ?`).run(a.planId);
   // Same set, now under the registry phase: a DISTINCT plan (the
   // phase is inside intent identity), and it binds the book.
   const b = await w.service.submitIntent({
@@ -187,12 +212,26 @@ test("B1+B2: a registry phase establishes the book's binding; afterwards the boo
   assert.equal(w.h.rows("d6_plans").length, 2);
 });
 
-test("B2: changing only keepGoing at book scope mints a distinct plan; identical retries converge", async () => {
+test("B2: changing only keepGoing at book scope is a distinct intent — fenced while the first plan is active (R2-2), minted once it is terminal", async () => {
   const w = await makeWorld(fpBookData());
   const base = { bookId: BOOK, scope: "book", phase: "forever-pucked", lane: "standard" };
   const a = await w.service.submitIntent({ commandId: "kg-1", ...base, keepGoing: true });
-  const b = await w.service.submitIntent({ commandId: "kg-2", ...base, keepGoing: false });
   assert.equal(a.created, true);
+  // Round 1 asserted this second submission MINTS its own plan.
+  // Round 2 (R2-2) supersedes that while plan A is active: a
+  // distinct intent, yes — but creating it would put two live
+  // plans over the same eligible set, so admission rejects it
+  // with the conflict naming plan A's semantics.
+  const fenced = await w.service.submitIntent({ commandId: "kg-2a", ...base, keepGoing: false });
+  assert.equal(fenced.outcome, "rejected");
+  assert.equal(fenced.reason, "plan_overlap_conflict");
+  assert.equal(fenced.conflict.planId, a.planId);
+  assert.equal(fenced.conflict.keepGoing, true, "the conflict names the EXISTING plan's keepGoing");
+  assert.equal(w.h.rows("d6_plans").length, 1, "no second live plan over the same set");
+  // Once plan A is terminal, the different-semantics intent
+  // mints its own plan exactly as B2 requires.
+  w.h.db.prepare(`UPDATE d6_plans SET state = 'complete' WHERE plan_id = ?`).run(a.planId);
+  const b = await w.service.submitIntent({ commandId: "kg-2", ...base, keepGoing: false });
   assert.equal(b.created, true, "a keepGoing change is a different intent, not the old plan");
   assert.notEqual(b.planId, a.planId);
   const rows = w.h.rows("d6_plans");

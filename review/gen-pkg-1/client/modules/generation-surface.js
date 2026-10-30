@@ -132,6 +132,9 @@ const REJECTION_TEXT = Object.freeze({
   phase_required: "The server didn't accept that start: this book has a budget phase and the request didn't carry it. Nothing was started.",
   phase_mismatch: "The server didn't accept that start: the budget phase in the request doesn't match this book's. Nothing was started.",
   phase_not_budgeted: "The server didn't accept that start: that budget phase isn't one the server has for this book. Nothing was started.",
+  phase_bound_to_other_book: "The server didn't accept that start: that budget phase belongs to a different book on the server. Nothing was started.",
+  phase_unbound: "The server didn't accept that start: that budget phase has no book assigned to it on the server yet. Nothing was started.",
+  plan_overlap_conflict: "The server didn't accept that start: another plan is already running over some of the same segments. Nothing was started.",
   lane_not_allowed: "The server didn't accept that start: that lane isn't enabled. Nothing was started.",
   scope_invalid: "The server didn't accept that start. Nothing was started.",
 });

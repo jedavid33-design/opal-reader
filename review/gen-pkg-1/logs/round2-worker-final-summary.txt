@@ -1,0 +1,143 @@
+files: 118 total, 96 pass, 22 fail
+tests counted in per-file summaries: 918, pass 896
+failing files:
+adaptive-background-repair.test.mjs
+audio-chunk-playback.test.mjs
+chapter-quota-banner.test.mjs
+continue-preparation-progress.test.mjs
+continue-setup-recovery.test.mjs
+continue-to-quota.test.mjs
+cross-device-chapter-handoff.test.mjs
+dormant-playback-start.test.mjs
+first-chapter-segment-joining.test.mjs
+gemini-400-hydration.test.mjs
+gemini-batch-lane.test.mjs
+gemini-quota-diagnostics.test.mjs
+generation-manual-queue-reuse.test.mjs
+generation-playback-concurrency.test.mjs
+generation-session-sync-guard.test.mjs
+p8-d3-prod-envelope.test.mjs
+p8-upload-envelope.test.mjs
+playback-bookmarks.test.mjs
+restore-sound-rewind.test.mjs
+silent-audio-recovery.test.mjs
+split-first-update-stop.test.mjs
+sync-diagnostics.test.mjs
+FAIL adaptive-background-repair.test.mjs
+FAIL audio-chunk-playback.test.mjs
+PASS auto-split-quota-guard.test.mjs
+PASS batch-attempt-markers.test.mjs
+PASS cap-pause-rearm.test.mjs
+FAIL chapter-quota-banner.test.mjs
+PASS chapter-truth-projection.test.mjs
+PASS client-review-stage23.test.mjs
+PASS client-stage1-followups.test.mjs
+PASS client-stage1-substitution.test.mjs
+PASS client-stage1.test.mjs
+PASS client-stage2.test.mjs
+PASS client-stage3.test.mjs
+PASS client-stage4.test.mjs
+PASS client-store-p5.test.mjs
+PASS composite-cache-isolation.test.mjs
+PASS continue-chunked-staging.test.mjs
+FAIL continue-preparation-progress.test.mjs
+FAIL continue-setup-recovery.test.mjs
+FAIL continue-to-quota.test.mjs
+PASS coordinator-api.test.mjs
+PASS coordinator-bindings.test.mjs
+PASS coordinator-commands.test.mjs
+PASS coordinator-grants.test.mjs
+PASS coordinator-p3-claims.test.mjs
+PASS coordinator-recovery.test.mjs
+PASS coordinator-round3.test.mjs
+PASS coordinator-round4.test.mjs
+PASS coordinator-round5.test.mjs
+PASS coordinator-round6.test.mjs
+PASS coordinator-transitions.test.mjs
+FAIL cross-device-chapter-handoff.test.mjs
+PASS d5-audio-route.test.mjs
+PASS d6-correction.test.mjs
+PASS d6-correction2.test.mjs
+PASS d6-eligible-set.test.mjs
+PASS d6-enrichment-tooling.test.mjs
+PASS d6-executor-fi.test.mjs
+PASS d6-genstore.test.mjs
+PASS d6-grant-guards.test.mjs
+PASS d6-integration.test.mjs
+PASS d6-parked-inertness.test.mjs
+PASS d6-policy-split.test.mjs
+PASS d6-proofs.test.mjs
+PASS d6-seed-hardening.test.mjs
+PASS d6-service.test.mjs
+PASS d6-settings-cas.test.mjs
+PASS d6-syncpush-payload.test.mjs
+PASS d6-work-source.test.mjs
+PASS discovery-instance-safety.test.mjs
+FAIL dormant-playback-start.test.mjs
+PASS executor-p3.test.mjs
+FAIL first-chapter-segment-joining.test.mjs
+PASS flip-flop-regression.test.mjs
+PASS freeze-build.test.mjs
+PASS freeze-route-census.test.mjs
+FAIL gemini-400-hydration.test.mjs
+FAIL gemini-batch-lane.test.mjs
+FAIL gemini-quota-diagnostics.test.mjs
+PASS generation-flow-scenarios.test.mjs
+PASS generation-inline-ordering.test.mjs
+FAIL generation-manual-queue-reuse.test.mjs
+FAIL generation-playback-concurrency.test.mjs
+FAIL generation-session-sync-guard.test.mjs
+PASS genpkg1-diagnostics.test.mjs
+PASS genpkg1-intent-idempotency.test.mjs
+PASS genpkg1-overlap-fence.test.mjs
+PASS genpkg1-phase-authority.test.mjs
+PASS genpkg1-phase-policy.test.mjs
+PASS genpkg1-projection.test.mjs
+PASS genpkg1-surfaces.test.mjs
+PASS inline-split-client-merge.test.mjs
+PASS inline-split-integration.test.mjs
+PASS kernel-split-fingerprint.test.mjs
+PASS kv-coalescing.test.mjs
+PASS migration-p7.test.mjs
+PASS p8-b1-carry.test.mjs
+PASS p8-b1-correction.test.mjs
+PASS p8-b1-runner.test.mjs
+PASS p8-d3-chunk-mandate.test.mjs
+PASS p8-d3-chunking.test.mjs
+FAIL p8-d3-prod-envelope.test.mjs
+PASS p8-d3-production-surface.test.mjs
+PASS p8-d3-resource-proofs.test.mjs
+PASS p8-d3-scale-rehearsal.test.mjs
+PASS p8-migration-corrections.test.mjs
+PASS p8-migration-import.test.mjs
+PASS p8-migration-rehearsal.test.mjs
+PASS p8-option-d-two-phase.test.mjs
+PASS p8-part1-b7-revision.test.mjs
+PASS p8-part1-b7-safety.test.mjs
+PASS p8-part1-integration.test.mjs
+PASS p8-part2-f1-fix.test.mjs
+PASS p8-preview-p1-p2.test.mjs
+PASS p8-preview-ui.test.mjs
+FAIL p8-upload-envelope.test.mjs
+PASS park-monotonicity.test.mjs
+FAIL playback-bookmarks.test.mjs
+PASS poller-review-fixes.test.mjs
+PASS poller-watchlist.test.mjs
+PASS post-jobs-park-adoption.test.mjs
+PASS quota-park-concurrency.test.mjs
+PASS quota-park-governance.test.mjs
+PASS quota-probe.test.mjs
+PASS registry-discovery.test.mjs
+PASS repair-chain-continuation.test.mjs
+PASS repair-chain-foreground-gate.test.mjs
+FAIL restore-sound-rewind.test.mjs
+PASS shelf-bridge-contract.test.mjs
+PASS shelf-bridge-replay.test.mjs
+FAIL silent-audio-recovery.test.mjs
+FAIL split-first-update-stop.test.mjs
+PASS staging-no-reset.test.mjs
+FAIL sync-diagnostics.test.mjs
+PASS sync-manifest.test.mjs
+PASS sync-p4.test.mjs
+PASS tts-park-gate.test.mjs
+PASS wav-stitch.test.mjs

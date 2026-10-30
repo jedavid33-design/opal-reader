@@ -32,8 +32,9 @@
 //   GP-13 rollback: the ui-pkg-4 build boots on the same profile
 //         and state, state byte-identical after; the gen build
 //         boots again after it (no migration either direction)
-//   GP-14 halted_unknown plan (round-1 corrections): renders with
-//         the plain-language stop reason, settled figure WITH the
+//   GP-14 halted_unknown plan (round-1 corrections; fixture made
+//         clearly synthetic in round-2 R2-3): renders with the
+//         plain-language stop reason, settled figure WITH the
 //         unconfirmed-charge qualifier, its lane named, and no
 //         retry/resume affordance; nothing is submitted
 import http from "node:http";
@@ -457,24 +458,33 @@ await row("GP-5", "Generation view discovers the Wren-submitted plan; budget lin
 });
 
 await row("GP-14", "halted_unknown plan: accurate money labels, plain stop reason, no retry affordance", async () => {
-  // A plan in the exact shape of the production FP Ch 2 halt:
-  // known-settled accounting in settledMicroCents, one charge
-  // unconfirmed (unknown_billing) and OUTSIDE that figure.
+  // A SYNTHETIC halted_unknown plan (round-2 correction R2-3).
+  // The round-1 fixture reused the production FP Ch 2 halt's
+  // numbers — including 353736 micro-cents as settledMicroCents —
+  // and called itself that halt's "exact shape". That figure was
+  // the GRANT-TIME ESTIMATE/debit from the Ch 2 diagnosis, NOT
+  // known-settled spend, and presenting it as settled was wrong.
+  // This fixture therefore uses clearly synthetic amounts: a
+  // round known-settled figure ($0.30) in settledMicroCents, and
+  // the unconfirmed charge represented SEPARATELY — by the
+  // halted_unknown state and its qualifier text — never folded
+  // into the settled figure. A real Ch 2 display waits on the
+  // attempt-log accounting, not on any figure reused here.
   planStore.unshift({
-    planId: "plan-halted-fp", bookId: FP_ID, scope: "chapter", chapterIndex: 1, lane: "standard",
+    planId: "plan-halted-synthetic", bookId: FP_ID, scope: "chapter", chapterIndex: 1, lane: "standard",
     keepGoing: false, phase: "forever-pucked", state: "halted_unknown",
     stopReason: "phase_halted_unknown_billing",
-    totals: { eligible: 18, done: 0, failed: 8, blocked: 0, prompts: 0 },
-    settledMicroCents: 353736, bindingsPublished: 0, bindingsPending: 0,
+    totals: { eligible: 12, done: 4, failed: 2, blocked: 0, prompts: 0 },
+    settledMicroCents: 300000, bindingsPublished: 0, bindingsPending: 0,
     createdAt: "2026-10-30T00:00:00.000Z", updatedAt: "2026-10-30T00:01:00.000Z",
   });
   const before = commands.length;
   // The view polls while any non-terminal plan exists; the new
   // line appears on the next refresh.
-  await p.waitFor(`!!document.getElementById('genline-plan-halted-fp')`, { label: "halted plan line rendered", timeout: 20000 });
-  const line = await p.eval(`document.getElementById('genline-plan-halted-fp')?.textContent`);
+  await p.waitFor(`!!document.getElementById('genline-plan-halted-synthetic')`, { label: "halted plan line rendered", timeout: 20000 });
+  const line = await p.eval(`document.getElementById('genline-plan-halted-synthetic')?.textContent`);
   assert(line && line.includes("a charge needs checking"), `plain-language stop reason: ${line}`);
-  assert(line.includes("Settled $0.35"), `settled (known-settled) figure present: ${line}`);
+  assert(line.includes("Settled $0.30"), `settled (known-settled, synthetic) figure present: ${line}`);
   assert(line.includes("isn't confirmed yet"), `unconfirmed charge called out, never folded into a total: ${line}`);
   assert(!/bill(ed)?\b|spent at/i.test(line), `no provider-bill language: ${line}`);
   assert(line.includes("Standard lane"), `the plan's lane is named: ${line}`);

@@ -1,0 +1,18 @@
+✔ R2-2: a keepGoing change over the same set is fenced — the conflict names the existing plan's semantics (12.079608ms)
+✔ R2-2: a byte-identical retry still converges — the fence never fires on convergence (3.910428ms)
+✔ R2-2: non-overlapping sets still admit; a later overlapping scope is fenced by whichever plan owns the segment (5.654877ms)
+✔ R2-2: a book-scope intent is fenced by an active chapter plan over a subset of its set (3.97196ms)
+✔ R2-2: a batch-shaped request meets the lane gate BEFORE the fence (documented ordering) (5.760395ms)
+✔ R2-2: terminal plans (complete, partial) do not fence (5.6509ms)
+✔ R2-2: a halted_unknown plan does not fence a fresh intent — and is left byte-identical (never resumed) (5.115727ms)
+✔ R2-2: a parked plan (parked_quota) DOES fence — driveOnce resumes parks without a fresh decision (5.468256ms)
+✔ R2-2: two racing different-semantics submissions over one set create exactly one plan (4.666303ms)
+✔ R2-2: the parked Ch 3 job is untouched by admission and by the fence; its segments never enter a plan (8.140717ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 264.854289

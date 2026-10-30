@@ -1,0 +1,4 @@
+package: publish 81 paths (base 73 + 9 delta), non-delta byte-identical, bridge SHA pinned
+package: import closure 26 modules, all inside SW SHELL (33 paths)
+package: rollback base sw-ui4 SHELL fully resolvable (31 paths)
+package-assemble: ALL CHECKS PASS

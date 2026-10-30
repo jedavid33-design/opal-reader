@@ -1,0 +1,18 @@
+✔ R2-1: capabilities derives the phase's book from the registry — before any plan exists (8.920327ms)
+✔ R2-1: the mapped book with its registry phase is admitted; the plan stores the registry phase (8.374658ms)
+✔ R2-1: the mapped book with a missing/null phase is rejected (phase_required), nothing moves (3.294264ms)
+✔ R2-1: the mapped book with a different phase is rejected (phase_mismatch), nothing moves (3.184779ms)
+✔ R2-1: an unrelated book's forged claim on the bound phase is rejected (phase_bound_to_other_book) (3.55153ms)
+✔ R2-1: an unbound book runs unbudgeted with no phase; an invented phase is rejected (registry mode) (8.557843ms)
+✔ R2-1: no submission field opts out of the registry — spoofed mode fields change nothing (4.053353ms)
+✔ R2-1: bindPhaseBook — idempotent re-record, conflict keeps the original, shape/budget validation (4.855417ms)
+✔ R2-1 legacy mode: with NO binding recorded, the round-1 first-use rules stand (explicit fixture behavior) (13.466289ms)
+✔ R2-1 entry level: once the binding is recorded, the public path enforces it (59.79839ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 555.483617

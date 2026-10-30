@@ -145,11 +145,13 @@ await row("GU10", "phaseForBook + formatMicroCents: server data only", async () 
   eq(formatMicroCents(1.5), "—", "non-integer refused");
 });
 
-await row("GU11", "rejectionText: every server rejection says 'nothing was started' (round-1 B1)", async () => {
-  for (const r of ["phase_required", "phase_mismatch", "phase_not_budgeted", "lane_not_allowed", "scope_invalid"])
+await row("GU11", "rejectionText: every server rejection says 'nothing was started' (round-1 B1; round-2 R2-1/R2-2 reasons added)", async () => {
+  for (const r of ["phase_required", "phase_mismatch", "phase_not_budgeted", "phase_bound_to_other_book", "phase_unbound", "plan_overlap_conflict", "lane_not_allowed", "scope_invalid"])
     assert(rejectionText(r).includes("Nothing was started."), `${r} states nothing started`);
   assert(rejectionText("phase_required").includes("budget phase"), "phase_required names the cause");
   assert(rejectionText("phase_mismatch").includes("doesn't match"), "phase_mismatch names the cause");
+  assert(rejectionText("phase_bound_to_other_book").includes("different book"), "phase_bound_to_other_book names the cause");
+  assert(rejectionText("plan_overlap_conflict").includes("already running"), "plan_overlap_conflict names the cause");
   assert(rejectionText("some_future_reason").includes("Nothing was started."), "unknown reasons fall back safely, never 'Started'");
   assert(!rejectionText("phase_required").startsWith("Started"), "a rejection never reads as a start");
 });
@@ -171,9 +173,9 @@ await row("GU12", "planSemanticsText: a plan's own lane + continuation, never th
 await row("GU13", "planMoneyText: settled is known-settled accounting; unknown charges called out (round-1 money)", async () => {
   eq(planMoneyText({ state: "active", settledMicroCents: 17749 }), "Settled $0.02",
     "settled figure, ledger vocabulary");
-  eq(planMoneyText({ state: "halted_unknown", settledMicroCents: 353736 }),
-    "Settled $0.35 so far — plus a charge that isn't confirmed yet",
-    "halted_unknown: settled distinguished from the unconfirmed charge — never a final total, never a bill");
+  eq(planMoneyText({ state: "halted_unknown", settledMicroCents: 300000 }),
+    "Settled $0.30 so far — plus a charge that isn't confirmed yet",
+    "halted_unknown: settled distinguished from the unconfirmed charge — never a final total, never a bill (synthetic figure, round-2 R2-3)");
   assert(!/bill|spent|charged at/i.test(planMoneyText({ state: "halted_unknown", settledMicroCents: 1 })),
     "no provider-bill language anywhere");
   eq(planMoneyText(null), "", "null safe");

@@ -1,0 +1,16 @@
+FAIL GP-1 boot under sw-genpkg1, connect, library renders - timeout waiting for: genpkg1 controller
+FAIL GP-2 sheet renders the server quote; Batch disabled with its server reason - timeout waiting for: library row gb
+FAIL GP-3 double-tap submits exactly ONE SubmitJob of the pinned shape - timeout waiting for: started note
+FAIL GP-4 reopening the same scope reroutes to the active plan (no second submit) - page exception: {"exceptionId":1,"text":"Uncaught","lineNumber":0,"columnNumber":38,"scriptId":"36","stackTrace":{"callFrames":[{"functionName":"","scriptId":"36","url":"","lineNumber":0,"columnNumber":38}]},"exception":{"type":"object","subtype":"error","className":"TypeError","description":"TypeError: Cannot read properties of null (reading 'click')\n    at <anonymous>:1:39","objectId":"8156164489792384228.2.2"}}
+FAIL GP-5 Generation view discovers the Wren-submitted plan; budget line from server amounts - timeout waiting for: view summary rendered
+FAIL GP-14 halted_unknown plan: accurate money labels, plain stop reason, no retry affordance - timeout waiting for: halted plan line rendered
+FAIL GP-6 chapter scope submits scoped: chapterIndex + keepGoing false - timeout waiting for: library row gb
+FAIL GP-7 parked chapter: Start never offered, parked wording, nothing submitted - timeout waiting for: library row 5c589095-f812-48a2-8ab2-03ba2791f2b2
+FAIL GP-8 voice_prompt segment: 'needs a voice choice first', no control submits - page exception: {"exceptionId":2,"text":"Uncaught","lineNumber":0,"columnNumber":37,"scriptId":"41","stackTrace":{"callFrames":[{"functionName":"","scriptId":"41","url":"","lineNumber":0,"columnNumber":37}]},"exception":{"type":"object","subtype":"error","className":"TypeError","description":"TypeError: Cannot read properties of null (reading 'click')\n    at <anonymous>:1:38","objectId":"8156164489792384228.2.4"}}
+FAIL GP-9 FP book submit carries the phase from server capabilities - page exception: {"exceptionId":3,"text":"Uncaught","lineNumber":0,"columnNumber":46,"scriptId":"42","stackTrace":{"callFrames":[{"functionName":"","scriptId":"42","url":"","lineNumber":0,"columnNumber":46}]},"exception":{"type":"object","subtype":"error","className":"TypeError","description":"TypeError: Cannot read properties of null (reading 'click')\n    at <anonymous>:1:47","objectId":"8156164489792384228.2.6"}}
+FAIL GP-10 timeout-after-accepted-submit: plan re-read reports Started, no blind resubmit - timeout waiting for: library row gb
+FAIL GP-11 state record + Shelf record byte-stable across all generation flows - fingerprint drift across generation flows
+FAIL GP-12 halted capabilities: Start never offered - page exception: {"exceptionId":4,"text":"Uncaught","lineNumber":0,"columnNumber":37,"scriptId":"44","stackTrace":{"callFrames":[{"functionName":"","scriptId":"44","url":"","lineNumber":0,"columnNumber":37}]},"exception":{"type":"object","subtype":"error","className":"TypeError","description":"TypeError: Cannot read properties of null (reading 'click')\n    at <anonymous>:1:38","objectId":"8156164489792384228.2.8"}}
+FAIL GP-13 rollback: ui-pkg-4 boots on the same state untouched; gen build boots after it - Cannot read properties of null (reading 'ls')
+
+CHROMIUM PROOF: 0/14 PASS; page exceptions: 0

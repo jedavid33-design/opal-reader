@@ -19,11 +19,16 @@ Candidate commits are pinned to the review branch `ui1-review` ONLY (see
   round 0 was `c5240489558a760424287e521159df0d8442c62eb6ff12ef517a840e136fed0d`,
   368 files, under the round-0 builder's ad-hoc serialization — the delta
   between the trees is exactly the round-1 correction set in the Round-1
-  section below)
+  section below); **round-2 corrected tree**
+  `6685e7f91f219b80b935883be1a7bdf23f7bad169cc05e42c9bac2892fdac66c` (372 files;
+  the delta vs round 1 is exactly the round-2 correction set in the Round-2
+  section below: `service.mjs` corrected, `phase-policy.mjs` new, two new
+  test suites)
 - Entry: `worker/worker-entry-prod-d6.js` (the tree's `v2/` symlink mirrors `worker/`)
 - Changed-file SHA-256 prefixes: entry `3b377d25eecddfa9…`,
-  `generation/service.mjs` `2ae2031dbe04f5357…` (round-1 corrected; round 0
-  was `9b4079232cb9cb2c…`),
+  `generation/service.mjs` `8d3912bbcebd0bfb…` (round-2 corrected; round-1
+  corrected was `2ae2031dbe04f5357…`; round 0 was `9b4079232cb9cb2c…`),
+  `generation/phase-policy.mjs` (new, round 2) `f9c858b826303060…`,
   `generation/binding-projection.mjs` (new) `d100f02ce199bbcd…`,
   `generation/d6-executor.mjs` `df7e0003f76177a4…`
 
@@ -33,13 +38,18 @@ Candidate commits are pinned to the review branch `ui1-review` ONLY (see
 - Publish tree: `package/publish/`, 81 paths, tree hash (same digest method
   as the worker tree above): **round-1 corrected tree**
   `558d090676c510e705e37acedeae4ff768443b70823263665188626b1c22ca2c`
-  (round 0 was `bbbf6bb3e1251c453a48da5e2730690c36d1a5e889178e4dbb8e0b40c33179c8`).
+  (round 0 was `bbbf6bb3e1251c453a48da5e2730690c36d1a5e889178e4dbb8e0b40c33179c8`);
+  **round-2 corrected tree**
+  `a84344d43b12b17d47763e8ada1f119609a91c5a1a510dac34ea8355de9321d5`.
   Round-1 changed delta files: `app-268.js` `dc44b698c3b511384d…`,
   `modules/generation-surface.js` `6ce61c18ea9af0613f66…`,
   `modules/entry-genpkg1.js` `f882feb17932a53603a8…` (export list only);
-  the other six delta paths are byte-identical to round 0. **Entry name and
-  build marker unchanged** (`app-268.js` / `d5b-v2-generation-client-2`) —
-  content-only corrections.
+  the other six delta paths are byte-identical to round 0. Round 2 changed
+  exactly one delta file: `modules/generation-surface.js`
+  `82677469add174d6…` (rejection wording for the three round-2 server
+  reasons); the other eight delta paths are byte-identical to round 1.
+  **Entry name and build marker unchanged** (`app-268.js` /
+  `d5b-v2-generation-client-2`) — content-only corrections.
 - Entry `app-268.js`, service worker `sw-genpkg1.js`, stylesheet `styles-155.css`
 - Build marker **`d5b-v2-generation-client-2`** (the `-2` distinguishes this build
   from the WS-4 `d5b-v2-generation-client-1` candidate, which sat on the superseded
@@ -432,10 +442,15 @@ the settled figure, and the plan line carries no retry/resume affordance
   halted_unknown qualifier and a no-bill-language assertion).
 - **Chromium proof** — GP-4 additionally asserts the reroute note names
   the existing plan's lane + continuation; new **GP-14** (halted_unknown
-  view test): a stub plan in the production Ch 2 halt's exact shape
-  renders "Stopped — a charge needs checking before it can continue",
-  "Settled $0.35 so far — plus a charge that isn't confirmed yet",
-  its lane, no retry/resume control, and zero submissions. The stub now
+  view test): a stub halted_unknown plan renders "Stopped — a charge
+  needs checking before it can continue", the settled line with its
+  unconfirmed-charge qualifier, its lane, no retry/resume control, and
+  zero submissions. *(Round-2 correction R2-3: the round-1 fixture
+  reused the production Ch 2 halt's numbers and called itself that
+  halt's "exact shape", presenting the $0.3537 grant-time estimate as
+  a settled figure; the fixture is now clearly synthetic — see the
+  Round-2 section. The round-1 run below passed with the old fixture;
+  the corrected fixture passes in the round-2 runs.)* The stub now
   carries `keepGoing` on plans (seeded + intent-created), mirroring the
   corrected worker surface. **14/14 PASS, 0 page exceptions** on tree-a
   and on `package/publish`. Disclosure: the first tree-a run failed
@@ -458,6 +473,248 @@ the settled figure, and the plan line carries no retry/resume affordance
   (publish = base + 9-path delta exact; bridge SHA pinned — independently
   re-verified `bc0a5879fbf4a6f455170ead8e0fbe1aa19d82126df4eb631bd0ebad9112ec8e`).
 
+## Round-2 corrections (Rowan round-2 source review, comment 6511950562)
+
+Applied locally to the round-1 trees; **no deploy, no publication, no
+production contact.** Rowan withheld round-2 sign-off on two residual
+admission blockers (R2-1, R2-2) plus a test-fixture accuracy correction
+(R2-3). This section is the correction record. Everything not named here
+is untouched: the adapters, the 120 s timeout, `reconcileUnknown`
+wiring, the parked Ch 3 fence logic, the entry, and the Shelf bridge
+(re-verified `bc0a5879…` in the round-2 publish tree).
+
+### R2-1 — phase authority derives from a server-held registry, not from caller history
+
+**The defect.** Round 1's `admitPhase` derived a book's binding from the
+phase of plans earlier callers had admitted. For an unbound book, first
+use still originated with the caller: any book could claim the
+`forever-pucked` envelope, and a book could run once unbudgeted and then
+again under the phase (the round-1 suite asserted both as behavior).
+
+**The mechanism (new module `worker/generation/phase-policy.mjs`).** A
+server-held registry in the coordinator's own store — `d6_phase_bindings
+(phase PRIMARY KEY, book_id, source, created_at, updated_at)` — one row
+per budgeted phase naming the ONE book authorized to ride it. Following
+the round-0 binding-projection precedent, the DDL lives in the module
+(not in `GEN_SCHEMA` — the correction suites pin the bootstrap's table
+set) and is ensured lazily: DDL-only, idempotent, no bootstrap reads.
+The only writer is `recordPhaseBinding`, exposed on the service as
+`bindPhaseBook`: insert-if-absent (same pair re-recorded = idempotent
+no-op; a phase already bound to a different book =
+`phase_binding_conflict` and the recorded binding stands; a
+non-budgeted phase can never acquire a binding). **No client route
+reaches the writer in this build, and nothing was recorded anywhere
+outside test fixtures.**
+
+**Establishment is the switch — the boundary, stated exactly.**
+`admitPhase` reads the mode from SERVER STATE, never from the
+submission:
+
+- **Registry established (≥1 binding recorded):** the registry is the
+  complete authority for every budgeted phase, on every path (direct
+  service calls and the public entry alike — proven at entry level).
+  A bound book's phase is DERIVED from its row: missing →
+  `phase_required`; different → `phase_mismatch`. A book with no row
+  cannot claim a budgeted phase: bound to another book →
+  `phase_bound_to_other_book`; budgeted but unrecorded →
+  `phase_unbound` (fail-closed; unreachable with today's single-phase
+  registry once the FP binding is recorded, and the standing rule is
+  that a phase enters the budget registry and the binding registry
+  together). Invented phase → `phase_not_budgeted`; no phase →
+  unbudgeted. First-use binding ceases to exist, and there is **no
+  input field that selects the legacy rules** (adversarially tested
+  with spoofed mode fields).
+- **Registry empty (legacy mode):** the round-1 history derivation,
+  preserved verbatim as `admitPhaseLegacy`. This is the explicit
+  legacy/service-fixture behavior Rowan sanctioned: the existing D6
+  suites stage two books under one phase inside registry-free fixture
+  databases (`d6-service`, and `d6-correction` through the real DO
+  route and the real entry — both verified by reading their flows
+  before choosing this boundary), and a hardcoded production-book
+  rule enforced in `submitIntent` would have broken them. No
+  baseline suite was changed.
+
+**Why state, not a code constant or an admission flag.** A constant
+binding enforced on any path the fixtures exercise breaks
+`d6-correction` (its C2/C3 fixtures submit fixture books under
+`forever-pucked` through the real route/entry and expect admission);
+an input-carried admission flag would be caller-spoofable through
+the entry's intent forward. Server state is the only boundary that
+is both fixture-preserving and unforgeable. **Deploy-gate obligation
+(recorded here, not performed):** the gen-pkg-1 deploy gate records
+the production pair — `forever-pucked` ↔
+`5c589095-f812-48a2-8ab2-03ba2791f2b2` — BEFORE the client build is
+published. Until that act, production admission remains under the
+legacy rules, where Forever Pucked is already history-bound by its
+admitted plans (the G10 smoke + Ch 2 plans); the registry replaces
+that derivation with an independent one and widens nothing.
+`capabilities()` now reports a phase's book from the registry when
+established (even before any plan exists), falling back to the
+round-1 plan-derived link in legacy mode.
+
+### R2-2 — the active overlapping-occurrence fence
+
+**The defect.** B2's semantics-in-identity stops silent substitution,
+but two LIVE plans over the same eligible occurrences could both be
+granted and both pay for the same content (the round-1 phase-authority
+suite asserted keepGoing true/false submissions both creating active
+plans over one set).
+
+**The fence (`activeOverlapConflict`, inside `submitIntent`).**
+Admission order: lane gate → phase admission → eligible-set build →
+intent identity → **convergence** (a byte-identical retry returns its
+own plan and never fences itself) → **fence** → plan insert. The
+convergence lookup, the fence check, and the insert sit in one
+synchronous stretch with no intervening await, so two racing
+submissions cannot both pass (proven by the concurrency test). A new
+intent whose eligible set intersects the eligible entries of any
+non-terminal plan for the same book is rejected:
+
+```json
+{ "outcome": "rejected", "reason": "plan_overlap_conflict",
+  "conflict": { "planId": "...", "bookId": "...", "scope": "chapter",
+                "lane": "standard", "keepGoing": true,
+                "phase": null, "overlapCount": 2 } }
+```
+
+The conflict names the EXISTING plan and its immutable semantics —
+never the request's. **Which states fence:** every state the driver
+can still grant against without a fresh operator decision — `active`
+and the `parked_*` family (quota/cap/storage parks resume on their
+own in `driveOnce`; tested for `parked_quota`). **Terminal states do
+not fence:** `complete`, `partial`, and `halted_unknown` — a halted
+plan grants again only after a gated unknown-billing reconciliation,
+so it must not block a fresh intent; the fence only reads it, and the
+suite asserts the halted plan's row and job links are byte-identical
+after a fresh intent is admitted over its set (never resumed, never
+altered, no grants). Non-overlapping sets still admit — including
+beside an active plan — so later runs over newly eligible segments
+stay possible once prior owners are terminal. The parked Ch 3 JOB is
+a different mechanism: its occurrences never enter an eligible set
+(the builder's `excluded_parked`/`excluded_ch3` dispositions are
+unchanged), so they can neither fence nor be fenced; the suite
+asserts the parked job's rows are byte-identical across an admission
+and a fenced rejection, with its state still `parked_policy`. A
+batch-shaped request meets the `lane_not_allowed` gate before the
+fence ever sees it (documented ordering, tested both with and without
+an active overlapping plan).
+
+**Client wording.** `rejectionText` gains entries for the three new
+reasons (`phase_bound_to_other_book`, `phase_unbound`,
+`plan_overlap_conflict`) — each ends "Nothing was started." GU11
+covers all eight reasons.
+
+**Round-1 genpkg1 suites amended where round-2 law superseded their
+premises** (candidate suites, not baseline suites; each amendment is
+commented in place):
+
+- `genpkg1-phase-authority` — the binding-establishment and
+  keepGoing tests asserted second same-set plans minting beside an
+  active first plan. They now assert the fence rejection first
+  (naming the first plan's semantics), then mint the distinct plan
+  once the first is terminal; their B1/B2 subjects are unchanged.
+- `genpkg1-intent-idempotency` — the newly-eligible-segments test
+  asserted an expanded set minting a new plan while the first plan
+  was still active over the shared segment. It now asserts the
+  fence's named conflict while the first plan is active, drives the
+  first plan to a REAL completion (executor path), and then mints
+  the new plan whose eligible work is the newly eligible segment
+  (the completed plan's segment reads `bound_already`). Obligation
+  3's guarantee — a later intentional run is never swallowed by a
+  stale plan — is preserved; what changed is that an overlapping
+  run waits for the active owner to finish instead of duplicating
+  its spend surface.
+
+All pre-existing (baseline) suites were read before the design was
+chosen and needed no changes: their multi-plan flows are
+same-intent convergences, different books, or post-completion runs.
+
+### R2-3 — GP-14 fixture accuracy
+
+The round-1 GP-14 fixture reused the production Ch 2 halt's numbers —
+`settledMicroCents: 353736` — and called itself that halt's "exact
+shape". Per the Ch 2 diagnosis, $0.3537 was the GRANT-TIME
+ESTIMATE/debit, not known-settled spend; presenting it as settled was
+wrong. The fixture is now clearly synthetic: plan id
+`plan-halted-synthetic`, totals `{eligible: 12, done: 4, failed: 2}`,
+and `settledMicroCents: 300000` (a round $0.30), with the unconfirmed
+charge represented separately — by the `halted_unknown` state and its
+qualifier text — never folded into the settled figure. GU13's
+halted_unknown case uses the same synthetic figure. GP-14 renders
+"Settled $0.30 so far — plus a charge that isn't confirmed yet". A
+repo-wide grep confirms no test or report text presents $0.3537 as
+settled/provider spend anywhere (its two remaining mentions — the
+GP-14 correction comment and the round-1 money section — both frame
+it explicitly as the grant-time estimate). A real Ch 2 display waits
+on the attempt-log accounting the diagnostics surface reads; nothing
+here fabricates it.
+
+### New and amended tests (all on the round-2 final trees)
+
+- **Worker** `tests/genpkg1-phase-policy.test.mjs` — **10/10**:
+  capabilities derives the phase→book link from the registry before
+  any plan exists; mapped book + correct phase admitted (plan stores
+  the registry phase); mapped book + null → `phase_required`, +
+  different → `phase_mismatch`, both with plan/ledger/attempt/grant
+  counts provably unchanged; unrelated book's forged `forever-pucked`
+  → `phase_bound_to_other_book` (counts unchanged, binding stands);
+  unbound book unbudgeted admitted / invented phase →
+  `phase_not_budgeted`; spoofed mode fields change nothing;
+  `bindPhaseBook` idempotence, conflict, budget and shape validation;
+  legacy mode preserved (two books share a phase in a registry-free
+  database; history binding governs afterwards); and an entry-level
+  test through the REAL public path (production entry + D6 class,
+  halt="1"): after the binding row is recorded in the DO store, the
+  mapped book is admitted and both the forged claim and the
+  missing-phase submission are rejected over the wire, creating
+  nothing.
+- **Worker** `tests/genpkg1-overlap-fence.test.mjs` — **10/10**:
+  keepGoing change fenced with the existing plan's semantics named;
+  identical retry converges; non-overlapping segment run admits
+  beside an active chapter plan and then fences the overlapping
+  chapter run; book scope fenced by an active chapter plan;
+  batch-shaped requests meet the lane gate first (with and without
+  an active plan); `complete`/`partial` do not fence;
+  `halted_unknown` does not fence and is byte-identical afterwards;
+  `parked_quota` fences; two racing different-semantics submissions
+  create exactly one plan and one job set; the parked Ch 3 job is
+  byte-identical across an admission and a fenced rejection and is
+  never resumed.
+- **Client unit** — store battery **13/13**; generation unit
+  **13/13** (GU11 extended to all eight rejection reasons; GU13 on
+  the synthetic figure).
+- **Chromium proof** — **14/14 PASS, 0 page exceptions** on tree-a
+  AND on `package/publish` (GP-14 on the corrected synthetic
+  fixture). Disclosure: the builder's first two package-tree
+  attempts served the WRONG tree (`GEN_TREE=../package/publish`
+  resolves outside `gen/` — the ui-pkg-4 package tree — so the app
+  under test was the old playback build and every row failed at
+  boot); both logs are preserved
+  (`logs/round2/client-chromium-package-first-run.log`,
+  `client-chromium-package-wrong-tree-run.log`) and the corrected
+  invocation (`GEN_TREE=package/publish`) passed 14/14 in 24 s.
+  The trees themselves are byte-identical (verified by recursive
+  diff), so no product behavior was ever in question.
+- **Package static checks: ALL PASS** on the round-2 tree (publish =
+  base + 9-path delta exact; the round-2 delta within the delta is
+  `modules/generation-surface.js` only; bridge SHA pinned and
+  independently re-verified
+  `bc0a5879fbf4a6f455170ead8e0fbe1aa19d82126df4eb631bd0ebad9112ec8e`).
+
+### Battery (round-2 final trees)
+
+- Worker: **118 suite files: 96 pass / 22 fail** — the failing set is
+  byte-identical to the recorded 22-name baseline (20 legacy-fixture
+  ENOENT + 2 git-required envelope suites); zero assertion failures
+  anywhere (896/918 tests pass; the two new suites add 20 tests,
+  all passing, inside the 96). Logs:
+  `~/workspace/gen-pkg-1/logs/round2/worker-final/`.
+- Tree hashes (same digest method as round 1): worker
+  `6685e7f91f219b80b935883be1a7bdf23f7bad169cc05e42c9bac2892fdac66c`
+  (372 files); client publish
+  `a84344d43b12b17d47763e8ada1f119609a91c5a1a510dac34ea8355de9321d5`
+  (81 paths).
+
 ## Pin
 
 Pinned to `jedavid33-design/opal-reader` branch `ui1-review` (review only;
@@ -476,3 +733,11 @@ completed-report head), same `review/gen-pkg-1/` layout, plus the new
 worker suite and the round-1 logs. The re-pin commit SHA is recorded in
 the builder's completion message, and the branch head was verified by
 independent read-back after the push.
+
+**Round-2 re-pin:** the round-2 corrected artifacts were re-pinned on
+the same branch with parent `b8fe8c0ee496332ea059cb05686ba7e73cb793eb`
+(the round-1 completed-report head), same `review/gen-pkg-1/` layout,
+plus the two new worker suites, the amended round-1 suites, and the
+round-2 logs. The re-pin commit SHA is recorded in the builder's
+completion message, and the branch head was verified by independent
+read-back after the push.

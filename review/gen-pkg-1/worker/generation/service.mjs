@@ -20,6 +20,10 @@ import {
   reconcileBindingProjections, isBindingPublished,
   ensureBindingProjectionSchema,
 } from "./binding-projection.mjs";
+import {
+  phaseBindingFor, phaseBindingForBook, phaseRegistryEstablished,
+  recordPhaseBinding,
+} from "./phase-policy.mjs";
 
 // Voice mappings, recorded only (proposal §6.4): a voice-prompt row
 // names the character and the recorded mapping where one exists.
@@ -162,29 +166,69 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   }
 
   // B1 (Rowan gen-pkg-1 source review round 1, comment
-  // 6511518715): the phase a plan rides is SERVER authority, never
-  // caller trust. The budgeted-phase universe is the registry
-  // (PHASE_BUDGET_MICRO_CENTS — a phase string outside it is an
-  // invention, not a budget). A book's binding to a budgeted phase
-  // is server state: the phase of the plans this service has
-  // already admitted for that book (the same record capabilities()
-  // reads its phase→book link from). Rules, evaluated before any
-  // plan or ledger state moves:
-  //   * a book already bound to a budgeted phase may only ever
-  //     submit under that exact phase — a missing/null phase is
-  //     rejected (phase_required) and any different phase is
+  // 6511518715) + R2-1 (round 2, comment 6511950562): the phase a
+  // plan rides is SERVER authority, never caller trust, evaluated
+  // before any plan or ledger state moves. Two modes, selected by
+  // SERVER STATE — never by anything in the submission:
+  //
+  // REGISTRY MODE (the phase→book registry in phase-policy.mjs
+  // has been established — see that module for the establishment
+  // rule and the deploy-gate act that records the production
+  // binding): the binding is DERIVED from the registry alone.
+  //   * a book the registry binds to a budgeted phase may only
+  //     ever submit under that exact phase — a missing/null phase
+  //     is rejected (phase_required) and any different phase is
   //     rejected (phase_mismatch), so no plan for a budgeted book
   //     can be created outside its phase accounting and hard stop;
-  //   * an unbound book presenting a phase outside the registry
-  //     is rejected (phase_not_budgeted);
-  //   * an unbound book presenting a registry phase establishes
-  //     its binding with the plan this submission creates; an
-  //     unbound book with no phase runs unbudgeted (phase null).
-  // The admitted phase — derived here, not the caller's raw
-  // value — is what the plan stores and what intent identity (B2)
-  // binds.
+  //   * a book with NO registry row cannot claim a budgeted phase
+  //     at all: a phase bound to another book is rejected
+  //     (phase_bound_to_other_book) and a budgeted phase with no
+  //     recorded book is rejected (phase_unbound) — other books
+  //     cannot claim the Forever Pucked envelope, and first-use
+  //     binding no longer exists;
+  //   * an invented phase (outside PHASE_BUDGET_MICRO_CENTS) is
+  //     rejected (phase_not_budgeted); no phase runs unbudgeted.
+  //
+  // LEGACY MODE (registry not yet established — every pre-
+  // registry deployment and fixture database): the round-1 rules
+  // in admitPhaseLegacy below, where a book's binding is the
+  // phase of the plans this service has already admitted for it
+  // and an unbound book presenting a registry phase establishes
+  // its binding with the plan it creates. This is the explicit
+  // legacy/service-fixture behavior Rowan sanctioned preserving;
+  // it is reachable ONLY while no binding has ever been
+  // recorded, and no submission can select it.
+  //
+  // The admitted phase — derived in admitPhase, not the caller's
+  // raw value — is what the plan stores and what intent identity
+  // (B2) binds.
   function admitPhase(bookId, callerPhaseRaw) {
     const callerPhase = callerPhaseRaw ?? null;
+    if (!phaseRegistryEstablished(coord))
+      return admitPhaseLegacy(bookId, callerPhase);
+    const own = phaseBindingForBook(coord, bookId);
+    if (own) {
+      if (callerPhase === null)
+        return { ok: false, reason: "phase_required" };
+      if (callerPhase !== own.phase)
+        return { ok: false, reason: "phase_mismatch" };
+      return { ok: true, phase: own.phase };
+    }
+    if (callerPhase !== null) {
+      if (!Object.hasOwn(PHASE_BUDGET_MICRO_CENTS, callerPhase))
+        return { ok: false, reason: "phase_not_budgeted" };
+      if (phaseBindingFor(coord, callerPhase))
+        return { ok: false, reason: "phase_bound_to_other_book" };
+      return { ok: false, reason: "phase_unbound" };
+    }
+    return { ok: true, phase: null };
+  }
+
+  // The round-1 history derivation, preserved verbatim as the
+  // legacy mode (see above). Do not "fix" the first-use binding
+  // here: registry mode is where first use is governed, and this
+  // path exists for registry-free deployments and fixtures.
+  function admitPhaseLegacy(bookId, callerPhase) {
     const boundRow = coord._oneOrNull(
       `SELECT phase FROM d6_plans
         WHERE book_id = ? AND phase IS NOT NULL
@@ -202,6 +246,81 @@ export function createGenerationService({ coord, env = {}, store = null, sources
         && !Object.hasOwn(PHASE_BUDGET_MICRO_CENTS, callerPhase))
       return { ok: false, reason: "phase_not_budgeted" };
     return { ok: true, phase: callerPhase };
+  }
+
+  // The service handle on the registry writer (phase-policy.mjs
+  // recordPhaseBinding): recording a phase→book binding is a
+  // gated operator act — no client route reaches this method in
+  // this build (the deploy gate performs the production
+  // recording). Returns the service's usual applied/rejected
+  // shapes; a conflict or malformed request moves nothing.
+  function bindPhaseBook(input) {
+    try {
+      const r = recordPhaseBinding(coord, input || {});
+      return { outcome: "applied", ...r };
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      if (msg.startsWith("phase_binding_conflict"))
+        return { outcome: "rejected", reason: "phase_binding_conflict" };
+      if (msg.startsWith("phase_not_budgeted"))
+        return { outcome: "rejected", reason: "phase_not_budgeted" };
+      if (msg.startsWith("phase_binding_shape"))
+        return { outcome: "rejected", reason: "phase_binding_shape" };
+      throw e;
+    }
+  }
+
+  // R2-2 (Rowan round 2, comment 6511950562): the ACTIVE
+  // OVERLAPPING-OCCURRENCE FENCE. B2 put execution semantics
+  // inside intent identity, so a different-semantics request over
+  // the same eligible set mints a distinct plan instead of being
+  // silently handed the old one — but identity alone does not
+  // prevent DUPLICATE SPENDING: two live plans over the same
+  // occurrences could both be granted and both pay for the same
+  // content. This fence is the spending guard. It runs inside
+  // submitIntent AFTER intent convergence (a byte-identical retry
+  // returns its own plan first and never fences itself) and
+  // BEFORE any plan/ledger state moves, in the same synchronous
+  // stretch as the convergence lookup and the plan insert, so
+  // two racing submissions cannot both pass it.
+  //
+  // A plan FENCES while the driver can still grant against it
+  // without a fresh operator decision: state 'active' and the
+  // parked_* family (quota/cap/storage parks resume on their own
+  // in driveOnce). Terminal plans do NOT fence: 'complete' and
+  // 'partial' are finished, and a 'halted_unknown' plan can grant
+  // again only after an operator reconciles its unknown billing
+  // — a separately gated act — so a halt must not block a fresh
+  // intent. The fence never resumes, alters, or unblocks the
+  // halted plan; it only reads plan state. The parked JOB (a
+  // coordinator-level job in state parked_policy — Forever
+  // Pucked Ch 3) is a different mechanism entirely: its
+  // occurrences never enter an eligible set (the builder marks
+  // them excluded_parked / excluded_ch3), so they can neither
+  // fence nor be fenced, and nothing here touches that job.
+  const PLAN_FENCE_TERMINAL = Object.freeze(
+    ["complete", "partial", "halted_unknown"]);
+  function activeOverlapConflict(bookId, eligibleIds) {
+    const want = new Set(eligibleIds);
+    const plans = coord._all(
+      `SELECT * FROM d6_plans WHERE book_id = ?
+        ORDER BY created_at, plan_id`, bookId);
+    for (const p of plans) {
+      if (PLAN_FENCE_TERMINAL.includes(p.state)) continue;
+      const rows = coord._all(
+        `SELECT occurrence_id FROM d6_plan_entries
+          WHERE plan_id = ? AND disposition = 'eligible'`, p.plan_id);
+      let overlapCount = 0;
+      for (const r of rows) if (want.has(r.occurrence_id)) overlapCount++;
+      if (overlapCount > 0) {
+        return {
+          planId: p.plan_id, bookId: p.book_id, scope: p.scope,
+          lane: p.lane, keepGoing: !!p.keep_going, phase: p.phase,
+          overlapCount,
+        };
+      }
+    }
+    return null;
   }
 
   async function submitIntent(input) {
@@ -251,6 +370,15 @@ export function createGenerationService({ coord, env = {}, store = null, sources
       `SELECT * FROM d6_plans WHERE intent_key = ?`, intentKey);
     if (existing)
       return { planId: existing.plan_id, created: false, state: existing.state };
+    // R2-2: the active overlapping-occurrence fence (above). A
+    // rejection names the existing plan and ITS immutable
+    // semantics — the caller is told exactly which plan owns the
+    // overlapping work — and creates nothing.
+    if (eligibleIds.length) {
+      const conflict = activeOverlapConflict(bookId, eligibleIds);
+      if (conflict)
+        return { outcome: "rejected", reason: "plan_overlap_conflict", conflict };
+    }
     const planId = `plan:${intentKey.slice(0, 24)}`;
     const t = coord._now();
     coord._tx(() => {
@@ -565,11 +693,16 @@ export function createGenerationService({ coord, env = {}, store = null, sources
     const phases = [];
     for (const [phase, budget] of Object.entries(PHASE_BUDGET_MICRO_CENTS)) {
       const acct = store.phaseAccounting(phase);
-      const plan = coord._oneOrNull(
+      // R2-1: once the phase→book registry is established, the
+      // phase's book is the registry's — the authoritative link,
+      // reported even before any plan exists. In legacy mode the
+      // link is read from admitted plans, as in round 1.
+      const binding = phaseBindingFor(coord, phase);
+      const plan = binding ? null : coord._oneOrNull(
         `SELECT book_id FROM d6_plans WHERE phase = ?
           ORDER BY created_at DESC LIMIT 1`, phase);
       phases.push({
-        phase, bookId: plan ? plan.book_id : null,
+        phase, bookId: binding ? binding.book_id : (plan ? plan.book_id : null),
         budgetMicroCents: budget,
         settledMicroCents: acct.settledMicro,
         inFlightUpperMicroCents: acct.inFlightUpperMicro,
@@ -861,5 +994,6 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   }
 
   return { submitIntent, driveOnce, planStatus, seedStorageBase, recover,
+           bindPhaseBook,
            listPlans, capabilities, eligibilityQuote, attemptDiagnostics };
 }

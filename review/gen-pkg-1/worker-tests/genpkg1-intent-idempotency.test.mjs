@@ -123,7 +123,7 @@ test("a later run for newly eligible segments is a NEW plan, not the stale one",
     defaultVoice: { provider: "gemini", voice_id: "Zephyr" },
   };
   const w = await makeWorld(data, "book-goal-mini");
-  const { h, service } = w;
+  const { h, service, exec } = w;
   const a = await service.submitIntent({
     commandId: "map-1", bookId: "book-goal-mini", scope: "book",
     phase: null, lane: "standard",
@@ -139,6 +139,28 @@ test("a later run for newly eligible segments is a NEW plan, not the stale one",
   updated.povs[0].voice = { voice_id: "Aoede", provider: "gemini", model_id: "gemini-3.8-flash-tts", style_direction: "" };
   h.db.prepare(`UPDATE sync_entities SET data_json = ? WHERE family = 'content' AND entity_key = 'book-goal-mini'`)
     .run(JSON.stringify(updated));
+  // Round 2 (R2-2): while plan A is still ACTIVE, the expanded
+  // set still overlaps A's eligible entry (g2), so the fence —
+  // not the stale plan, and not a duplicate plan — answers: a
+  // named conflict. (Round 1 minted the new plan immediately;
+  // Rowan's round-2 fence supersedes that for overlapping sets.)
+  const fenced = await service.submitIntent({
+    commandId: "map-2a", bookId: "book-goal-mini", scope: "book",
+    phase: null, lane: "standard",
+  });
+  assert.equal(fenced.outcome, "rejected");
+  assert.equal(fenced.reason, "plan_overlap_conflict");
+  assert.equal(fenced.conflict.planId, a.planId);
+  assert.equal(h.rows("d6_plans").length, 1, "the fenced attempt created nothing");
+  // Drive plan A to completion for real: its one eligible segment
+  // is generated and bound.
+  await service.driveOnce();
+  await exec.handleMessage(h.sentGrants[h.sentGrants.length - 1]);
+  await service.driveOnce();
+  assert.equal(service.planStatus(a.planId).state, "complete");
+  // Now the later run mints its NEW plan (never the stale one):
+  // the newly eligible segment is its work; the segment plan A
+  // bound reads bound_already, so the sets no longer overlap.
   const b = await service.submitIntent({
     commandId: "map-2", bookId: "book-goal-mini", scope: "book",
     phase: null, lane: "standard",
@@ -148,9 +170,14 @@ test("a later run for newly eligible segments is a NEW plan, not the stale one",
   const statusB = service.planStatus(b.planId);
   assert.deepEqual(
     statusB.entries.filter(e => e.disposition === "eligible").map(e => e.occurrenceId).sort(),
-    ["g0", "g2"], "the newly eligible segment is in the new plan's set");
+    ["g0"], "the newly eligible segment is the new plan's eligible work");
+  assert.deepEqual(
+    statusB.entries.map(e => [e.occurrenceId, e.disposition]).sort(),
+    [["g0", "eligible"], ["g2", "bound_already"]],
+    "the segment the completed plan bound is not re-planned");
   // Plan A is untouched by the new submission.
   assert.equal(service.planStatus(a.planId).entries.length, 2);
+  assert.equal(service.planStatus(a.planId).state, "complete");
 });
 
 test("after completion, resubmission over the shrunk set is a new plan; the empty set is then stable", async () => {
