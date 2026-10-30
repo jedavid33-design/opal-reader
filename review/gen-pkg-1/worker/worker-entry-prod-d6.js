@@ -79,7 +79,15 @@
 //     phase→book registry rules from the first served request and
 //     a budgeted-phase claim with no recorded binding fails
 //     CLOSED (phase_unbound) — no legacy window between deploy
-//     and binding recording; and (b) two OPERATOR-ONLY POST
+//     and binding recording. ROUND 5 (R4-2, Rowan ruling
+//     6514899384; Julie's approval 6522602149) hardens this
+//     further: d6Service now constructs enforcement
+//     UNCONDITIONALLY, the intent route returns an explicit
+//     503 phase_policy_not_configured whenever the deployment
+//     var is not exactly "enforce", and while the registry is
+//     empty the service's bootstrap gate refuses EVERY intent
+//     (phase_binding_required — null-phase included) until the
+//     operator records the binding; and (b) two OPERATOR-ONLY POST
 //     surfaces in the diagnostics fence class (admitted on the
 //     migration-operator credential alone — the production gate
 //     skips the client token for them — with the entry's
@@ -163,17 +171,22 @@ function d6Service(coord, env) {
     // worker's own R2 binding — the invocation supplies neither.
     expectedStorageBase: RECORDED_STORAGE_BASE,
     recountBucket: env.OPALREADER_STORAGE,
-    // R3-1: phase-policy enforcement is a DEPLOYMENT property.
-    // The pinned deploy spec (p8/deploy-spec-prod-d6.json) sets
-    // OPALREADER_PHASE_POLICY to "enforce" as a plain-text
-    // binding, so the deployed Worker constructs every service
-    // enforcement-bound and budgeted-phase admission fails
-    // closed from the first served request. The var is set by
-    // the deployment, never by a request; any other value (or
-    // its absence, as in every test fixture) leaves the service
-    // in the legacy construction the D6 suites stage against.
-    phasePolicyMode: env.OPALREADER_PHASE_POLICY === "enforce"
-      ? "enforce" : "legacy",
+    // R3-1 made phase-policy enforcement a deployment property;
+    // R5 / R4-2 (Rowan round-5 ruling, comment 6514899384, item
+    // 1; Julie's approval, comment 6522602149) makes it
+    // UNCONDITIONAL: this entry — the real production entry —
+    // constructs every generation service enforcement-bound,
+    // whatever the deployment var says, so no missing, omitted,
+    // or mistyped OPALREADER_PHASE_POLICY value can silently
+    // restore legacy admission. The var remains a required
+    // deployment binding (pinned to "enforce" by the deploy
+    // spec, and now gated by tools/validate-prod-envelope.mjs):
+    // the intent route below refuses D6 submission with an
+    // explicit 503 configuration failure whenever the var is
+    // not exactly "enforce". Direct service construction in
+    // fixtures keeps its explicit legacy default — that path
+    // never reaches this entry.
+    phasePolicyMode: "enforce",
   });
 }
 
@@ -204,6 +217,20 @@ export class OpalReaderCoordinatorProd extends ProductionCoordinatorBase {
     const url = new URL(request.url);
     try {
       if (url.pathname === "/internal/d6/intent" && request.method === "POST") {
+        // R5 / R4-2 explicit configuration failure (Rowan
+        // round-5 ruling, comment 6514899384, item 1): D6
+        // submission is refused with a 503 whenever the
+        // deployment's OPALREADER_PHASE_POLICY binding is not
+        // exactly "enforce" — a missing or mistyped flag is a
+        // visible release defect, never a silent legacy
+        // fallback. (Construction is unconditional-enforce in
+        // d6Service above regardless; this check makes the
+        // misconfiguration itself fail loudly at the one route
+        // that creates generation work. All other D6 routes —
+        // reads, diagnostics, the operator surfaces, the seed —
+        // are unaffected.)
+        if (this.env.OPALREADER_PHASE_POLICY !== "enforce")
+          return json(503, { error: "phase_policy_not_configured" });
         const cache = await this._cache();
         const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
         const result = await d6Service(coord, d6HostEnv(this.env, cache))

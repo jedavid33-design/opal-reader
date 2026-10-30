@@ -1202,6 +1202,305 @@ this round, as instructed.
   unwritten, the Ch 2 halt and the parked Ch 3 job are
   exactly as they were.
 
+## Round-5 corrections (R4-2) (Rowan round-5 ruling, comment 6514899384; Julie's approval, comment 6522602149)
+
+Applied locally to the round-4 trees under Julie's explicit
+approval of Rowan's option (a) — the repo-only R4-2 correction,
+including the disclosed `d6-correction` fixture modernization
+and the bootstrap gate. **No deploy, no publication, no
+production contact, no production binding recorded, no
+reconciliation/retirement, no Ch 2 retry, no Batch arming, no
+generation, no spending.** The R4-1 correction (round 4) is
+untouched and remains in the tree. The client is UNCHANGED
+(publish tree hash identical to rounds 3/4 — see Battery).
+
+### Item 1 — unconditional enforcement at the production entry
+
+**Where it lives.** `worker/worker-entry-prod-d6.js`:
+
+- `d6Service` now constructs the generation service with
+  `phasePolicyMode: "enforce"` UNCONDITIONALLY. The round-3
+  derivation (`env.OPALREADER_PHASE_POLICY === "enforce" ?
+  "enforce" : "legacy"`) is deleted: no missing, omitted, or
+  mistyped deployment value can silently select legacy
+  admission through the real production entry, ever. Direct
+  service construction (fixtures, the legacy D6 suites) keeps
+  its explicit `"legacy"` default for historical-compatibility
+  tests — that path never reaches this entry.
+- The class's `/internal/d6/intent` route — the one route
+  that creates generation work — additionally returns an
+  explicit configuration failure, HTTP **503
+  `{error: "phase_policy_not_configured"}`**, whenever
+  `OPALREADER_PHASE_POLICY` is not exactly `"enforce"`,
+  before any service call. A misconfigured deployment fails
+  loudly at submission time instead of admitting under the
+  wrong rules. All other D6 routes (reads, diagnostics, the
+  operator surfaces, the seed) are unaffected by the check.
+  Both halves of Rowan's item 1 are implemented (unconditional
+  enforcement AND the explicit failure), not just one.
+
+### Item 2 — the bootstrap gate (all intents refused while the required binding is absent)
+
+**Where it lives.** `worker/generation/service.mjs`,
+`admitPhase`, ahead of both the legacy and registry paths:
+
+```js
+if (enforcePhasePolicy && !phaseRegistryEstablished(coord))
+  return { ok: false, reason: "phase_binding_required" };
+```
+
+Under an enforcement-bound construction, while the phase→book
+registry is EMPTY, **every** new generation intent is refused
+with reason **`phase_binding_required`** — budgeted phase,
+invented phase, and null phase alike, for any book, including
+the budgeted book itself — with zero plan/ledger/attempt/
+grant movement. Round 3's enforce mode admitted a null-phase
+intent in that window, which could have created an unbudgeted
+plan for the real Forever Pucked book before its binding was
+recorded; that hole is closed. The gate is narrow: the moment
+any binding is recorded, the registry rules govern as before
+(bound book held to its phase: `phase_required` /
+`phase_mismatch`; another book claiming the bound phase:
+`phase_bound_to_other_book`; an unrecorded budgeted phase:
+`phase_unbound`; invented phase: `phase_not_budgeted`;
+genuinely unbudgeted books: admitted with phase null). The
+operator-only binding writer (`bindPhaseBook` /
+`POST /v2/d6-phase-binding`) never passes through `admitPhase`
+and remains fully usable while admission is gated — proven at
+entry level (the recording route answers 200 and the binding
+lands while every submission is refused).
+
+**Entry-level proof** (`tests/genpkg1-phase-enforce.test.mjs`,
+amended candidate suite, **12/12** — see the suite-amendment
+note under Item 3's sibling list below): (a) missing flag →
+the whole matrix (FP budgeted / FP null / other budgeted /
+other null / invented) fails **503
+`phase_policy_not_configured`**, zero plans/ledger/grants;
+(b) mistyped flag (`"enfore"`) → the identical matrix, the
+identical 503, zero movement; (c) exact `enforce` + empty
+registry → **all** submissions refused
+`phase_binding_required`, zero movement, then the operator
+records the binding through the gated window and unbudgeted
+work flows; (d) after the (synthetic, in-fixture) binding:
+FP + correct phase admitted, FP + null phase →
+`phase_required`, unrelated unbudgeted work admitted,
+another book claiming FP's phase →
+`phase_bound_to_other_book`. The service-level half of the
+same matrix runs against direct enforce construction in the
+same suite.
+
+### Item 3 — d6-correction fixture modernization (the disclosed baseline change)
+
+ONLY `tests/d6-correction.test.mjs` among baseline suites was
+changed, exactly as authorized. **Test count unchanged: 5
+tests (C1–C5) before and after. No assertion was deleted,
+skipped, or lowered** — replacements are asserted in stronger
+form (details below). A shared fixture helper,
+`recordFixtureBinding(storage, db, phase, bookId)`, records
+the authorized binding in the synthetic DO setup: the
+production module's own `ensurePhaseBindingSchema` DDL plus
+one row (source `"d6-correction-fixture-r5"`), the same
+fixture-scale pattern the round-2 candidate suite established.
+
+- **C1 — unchanged.** (Class identity + deploy-spec
+  assertions; it submits nothing.)
+- **C2 — before:** the post-D6 class was constructed with a
+  flag-less env, and the book intent (`book-fix`,
+  `phase: "forever-pucked"`) was admitted by first use under
+  the legacy history rules against an empty registry.
+  **After:** the post-D6 env carries
+  `OPALREADER_PHASE_POLICY: "enforce"`, and the binding
+  `forever-pucked ↔ book-fix` is recorded in the DO setup
+  AFTER the bootstrap snapshot/table-set assertions (so the
+  D6-bootstrap assertions are untouched) and BEFORE the
+  intent. Every continuity assertion — pre-existing rows
+  byte-identical, the eight added tables empty, settings
+  still revision 0, plan job granted against carried state,
+  parked rows untouched — stands exactly as before.
+- **C3 — before:** flag-less class env and entry env; the
+  `book-host` intent with `phase: "forever-pucked"` admitted
+  by first use. **After:** both envs carry
+  `OPALREADER_PHASE_POLICY: "enforce"` and the binding
+  `forever-pucked ↔ book-host` is recorded in setup before
+  any submission. All preservation assertions (401/403 gate
+  bodies, halted admission as durable state only, zero
+  grants/dispatches/executions, 423 on internal execute,
+  queue handler halting before the namespace) unchanged.
+- **C4 — unchanged fixtures.** (It submits no D6 intent; its
+  crafted-grant and batch-lane proofs are unaffected.)
+- **C5 — before:** BOTH `book-a` and `book-b` submitted book
+  intents claiming the SAME budgeted phase `forever-pucked`
+  through the real entry — the two-books-one-phase premise
+  the registry law exists to forbid — and the suite asserted
+  plan B's dispatch, quota parking, restart continuity, and
+  rollover on that basis. **After:** class envs (initial +
+  restart) and the entry env carry
+  `OPALREADER_PHASE_POLICY: "enforce"`; the binding
+  `forever-pucked ↔ book-a` (the ONE authorized book) is
+  recorded in setup. Plan A is unchanged (book-a under its
+  phase). Book-b's claim on the phase is now asserted
+  REJECTED over the real public route —
+  `{outcome: "rejected", reason: "phase_bound_to_other_book"}`
+  with exactly one plan in the store afterwards — and book-b's
+  real plan is submitted UNBUDGETED (`phase: null`, admitted
+  under the registry rules once established), with a new
+  assertion that plan B's stored phase is null (it does not
+  consume book-a's envelope). **C5's real proof obligations
+  are preserved at full strength on plan B's unbudgeted
+  plan**: one grant + exactly one dispatch for A; B parks at
+  exactly 100 daily attempts with zero dispatches; a fresh
+  class instance (worker restart) reads B's carried
+  `parked_quota` state through the real entry; after the day
+  boundary the alarm resumes B with exactly one dispatch,
+  never re-sends a settled A occurrence, and B's plan row
+  ends `active`. Nothing about the grant/alarm/continuity
+  assertions was weakened — the phase each plan rides is the
+  only premise that changed, plus the added theft-rejection
+  assertions.
+
+**Candidate-suite amendments required by the new law**
+(disclosed; candidate suites only — the round-2/3 precedent;
+no other baseline suite was touched):
+
+- `genpkg1-phase-enforce` — **11/11 → 12/12.** Three premises
+  superseded by Rowan's items 1–2, each amended in place and
+  marked R5: the empty-registry enforce expectations
+  (`phase_unbound` / `phase_not_budgeted` for named claims,
+  null-phase admitted) are now the bootstrap gate's single
+  `phase_binding_required` refusal for the whole matrix; the
+  unbudgeted-admission behavior is asserted AFTER recording
+  (plus FP-null → `phase_required`, FP-correct admitted,
+  forged → `phase_bound_to_other_book`); the round-3 contrast
+  test ("no enforce setting → legacy bootstrap through the
+  entry") is replaced by two tests (missing flag, mistyped
+  flag) asserting the 503 matrix. The legacy-construction
+  service test (direct construction keeps legacy rules) is
+  retained unchanged.
+- `genpkg1-phase-policy` — **10/10, count unchanged.** Its
+  entry fixture now carries the deployment flag (both envs),
+  its boot step asserts the round-5 gated refusal instead of
+  a legacy admission, and the unrelated book's unbudgeted
+  admission is asserted after the binding is recorded; the
+  final plan-count assertion is unchanged.
+- `genpkg1-envelope-policy` — **NEW, 5/5** (Item 4 below).
+
+Every other entry/service-touching suite passed UNCHANGED
+against the new construction (verified in the targeted run:
+`genpkg1-diagnostics` 9/9, `d6-seed-hardening` 12/12,
+`d6-correction2` 10/10, `genpkg1-phase-authority`,
+`genpkg1-overlap-fence`, `genpkg1-halted-fence` 7/7 — the
+R4-1 proof intact — `genpkg1-intent-idempotency`,
+`genpkg1-projection`, `genpkg1-surfaces`, `d6-service`,
+`d6-integration`). No STOP condition arose: nothing outside
+the authorized fixture set needed editing.
+
+### Item 4 — the seventh binding is gated in the envelope validator
+
+`tools/validate-prod-envelope.mjs` gains two checks that run
+BEFORE the dist inputs (so a bad spec fails the gate even
+with no dist present), reading the D6 successor's deploy spec
+(`worker/p8/deploy-spec-prod-d6.json`, overridable via the new
+`--d6-spec <file>` argument) — the spec the gen-pkg-1 deploy
+gate will re-derive the actual upload envelope from, so
+gating the spec gates every envelope derived from it:
+
+- **P6** — the spec carries exactly **7 bindings**, with
+  `OPALREADER_PHASE_POLICY` present **exactly once**, as
+  `plain_text` with text exactly `"enforce"` and no extra
+  keys.
+- **P7** — the binding set is exactly the specced seven
+  (names + types; no duplicates, no extras).
+
+The deploy spec itself gains one `d6_delta.changes` entry
+recording the round-5 law (bindings unchanged — still the
+same seven). **Failure proof, captured in
+`~/workspace/gen-pkg-1/logs/round5/`:** the full validator
+run against a real built dist (built from a throwaway git
+copy of this exact tree, because the builder requires a git
+worktree — the same environmental reason the two envelope
+suites sit in the baseline failing set) **PASSES 26/26**
+(`envelope-validator-full.log`; the 24 pre-existing
+assertions + P6/P7); the same dist with a spec copy MISSING
+the seventh binding **FAILS** (exit 1, `[FAIL] P6` +
+`[FAIL] P7`, `envelope-validator-missing-binding.log`); with
+a MALFORMED value (`"enfore"`) it **FAILS** (exit 1,
+`[FAIL] P6`, `envelope-validator-malformed-binding.log`).
+The new candidate suite `genpkg1-envelope-policy` (5/5)
+exercises the same gate in the battery: real spec passes
+P6/P7; missing, mistyped-value, wrong-type, and extra-eighth-
+binding specs each fail with the expected check ids.
+
+### Battery (round-5 final trees)
+
+- Worker full battery, one complete run on the exact final
+  tree (runner + logs:
+  `~/workspace/gen-pkg-1/logs/round5/worker-final/`):
+  **121 suite files: 99 pass / 22 fail — the failing set is
+  BYTE-IDENTICAL to the recorded 22-name baseline**
+  (verified by diff against the round-4 failing list; the
+  baseline change is INSIDE `d6-correction`, which PASSES
+  5/5 in its modernized form — it was never in the failing
+  set). **942 tests: 920 pass; zero assertion failures.**
+  Test-count delta vs round 4 (936): +6 = phase-enforce
+  11→12 (+1) and the new envelope-policy suite (+5);
+  `d6-correction` contributes the same 5 tests as before.
+  No flakes this round; the single run is the clean run.
+- Client: NO client change this round (as required — nothing
+  in items 1–4 touches the client; the new server rejection
+  reason `phase_binding_required` and the 503
+  `phase_policy_not_configured` are submission-path shapes
+  the client's existing safe-default rejection wording
+  already covers). Batteries re-run on the unchanged trees:
+  store unit **13/13**; generation unit **13/13**; Chromium
+  proof **14/14 with 0 page exceptions** on tree-a AND on
+  `gen/package/publish`. Logs: `~/workspace/gen-pkg-1/logs/round5/`.
+- Shelf bridge re-verified in the publish tree:
+  `modules/vendor/client/shelf-bridge.js` =
+  `bc0a5879fbf4a6f455170ead8e0fbe1aa19d82126df4eb631bd0ebad9112ec8e`,
+  byte-identical, as required.
+- Tree hashes (established digest method): worker
+  `2d16fe291dfa8d067fae82110089e501ca28bd93e80a047ac5efd0ffee840fb2`
+  (375 files — round 4's 374 + the new envelope suite). The
+  delta vs round 4 is exactly nine files: `worker/generation/
+  service.mjs` (bootstrap gate; SHA-256 `700b8a8d67a813d3…`),
+  `worker/worker-entry-prod-d6.js` (unconditional enforce +
+  intent-route config check; `9cfd4c40a2549fc9…`),
+  `worker/generation/phase-policy.mjs` (header note only;
+  `09883c40e365815f…`), `worker/p8/deploy-spec-prod-d6.json`
+  (one `d6_delta` line; `0dafd14c63d420f4…`),
+  `tools/validate-prod-envelope.mjs` (P6/P7 + `--d6-spec`;
+  `8ad59914d1f2a1934…`), `tests/d6-correction.test.mjs`
+  (Item 3; `2ad7c7fc023db99b…`), `tests/genpkg1-phase-enforce.
+  test.mjs` (amended; `fb23359f9313686a…`), `tests/genpkg1-
+  phase-policy.test.mjs` (amended; `4071e38c47c3a2a96…`),
+  `tests/genpkg1-envelope-policy.test.mjs` (new;
+  `9dd890ee933317ea…`). Client publish
+  `365ecbddf0bc17066c1eed5a6349735a290070482a50cddccda96c7a1e31dbd8`
+  (81 paths — IDENTICAL to rounds 3/4, proving the client
+  tree is untouched).
+
+### Disclosures
+
+- The intent-route configuration check reads the DO class's
+  own env (`this.env`) — in production the entry env and the
+  class env are one Worker env, and every fixture here sets
+  both consistently. The check guards SUBMISSION only, by
+  design: a misconfigured deployment still serves reads and
+  the operator surfaces (including the binding writer, which
+  is how the misconfiguration's companion defect — a missing
+  binding — is repaired), while creating no generation work.
+- The bootstrap gate's reason (`phase_binding_required`) and
+  the config failure's error (`phase_policy_not_configured`)
+  are new names introduced by this round; Rowan's ruling
+  specified the behavior, not the strings. Both are asserted
+  verbatim in the amended suites.
+- Nothing was deployed, published, or recorded against
+  production in this round; the production registry remains
+  unwritten, the Ch 2 halt and the parked Ch 3 job are
+  exactly as they were (parked-Ch-3 fixture rows remained
+  byte-identical across the halted-fence suite in this
+  round's battery, as in every prior round).
+
 ## Pin
 
 Pinned to `jedavid33-design/opal-reader` branch `ui1-review` (review only;
@@ -1245,3 +1544,18 @@ The entry, deploy spec, and all client blobs are carried forward
 unchanged. The re-pin commit SHA is recorded in the builder's
 completion message, and the branch head was verified by independent
 read-back after the push.
+
+**Round-5 re-pin:** the round-5 artifacts were re-pinned on the same
+branch with parent `ac9558f46bfe5a62e5ecc9e7842ad93bbffd225e` (the
+round-4 head), same `review/gen-pkg-1/` layout: the updated report,
+the nine round-5 worker-tree delta files (service, entry,
+phase-policy, deploy spec, envelope validator, the modernized
+`d6-correction`, the amended phase-enforce + phase-policy suites,
+and the new envelope-policy suite), and the round-5 logs (worker
+battery summary + failing list, the targeted-suite per-file logs
+for `d6-correction` and `genpkg1-phase-enforce`, the three
+envelope-validator demonstration logs, and the client battery
+logs). All client blobs are carried forward unchanged (the client
+publish tree is hash-identical to rounds 3/4). The re-pin commit
+SHA is recorded in the builder's completion message, and the
+branch head was verified by independent read-back after the push.

@@ -282,9 +282,17 @@ function entryWorld() {
     async deleteAlarm() { alarmAt = null; },
   };
   const state = { storage };
+  // ROUND-5 AMENDMENT (R4-2; Rowan ruling 6514899384 items 1–2;
+  // Julie's approval 6522602149): the production entry now
+  // constructs enforcement unconditionally and its intent route
+  // requires OPALREADER_PHASE_POLICY to be exactly "enforce"
+  // (503 otherwise), so this fixture carries the deployment
+  // flag like the real deployment. The boot step below is
+  // amended accordingly — see the test.
   const inst = new D6Prod(state, {
     OPALREADER_V2_SCOPE: "production", OPALREADER_ACCESS_TOKEN: TOK,
     GENERATION_HALT: "1", ALLOWED_ORIGIN: ORIGIN,
+    OPALREADER_PHASE_POLICY: "enforce",
   });
   const seg = (id) => ({ occurrenceId: id, text: "Synthetic segment text.", pov: "pov-n" });
   const seedContent = (bookId) => {
@@ -302,6 +310,7 @@ function entryWorld() {
   const entryEnv = {
     OPALREADER_V2_SCOPE: "production", OPALREADER_ACCESS_TOKEN: TOK,
     GENERATION_HALT: "1", COORDINATOR: ns, ALLOWED_ORIGIN: ORIGIN,
+    OPALREADER_PHASE_POLICY: "enforce",
   };
   const submit = (commandId, bookId, d6Intent) =>
     D6Entry.fetch(new Request("https://w.test/v2/commands", {
@@ -320,12 +329,19 @@ function entryWorld() {
 
 test("R2-1 entry level: once the binding is recorded, the public path enforces it", async () => {
   const w = entryWorld();
-  // Bootstrap through the public path in legacy mode (registry
-  // still empty): the unrelated book's unbudgeted intent is
-  // admitted, and the service's first admission creates the
-  // (empty) registry table inside the DO store.
+  // ROUND-5 AMENDMENT: the round-2 form of this test bootstrapped
+  // through the public path in legacy mode (registry empty) and
+  // had the unrelated book's unbudgeted intent admitted. Under
+  // the round-5 law the production entry is enforcement-bound
+  // and the bootstrap gate refuses EVERY intent while the
+  // registry is empty — so the boot step now asserts that
+  // refusal (which also creates the registry table inside the
+  // DO store, as the service's gate check ensures the schema),
+  // and the unrelated book's unbudgeted admission is asserted
+  // AFTER the binding, where the registry rules admit it.
   const boot = await (await w.submit("ent-boot", OTHER, { scope: "book", keepGoing: true, phase: null })).json();
-  assert.equal(boot.created, true, "legacy-mode bootstrap intent admitted");
+  assert.deepEqual(boot, { outcome: "rejected", reason: "phase_binding_required" },
+    "round 5: no intent is admitted through the production entry while the registry is empty");
   // The recorded operator act (fixture scale: the row itself,
   // written into the same store the service reads).
   w.db.prepare(`INSERT INTO d6_phase_bindings (phase, book_id, source, created_at, updated_at)
@@ -334,6 +350,11 @@ test("R2-1 entry level: once the binding is recorded, the public path enforces i
   // The mapped book with its registry phase: admitted.
   const fp = await (await w.submit("ent-fp", FP_ID, { scope: "book", keepGoing: true, phase: PHASE })).json();
   assert.equal(fp.created, true, "the mapped book is admitted through the public entry");
+  // The unrelated book's unbudgeted intent: admitted now that
+  // the registry is established (the gate is narrow — it binds
+  // only the pre-binding window).
+  const otherFree = await (await w.submit("ent-other-free", OTHER, { scope: "book", keepGoing: true, phase: null })).json();
+  assert.equal(otherFree.created, true, "unbudgeted work for an unbound book flows once the registry is established");
   // The unrelated book's forged claim on the bound phase:
   // rejected by the same law, over the wire. (Segment scope: the
   // phase gate runs before any overlap consideration.)

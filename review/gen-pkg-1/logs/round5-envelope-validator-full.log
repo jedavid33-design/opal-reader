@@ -1,0 +1,77 @@
+[PASS] P6 D6 successor spec carries the seventh binding exactly once: OPALREADER_PHASE_POLICY plain_text "enforce" (7 bindings total) — bindings=7, phasePolicy=[["plain_text","enforce"]]
+[PASS] P7 D6 successor spec binding set is exactly the specced seven (names + types, no duplicates, no extras) — names=COORDINATOR, OPALREADER_STORAGE, ALLOWED_ORIGIN, OPALREADER_V2_SCOPE, GENERATION_HALT, OPALREADER_PHASE_POLICY, OPALREADER_GENERATION_V2
+[PASS] A0 artifact files match the build manifest (sha256 + size) — 54 files, source commit 38a8a48462c28d246f50b557ba7d63007b5781fa
+[PASS] A1 main_module is the production entry and names an actual part — main_module="v2/worker-entry-prod.js"
+[PASS] A2 every relative import in the closure resolves to an exactly-named part — 16 modules in closure; bare specifiers: node:crypto (node: covered by nodejs_compat)
+[PASS] F1 multipart envelope round-trips byte-identically (metadata + every module part) — 17 parts total
+[PASS] A3 every module part carries Content-Type application/javascript+module
+
+PART TABLE (bundle root = dist worker/; part name = path relative to root)
+  part v2/api.mjs  <-  worker/v2/api.mjs  [application/javascript+module, 13632 bytes, sha256 9b1d0eba128c…]
+  part v2/audio-route.mjs  <-  worker/v2/audio-route.mjs  [application/javascript+module, 15965 bytes, sha256 b6383d21be32…]
+  part v2/coordinator.mjs  <-  worker/v2/coordinator.mjs  [application/javascript+module, 268522 bytes, sha256 c31359ae87cf…]
+  part v2/executor.mjs  <-  worker/v2/executor.mjs  [application/javascript+module, 13974 bytes, sha256 5c6db175e68a…]
+  part v2/generation/gen-constants.mjs  <-  worker/v2/generation/gen-constants.mjs  [application/javascript+module, 3944 bytes, sha256 6922ad7402bc…]
+  part v2/generation/gen-schema.mjs  <-  worker/v2/generation/gen-schema.mjs  [application/javascript+module, 5307 bytes, sha256 d7ae4936b11f…]
+  part v2/generation/genstore.mjs  <-  worker/v2/generation/genstore.mjs  [application/javascript+module, 22164 bytes, sha256 2e1eb5bd2b53…]
+  part v2/generation/grant-guards.mjs  <-  worker/v2/generation/grant-guards.mjs  [application/javascript+module, 4188 bytes, sha256 98a71d8a5b9a…]
+  part v2/host/adapters.mjs  <-  worker/v2/host/adapters.mjs  [application/javascript+module, 34359 bytes, sha256 22557b5993de…]
+  part v2/host/build-identity.mjs  <-  worker/v2/host/build-identity.mjs  [application/javascript+module, 411 bytes, sha256 4582f13ada58…]
+  part v2/p8/approved-freeze-carry.mjs  <-  worker/v2/p8/approved-freeze-carry.mjs  [application/javascript+module, 57703 bytes, sha256 24ddc8ee428e…]
+  part v2/p8/approved-freeze-chunks.mjs  <-  worker/v2/p8/approved-freeze-chunks.mjs  [application/javascript+module, 6101 bytes, sha256 b49cfcfcaf65…]
+  part v2/p8/approved-freeze-manifest.mjs  <-  worker/v2/p8/approved-freeze-manifest.mjs  [application/javascript+module, 467075 bytes, sha256 e59ab3d37245…]
+  part v2/p8/migration-chunk-limits.mjs  <-  worker/v2/p8/migration-chunk-limits.mjs  [application/javascript+module, 4733 bytes, sha256 886c8ea6d79d…]
+  part v2/worker-entry-prod.js  <-  worker/v2/worker-entry-prod.js  [application/javascript+module, 14480 bytes, sha256 1d2f333a75a3…]
+  part v2/worker-entry.js  <-  worker/v2/worker-entry.js  [application/javascript+module, 21520 bytes, sha256 91daefdd4778…]
+EXCLUDED FROM THE ENVELOPE (present in the artifact tree, not uploaded as parts):
+  v2/client-store.mjs
+  v2/client/assembled-client.mjs
+  v2/client/funnel.mjs
+  v2/client/http-transport.mjs
+  v2/client/projection.mjs
+  v2/client/removals.mjs
+  v2/client/shelf-bridge.mjs
+  v2/client/surfaces.mjs
+  v2/generation/binding-projection.mjs
+  v2/generation/content-plane-adapter.mjs
+  v2/generation/d6-executor.mjs
+  v2/generation/d6-work-source.mjs
+  v2/generation/eligible-set.mjs
+  v2/generation/flush-store.mjs
+  v2/generation/phase-policy.mjs
+  v2/generation/policy-split.mjs
+  v2/generation/proofs.mjs
+  v2/generation/service.mjs
+  v2/generation/settings-reconcile.mjs
+  v2/migration/adjudicate.mjs
+  v2/migration/rollback.mjs
+  v2/migration/shelf-outbox-import.mjs
+  v2/migration/transform.mjs
+  v2/migration/util.mjs
+  v2/migration/verify.mjs
+  v2/p8/deploy-spec-prod-d6.json
+  v2/p8/deploy-spec-prod.json
+  v2/p8/deploy-spec.json
+  v2/p8/freeze-worker.js
+  v2/worker-entry-prod-d6.js
+[PASS] B1 metadata is a JSON object (the `metadata` part)
+[PASS] B2 compatibility_date + compatibility_flags present — date=2026-08-29, flags=["nodejs_compat"]
+[PASS] B3 every binding matches its documented shape exactly — 5 bindings
+[PASS] B4 no secret_text bindings in the upload payload (both production secrets are dashboard-set by Julie and carried by inherit on later uploads)
+[PASS] B5 emitted metadata is exactly derived from the reviewed production deploy spec (bindings / main_module / compatibility)
+[PASS] C1 migrations is a SingleStepMigration OBJECT (API schema), not an array
+[PASS] C2 migrations carries only documented SingleStepMigration keys — new_sqlite_classes, new_tag
+[PASS] C3 emitted migrations are exactly the production spec's durable_object_migrations
+[PASS] C4 migrations.new_tag is "v1" — the first migration on THIS script's own new namespace (tags are per-script) — new_tag="v1"
+[PASS] C5 no old_tag (first migration on a new script; nothing to verify against)
+[PASS] D1 no top-level queue_consumers key in the upload metadata (not a documented upload attribute)
+[PASS] D2 top-level metadata keys are within the documented set — keys: main_module, compatibility_date, compatibility_flags, bindings, migrations, observability
+[PASS] P1 production invariants in plain_text bindings (scope=production, GENERATION_HALT=1)
+[PASS] P2 NO queue binding of any kind (no producer, no consumer; opalreader-generation keeps its single v1 consumer)
+[PASS] P3 NO R2_KEY_PREFIX binding (its absence is the production namespace shape; the class enforces it in code)
+[PASS] P4 exactly the five specced bindings, for the production script — script=opalreader-api-v2-prod, bindings=COORDINATOR, OPALREADER_STORAGE, ALLOWED_ORIGIN, OPALREADER_V2_SCOPE, GENERATION_HALT
+[PASS] P5 no provider-secret bindings present (absence verified here statically and live at D2)
+[PASS] A4 DO binding class_name == OpalReaderCoordinatorProd == migrations.new_sqlite_classes == the class the production entry part actually exports (the script owns its class) — class=OpalReaderCoordinatorProd
+[PASS] A5 the DO binding names NO script_name (the class is this script's own, never a cross-script reference to staging) — own class
+
+PROD ENVELOPE VALIDATION: PASS (26/26 assertions)

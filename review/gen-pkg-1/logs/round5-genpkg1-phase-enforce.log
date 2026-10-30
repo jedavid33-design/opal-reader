@@ -1,0 +1,20 @@
+✔ R3-1+R5: enforce construction, registry ABSENT — the bootstrap gate refuses EVERY intent (phase_binding_required), nothing moves (7.27329ms)
+✔ R3-1+R5: enforce construction — null-phase work is refused while the registry is empty, and admitted once the binding is recorded (8.09354ms)
+✔ R3-1: legacy construction, registry ABSENT — the same claim is admitted (the boundary is construction, not the request) (3.77991ms)
+✔ R3-1: enforce capabilities never derives the phase's book from plan history — registry row or null (7.243175ms)
+✔ R3-1+R5 entry: registry ABSENT + enforce — EVERY submission is refused by the bootstrap gate over the public route (23.741131ms)
+✔ R3-1 entry: the recording route refuses everything except the operator credential (3.322103ms)
+✔ R3-1 entry: operator credential unconfigured — the route fails closed (503), nothing recorded (2.66018ms)
+✔ R3-1 entry: the internal route refuses a direct call without the entry's operator-admitted stamp (2.639139ms)
+✔ R3-1 entry: the operator records forever-pucked → the Forever Pucked book — read-back, idempotency, conflict refusal (8.895203ms)
+✔ R3-1 entry: after the binding — the mapped book is admitted, the phase is closed to everyone else (7.839629ms)
+✔ R5 entry: MISSING phase-policy flag — every submission fails 503 phase_policy_not_configured, zero movement (4.36001ms)
+✔ R5 entry: MISTYPED phase-policy flag — every submission fails 503 phase_policy_not_configured, zero movement (4.294973ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 258.711976

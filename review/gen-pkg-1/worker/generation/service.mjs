@@ -66,22 +66,30 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   store = store || createGenStore(coord);
   store.ensureSchema();
   const builder = sources.buildEligibleSet || realBuildEligibleSet;
-  // R3-1 (Rowan round 3, comment 6512804398): the phase-policy
-  // ENFORCEMENT boundary. "enforce" is selected ONLY by trusted
-  // server-side construction: the production entry
-  // (worker-entry-prod-d6.js d6Service) derives it from the
-  // deployment configuration (the OPALREADER_PHASE_POLICY var the
-  // pinned deploy spec sets to "enforce"), so the deployed Worker
+  // R3-1 (Rowan round 3, comment 6512804398) + R5 / R4-2 (Rowan
+  // round-5 ruling, comment 6514899384; Julie's approval, comment
+  // 6522602149): the phase-policy ENFORCEMENT boundary.
+  // "enforce" is selected ONLY by trusted server-side
+  // construction. Since round 5 the production entry
+  // (worker-entry-prod-d6.js d6Service) constructs this service
+  // with "enforce" UNCONDITIONALLY — it no longer derives the
+  // mode from the OPALREADER_PHASE_POLICY deployment var, so no
+  // missing or mistyped flag can silently restore legacy
+  // admission — and the entry's intent route additionally
+  // returns an explicit 503 configuration failure whenever that
+  // var is not exactly "enforce". The deployed Worker therefore
   // applies the registry rules from its first served request —
-  // including while the binding registry is still empty, where a
-  // budgeted-phase claim fails CLOSED (phase_unbound). Direct
-  // construction (every test fixture, the legacy D6 suites)
-  // defaults to "legacy": the round-1/2 behavior, in which the
-  // registry rules engage once a binding is recorded and the
-  // history rules govern before that. No request, command, or
-  // intent field can select the mode — submitIntent destructures
-  // its known inputs only, and the mode is fixed here, at
-  // construction, from the server's own configuration.
+  // including while the binding registry is still empty, where
+  // the bootstrap gate in admitPhase refuses EVERY intent
+  // (phase_binding_required) until the operator records the
+  // binding. Direct construction (every test fixture, the
+  // legacy D6 suites) defaults to "legacy": the round-1/2
+  // behavior, in which the registry rules engage once a binding
+  // is recorded and the history rules govern before that. No
+  // request, command, or intent field can select the mode —
+  // submitIntent destructures its known inputs only, and the
+  // mode is fixed here, at construction, from the server's own
+  // configuration.
   const enforcePhasePolicy = phasePolicyMode === "enforce";
 
   function planRow(planId) {
@@ -211,13 +219,15 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   // established (any binding recorded), in ANY construction —
   // and, since round 3, ALSO from the start in an
   // enforcement-bound construction (phasePolicyMode "enforce":
-  // the production entry under its deployment configuration),
-  // where the still-empty registry simply means every budgeted
-  // claim fails closed as phase_unbound until the operator
-  // records the binding through the gated route. There is no
-  // window — not even between Worker deployment and binding
-  // recording — in which a production construction applies the
-  // legacy rules.
+  // the production entry, which since round 5 constructs it
+  // unconditionally), where the still-empty registry means
+  // EVERY intent — budgeted, invented, or null-phase — fails
+  // closed as phase_binding_required (the round-5 bootstrap
+  // gate) until the operator records the binding through the
+  // gated route. There is no window — not even between Worker
+  // deployment and binding recording — in which a production
+  // construction applies the legacy rules or admits an
+  // unbudgeted plan.
   //
   // LEGACY MODE (non-enforcement construction AND registry not
   // yet established — every pre-registry fixture database and
@@ -235,6 +245,28 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   // (B2) binds.
   function admitPhase(bookId, callerPhaseRaw) {
     const callerPhase = callerPhaseRaw ?? null;
+    // R5 / R4-2 bootstrap gate (Rowan round-5 ruling, comment
+    // 6514899384, item 2; Julie's approval, comment 6522602149):
+    // in an ENFORCEMENT-bound construction, while the phase→book
+    // registry is still EMPTY, EVERY new generation intent is
+    // refused — budgeted, invented, AND null-phase alike
+    // (reason phase_binding_required) — with zero plan, ledger,
+    // attempt, or grant movement. Round 3's enforce mode still
+    // admitted a null-phase intent for an arbitrary book in that
+    // window, which could have created an unbudgeted plan for
+    // the real budgeted book itself before its binding was
+    // recorded. The gate lifts the moment ANY binding is
+    // recorded (the registry is established): from then on the
+    // registry rules below govern, and genuinely unbudgeted
+    // books may again submit with no phase. The operator-only
+    // binding writer (bindPhaseBook) never passes through this
+    // gate, so the recording act stays usable while admission
+    // is gated. Direct legacy constructions are unaffected:
+    // this gate exists only under enforcement, which — since
+    // round 5 — the production entry applies UNCONDITIONALLY
+    // (see worker-entry-prod-d6.js d6Service).
+    if (enforcePhasePolicy && !phaseRegistryEstablished(coord))
+      return { ok: false, reason: "phase_binding_required" };
     if (!enforcePhasePolicy && !phaseRegistryEstablished(coord))
       return admitPhaseLegacy(bookId, callerPhase);
     return admitPhaseRegistry(bookId, callerPhase);

@@ -14,19 +14,26 @@
 // any plan or ledger state moves.
 //
 // ESTABLISHMENT IS THE SWITCH — with one round-3 hardening
-// (R3-1, Rowan round-3 review, comment 6512804398). While the
+// (R3-1, Rowan round-3 review, comment 6512804398) and one
+// round-5 hardening (R4-2, Rowan round-5 ruling, comment
+// 6514899384; Julie's approval, comment 6522602149). While the
 // registry is empty, a NON-enforcement construction applies the
 // legacy round-1 history rules — the explicit legacy/service-
 // fixture behavior Rowan sanctioned preserving (the existing D6
 // suites stage two books under one phase inside registry-free
 // fixture databases, and they keep doing so, untouched). An
-// ENFORCEMENT-BOUND construction (the production entry under its
-// deployment configuration — service.mjs phasePolicyMode) never
-// applies the legacy rules: the registry rules below govern from
-// the first served request, and while the registry is still
-// empty every budgeted-phase claim fails closed (phase_unbound)
-// until the operator records the binding. There is no exposure
-// window between Worker deployment and binding recording. The
+// ENFORCEMENT-BOUND construction never applies the legacy
+// rules: the registry rules below govern from the first served
+// request, and — since round 5 — while the registry is still
+// empty the service's bootstrap gate refuses EVERY generation
+// intent (phase_binding_required; budgeted, invented, and
+// null-phase alike) until the operator records the binding.
+// Since round 5 the production entry constructs enforcement
+// UNCONDITIONALLY (the deployment var no longer selects the
+// mode; a missing/mistyped var makes the entry's intent route
+// return an explicit 503 configuration failure instead). There
+// is no exposure window between Worker deployment and binding
+// recording. The
 // moment ANY binding is recorded, the registry is the COMPLETE
 // authority for every budgeted phase, on every submission path,
 // in every construction:

@@ -1,0 +1,13 @@
+✔ R5 envelope: the real D6 spec passes the seventh-binding gate (P6 + P7) (102.544716ms)
+✔ R5 envelope: a MISSING seventh binding fails the release gate (P6) (86.491426ms)
+✔ R5 envelope: a MALFORMED seventh binding (mistyped value) fails the release gate (P6) (167.208672ms)
+✔ R5 envelope: a MALFORMED seventh binding (wrong type) fails the release gate (P6) (113.759098ms)
+✔ R5 envelope: an EXTRA eighth binding fails the gate (P6 count + P7 set) (83.964977ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 690.343089

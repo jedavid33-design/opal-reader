@@ -1,0 +1,5 @@
+[FAIL] P6 D6 successor spec carries the seventh binding exactly once: OPALREADER_PHASE_POLICY plain_text "enforce" (7 bindings total) — bindings=7, phasePolicy=[["plain_text","enfore"]]
+[PASS] P7 D6 successor spec binding set is exactly the specced seven (names + types, no duplicates, no extras) — names=COORDINATOR, OPALREADER_STORAGE, ALLOWED_ORIGIN, OPALREADER_V2_SCOPE, GENERATION_HALT, OPALREADER_PHASE_POLICY, OPALREADER_GENERATION_V2
+
+PROD ENVELOPE VALIDATION: FAIL (1/2 assertions)
+failed: P6

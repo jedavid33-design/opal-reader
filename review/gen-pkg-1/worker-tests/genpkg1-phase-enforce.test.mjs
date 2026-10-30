@@ -45,6 +45,30 @@
 //     purely as a fixture identifier over synthetic content.
 //     NOTHING in this suite (or this build) records anything in
 //     production.
+//
+// ROUND-5 AMENDMENT (R4-2; Rowan round-5 ruling, comment
+// 6514899384, items 1–2; Julie's approval, comment 6522602149):
+// this candidate suite's round-3 premises are superseded in
+// exactly three places, each amended in place below and marked
+// R5: (1) under enforcement with an EMPTY registry, every
+// intent — budgeted, invented, or null-phase — is now refused
+// by the service's bootstrap gate as phase_binding_required
+// (round 3 expected phase_unbound / phase_not_budgeted for the
+// named claims and still admitted null-phase work in that
+// window; that null-phase admission was the hole Rowan's
+// item 2 closes); (2) the unbudgeted-admission behavior is now
+// asserted AFTER the binding is recorded, where the registry
+// rules still admit genuinely unbudgeted work; (3) the
+// round-3 contrast test ("without the enforce setting the
+// entry keeps the legacy bootstrap") is REPLACED by two tests
+// proving the new law: a missing flag and a mistyped flag each
+// make the real entry's intent route return an explicit 503
+// phase_policy_not_configured for the whole submission matrix,
+// with zero state movement — the production entry constructs
+// enforcement unconditionally and never falls back to legacy.
+// Test count: 11 (round 3/4) → 12 (the contrast split in two);
+// no assertion was deleted or lowered — each replaced premise
+// is asserted in its stronger round-5 form.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -100,40 +124,83 @@ function ledgerCounts(h) {
 
 // ---- Service level: the enforce construction ----------------
 
-test("R3-1: enforce construction, registry ABSENT — a budgeted claim fails closed (phase_unbound), nothing moves", async () => {
+test("R3-1+R5: enforce construction, registry ABSENT — the bootstrap gate refuses EVERY intent (phase_binding_required), nothing moves", async () => {
   const w = await makeWorld("enforce");
   const before = ledgerCounts(w.h);
+  // R5: round 3 expected phase_unbound for the two named claims
+  // and phase_not_budgeted for the invented one; the round-5
+  // bootstrap gate (Rowan ruling 6514899384 item 2) refuses the
+  // whole matrix with one reason while the registry is empty.
   const fpClaim = await w.service.submitIntent({
     commandId: "e-1", bookId: FP_ID, scope: "book", keepGoing: true,
     phase: PHASE, lane: "standard",
   });
-  assert.deepEqual(fpClaim, { outcome: "rejected", reason: "phase_unbound" },
+  assert.deepEqual(fpClaim, { outcome: "rejected", reason: "phase_binding_required" },
     "the production book itself cannot first-use its phase under enforcement");
   const otherClaim = await w.service.submitIntent({
     commandId: "e-2", bookId: OTHER, scope: "book", keepGoing: true,
     phase: PHASE, lane: "standard",
   });
-  assert.deepEqual(otherClaim, { outcome: "rejected", reason: "phase_unbound" });
+  assert.deepEqual(otherClaim, { outcome: "rejected", reason: "phase_binding_required" });
   const invented = await w.service.submitIntent({
     commandId: "e-3", bookId: OTHER, scope: "book", keepGoing: true,
     phase: "phase-invented", lane: "standard",
   });
-  assert.deepEqual(invented, { outcome: "rejected", reason: "phase_not_budgeted" });
+  assert.deepEqual(invented, { outcome: "rejected", reason: "phase_binding_required" });
+  const nullPhase = await w.service.submitIntent({
+    commandId: "e-3b", bookId: FP_ID, scope: "book", keepGoing: true,
+    phase: null, lane: "standard",
+  });
+  assert.deepEqual(nullPhase, { outcome: "rejected", reason: "phase_binding_required" },
+    "R5: even the budgeted book's own NULL-phase intent is refused while its binding is absent — no unbudgeted plan can slip into the deployment window");
   assert.deepEqual(ledgerCounts(w.h), before,
     "fail-closed rejections move no plan, ledger, attempt, or grant state");
   assert.equal(w.h.rows("d6_phase_bindings").length, 0,
     "no submission wrote a binding — first-use binding does not exist under enforcement");
 });
 
-test("R3-1: enforce construction — null phase with no budgeted claim keeps the unbudgeted behavior", async () => {
+test("R3-1+R5: enforce construction — null-phase work is refused while the registry is empty, and admitted once the binding is recorded", async () => {
   const w = await makeWorld("enforce");
+  // R5: the round-3 form of this test asserted null-phase
+  // admission with the registry still empty; that admission is
+  // precisely the deployment-window hole the bootstrap gate
+  // closes, so the premise is asserted in its round-5 form.
+  const early = await w.service.submitIntent({
+    commandId: "e-4a", bookId: OTHER, scope: "book", keepGoing: true,
+    phase: null, lane: "standard",
+  });
+  assert.deepEqual(early, { outcome: "rejected", reason: "phase_binding_required" });
+  assert.equal(w.h.rows("d6_plans").length, 0, "the gated refusal created nothing");
+  // The operator-side writer is NOT gated: recording works
+  // while admission is closed.
+  const bound = w.service.bindPhaseBook({ phase: PHASE, bookId: FP_ID, source: "enforce-test" });
+  assert.equal(bound.outcome, "applied");
+  // After the registry is established, genuinely unbudgeted
+  // work flows again (Rowan ruling item 2: the gate is narrow).
   const r = await w.service.submitIntent({
     commandId: "e-4", bookId: OTHER, scope: "book", keepGoing: true,
     phase: null, lane: "standard",
   });
-  assert.equal(r.created, true, "genuinely unbudgeted work is not blocked by enforcement");
+  assert.equal(r.created, true, "genuinely unbudgeted work is not blocked once the binding is recorded");
   const row = w.h.rows("d6_plans").find(p => p.plan_id === r.planId);
   assert.equal(row.phase, null);
+  // And the budgeted book is held to its phase from here on.
+  const fpNull = await w.service.submitIntent({
+    commandId: "e-4b", bookId: FP_ID, scope: "segment", occurrenceId: "e0",
+    phase: null, lane: "standard",
+  });
+  assert.deepEqual(fpNull, { outcome: "rejected", reason: "phase_required" });
+  const fpOk = await w.service.submitIntent({
+    commandId: "e-4c", bookId: FP_ID, scope: "book", keepGoing: true,
+    phase: PHASE, lane: "standard",
+  });
+  assert.equal(fpOk.created, true, "the bound book with its correct phase is admitted");
+  const forged = await w.service.submitIntent({
+    commandId: "e-4d", bookId: OTHER, scope: "segment", occurrenceId: "e0",
+    phase: PHASE, lane: "standard",
+  });
+  assert.deepEqual(forged, { outcome: "rejected", reason: "phase_bound_to_other_book" },
+    "another book cannot steal the bound book's budget");
 });
 
 test("R3-1: legacy construction, registry ABSENT — the same claim is admitted (the boundary is construction, not the request)", async () => {
@@ -201,8 +268,13 @@ class SqlFacade {
 
 // enforce: the deployment configuration the pinned spec ships
 // (OPALREADER_PHASE_POLICY=enforce in BOTH the entry env and the
-// class env — production is one Worker env; d6Service reads the
-// class's env). Set enforce:false for the legacy contrast world.
+// class env — production is one Worker env; the class's intent
+// route reads its own env). R5: the flag no longer SELECTS the
+// construction (d6Service is unconditional-enforce); it is a
+// required deployment binding whose absence or corruption makes
+// the intent route fail with an explicit 503. Pass
+// enforce:"typo" for a mistyped-flag world, enforce:false for a
+// missing-flag world.
 function entryWorld({ enforce = true, operator = true } = {}) {
   const db = new DatabaseSync(":memory:");
   let alarmAt = null;
@@ -217,7 +289,8 @@ function entryWorld({ enforce = true, operator = true } = {}) {
     async getAlarm() { return alarmAt; },
     async deleteAlarm() { alarmAt = null; },
   };
-  const policy = enforce ? { OPALREADER_PHASE_POLICY: "enforce" } : {};
+  const policy = enforce === true ? { OPALREADER_PHASE_POLICY: "enforce" }
+    : enforce === "typo" ? { OPALREADER_PHASE_POLICY: "enfore" } : {};
   const opEnv = operator ? { OPALREADER_MIGRATION_OPERATOR_TOKEN: OPTOK } : {};
   const inst = new D6Prod({ storage }, {
     OPALREADER_V2_SCOPE: "production", OPALREADER_ACCESS_TOKEN: TOK,
@@ -267,19 +340,33 @@ function entryWorld({ enforce = true, operator = true } = {}) {
   return { db, inst, entryEnv, submit, bind };
 }
 
-test("R3-1 entry: registry ABSENT + enforce — a client claim on forever-pucked is rejected fail-closed over the public route", async () => {
+test("R3-1+R5 entry: registry ABSENT + enforce — EVERY submission is refused by the bootstrap gate over the public route", async () => {
   const w = entryWorld();
+  // R5: round 3 expected phase_unbound for the named claims and
+  // admitted the null-phase one; the bootstrap gate now refuses
+  // the whole matrix (Rowan ruling 6514899384 item 2, test (c)).
   const fp = await (await w.submit("x-1", FP_ID, { scope: "book", keepGoing: true, phase: PHASE })).json();
-  assert.deepEqual(fp, { outcome: "rejected", reason: "phase_unbound" },
+  assert.deepEqual(fp, { outcome: "rejected", reason: "phase_binding_required" },
     "from the new Worker's first requests, the budgeted claim fails closed — no legacy window");
   const other = await (await w.submit("x-2", OTHER, { scope: "book", keepGoing: true, phase: PHASE })).json();
-  assert.deepEqual(other, { outcome: "rejected", reason: "phase_unbound" });
+  assert.deepEqual(other, { outcome: "rejected", reason: "phase_binding_required" });
+  const fpNull = await (await w.submit("x-2b", FP_ID, { scope: "book", keepGoing: true, phase: null })).json();
+  assert.deepEqual(fpNull, { outcome: "rejected", reason: "phase_binding_required" },
+    "the budgeted book cannot slip an unbudgeted plan in before its binding is recorded");
+  const free = await (await w.submit("x-3", OTHER, { scope: "book", keepGoing: true, phase: null })).json();
+  assert.deepEqual(free, { outcome: "rejected", reason: "phase_binding_required" },
+    "null-phase work for ANY book waits for the binding while the registry is empty");
+  const forged = await (await w.submit("x-3b", OTHER, { scope: "book", keepGoing: true, phase: "phase-invented" })).json();
+  assert.deepEqual(forged, { outcome: "rejected", reason: "phase_binding_required" });
   assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM d6_plans`).get().n, 0, "no plan was created");
   assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM ledger_ops`).get().n, 0, "no ledger movement");
   assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM grants`).get().n, 0, "no grant");
-  // Unbudgeted work still flows under enforcement.
-  const free = await (await w.submit("x-3", OTHER, { scope: "book", keepGoing: true, phase: null })).json();
-  assert.equal(free.created, true, "a null-phase intent for an unbound book is admitted");
+  // The operator writer remains usable while admission is
+  // gated — and once the binding lands, unbudgeted work flows.
+  const bindRes = await w.bind({});
+  assert.equal(bindRes.status, 200, "the recording route works while generation admission is gated");
+  const freeAfter = await (await w.submit("x-3c", OTHER, { scope: "book", keepGoing: true, phase: null })).json();
+  assert.equal(freeAfter.created, true, "after the binding, a null-phase intent for an unbound book is admitted");
 });
 
 test("R3-1 entry: the recording route refuses everything except the operator credential", async () => {
@@ -359,9 +446,36 @@ test("R3-1 entry: after the binding — the mapped book is admitted, the phase i
     "the bound book may not run outside its phase accounting");
 });
 
-test("R3-1 entry: WITHOUT the deployment's enforce setting, the same entry keeps the legacy bootstrap (fixture contrast)", async () => {
+// R5 (replaces the round-3 contrast test, whose premise —
+// unset flag → legacy construction through the production
+// entry — is exactly what Rowan's item 1 forbids): a missing
+// or mistyped flag is an explicit configuration failure at the
+// intent route, for the WHOLE submission matrix (Rowan ruling
+// 6514899384 item 2, tests (a) and (b)), with zero movement.
+async function assertConfigFailureMatrix(w, label) {
+  const matrix = [
+    ["m-1", FP_ID, { scope: "book", keepGoing: true, phase: PHASE }],
+    ["m-2", FP_ID, { scope: "book", keepGoing: true, phase: null }],
+    ["m-3", OTHER, { scope: "book", keepGoing: true, phase: PHASE }],
+    ["m-4", OTHER, { scope: "book", keepGoing: true, phase: null }],
+    ["m-5", OTHER, { scope: "book", keepGoing: true, phase: "phase-invented" }],
+  ];
+  for (const [cid, bookId, intent] of matrix) {
+    const res = await w.submit(cid, bookId, intent);
+    assert.equal(res.status, 503, `${label}: submission ${cid} fails with an explicit configuration error`);
+    assert.deepEqual(await res.json(), { error: "phase_policy_not_configured" });
+  }
+  assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM d6_plans`).get().n, 0, `${label}: no plan was created`);
+  assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM ledger_ops`).get().n, 0, `${label}: no ledger movement`);
+  assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM grants`).get().n, 0, `${label}: no grant`);
+}
+
+test("R5 entry: MISSING phase-policy flag — every submission fails 503 phase_policy_not_configured, zero movement", async () => {
   const w = entryWorld({ enforce: false });
-  const fp = await (await w.submit("x-7", FP_ID, { scope: "book", keepGoing: true, phase: PHASE })).json();
-  assert.equal(fp.created, true,
-    "the boundary is the deployment configuration: unset → legacy construction, as every baseline fixture runs it");
+  await assertConfigFailureMatrix(w, "missing flag");
+});
+
+test("R5 entry: MISTYPED phase-policy flag — every submission fails 503 phase_policy_not_configured, zero movement", async () => {
+  const w = entryWorld({ enforce: "typo" });
+  await assertConfigFailureMatrix(w, "mistyped flag");
 });
