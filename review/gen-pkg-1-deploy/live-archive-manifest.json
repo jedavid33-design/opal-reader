@@ -1,0 +1,143 @@
+{
+  "archive": "live ac451df8 upload package (module parts)",
+  "build": "ac451df8b772ddc3f64d4c6418678ce78b243d58",
+  "script": "opalreader-api-v2-prod",
+  "script_etag_at_deploy": "37b464ac1c2f1d7913da82e85e09638ad7e1b5c6021e3406c6cc4a5ddb9df675",
+  "source": "~/workspace/d6-build/deploy-evidence/g9-continuation/pre-flip-archive/ (downloaded from the live script at G9 halt-flip F0; byte-identical to the seed-fix deploy D1 envelope parts and to the D2 post-upload content read-back, 26/26)",
+  "parts_count": 26,
+  "total_module_bytes": 1083378,
+  "parts": [
+    {
+      "part": "v2/api.mjs",
+      "bytes": 13632,
+      "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d"
+    },
+    {
+      "part": "v2/audio-route.mjs",
+      "bytes": 15965,
+      "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616"
+    },
+    {
+      "part": "v2/coordinator.mjs",
+      "bytes": 268522,
+      "sha256": "c31359ae87cf0271c2186a579e6540461089e0ffaa181e00c732ceed649d8eb3"
+    },
+    {
+      "part": "v2/executor.mjs",
+      "bytes": 13974,
+      "sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9"
+    },
+    {
+      "part": "v2/generation/content-plane-adapter.mjs",
+      "bytes": 7577,
+      "sha256": "51c177dd8d2c4c85dbd1ce19180f60f70b3d037c53081be17c9762f93e7b8f38"
+    },
+    {
+      "part": "v2/generation/d6-executor.mjs",
+      "bytes": 30525,
+      "sha256": "3bdea5452667856771e5370396bac5a16306ddbae6f95d40e63273869b4ed61d"
+    },
+    {
+      "part": "v2/generation/d6-work-source.mjs",
+      "bytes": 5981,
+      "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006"
+    },
+    {
+      "part": "v2/generation/eligible-set.mjs",
+      "bytes": 5978,
+      "sha256": "87b4b09ad08a23160a8b473bd0ecb88cf2f7b1d5fcf1ec0d52dbb96920e51a7c"
+    },
+    {
+      "part": "v2/generation/flush-store.mjs",
+      "bytes": 8497,
+      "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325"
+    },
+    {
+      "part": "v2/generation/gen-constants.mjs",
+      "bytes": 3944,
+      "sha256": "6922ad7402bcc369bbd48b12d859ccdf93964dbd94ab593ce126aa7af0a2e4ee"
+    },
+    {
+      "part": "v2/generation/gen-schema.mjs",
+      "bytes": 5307,
+      "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5"
+    },
+    {
+      "part": "v2/generation/genstore.mjs",
+      "bytes": 22164,
+      "sha256": "2e1eb5bd2b53fce4b58eb1b06f737326c385f1d49ba612e91a24f3ab43f311bb"
+    },
+    {
+      "part": "v2/generation/grant-guards.mjs",
+      "bytes": 4188,
+      "sha256": "98a71d8a5b9ac4eba20f3ed48cbe6fcc2bd3a55f037c7dc7191a41650d95ea6a"
+    },
+    {
+      "part": "v2/generation/policy-split.mjs",
+      "bytes": 9735,
+      "sha256": "cc54ad7631ba51c834abfa33660cf5094ea06650f3c015a80077d230ad29662c"
+    },
+    {
+      "part": "v2/generation/proofs.mjs",
+      "bytes": 15096,
+      "sha256": "e7571e1181a5e0e558ff2d7b524f620c260a601289eb66bcf73c43bce2910d38"
+    },
+    {
+      "part": "v2/generation/service.mjs",
+      "bytes": 22512,
+      "sha256": "f9d32053724aba0845b46adcd79ba19d42f5ef73fa44c6b6389646510722492c"
+    },
+    {
+      "part": "v2/generation/settings-reconcile.mjs",
+      "bytes": 1138,
+      "sha256": "6ba4ec330adf5a34c535233d15528bb1e20cc28d30db641a5cc477b443974d61"
+    },
+    {
+      "part": "v2/host/adapters.mjs",
+      "bytes": 34359,
+      "sha256": "22557b5993de13d20831eec0761a0c448cafd42d5698ace0f468352fbf825258"
+    },
+    {
+      "part": "v2/host/build-identity.mjs",
+      "bytes": 411,
+      "sha256": "f7583ebd2623b051f6e5323827e7ce1e967a692faa71e9e44b2c137dc8f23471"
+    },
+    {
+      "part": "v2/p8/approved-freeze-carry.mjs",
+      "bytes": 57703,
+      "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46"
+    },
+    {
+      "part": "v2/p8/approved-freeze-chunks.mjs",
+      "bytes": 6101,
+      "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a"
+    },
+    {
+      "part": "v2/p8/approved-freeze-manifest.mjs",
+      "bytes": 467075,
+      "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd"
+    },
+    {
+      "part": "v2/p8/migration-chunk-limits.mjs",
+      "bytes": 4733,
+      "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41"
+    },
+    {
+      "part": "v2/worker-entry-prod-d6.js",
+      "bytes": 22261,
+      "sha256": "a1241e325d5ed7e678a1000470ff1a6bacda850ee4ad01f1f3ed49062ccd5fec"
+    },
+    {
+      "part": "v2/worker-entry-prod.js",
+      "bytes": 14480,
+      "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5"
+    },
+    {
+      "part": "v2/worker-entry.js",
+      "bytes": 21520,
+      "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5"
+    }
+  ],
+  "metadata_record": "seed-fix deploy d1-envelope-validation.json (metadata object): main_module v2/worker-entry-prod-d6.js, compatibility 2026-08-29 + nodejs_compat, 7 non-secret bindings incl GENERATION_HALT \"1\" as uploaded, queue producer opalreader-generation-v2, 3 secrets as inherit by name, no migrations key, observability enabled/persisted",
+  "note": "Module parts only in this archive; upload metadata is the recorded D1 metadata above. The current live GENERATION_HALT is \"0\" (G9 flip) \u2014 a rollback must NOT copy current metadata; see ARCHIVE-AND-ROLLBACK.md."
+}

@@ -1,0 +1,2 @@
+2f5ce34ee47b822de9829890ae9878447c361d5f89abbe5440852d0a4f39e5f1  /home/hatch/workspace/gen-pkg-1/logs/deploy-plan/assembled-envelope.bin
+e08b06bc840810739ef5a2fbd5279c6670c1759235fa830121964507f162a9fd  /home/hatch/workspace/gen-pkg-1/logs/deploy-plan/assembled-metadata.json
