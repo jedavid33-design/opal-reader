@@ -22,6 +22,16 @@ illustration's arithmetic does not even reach cent-rounded
 equality with the displayed total (§3.2 S1). None of the three
 corrections weakens the conclusion; R3 reinforces it.
 
+**Design-review clarification 1 (Rowan, issue #15, comment
+6534952386).** The smoke's 17,749-unit figure below is
+**ledger-recorded known, not provider-verified**: "settled"
+in this research and in the design's accounting always means
+*recorded as known under the system's existing ledger
+contracts* — §3.1's own finding is that the figure is the
+estimator's output, not a meter read — and no per-attempt
+figure anywhere in the system carries Google's verification.
+§3.1's wording is aligned accordingly.
+
 **Conclusion, stated first: no such record or allocation exists
 at the required standard.** Google confirms exactly one figure —
 the account/day aggregate ($0.20 net, Oct 29, 2026, rounded to
@@ -103,7 +113,7 @@ What follows from the basis:
 
 | Request | Input | Response character | Our recorded cost |
 |---|---|---|---|
-| Smoke (Ch 4 Seg 1) | 1,259 chars | Success; audio file 4,197,164 B WAV (PCM 16-bit mono 24 kHz ⇒ ≈ 87.4 s of audio) | Settled **17,749 units** — which equals the *estimator* output for its own length, `round(1259 / 15.96 × 225)`; at published rates on its measured duration it would be ≈ 19,700–19,900 units. Even our one "settled" figure is estimator-derived, not a meter read. |
+| Smoke (Ch 4 Seg 1) | 1,259 chars | Success; audio file 4,197,164 B WAV (PCM 16-bit mono 24 kHz ⇒ ≈ 87.4 s of audio) | Recorded settled (ledger-known) **17,749 units** — which equals the *estimator* output for its own length, `round(1259 / 15.96 × 225)`; at published rates on its measured duration it would be ≈ 19,700–19,900 units. Even our one "settled" figure is estimator-derived, not a meter read, and not provider-verified (clarification 1). |
 | 8 failed Ch 2 attempts | Segments of the 18-entry, 25,091-char chapter set (mean 1,394 chars/entry); the 9 attempted are the first 9 by occurrence-id order | HTTP 200 with steps but **no audio content part** (diagnosis Q5 branch (b); the defect the B1 fix corrects) — one call each | `failed_known` at **cost 0 — by local convention** (the executor confirms every known failure at cost 0 by construction). Not a provider measurement. |
 | 1 unknown attempt | One segment of the same set (own length in its attempt record; `upperMicroCents` recorded on the chars/10 basis ⇒ ≈ **31,400 units ≈ $0.0314** at the mean length — a **modeled internal budgeting cap** derived from an assumed speech rate, **not** a guaranteed ceiling on Google's actual charge for the request; see R2 note under §3.2) | **No usable response received.** Mechanism classes (diagnosis Q1/Q5): (1) fetch timeout at the 120 s `AbortSignal` — Google may or may not have completed generation server-side; (2) truncated-body JSON parse throw — a 200 *was* received; (3) base64 decode throw — a 200 *with audio* was received and lost client-side. One call by construction (the message stops at the first unknown). | `unknown`, cost NULL — the only honest entry our system could write. |
 
