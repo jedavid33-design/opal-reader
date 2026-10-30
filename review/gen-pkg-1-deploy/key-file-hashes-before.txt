@@ -1,4 +1,5 @@
-9cfd4c40a2549fc9667e8420ef09792897a2e43e751d5ac77d3462b340bfc77a  /home/hatch/workspace/gen-pkg-1/worker-build/worker/worker-entry-prod-d6.js
-700b8a8d67a813d38597f9017fb24e1d773cac033788db17a4b475b456d087ef  /home/hatch/workspace/gen-pkg-1/worker-build/worker/generation/service.mjs
+1564b784557828b64b648a3e50360c80f340d5d587041416573857819ecd6de0  /home/hatch/workspace/gen-pkg-1/worker-build/worker/worker-entry-prod-d6.js
+5670dfb3739986c3473bea5ab913b9f1f005925523e1bbaee19f99c9b3b8d4d1  /home/hatch/workspace/gen-pkg-1/worker-build/worker/generation/service.mjs
+64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62  /home/hatch/workspace/gen-pkg-1/worker-build/worker/generation/quarantine.mjs
 0dafd14c63d420f4c22eaf323e4e2cbac5fbfd2f9fdb2df26014be57a8e55fb4  /home/hatch/workspace/gen-pkg-1/worker-build/worker/p8/deploy-spec-prod-d6.json
 bcb29105888bdd91ff9e33650f6d1fb57b4262c2674ca6e70f0076e5a8c6840d  /home/hatch/workspace/gen-pkg-1/worker-build/worker/host/build-identity.mjs

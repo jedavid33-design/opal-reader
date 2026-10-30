@@ -133,6 +133,20 @@ anything is overwritten.
 
 ## 2. Compatibility assessment — candidate vs live build
 
+**D9-E note (2026-10-30):** this section was verified
+against the round-5 candidate, signed pin `5ae38942…`
+(HISTORICAL). The FINAL candidate is
+`f3b6e6e9fd7a44532ceef86e484a79e466b36d4d` (D7-2 quarantine +
+D8 corrections; Rowan code-level PASS, comment 6526547700).
+Its state additions beyond the table below follow the same
+pattern — additive, DDL-only, lazily ensured, beside the
+owning module: `d6_quarantine_holds`, `d6_halt_epochs`, and
+`d6_quarantine_meta` (all in
+`generation/quarantine.mjs`). The rollback base in §1 — the
+live `ac451df8` 26-part archive — and every rollback rule in
+this document are unchanged and apply to the final
+candidate.
+
 Verified against the actual candidate source
 (`gen-pkg-1/worker-build/worker/`, signed pin `5ae38942…`) and
 the live build's source (`d6-build/seedfix-build/`), not just
@@ -293,6 +307,9 @@ this plan.
   `d2-upload.json`).
 - Candidate source: `~/workspace/gen-pkg-1/worker-build/worker/`
   at signed pin `5ae38942e493a4b53f541b5e1f589060d58d158d`
+  (round-5 verification basis, historical); the FINAL
+  candidate is `f3b6e6e9fd7a44532ceef86e484a79e466b36d4d`
+  (see the D9-E note at §2).
   (`generation/phase-policy.mjs`,
   `generation/binding-projection.mjs`,
   `generation/service.mjs`, `worker-entry-prod-d6.js`).

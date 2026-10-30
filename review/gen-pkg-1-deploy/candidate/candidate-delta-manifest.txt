@@ -1,0 +1,16 @@
+# candidate/worker SOURCE-DELTA manifest — D9-E
+# previous pinned candidate: review/gen-pkg-1-deploy/candidate/worker at commit 1c7f05305c9ef9a757fd8d32499a3f512ae59943 (56 files, round-5 candidate 5ae38942)
+# final candidate: signed pin f3b6e6e9fd7a44532ceef86e484a79e466b36d4d (57 files; D7-2 quarantine + D8 corrections)
+# method: per-file SHA-256 of both pinned manifests
+
+ADDED (1):
+  generation/quarantine.mjs
+REMOVED (0):
+CHANGED (4):
+  generation/d6-executor.mjs
+  generation/grant-guards.mjs
+  generation/service.mjs
+  worker-entry-prod-d6.js
+UNCHANGED: 52 files byte-identical
+
+Note: the delta spans BOTH the D7-2 quarantine build (pin 83375188) and the D8 corrections (pin f3b6e6e9), because the previously pinned candidate predates D7-2. The per-round deltas are recorded at review/gen-pkg-1/** in pins 83375188 and f3b6e6e9 respectively.

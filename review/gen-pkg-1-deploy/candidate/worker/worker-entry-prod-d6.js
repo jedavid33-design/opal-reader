@@ -100,6 +100,60 @@
 //     reconciled). Neither surface is reachable on the client
 //     token, and neither has been exercised against production —
 //     each USE is a separate Julie authorization.
+//   * gen-pkg-1 D7-2 (Rowan ruling 6524426826; Julie's approval
+//     6524562842) adds the BIRTH-MARK + GRANT-QUARANTINE:
+//     d6Service constructs quarantineMode "enforce"
+//     UNCONDITIONALLY, so a plan submitted while GENERATION_HALT
+//     is not exactly "0" is birth-marked atomically with its plan
+//     insert (generation/quarantine.mjs — an additive, lazily
+//     ensured table, never part of the pinned bootstrap set);
+//     the grant guard refuses held subjects absolutely (and, via
+//     d6HostEnv's d6HaltFence, refuses + marks plan-less jobs
+//     attempting grants while halted); driveOnce skips held
+//     plans; the D6 executor refuses held jobs pre-claim. The
+//     ONLY clearance is the operator-only POST
+//     /v2/d6-release-quarantine (same fence class as the
+//     phase-binding / retirement routes), per subject,
+//     idempotent, audited on the hold row itself, with read-back.
+//     Admission while halted is unchanged (C3's contract);
+//     SPEND AUTHORITY is what is fenced. No deploy, binding,
+//     publication, or re-arm path releases a hold, and each
+//     production release remains a separate Julie approval.
+//   * gen-pkg-1 D8 (Rowan review of the D7-2 build, comment
+//     6525035570) corrects two grant-safety blockers in the
+//     quarantine build. D8-1: every hold read at a spending /
+//     execute fence is now STRICT (generation/quarantine.mjs) —
+//     a SQL fault throws and refuses before any grant, ledger,
+//     outbox, or provider effect; the catch-all "error means no
+//     hold" read survives only on read-only views, and there only
+//     for a genuinely absent table. D8-2: (i) the admission fence
+//     — public + class level — now refuses EVERY generation-
+//     producing legacy command while halted: plain SubmitJob
+//     (WITHOUT data.d6Intent) and RequestRepair join
+//     RequestSynthesis / RequestResume at 423 generation_halted,
+//     because a plan-less job staged while halted carried no
+//     birth mark and a generic re-arm could make it spendable;
+//     the D6 intent shape (SubmitJob + data.d6Intent) is still
+//     admitted and birth-marked, exactly as C3 contracts, and
+//     reads/sync/settings commands are untouched; (ii) the
+//     production class stamps the D6 guard flags (d6StandardOnly,
+//     d6HaltFence) onto its own env after construction, so every
+//     coordinator the class builds for its post-construction
+//     operations — the /v2/commands API dispatch and, critically,
+//     the BASE alarm's schedule processing (super.alarm() runs a
+//     coordinator built from this env) — runs the D6 grant guard:
+//     no base-machinery path (watchdog retry_grant, repair
+//     chains, command handlers) can issue a grant the guard never
+//     sees. The constructor's own coordinator (this.coordinator)
+//     deliberately keeps the plain construction env — it is a
+//     schema/settings handle no production grant path uses, and
+//     the baseline suites pin its plain behavior; and (iii) the
+//     grant guard additionally fences, via the halt-epoch ledger
+//     (generation/quarantine.mjs), plan-less jobs born inside a
+//     recorded halt epoch — the durable answer for rows staged
+//     in the store despite the admission fence, whose halt-era
+//     grant attempts may have been refused before the guard
+//     (quota park / daily quota / monthly cap) ever ran.
 //   * A queue handler consumes the v2 queue into /internal/execute.
 //     GENERATION_HALT still gates queue + execute via
 //     assertGenerationEnabled, independently at each layer.
@@ -133,6 +187,32 @@ import { createCoordinatorPlaneSource } from "./generation/content-plane-adapter
 const INTERNAL_HEADER = "x-opalreader-internal";
 const TOKEN_ERROR_BODY = { error: "The personal access token is missing or incorrect." };
 
+// D7-2 + D8-2 ADMISSION FENCE predicate, shared by the public
+// fetch and the coordinator class (which carries the same
+// refusal as a bypass backup): the command types that PRODUCE
+// generation work — a job and/or an immediate grant — and so are
+// refused while GENERATION_HALT !== "0". D7-2 refused
+// RequestSynthesis (job + immediate grant) and RequestResume
+// (paused_quota grant probe). D8-2 (Rowan review 6525035570)
+// adds the two staging shapes the D7-2 build still admitted:
+// plain SubmitJob — a plan-less job with NO birth mark, whose
+// first grant attempt might happen only after a generic re-arm
+// (or be refused before the guard by the park/quota/cap checks,
+// leaving it unmarked) — and RequestRepair, which is the same
+// staging shape under a repair kind. The D6 intent shape
+// (SubmitJob carrying payload.data.d6Intent) is NOT refused: it
+// routes to the intent surface, where admission is C3's contract
+// and the plan is birth-marked. Every other command type —
+// sync, settings, reads, migration fences — is untouched.
+function isHaltRefusedCommand(peek) {
+  if (!peek || typeof peek.type !== "string") return false;
+  if (peek.type === "RequestSynthesis" || peek.type === "RequestResume" ||
+      peek.type === "RequestRepair") return true;
+  if (peek.type === "SubmitJob")
+    return !(peek.payload && peek.payload.data && peek.payload.data.d6Intent);
+  return false;
+}
+
 // The D6 coordinator environment for one DO operation: the staging
 // hostEnv's seams (request-scoped R2 cache probe / hydration /
 // migration prime / byte check) PLUS the two D6 additions —
@@ -146,6 +226,14 @@ function d6HostEnv(env, cache) {
   return {
     ...env,
     d6StandardOnly: true,
+    // D7-2: the halt fence for plan-less jobs (grant-guards.mjs):
+    // wired ONLY here, in the D6 production entry's coordinator
+    // environment, so a grant attempt for a job with no D6 plan
+    // while GENERATION_HALT !== "0" is refused and the job durably
+    // quarantined. Direct coordinator constructions (fixtures,
+    // legacy suites) never set it and keep the pre-D7-2 unguarded
+    // behavior for plan-less jobs exactly.
+    d6HaltFence: true,
     probe: cache ? cache.probe : undefined,
     hydrateCacheKey: cache ? (key) => cache.hydrateKey(key) : undefined,
     migrationPrime: cache ? (key) => cache.primeForMigration(key) : undefined,
@@ -187,6 +275,14 @@ function d6Service(coord, env) {
     // fixtures keeps its explicit legacy default — that path
     // never reaches this entry.
     phasePolicyMode: "enforce",
+    // D7-2 (Rowan ruling 6524426826; Julie's approval
+    // 6524562842): the birth-mark quarantine, likewise
+    // UNCONDITIONAL in this entry — every service this entry
+    // constructs birth-marks plans submitted while halted. The
+    // fence (guard/driver/executor) is data-driven and needs no
+    // mode; the mode governs only the marking act, and only this
+    // trusted construction enables it.
+    quarantineMode: "enforce",
   });
 }
 
@@ -199,6 +295,32 @@ function d6Service(coord, env) {
 export class OpalReaderCoordinatorProd extends ProductionCoordinatorBase {
   constructor(state, env) {
     super(state, env);
+    // D8-2 PRODUCTION-CLASS FENCE (Rowan review 6525035570, path
+    // audit): the base class builds every post-construction
+    // coordinator from THIS env through a host-env spread — the
+    // /v2/commands API dispatch in fetch(), and the coordinator
+    // whose alarm() runs inside this class's super.alarm()
+    // (schedule processing: watchdog retry_grant, lease handling,
+    // repair follow-ups). The raw platform env carries neither
+    // D6 guard flag, so before this correction those coordinators
+    // ran _issueGrant with the D6 grant guard DISABLED — the
+    // guard existed only on the separately constructed D6 service
+    // coordinators (d6HostEnv). Stamping both flags onto the
+    // class's own env here makes the guard — plan/phase checks,
+    // the quarantine hold fence, the halt fence, the epoch fence —
+    // apply on EVERY coordinator this class operates: no
+    // base-machinery grant path can issue a grant, ledger
+    // reservation, or outbox row the guard never sees. Deliberately
+    // NOT done by decorating the constructor ARGUMENT: the base
+    // constructor builds this.coordinator from that argument, and
+    // this.coordinator is a plain schema/settings handle that no
+    // production grant path uses (its only production use is the
+    // ensureGenSchema call below) — the baseline suites pin its
+    // plain behavior (d6-correction C2/C4), so it keeps the
+    // construction env exactly as before. The spread preserves
+    // every platform binding (GENERATION_HALT, tokens, storage,
+    // queue) untouched; only the two D6 flags are added.
+    this.env = { ...this.env, d6StandardOnly: true, d6HaltFence: true };
     // In-place, idempotent generation-schema bootstrap inside the
     // existing coordinator's SQLite (CORRECTION 6501450683). The
     // DDL is CREATE TABLE IF NOT EXISTS throughout: on the live
@@ -216,6 +338,42 @@ export class OpalReaderCoordinatorProd extends ProductionCoordinatorBase {
       return json(403, { error: this._scopeRequiredError() });
     const url = new URL(request.url);
     try {
+      // D7-2 + D8-2 ADMISSION FENCE (class level; the public
+      // entry carries the same refusal — this is the D3-1-style
+      // backup for a direct internal request that bypassed it):
+      // while GENERATION_HALT !== "0", the grant-PRODUCING legacy
+      // command types are refused HERE, before the API dispatch.
+      // D7-2 refused RequestSynthesis (job + immediate grant in
+      // one command) and RequestResume (paused_quota grant
+      // probe): the /v2/commands dispatch historically ran on a
+      // coordinator the D6 guard flag never reached, so either
+      // could issue a grant/ledger/outbox spend the guard seam
+      // never saw — Rowan's named hole (6524426826), closed at
+      // its admission point as the ruling allows. (Since D8-2 the
+      // dispatch coordinator is flagged too — see the constructor
+      // — but admission remains the first, cheapest fence.)
+      // D8-2 (review 6525035570) extends the refusal to plain
+      // SubmitJob and RequestRepair: both stage plan-less jobs
+      // with NO birth mark, and the D7-2 build's answer — the
+      // guard marks the job at its first halted grant ATTEMPT —
+      // is unreachable when that attempt is refused before the
+      // guard (quota park / daily quota / monthly cap, all
+      // checked earlier in _issueGrant) or only happens after a
+      // generic re-arm. Staging is therefore refused outright
+      // while halted; the guard's halt-epoch fence remains as the
+      // durable layer for rows already in the store. The refusal
+      // is the codebase's halt vocabulary (423, the
+      // GenerationHaltedError shape). Everything else is
+      // untouched: D6 intents arrive on their own internal route
+      // (admitted + birth-marked, C3's contract), and sync/read/
+      // settings/other commands behave exactly as before.
+      if (request.method === "POST" && url.pathname === "/v2/commands" &&
+          this.env.GENERATION_HALT !== "0") {
+        let peek = null;
+        try { peek = await request.clone().json(); } catch { peek = null; }
+        if (isHaltRefusedCommand(peek))
+          return json(423, { error: "generation_halted" });
+      }
       if (url.pathname === "/internal/d6/intent" && request.method === "POST") {
         // R5 / R4-2 explicit configuration failure (Rowan
         // round-5 ruling, comment 6514899384, item 1): D6
@@ -364,6 +522,38 @@ export class OpalReaderCoordinatorProd extends ProductionCoordinatorBase {
         await cache.flush();
         return json(200, result);
       }
+      if (url.pathname === "/internal/d6/release-quarantine" && request.method === "POST") {
+        // D7-2 (Rowan ruling 6524426826 req 3; Julie's approval
+        // 6524562842): the quarantine release — the ONLY clearance
+        // a birth-mark / grant-guard hold has. Same operator fence
+        // as the phase-binding and retirement routes above
+        // (operator-admitted stamp required at this class gate).
+        // The service checks its preconditions server-side
+        // (subject named exactly once, plan exists, hold exists,
+        // halted_unknown refused — release is not a reconcile),
+        // and the response carries the READ-BACK hold record from
+        // the store itself. A duplicate release is an idempotent
+        // applied no-op (alreadyReleased: true). Exercising this
+        // route against any production subject is a separate,
+        // per-plan Julie authorization — nothing here performs it.
+        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
+          return json(403, { error: "migration_operator_required" });
+        const cache = await this._cache();
+        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+        const body = await request.json().catch(() => null);
+        const service = d6Service(coord, d6HostEnv(this.env, cache));
+        const isStr = (v) => typeof v === "string" && v.length > 0;
+        const subject = {
+          planId: body && isStr(body.planId) ? body.planId : null,
+          jobId: body && isStr(body.jobId) ? body.jobId : null,
+        };
+        const result = service.releaseQuarantine({
+          ...subject, source: "operator-route",
+        });
+        const quarantine = service.getQuarantine(subject);
+        await cache.flush();
+        return json(200, { ...result, quarantine });
+      }
       if (url.pathname === "/internal/d6/seed-storage" && request.method === "POST") {
         // CORRECTION 2 + G2 HARDENING: the storage seed. Beyond the
         // class gate above (internal header + production scope),
@@ -496,9 +686,16 @@ async function fetchHandler(request, env) {
     url.pathname === "/v2/d6-phase-binding";
   const isRetirePlanRoute = request.method === "POST" &&
     url.pathname === "/v2/d6-retire-halted-plan";
+  // D7-2: the quarantine release joins the same operator fence
+  // class (gate skips the client token; the operator admission
+  // block below requires the migration-operator credential; the
+  // class gate requires the stamped admission again).
+  const isReleaseQuarantineRoute = request.method === "POST" &&
+    url.pathname === "/v2/d6-release-quarantine";
   const denied = productionGate(request, env, cors,
     { skipClientToken: isOperatorRoute || isDiagnosticsRoute
-        || isPhaseBindingRoute || isRetirePlanRoute });
+        || isPhaseBindingRoute || isRetirePlanRoute
+        || isReleaseQuarantineRoute });
   if (denied) return denied;
   const instance = request.headers.get("x-opalreader-instance");
   if (instance !== PRODUCTION_INSTANCE)
@@ -515,6 +712,18 @@ async function fetchHandler(request, env) {
     try { peek = await request.clone().json(); } catch { peek = null; }
     if (peek && peek.type === "MigrateImportBindings")
       return json(403, { error: "migration_chunk_required" }, cors);
+    // D7-2 + D8-2 ADMISSION FENCE (public level; the coordinator
+    // class carries the same refusal as a bypass backup): while
+    // halted, EVERY generation-producing legacy command type is
+    // refused 423 generation_halted — RequestSynthesis /
+    // RequestResume (D7-2) and plain SubmitJob / RequestRepair
+    // (D8-2; see isHaltRefusedCommand and the class-level comment
+    // in OpalReaderCoordinatorProd.fetch). D6 intents (SubmitJob
+    // + data.d6Intent) are NOT refused: they forward to the
+    // intent route below and are admitted + birth-marked,
+    // exactly as C3 contracts.
+    if (env.GENERATION_HALT !== "0" && isHaltRefusedCommand(peek))
+      return json(423, { error: "generation_halted" }, cors);
   }
   // G2: the storage-seed route joins the operator fence. Unlike
   // the two Option D operator routes (admitted on the operator
@@ -526,7 +735,8 @@ async function fetchHandler(request, env) {
     url.pathname === "/v2/d6-seed-storage";
   let operatorAdmitted = false;
   if (isOperatorRoute || isSeedRoute || isDiagnosticsRoute
-      || isPhaseBindingRoute || isRetirePlanRoute) {
+      || isPhaseBindingRoute || isRetirePlanRoute
+      || isReleaseQuarantineRoute) {
     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
     if (!operatorToken || !env.OPALREADER_ACCESS_TOKEN ||
         operatorToken === env.OPALREADER_ACCESS_TOKEN)
@@ -646,6 +856,15 @@ async function fetchHandler(request, env) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(retireBody ?? {}),
+    }));
+  }
+  if (isReleaseQuarantineRoute) {
+    let releaseBody = null;
+    try { releaseBody = await request.json(); } catch { releaseBody = null; }
+    return forward(new Request("https://do.internal/internal/d6/release-quarantine", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(releaseBody ?? {}),
     }));
   }
   return forward(new Request(url.toString(), request));

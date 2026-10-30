@@ -6,7 +6,7 @@
 // production dist (main_module v2/worker-entry-prod.js, 5
 // bindings, D6 modules EXCLUDED). This harness closes that gap:
 // it assembles the ACTUAL D6 upload envelope from the pinned
-// candidate tree (ui1-review 5ae38942e493a4b53f541b5e1f589060d58d158d)
+// candidate tree (ui1-review f3b6e6e9fd7a44532ceef86e484a79e466b36d4d)
 // exactly as the proven G4 / seed-fix halted deploys assembled
 // theirs, and validates THAT envelope against the pinned D6 spec
 // (worker/p8/deploy-spec-prod-d6.json).
@@ -50,7 +50,9 @@
 //   node proof-d6-envelope.mjs --mutate wrong-entry    (must FAIL, exit 1)
 
 // =====================================================================
-// REPLAY VARIANT (D7-1 correction, Rowan comment 6524120231) —
+// REPLAY VARIANT (D7-1 correction, Rowan comment 6524120231;
+// D9-E: PIN restamped to the final D8 candidate f3b6e6e9, Rowan
+// comment 6526547700 — no other change) —
 // review-only; the original filed harness above is the historical
 // record and is untouched. Differences from the original:
 //   * candidate worker dir DEFAULTS to ../gen-pkg-1/worker relative
@@ -76,7 +78,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const PIN = "5ae38942e493a4b53f541b5e1f589060d58d158d";
+const PIN = "f3b6e6e9fd7a44532ceef86e484a79e466b36d4d";
 const EXPECTED_ENTRY = "v2/worker-entry-prod-d6.js";
 
 const args = process.argv.slice(2);

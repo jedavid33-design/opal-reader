@@ -10,6 +10,19 @@ active plans". Where a surface genuinely cannot prove a fact,
 this addendum says so and names the compensating evidence —
 nothing is claimed at a strength the surfaces cannot carry.
 
+**D9-E applicability note (2026-10-30):** this addendum is
+unchanged in substance and applies as written to the FINAL
+candidate, signed pin
+`f3b6e6e9fd7a44532ceef86e484a79e466b36d4d` (Rowan code-level
+PASS, comment 6526547700). The "26 parts" figures in §B.1
+refer to the LIVE build `ac451df8` archive, which did not
+change; the candidate-side surfaces named in §D (plan list,
+diagnostics) are the final candidate's. The quarantine-era
+strengthening of the D0/D4 obligation — enumerate every
+durable plan and job WITH its quarantine hold state, per
+`DEPLOY-PLAN-ADDENDUM-D7.md` — stands alongside this
+addendum.
+
 ---
 
 ## A. The recorded production inventory (the closed set)

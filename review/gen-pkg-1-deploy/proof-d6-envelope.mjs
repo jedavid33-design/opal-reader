@@ -56,7 +56,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const CANDIDATE = resolve(here, "..", "..", "worker-build");
 const WORKER_DIR = join(CANDIDATE, "worker");
-const PIN = "5ae38942e493a4b53f541b5e1f589060d58d158d";
+const PIN = "f3b6e6e9fd7a44532ceef86e484a79e466b36d4d";
 const EXPECTED_ENTRY = "v2/worker-entry-prod-d6.js";
 
 const args = process.argv.slice(2);

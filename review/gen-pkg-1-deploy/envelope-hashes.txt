@@ -1,2 +1,21 @@
-2f5ce34ee47b822de9829890ae9878447c361d5f89abbe5440852d0a4f39e5f1  /home/hatch/workspace/gen-pkg-1/logs/deploy-plan/assembled-envelope.bin
-e08b06bc840810739ef5a2fbd5279c6670c1759235fa830121964507f162a9fd  /home/hatch/workspace/gen-pkg-1/logs/deploy-plan/assembled-metadata.json
+gen-pkg-1 D8 corrections — actual-D6-envelope proof record
+============================================================
+pin (BUILD_COMMIT stamped): f3b6e6e9fd7a44532ceef86e484a79e466b36d4d
+proof: PASS 18/18 (logs/d8/proof-pass.log)
+negative controls (all FAIL as required):
+  drop-seventh  -> failed E7, E8, E9, E10 (logs/d8/proof-negative-drop-seventh.log)
+  typo-enforce  -> failed E8, E9         (logs/d8/proof-negative-typo-enforce.log)
+  wrong-entry   -> failed E2             (logs/d8/proof-negative-wrong-entry.log)
+
+assembled envelope:  1,190,846 bytes, 28 parts (metadata + 27 modules)
+module bytes total:  1,183,927
+envelope SHA-256:    9cb9d0da0d0790e2a5a0e558c6ff50d6958c83ab2942e487830e6132c15cd9ce
+metadata SHA-256:    e08b06bc840810739ef5a2fbd5279c6670c1759235fa830121964507f162a9fd
+
+metadata: exactly 7 spec bindings + 3 inherit secrets
+(GEMINI_API_KEY, OPALREADER_ACCESS_TOKEN,
+OPALREADER_MIGRATION_OPERATOR_TOKEN); OPALREADER_PHASE_POLICY
+plain_text "enforce"; GENERATION_HALT "1"; NO migrations key;
+top-level keys exactly main_module, compatibility_date,
+compatibility_flags, bindings, observability.
+For deploy-gate D1 re-verification.

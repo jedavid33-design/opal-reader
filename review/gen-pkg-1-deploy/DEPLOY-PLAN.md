@@ -2,19 +2,30 @@
 
 **Status: DRAFT — authorizes nothing. FILED COPY** for Rowan's
 evidence review — this review-only evidence package
-(`review/gen-pkg-1-deploy/` on `ui1-review`, parent = the signed
-pin `5ae38942e493a4b53f541b5e1f589060d58d158d`; see `README.md`
-in this directory). Prepared by Wren under
+(`review/gen-pkg-1-deploy/` on `ui1-review`; see `README.md`
+in this directory). **D9-E reconciliation (2026-10-30):** the
+operative candidate throughout this plan is now the FINAL
+signed pin **`f3b6e6e9fd7a44532ceef86e484a79e466b36d4d`**
+(D7-2 quarantine + D8 corrections; Rowan code-level PASS,
+comment 6526547700), and the operative envelope proof is the
+27-module proof in this package (envelope SHA-256
+`9cb9d0da0d0790e2a5a0e558c6ff50d6958c83ab2942e487830e6132c15cd9ce`).
+Every earlier reference to pin `5ae38942…` or the 26-module
+proof is HISTORICAL (the round-5 candidate and its proof) and
+is marked as such where it remains. Prepared by Wren under
 Rowan's round-6 SOURCE SIGN-OFF (board issue #15, comment
 6523652449), condition B: no live deploy without an approved,
 pinned operational plan, and no blanket approval — each step
 below is its own Julie decision. The candidate is the signed
-pin `ui1-review` **`5ae38942e493a4b53f541b5e1f589060d58d158d`**
-(parent `ac9558f4…`). The actual-D6-envelope proof required by
-condition A is complete and filed alongside this plan
-(`logs/deploy-plan/ENVELOPE-PROOF-REPORT.md`: 18/18 PASS,
+pin `ui1-review` **`f3b6e6e9fd7a44532ceef86e484a79e466b36d4d`**
+(parent `83375188…`, the D7-2 quarantine pin; lineage:
+round-5 sign-off `5ae38942…` → D7 evidence `a6288de5…` /
+`739fe3ad…` / `1c7f0530…` → D7-2 `83375188…` → D8
+`f3b6e6e9…`). The actual-D6-envelope proof required by
+condition A is complete for THIS candidate and filed in this
+package (`ENVELOPE-PROOF-REPORT.md`: 27 modules, 18/18 PASS,
 three negative proofs FAIL as required, candidate tree
-byte-identical).
+byte-identical, clean-checkout replay record in `replay/`).
 
 ## The decisions Julie will be asked, in order
 
@@ -40,7 +51,7 @@ retrying it), Chapter 3's parked job, and Batch arming.
 
 ---
 
-## Gate 1 — Worker deploy of pin 5ae38942 (Julie's decision 1)
+## Gate 1 — Worker deploy of pin f3b6e6e9 (Julie's decision 1)
 
 Follows the proven G4 / seed-fix D0–D4 procedure with the
 gen-pkg-1 tree substituted.
@@ -78,13 +89,24 @@ no "explicitly justified in-flight" variant of this plan.
 
 ### D1 — Envelope re-verification (no production contact)
 
-Re-run `logs/deploy-plan/proof-d6-envelope.mjs` against the
-candidate tree at gate time. The assembled envelope must be
+Re-run the proof harness against the candidate tree at gate
+time (the pinned replay harness
+`replay/proof-d6-envelope-replay.mjs` in this package, run
+from a clean checkout of the evidence commit, per
+`replay/README-replay.md`). The assembled envelope must be
 byte-identical to the proof artifact (SHA-256
-`2f5ce34ee47b822de9829890ae9878447c361d5f89abbe5440852d0a4f39e5f1`
-/ metadata `e08b06bc…`), the tree digest must still be
-`2d16fe29…`, and the `ui1-review` ref must still read
-`5ae38942…`. **Any mismatch = STOP** (Rowan, condition A).
+`9cb9d0da0d0790e2a5a0e558c6ff50d6958c83ab2942e487830e6132c15cd9ce`
+/ metadata `e08b06bc…`), the candidate tree digest must still
+be `30a954c4…` (D8 pin-record method; full local tree,
+378 files), and the `ui1-review` ref must still read
+`f3b6e6e9…`. **Any mismatch = STOP** (Rowan, condition A).
+D1 also carries Rowan's D9-E operational note (comment
+6526547700): an adversarial replay test must check that a
+message-carried planId cannot conceal a held plan when the
+authoritative job linkage says otherwise (the executor's
+planId resolution accepts the message-carried planId first;
+grant creation is centrally held today, but D1 verifies the
+concealment case explicitly).
 
 ### D2 — Halt-first sequencing, then the upload
 
@@ -127,6 +149,18 @@ stops, in order of when they bite:
   `phase_policy_not_configured` if the phase-policy binding
   were somehow wrong. No caller — old client, new client, or
   API — can create a plan in the deploy window.
+- The **quarantine fence** (D7-2 + D8, the addendum's subject):
+  any plan born while halted is birth-marked and refused at
+  the grant guard independent of the halt flag's later value;
+  hold reads at every spending/execute fence fail closed
+  (D8-1); legacy staging commands (plain `SubmitJob`,
+  `RequestRepair`, `RequestSynthesis`, `RequestResume`) are
+  refused at admission while halted (D8-2), and plan-less jobs
+  born inside a recorded halt epoch are epoch-fenced at the
+  guard. A later generic re-arm therefore grants nothing that
+  was staged while halted; per-plan release is a separate
+  gate class (see the addendum), never an effect of this
+  deploy, the Gate 2 binding write, publication, or re-arm.
 
 ### D3 — Observability (read-back first; PATCH only if reset)
 
@@ -143,13 +177,13 @@ not touch code).
 
 ### D4 — Post-state verification (all read-only; every line must match)
 
-- /health build == `5ae38942e493a4b53f541b5e1f589060d58d158d`;
+- /health build == `f3b6e6e9fd7a44532ceef86e484a79e466b36d4d`;
   generation `"halted"`.
 - Deployed bindings via `GET …/settings`: exactly **10 names** —
   the seven specced (incl. OPALREADER_PHASE_POLICY) + the three
   secret names — with GENERATION_HALT `"1"`.
 - Script etag == the D2 PUT response etag; downloaded parts
-  **26/26 byte-identical** to the validated envelope.
+  **27/27 byte-identical** to the validated envelope.
 - Settings revision still **1** (data unchanged); `/v2/quota`
   unchanged from D0; counts 7 / 2,610 / 1,799; watermarks
   content 18 / bindings 1800.
@@ -215,8 +249,11 @@ Runs only after Gate 2 is green. **Never combined with
 Gate 1 or 2 approvals.**
 
 - Publish the gen-pkg-1 client from the signed client trees
-  (publish tree `365ecbddf0bc17066c1eed5a6349735a290070482a50cddccda96c7a1e31dbd8`,
-  build marker `d5b-v2-generation-client-2`) to the Pages repo
+  (publish digest `97e280948341e0d993975f46ebf089c10e9a2dfdc74487783ff80dd2069cc398`,
+  build marker `d5b-v2-generation-client-2`; the round-5-era
+  tree digest `365ecbdd…` is historical — the operative client
+  publication digest is `97e28094…`, unchanged by D7-2/D8,
+  which are worker-only) to the Pages repo
   by the ui-pkg-4 pattern: compute the exact file delta against
   the live client at gate time, publish only that delta,
   verify **every published file byte-identical as served**.
@@ -286,12 +323,20 @@ Forever-Pucked follow-on; any spending or top-up.
 
 ## Evidence map
 
-- Envelope proof: `logs/deploy-plan/` (report, harness, pass +
-  three negative logs, parts manifest, assembled envelope).
-- Round-5 build record: `BUILD-REPORT.md` ("Round-5
-  corrections (R4-2)"); batteries: `logs/round5/`.
+- Envelope proof: THIS package (`review/gen-pkg-1-deploy/`:
+  report, harnesses, pass + three negative logs, parts
+  manifest, assembled envelope, `candidate/worker/` complete
+  final tree + manifests, `replay/` clean-checkout record).
+  The round-5/D7-1-era local proof directory
+  (`logs/deploy-plan/`) and the 26-module proof it contains
+  are HISTORICAL.
+- Build records: `BUILD-REPORT.md` (rounds 0–5 + D7-2 + D8
+  sections); batteries: `logs/round5/`, `logs/d8/`.
 - Procedure precedent: `~/workspace/d6-build/deploy-evidence/g4/`
   and `…/seedfix-deploy/` (D0–D4 records this plan mirrors).
 - Rowan's conditions: board issue #15, comment 6523652449
-  (sign-off), 6514899384 (R4-2 ruling); Julie's R4-2 approval:
-  comment 6522602149.
+  (round-6 sign-off), 6514899384 (R4-2 ruling), 6524426826
+  (D7-2 design + D7-1 PASS), 6525035570 (D8 blockers),
+  6526547700 (D8 code-level PASS; D9-E evidence request);
+  Julie's approvals: comment 6522602149 (R4-2), 6524562842
+  (D7-2/D8 quarantine build).

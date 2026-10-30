@@ -1,52 +1,60 @@
-# ACTUAL-D6-ENVELOPE PROOF — gen-pkg-1 candidate pin 5ae38942
+# ACTUAL-D6-ENVELOPE PROOF — gen-pkg-1 FINAL candidate pin f3b6e6e9 (D9-E)
 
-**Purpose (Rowan round-6 sign-off, comment 6523652449, condition A):**
-the round-5 validator's 26/26 run validated the D6 successor
-SPEC (checks P6/P7) plus the OLD pre-D6 production dist
-(main_module `v2/worker-entry-prod.js`, 5 bindings, D6 modules
-excluded). This proof closes that gap: it assembles the ACTUAL
-D6 upload envelope from the signed candidate tree and validates
-THAT envelope against the pinned D6 spec.
+**Purpose (Rowan round-6 sign-off, comment 6523652449, condition A;
+D9-E evidence completion, comment 6526547700):** assemble the
+ACTUAL D6 upload envelope from the FINAL signed candidate tree
+(D7-2 quarantine + D8 corrections) and validate THAT envelope
+against the pinned D6 spec. The predecessor report in this
+package proved the round-5 candidate `5ae38942…` (26 modules) —
+HISTORICAL; this report supersedes it for the operative
+candidate.
 
 **Result: PASS — 18/18 assertions** (`proof-pass.log`,
 `proof-result.json`). **Negative proofs: all three mutations
 FAIL as required** (details below). **Candidate tree untouched**
-(digest identical before and after; see "Tree integrity").
+(digests identical before and after). **Clean-checkout replay**
+of this exact proof from the pinned evidence commit: PASS
+18/18 with all byte comparisons identical — record in
+`replay/` (D9-E).
 
 Prepared locally only: no deploy, no upload, no production
-contact of any kind, nothing posted to the board.
+contact of any kind.
 
 ## Assembly (mirrors the proven G4 / seed-fix D1–D2 records)
 
-Harness: `proof-d6-envelope.mjs` (this directory — a separate
-proof script; the pinned validator `tools/validate-prod-envelope.mjs`
-was NOT modified and the candidate tree was not changed).
+Harnesses: `proof-d6-envelope.mjs` (this directory — the filed
+D8 harness; resolves its candidate by a local path) and
+`replay/proof-d6-envelope-replay.mjs` (the replayable variant —
+same 18 checks, candidate dir explicit/validated, outputs to a
+separate directory; PIN restamped to `f3b6e6e9…` for D9-E).
 
 - Module parts = the import closure rooted at the D6 entry
   `v2/worker-entry-prod-d6.js` over the candidate tree's
   `worker/` module set (same closure algorithm as the pinned
-  validator): **26 module parts, 1,137,209 module bytes** —
-  including the gen-pkg-1 modules the old envelope excluded
-  (`generation/service.mjs` at its new 58,250 B, plus
-  `generation/binding-projection.mjs` and
-  `generation/phase-policy.mjs`). Full per-part table with
-  SHA-256 hashes: `proof-pass.log` + `parts-manifest.json`.
+  validator): **27 module parts, 1,183,927 module bytes** —
+  the round-5 closure's 26 plus `generation/quarantine.mjs`
+  (the D7-2/D8 fence module). Full per-part table with SHA-256
+  hashes: `proof-pass.log` + `parts-manifest.json`
+  (SHA-256 `f20dee51ab011d8a931b41588b1cc235f9adf54072ad9a160c3b6ad247301d03`).
 - `host/build-identity.mjs` is the sole stamp part: its part
-  bytes carry `BUILD_COMMIT = 5ae38942e493a4b53f541b5e1f589060d58d158d`
+  bytes carry `BUILD_COMMIT = f3b6e6e9fd7a44532ceef86e484a79e466b36d4d`
   exactly once; the tree on disk keeps `"UNBUILT"` (verified —
-  check E5/E6; tree hash of that file unchanged, `bcb29105…`).
+  checks E5/E6; tree hash of that file unchanged, `bcb29105…`).
 - Metadata derived from the pinned D6 spec
-  (`worker/p8/deploy-spec-prod-d6.json`, SHA-256 `0dafd14c…`):
-  `main_module`, `compatibility_date` 2026-08-29,
-  `compatibility_flags` [nodejs_compat], the spec's **seven**
-  bindings, plus the three required secrets as
-  `{"type":"inherit","name":...}` (10 bindings total, names
-  only, zero `secret_text`, zero secret values), and the spec's
-  observability object. **No `migrations` key** (the D6 spec
-  applies no DO migration). Assembled metadata:
-  `assembled-metadata.json` (SHA-256 `e08b06bc…`); full
-  multipart body: `assembled-envelope.bin` (1,143,926 bytes,
-  SHA-256 `2f5ce34e…`).
+  (`worker/p8/deploy-spec-prod-d6.json`, SHA-256 `0dafd14c…`,
+  unchanged since round 5): `main_module`,
+  `compatibility_date` 2026-08-29, `compatibility_flags`
+  [nodejs_compat], the spec's **seven** bindings, plus the
+  three required secrets as `{"type":"inherit","name":...}`
+  (10 bindings total, names only, zero `secret_text`, zero
+  secret values), and the spec's observability object.
+  **No `migrations` key** (the D6 spec applies no DO
+  migration). Assembled metadata: `assembled-metadata.json`
+  (SHA-256 `e08b06bc…` — byte-identical to the round-5 proof's
+  metadata, as expected: the spec did not change); full
+  multipart body: `assembled-envelope.bin` (1,190,846 bytes,
+  SHA-256
+  `9cb9d0da0d0790e2a5a0e558c6ff50d6958c83ab2942e487830e6132c15cd9ce`).
 
 ## Checks (all PASS; see proof-pass.log for details)
 
@@ -86,11 +94,12 @@ was NOT modified and the candidate tree was not changed).
 ## Negative proofs (validation FAILS each time, exit 1)
 
 - **Drop the seventh binding** (`proof-negative-drop-seventh.log`):
-  FAIL E7 (6 bindings), E8, E9, and E10 (total drops to 9).
+  FAIL E7 (6 bindings), E8, E9, and E10 (total drops to 9) —
+  14/18.
 - **Mistype `"enfore"`** (`proof-negative-typo-enforce.log`):
-  FAIL E8, E9.
+  FAIL E8, E9 — 16/18.
 - **Wrong entry module** (`v2/worker-entry-prod.js`)
-  (`proof-negative-wrong-entry.log`): FAIL E2.
+  (`proof-negative-wrong-entry.log`): FAIL E2 — 17/18.
 
 ## Disclosed choices for Rowan
 
@@ -102,23 +111,27 @@ was NOT modified and the candidate tree was not changed).
    read-back-verified live at the deploy gate. Omitting it
    changes nothing operationally.
 2. The proof harness lives OUTSIDE the candidate tree
-   (`logs/deploy-plan/proof-d6-envelope.mjs`) precisely so the
-   signed tree stays byte-identical; it re-implements the
-   pinned validator's closure/assembly method rather than
-   modifying the validator.
+   precisely so the signed tree stays byte-identical; it
+   re-implements the pinned validator's closure/assembly
+   method rather than modifying the validator.
 
 ## Tree integrity
 
-- Worker tree digest (established method,
-  `logs/round4/treehash.py`) BEFORE and AFTER the proof:
-  `2d16fe291dfa8d067fae82110089e501ca28bd93e80a047ac5efd0ffee840fb2`
-  (375 files) — identical to the signed round-5 digest in
-  BUILD-REPORT.md. Client-build tree likewise unchanged
-  (`52335597…`, 687 files; the signed client *publish* tree
-  remains `365ecbdd…`).
+- Local candidate tree digests BEFORE and AFTER the proof
+  (`treehash-before.txt` / `treehash-after.txt`, established
+  method `logs/round4/treehash.py`): full local tree
+  (378 files) `39d46bca63e3f6a93cf567951a755914ae285b98372f27cd112d888bf6fed2f9`;
+  `worker/` subtree (57 files)
+  `300568ad32d2a6ecb795509cbe1a4924f0275b39d37a486dd8d65748d903481a`.
+  The D8 pin record's digest for the same tree (pin-record
+  method: sorted per-file SHA-256 manifest hash) is
+  `30a954c45831e4c95f596b8eb6442944b35e11c19bfadce59d27b712dffec84a`.
+- Client untouched by D7-2/D8 (worker-only corrections); the
+  operative client publication digest is
+  `97e280948341e0d993975f46ebf089c10e9a2dfdc74487783ff80dd2069cc398`.
 - `ui1-review` ref read back at proof time:
-  `5ae38942e493a4b53f541b5e1f589060d58d158d`
-  (`pin-ref-readback.txt`). Nothing was re-pinned.
-- Key file hashes match BUILD-REPORT round-5 exactly: entry
-  `9cfd4c40…`, service `700b8a8d…`, spec `0dafd14c…`
-  (`key-file-hashes-before.txt`).
+  `f3b6e6e9fd7a44532ceef86e484a79e466b36d4d`
+  (`pin-ref-readback.txt`).
+- Key file hashes (`key-file-hashes-before.txt`): entry
+  `1564b784…`, service `5670dfb3…`, quarantine `64a491f3…`,
+  spec `0dafd14c…`, build-identity `bcb29105…`.
