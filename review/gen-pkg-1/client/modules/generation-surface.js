@@ -112,10 +112,77 @@ export function formatMicroCents(mc) {
 
 // The phase (budget envelope) a book's submissions ride, looked up
 // in the server's capabilities — never hard-coded client-side.
+// Round 1 (6511518715, B1): this value is a HINT. The server
+// derives the admissible phase from its own book policy and
+// rejects a submission whose hint is missing or disagrees — see
+// rejectionText; the client never overrides the server's answer.
 export function phaseForBook(capabilities, bookId) {
   const phases = capabilities?.phases ?? [];
   const hit = phases.find((p) => p.bookId === bookId);
   return hit ? hit.phase : null;
+}
+
+// Plain language for a submission REJECTION. The intent route
+// answers HTTP 200 with the service result, so a rejection comes
+// back as data ({outcome:"rejected", reason}) with no planId —
+// callers must treat a missing planId as "not started", and these
+// words say exactly that. Reasons are the server's stable strings
+// (service.mjs admission + the lane gate).
+const REJECTION_TEXT = Object.freeze({
+  phase_required: "The server didn't accept that start: this book has a budget phase and the request didn't carry it. Nothing was started.",
+  phase_mismatch: "The server didn't accept that start: the budget phase in the request doesn't match this book's. Nothing was started.",
+  phase_not_budgeted: "The server didn't accept that start: that budget phase isn't one the server has for this book. Nothing was started.",
+  lane_not_allowed: "The server didn't accept that start: that lane isn't enabled. Nothing was started.",
+  scope_invalid: "The server didn't accept that start. Nothing was started.",
+});
+export function rejectionText(reason) {
+  return REJECTION_TEXT[reason]
+    ?? "The server didn't accept that start. Nothing was started.";
+}
+
+// A plan's immutable execution semantics, in plain words (Rowan
+// round 1, B2): whenever the UI routes to, recovers, or lists an
+// existing plan it names the plan's OWN lane and continuation, so
+// the settings actually in force are never misrepresented as the
+// ones the user just chose. keepGoing is a book-scope concept;
+// chapter and segment plans always run to their own end only.
+export function planLaneText(plan) {
+  return plan?.lane === "batch" ? "Batch lane" : "Standard lane";
+}
+export function planContinuationText(plan) {
+  if (!plan) return "";
+  if (plan.scope === "book")
+    return plan.keepGoing
+      ? "continues through the rest of the book"
+      : "does not continue on its own";
+  if (plan.scope === "chapter") return "this chapter only";
+  return "this segment only";
+}
+export function planSemanticsText(plan) {
+  if (!plan) return "";
+  return `${planLaneText(plan)} · ${planContinuationText(plan)}`;
+}
+
+// A plan's money line, in the server's own vocabulary (Rowan
+// round 1, money/status accuracy):
+//   * the quote's expected cost is an ESTIMATE (the sheet labels
+//     it "(estimate)");
+//   * a phase's in-flight figure is the RESERVED upper bound (the
+//     Generation view shows it as "reserved up to …");
+//   * settledMicroCents is KNOWN-SETTLED accounting — the
+//     attempt-log sum over outcomes whose cost is confirmed —
+//     shown as "Settled $X". It is never the grant-time ledger
+//     debit (that estimated figure is server-internal and no
+//     client surface displays it), and never a provider bill.
+// For a halted_unknown plan at least one charge is UNCONFIRMED
+// and sits outside the settled figure: the line says so, and the
+// figure is never presented as the final total.
+export function planMoneyText(plan) {
+  if (!plan) return "";
+  const settled = `Settled ${formatMicroCents(plan.settledMicroCents ?? 0)}`;
+  if (plan.state === "halted_unknown")
+    return `${settled} so far — plus a charge that isn't confirmed yet`;
+  return settled;
 }
 
 // An in-flight (non-terminal) plan for the same book + scope (+

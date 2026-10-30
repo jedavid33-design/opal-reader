@@ -12,5 +12,6 @@ export { createIndexedDbStorage, createStateRoutingStorage, runStorageMigration,
 export { CANDIDATE_BUILD_MARKER } from "./constants-genpkg1.js";
 export * as screens from "./screens.js";
 export { createGenerationClient, laneOptions, exclusionLines, formatMicroCents,
-  phaseForBook, findActivePlan, planStatusText, stopReasonText, isTerminalPlanState }
+  phaseForBook, findActivePlan, planStatusText, stopReasonText, isTerminalPlanState,
+  rejectionText, planSemanticsText, planMoneyText }
   from "./generation-surface.js";

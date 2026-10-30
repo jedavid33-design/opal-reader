@@ -32,6 +32,10 @@
 //   GP-13 rollback: the ui-pkg-4 build boots on the same profile
 //         and state, state byte-identical after; the gen build
 //         boots again after it (no migration either direction)
+//   GP-14 halted_unknown plan (round-1 corrections): renders with
+//         the plain-language stop reason, settled figure WITH the
+//         unconfirmed-charge qualifier, its lane named, and no
+//         retry/resume affordance; nothing is submitted
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -116,6 +120,7 @@ const wireCommands = [];   // every wire copy, incl. browser re-deliveries
 const receiptsByCommandId = new Map();
 const planStore = [{
   planId: "plan-wren-fp", bookId: FP_ID, scope: "chapter", chapterIndex: 3, lane: "standard",
+  keepGoing: false,
   phase: "forever-pucked", state: "active", stopReason: null,
   totals: { eligible: 2, done: 1, failed: 0, blocked: 0, prompts: 0 },
   settledMicroCents: 17749, bindingsPublished: 1, bindingsPending: 0,
@@ -194,7 +199,8 @@ function coordinator(req, res) {
       const plan = {
         planId: `plan-stub-${++planSeq}`, bookId: parsed?.payload?.bookId, scope: intent.scope,
         chapterIndex: intent.scope === "chapter" ? intent.chapterIndex : null,
-        lane: parsed?.payload?.lane, phase: intent.phase ?? null, state: "active", stopReason: null,
+        lane: parsed?.payload?.lane, phase: intent.phase ?? null, keepGoing: !!intent.keepGoing,
+        state: "active", stopReason: null,
         totals: { eligible: q.eligibleCount, done: 0, failed: 0, blocked: 0, prompts: 0 },
         settledMicroCents: 0, bindingsPublished: 0, bindingsPending: 0,
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
@@ -420,6 +426,11 @@ await row("GP-4", "reopening the same scope reroutes to the active plan (no seco
   const before = commands.length;
   await p.eval(`document.getElementById('book-genall').click()`);
   await p.waitFor(`(document.getElementById('gen-sheet-offnote')?.textContent ?? '').includes('already being generated')`, { label: "reroute note" });
+  // Round-1 B2: the reroute names the EXISTING plan's own lane +
+  // continuation semantics, never a bare "already running".
+  const rerouteNote = await sheetNote();
+  assert(rerouteNote.includes("Standard lane") && rerouteNote.includes("continues through the rest of the book"),
+    `reroute names the plan's semantics: ${rerouteNote}`);
   assert((await startBtnState()) === true, "Start disabled on reroute");
   assert((await p.eval(`document.getElementById('gen-sheet-view').hidden`)) === false, "View progress offered");
   await sleep(400);
@@ -443,6 +454,35 @@ await row("GP-5", "Generation view discovers the Wren-submitted plan; budget lin
   const anyResume = await p.eval(`[...document.querySelectorAll('#generation-list button')].some(x => /resume|restart|retry/i.test(x.textContent))`);
   assert(anyResume === false, "no resume/restart/retry control anywhere in the view");
   return { summary };
+});
+
+await row("GP-14", "halted_unknown plan: accurate money labels, plain stop reason, no retry affordance", async () => {
+  // A plan in the exact shape of the production FP Ch 2 halt:
+  // known-settled accounting in settledMicroCents, one charge
+  // unconfirmed (unknown_billing) and OUTSIDE that figure.
+  planStore.unshift({
+    planId: "plan-halted-fp", bookId: FP_ID, scope: "chapter", chapterIndex: 1, lane: "standard",
+    keepGoing: false, phase: "forever-pucked", state: "halted_unknown",
+    stopReason: "phase_halted_unknown_billing",
+    totals: { eligible: 18, done: 0, failed: 8, blocked: 0, prompts: 0 },
+    settledMicroCents: 353736, bindingsPublished: 0, bindingsPending: 0,
+    createdAt: "2026-10-30T00:00:00.000Z", updatedAt: "2026-10-30T00:01:00.000Z",
+  });
+  const before = commands.length;
+  // The view polls while any non-terminal plan exists; the new
+  // line appears on the next refresh.
+  await p.waitFor(`!!document.getElementById('genline-plan-halted-fp')`, { label: "halted plan line rendered", timeout: 20000 });
+  const line = await p.eval(`document.getElementById('genline-plan-halted-fp')?.textContent`);
+  assert(line && line.includes("a charge needs checking"), `plain-language stop reason: ${line}`);
+  assert(line.includes("Settled $0.35"), `settled (known-settled) figure present: ${line}`);
+  assert(line.includes("isn't confirmed yet"), `unconfirmed charge called out, never folded into a total: ${line}`);
+  assert(!/bill(ed)?\b|spent at/i.test(line), `no provider-bill language: ${line}`);
+  assert(line.includes("Standard lane"), `the plan's lane is named: ${line}`);
+  const anyRetry = await p.eval(`[...document.querySelectorAll('#generation-list button')].some(x => /resume|restart|retry/i.test(x.textContent))`);
+  assert(anyRetry === false, "no retry/resume affordance for a halted_unknown plan");
+  await sleep(600);
+  assert(commands.length === before, "viewing a halted plan submits nothing (no implicit retry)");
+  return { line };
 });
 
 await row("GP-6", "chapter scope submits scoped: chapterIndex + keepGoing false", async () => {

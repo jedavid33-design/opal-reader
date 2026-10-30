@@ -5,7 +5,8 @@
 // exclusion lines, plan status text, active-plan matching, phase
 // lookup, money formatting). Any failure exits nonzero.
 import { createGenerationClient, laneOptions, exclusionLines, formatMicroCents,
-  phaseForBook, findActivePlan, planStatusText, stopReasonText, isTerminalPlanState }
+  phaseForBook, findActivePlan, planStatusText, stopReasonText, isTerminalPlanState,
+  rejectionText, planSemanticsText, planMoneyText }
   from "../tree-a/modules/generation-surface.js";
 
 const rows = [];
@@ -142,6 +143,40 @@ await row("GU10", "phaseForBook + formatMicroCents: server data only", async () 
   eq(formatMicroCents(13500000), "$13.50", "phase budget");
   eq(formatMicroCents(0), "$0.00", "zero");
   eq(formatMicroCents(1.5), "—", "non-integer refused");
+});
+
+await row("GU11", "rejectionText: every server rejection says 'nothing was started' (round-1 B1)", async () => {
+  for (const r of ["phase_required", "phase_mismatch", "phase_not_budgeted", "lane_not_allowed", "scope_invalid"])
+    assert(rejectionText(r).includes("Nothing was started."), `${r} states nothing started`);
+  assert(rejectionText("phase_required").includes("budget phase"), "phase_required names the cause");
+  assert(rejectionText("phase_mismatch").includes("doesn't match"), "phase_mismatch names the cause");
+  assert(rejectionText("some_future_reason").includes("Nothing was started."), "unknown reasons fall back safely, never 'Started'");
+  assert(!rejectionText("phase_required").startsWith("Started"), "a rejection never reads as a start");
+});
+
+await row("GU12", "planSemanticsText: a plan's own lane + continuation, never the sheet's (round-1 B2)", async () => {
+  eq(planSemanticsText({ lane: "standard", scope: "book", keepGoing: true }),
+    "Standard lane · continues through the rest of the book", "book keepGoing");
+  eq(planSemanticsText({ lane: "standard", scope: "book", keepGoing: false }),
+    "Standard lane · does not continue on its own", "book without keepGoing");
+  eq(planSemanticsText({ lane: "batch", scope: "book", keepGoing: true }),
+    "Batch lane · continues through the rest of the book", "batch lane named");
+  eq(planSemanticsText({ lane: "standard", scope: "chapter" }),
+    "Standard lane · this chapter only", "chapter scope");
+  eq(planSemanticsText({ lane: "standard", scope: "segment" }),
+    "Standard lane · this segment only", "segment scope");
+  eq(planSemanticsText(null), "", "null safe");
+});
+
+await row("GU13", "planMoneyText: settled is known-settled accounting; unknown charges called out (round-1 money)", async () => {
+  eq(planMoneyText({ state: "active", settledMicroCents: 17749 }), "Settled $0.02",
+    "settled figure, ledger vocabulary");
+  eq(planMoneyText({ state: "halted_unknown", settledMicroCents: 353736 }),
+    "Settled $0.35 so far — plus a charge that isn't confirmed yet",
+    "halted_unknown: settled distinguished from the unconfirmed charge — never a final total, never a bill");
+  assert(!/bill|spent|charged at/i.test(planMoneyText({ state: "halted_unknown", settledMicroCents: 1 })),
+    "no provider-bill language anywhere");
+  eq(planMoneyText(null), "", "null safe");
 });
 
 const failed = rows.filter((r) => r[1] !== "PASS");

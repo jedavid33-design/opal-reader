@@ -161,6 +161,49 @@ export function createGenerationService({ coord, env = {}, store = null, sources
     return null;
   }
 
+  // B1 (Rowan gen-pkg-1 source review round 1, comment
+  // 6511518715): the phase a plan rides is SERVER authority, never
+  // caller trust. The budgeted-phase universe is the registry
+  // (PHASE_BUDGET_MICRO_CENTS — a phase string outside it is an
+  // invention, not a budget). A book's binding to a budgeted phase
+  // is server state: the phase of the plans this service has
+  // already admitted for that book (the same record capabilities()
+  // reads its phase→book link from). Rules, evaluated before any
+  // plan or ledger state moves:
+  //   * a book already bound to a budgeted phase may only ever
+  //     submit under that exact phase — a missing/null phase is
+  //     rejected (phase_required) and any different phase is
+  //     rejected (phase_mismatch), so no plan for a budgeted book
+  //     can be created outside its phase accounting and hard stop;
+  //   * an unbound book presenting a phase outside the registry
+  //     is rejected (phase_not_budgeted);
+  //   * an unbound book presenting a registry phase establishes
+  //     its binding with the plan this submission creates; an
+  //     unbound book with no phase runs unbudgeted (phase null).
+  // The admitted phase — derived here, not the caller's raw
+  // value — is what the plan stores and what intent identity (B2)
+  // binds.
+  function admitPhase(bookId, callerPhaseRaw) {
+    const callerPhase = callerPhaseRaw ?? null;
+    const boundRow = coord._oneOrNull(
+      `SELECT phase FROM d6_plans
+        WHERE book_id = ? AND phase IS NOT NULL
+        ORDER BY created_at, plan_id LIMIT 1`, bookId);
+    const boundPhase = boundRow && Object.hasOwn(PHASE_BUDGET_MICRO_CENTS, boundRow.phase)
+      ? boundRow.phase : null;
+    if (boundPhase !== null) {
+      if (callerPhase === null)
+        return { ok: false, reason: "phase_required" };
+      if (callerPhase !== boundPhase)
+        return { ok: false, reason: "phase_mismatch" };
+      return { ok: true, phase: boundPhase };
+    }
+    if (callerPhase !== null
+        && !Object.hasOwn(PHASE_BUDGET_MICRO_CENTS, callerPhase))
+      return { ok: false, reason: "phase_not_budgeted" };
+    return { ok: true, phase: callerPhase };
+  }
+
   async function submitIntent(input) {
     const {
       commandId = null, bookId, scope, chapterIndex = null,
@@ -169,6 +212,12 @@ export function createGenerationService({ coord, env = {}, store = null, sources
     } = input || {};
     if (!D6_LANE_ALLOWLIST.includes(lane || "standard"))
       return { outcome: "rejected", reason: "lane_not_allowed" };
+    // B1: phase admission (above) — a rejection creates no plan
+    // and moves no ledger state.
+    const admission = admitPhase(bookId, phase);
+    if (!admission.ok)
+      return { outcome: "rejected", reason: admission.reason };
+    const admittedPhase = admission.phase;
     if (typeof sources.eligiblePlane !== "function")
       throw new Error("d6_eligible_plane_source_required");
     const plane = await sources.eligiblePlane(bookId);
@@ -183,11 +232,20 @@ export function createGenerationService({ coord, env = {}, store = null, sources
       return { outcome: "rejected", reason: "scope_invalid" };
     const eligibleIds = scoped.filter(e => e.disposition === "eligible")
       .map(e => e.occurrenceId);
+    // B2 (Rowan round 1): intent identity covers the authoritative
+    // requested EXECUTION SEMANTICS — lane, keepGoing, and the
+    // server-derived phase (B1) — alongside the eligible set. A
+    // byte-identical retry still converges on the existing plan;
+    // a request whose semantics differ mints its own plan and is
+    // never silently handed a plan with different semantics.
     const intentKey = sha256Hex(canonicalJson({
       bookId, scope,
       chapterIndex: chapterIndex ?? null,
       occurrenceId: occurrenceId ?? null,
       eligibleIds,
+      lane: lane || "standard",
+      keepGoing: !!keepGoing,
+      phase: admittedPhase,
     }));
     const existing = coord._oneOrNull(
       `SELECT * FROM d6_plans WHERE intent_key = ?`, intentKey);
@@ -201,7 +259,7 @@ export function createGenerationService({ coord, env = {}, store = null, sources
            (plan_id, intent_key, book_id, scope, keep_going, phase, lane,
             state, stop_reason, eligible_digest, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, ?, ?, ?)`,
-        planId, intentKey, bookId, scope, keepGoing ? 1 : 0, phase ?? null,
+        planId, intentKey, bookId, scope, keepGoing ? 1 : 0, admittedPhase,
         lane || "standard", built.digest ?? null, t, t);
       for (const e of scoped) {
         coord.sql.exec(
@@ -439,6 +497,7 @@ export function createGenerationService({ coord, env = {}, store = null, sources
     return {
       planId: plan.plan_id, bookId: plan.book_id, scope: plan.scope,
       chapterIndex, lane: plan.lane, phase: plan.phase,
+      keepGoing: !!plan.keep_going,
       state: plan.state, stopReason: plan.stop_reason,
       totals,
       settledMicroCents: planSettledMicro(plan.plan_id),

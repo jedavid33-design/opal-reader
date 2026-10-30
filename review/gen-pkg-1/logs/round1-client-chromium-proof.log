@@ -1,0 +1,16 @@
+PASS GP-1 boot under sw-genpkg1, connect, library renders {"marker":"d5b-v2-generation-client-2"}
+PASS GP-2 sheet renders the server quote; Batch disabled with its server reason {"attempts":"3 segments · 3,992 characters","cost":"$0.06 (estimate)"}
+PASS GP-3 double-tap submits exactly ONE SubmitJob of the pinned shape {"planId":"plan-stub-1"}
+PASS GP-4 reopening the same scope reroutes to the active plan (no second submit) {"line":"Fixture Generic · Whole book — Working — 0 of 3 doneSettled $0.00 · Standard lane · continues through the rest of the book · audio published 0"}
+PASS GP-5 Generation view discovers the Wren-submitted plan; budget line from server amounts {"summary":"Generation is on. Fixture Forever: budget $13.50 · settled $0.02 · $13.48 left"}
+PASS GP-14 halted_unknown plan: accurate money labels, plain stop reason, no retry affordance {"line":"Fixture Forever · Chapter 2 — Stopped — a charge needs checking before it can continueSettled $0.35 so far — plus a charge that isn't confirmed yet · Standard lane · this chapter only · audio published 0"}
+PASS GP-6 chapter scope submits scoped: chapterIndex + keepGoing false {"intent":{"scope":"chapter","keepGoing":false,"phase":null,"chapterIndex":1}}
+PASS GP-7 parked chapter: Start never offered, parked wording, nothing submitted {"note":"Everything here is parked. Parked work resumes only on your explicit word — it can't be started from here."}
+PASS GP-8 voice_prompt segment: 'needs a voice choice first', no control submits {}
+PASS GP-9 FP book submit carries the phase from server capabilities {"intent":{"scope":"book","keepGoing":true,"phase":"forever-pucked"}}
+PASS GP-10 timeout-after-accepted-submit: plan re-read reports Started, no blind resubmit {"wireCopies":4}
+PASS GP-11 state record + Shelf record byte-stable across all generation flows {"bytes":8784}
+PASS GP-12 halted capabilities: Start never offered {}
+PASS GP-13 rollback: ui-pkg-4 boots on the same state untouched; gen build boots after it {"ui4Marker":"d5b-v2-playback-client-15 (rollback base)"}
+
+CHROMIUM PROOF: 14/14 PASS; page exceptions: 0

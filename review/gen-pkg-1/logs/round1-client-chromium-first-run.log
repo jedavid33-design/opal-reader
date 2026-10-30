@@ -1,0 +1,16 @@
+PASS GP-1 boot under sw-genpkg1, connect, library renders {"marker":"d5b-v2-generation-client-2"}
+FAIL GP-2 sheet renders the server quote; Batch disabled with its server reason - page exception: {"exceptionId":1,"text":"Uncaught","lineNumber":0,"columnNumber":34,"scriptId":"42","stackTrace":{"callFrames":[{"functionName":"","scriptId":"42","url":"","lineNumber":0,"columnNumber":34}]},"exception":{"type":"object","subtype":"error","className":"TypeError","description":"TypeError: Cannot read properties of null (reading 'click')\n    at <anonymous>:1:35","objectId":"171684900810059611.2.2"}}
+FAIL GP-3 double-tap submits exactly ONE SubmitJob of the pinned shape - timeout waiting for: started note
+FAIL GP-4 reopening the same scope reroutes to the active plan (no second submit) - page exception: {"exceptionId":2,"text":"Uncaught","lineNumber":0,"columnNumber":38,"scriptId":"47","stackTrace":{"callFrames":[{"functionName":"","scriptId":"47","url":"","lineNumber":0,"columnNumber":38}]},"exception":{"type":"object","subtype":"error","className":"TypeError","description":"TypeError: Cannot read properties of null (reading 'click')\n    at <anonymous>:1:39","objectId":"171684900810059611.2.4"}}
+FAIL GP-5 Generation view discovers the Wren-submitted plan; budget line from server amounts - timeout waiting for: view summary rendered
+FAIL GP-14 halted_unknown plan: accurate money labels, plain stop reason, no retry affordance - timeout waiting for: halted plan line rendered
+PASS GP-6 chapter scope submits scoped: chapterIndex + keepGoing false {"intent":{"scope":"chapter","keepGoing":false,"phase":null,"chapterIndex":1}}
+PASS GP-7 parked chapter: Start never offered, parked wording, nothing submitted {"note":"Everything here is parked. Parked work resumes only on your explicit word — it can't be started from here."}
+PASS GP-8 voice_prompt segment: 'needs a voice choice first', no control submits {}
+PASS GP-9 FP book submit carries the phase from server capabilities {"intent":{"scope":"book","keepGoing":true,"phase":"forever-pucked"}}
+PASS GP-10 timeout-after-accepted-submit: plan re-read reports Started, no blind resubmit {"wireCopies":4}
+PASS GP-11 state record + Shelf record byte-stable across all generation flows {"bytes":8784}
+PASS GP-12 halted capabilities: Start never offered {}
+PASS GP-13 rollback: ui-pkg-4 boots on the same state untouched; gen build boots after it {"ui4Marker":"d5b-v2-playback-client-15 (rollback base)"}
+
+CHROMIUM PROOF: 9/14 PASS; page exceptions: 0

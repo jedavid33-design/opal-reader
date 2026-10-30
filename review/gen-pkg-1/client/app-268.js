@@ -166,7 +166,7 @@
 // the rollback basis. The build marker stays
 // d5b-v2-playback-client-13: no behaviour code changed, and every
 // module is reused at its ui1 path, byte-identical.
-import { createRunnableClient, createAudioTransport, createGenerationClient, laneOptions, exclusionLines, formatMicroCents, phaseForBook, findActivePlan, planStatusText, isTerminalPlanState } from "./modules/entry-genpkg1.js";
+import { createRunnableClient, createAudioTransport, createGenerationClient, laneOptions, exclusionLines, formatMicroCents, phaseForBook, findActivePlan, planStatusText, isTerminalPlanState, rejectionText, planSemanticsText, planMoneyText } from "./modules/entry-genpkg1.js";
 import { readStateRecordFromBackend } from "./modules/storage-state.js";
 import * as screens from "./modules/screens.js";
 import {
@@ -550,7 +550,8 @@ media.addEventListener("timeupdate", () => {
 // excluded and why). Starting work is a POST /v2/commands
 // SubmitJob carrying the D6 intent; the command_id is minted once
 // per sheet opening, and the server's intent identity (same book
-// + scope + eligible set = same plan) absorbs double-taps,
+// + scope + eligible set + lane + keepGoing + server-admitted
+// phase = same plan; round-1 corrections) absorbs double-taps,
 // retries, and a second device asking for the same work. If a
 // plan for the same scope is already running, the sheet routes to
 // it instead of submitting. If the submit's answer is lost, the
@@ -656,23 +657,46 @@ async function genSheetSubmit() {
   try {
     const receipt = await genClient.submitIntent({ commandId: ctx.commandId, bookId: ctx.bookId, lane: ctx.lane, intent });
     if (genCtx !== ctx) return;
-    ctx.planId = receipt?.planId ?? null;
+    // The intent route answers 200 with the service result, so a
+    // REJECTION (Rowan round 1, comment 6511518715: B1 phase
+    // admission, the lane gate) arrives WITH no planId. It must
+    // never be reported as "Started".
+    if (!receipt?.planId) {
+      ctx.submitted = false;
+      genSheetNote.textContent = rejectionText(receipt?.reason);
+      genSetStart(true, "Start generation");
+      return;
+    }
+    ctx.planId = receipt.planId;
     genSheetNote.textContent = "Started. It runs on the server — you can close the app and it keeps going. Progress is on the Generation view.";
     genViewBtn.hidden = false;
   } catch (e) {
     if (genCtx !== ctx) return;
     // A lost answer is not a lost intent: the server keys the
     // plan by the intent itself, so look before claiming failure.
-    let found = null;
+    // The match must be on the run's SEMANTICS (lane + keepGoing),
+    // not just its scope: a plan minted under different semantics
+    // is not the run this sheet asked for, and must never be
+    // reported as "Started" (Rowan round 1, B2).
+    let started = null, otherActive = null;
     try {
       const plans = await genClient.listAllPlans();
-      found = findActivePlan(plans, { bookId: ctx.bookId, scope: ctx.scope, chapterIndex: ctx.chapterIndex ?? null })
-        ?? plans.find((p) => p.bookId === ctx.bookId && p.scope === ctx.scope
-          && (ctx.scope !== "chapter" || p.chapterIndex === ctx.chapterIndex)) ?? null;
-    } catch { found = null; }
-    if (found) {
-      ctx.planId = found.planId;
+      const scoped = plans.filter((p) => p && p.bookId === ctx.bookId && p.scope === ctx.scope
+        && (ctx.scope !== "chapter" || p.chapterIndex === ctx.chapterIndex));
+      started = scoped.find((p) => p.lane === ctx.lane
+        && !!p.keepGoing === (ctx.scope === "book" ? !!ctx.keepGoing : false)) ?? null;
+      otherActive = started ? null
+        : (scoped.find((p) => !isTerminalPlanState(p.state)) ?? null);
+    } catch { started = null; otherActive = null; }
+    if (started) {
+      ctx.planId = started.planId;
       genSheetNote.textContent = "Started — the answer was lost on the way back, but the plan is on the server. Progress is on the Generation view.";
+      genViewBtn.hidden = false;
+      return;
+    }
+    if (otherActive) {
+      ctx.planId = otherActive.planId;
+      genSheetNote.textContent = `A run with different settings is already going for this — ${planSemanticsText(otherActive)}. This sheet's start wasn't submitted. The running one is on the Generation view.`;
       genViewBtn.hidden = false;
       return;
     }
@@ -712,7 +736,10 @@ async function prepareGenSheet() {
     const active = findActivePlan(plans, { bookId: ctx.bookId, scope: ctx.scope, chapterIndex: ctx.chapterIndex ?? null });
     if (active) {
       ctx.activePlan = active;
-      genSheetNote.textContent = "This is already being generated — starting it again would do nothing. Its progress is on the Generation view.";
+      // Name the running plan's own lane + continuation semantics:
+      // rerouting must never imply the sheet's chosen settings are
+      // the ones in force (Rowan round 1, B2).
+      genSheetNote.textContent = `This is already being generated — ${planSemanticsText(active)}. Starting it again would do nothing. Its progress is on the Generation view.`;
       genSetStart(false);
       genViewBtn.hidden = false;
       return;
@@ -766,7 +793,7 @@ function genPlanLine(p, bookTitle) {
   const line = el("div", { class: "ui-genline", id: `genline-${p.planId}` });
   line.append(el("span", { class: "ui-genstatus", text: `${bookTitle ? `${bookTitle} · ` : ""}${scopeLabel} — ${planStatusText(p)}` }));
   line.append(el("span", { class: "ui-genplan-meta",
-    text: `Settled ${formatMicroCents(p.settledMicroCents ?? 0)} · audio published ${p.bindingsPublished ?? 0}${(p.bindingsPending ?? 0) > 0 ? ` · publishing ${p.bindingsPending}` : ""}` }));
+    text: `${planMoneyText(p)} · ${planSemanticsText(p)} · audio published ${p.bindingsPublished ?? 0}${(p.bindingsPending ?? 0) > 0 ? ` · publishing ${p.bindingsPending}` : ""}` }));
   return line;
 }
 
@@ -789,7 +816,7 @@ async function renderGeneration(focusBookId) {
       bits.push(caps.generationState === "enabled" ? "Generation is on." : "Generation is paused on the server.");
       for (const ph of caps.phases ?? []) {
         const title = ph.bookId ? (contentEntities()[ph.bookId]?.payload?.title ?? null) : null;
-        bits.push(`${title ? `${title}: ` : ""}budget ${formatMicroCents(ph.budgetMicroCents)} · settled ${formatMicroCents(ph.settledMicroCents)} · ${formatMicroCents(ph.remainingMicroCents)} left`);
+        bits.push(`${title ? `${title}: ` : ""}budget ${formatMicroCents(ph.budgetMicroCents)} · settled ${formatMicroCents(ph.settledMicroCents)}${(ph.inFlightUpperMicroCents ?? 0) > 0 ? ` · reserved up to ${formatMicroCents(ph.inFlightUpperMicroCents)}` : ""} · ${formatMicroCents(ph.remainingMicroCents)} left`);
       }
       summary.textContent = bits.join(" ");
       list.replaceChildren();

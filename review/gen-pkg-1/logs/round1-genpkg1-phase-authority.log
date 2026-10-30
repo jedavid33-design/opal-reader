@@ -1,0 +1,16 @@
+✔ B1: budgeted book — missing/null phase is rejected, nothing is created, no ledger movement (16.689546ms)
+✔ B1: budgeted book — a wrong phase string is rejected (phase_mismatch) (4.787294ms)
+✔ B1: budgeted book — the correct phase is admitted and converges on the existing plan (4.408816ms)
+✔ B1: unbudgeted book — no phase is admitted; an invented phase is rejected (7.358333ms)
+✔ B1+B2: a registry phase establishes the book's binding; afterwards the book is budgeted (5.874495ms)
+✔ B2: changing only keepGoing at book scope mints a distinct plan; identical retries converge (6.719074ms)
+✔ B2: a different-lane request never returns the existing plan (explicit rejection today) (4.334645ms)
+✔ B2: concurrent identical submissions with full semantics converge on one plan (5.201506ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 269.928243

@@ -13,19 +13,33 @@ Candidate commits are pinned to the review branch `ui1-review` ONLY (see
 ### Worker candidate (base: live build `ac451df8…`, tree `~/workspace/d6-build/impl/`)
 
 - Working tree: `~/workspace/gen-pkg-1/worker-build/`
-- Tree hash (SHA-256 over sorted relative paths + contents, logs excluded):
-  `c5240489558a760424287e521159df0d8442c62eb6ff12ef517a840e136fed0d` (368 files)
+- Tree hash (SHA-256 over sorted `relpath\n<file-sha256-hex>\n` lines, logs
+  excluded, symlinks not followed): **round-1 corrected tree**
+  `401971edfdaccd5ad313c62f886835d9fb486af5a35af324fd7893d1c8d823d1` (369 files;
+  round 0 was `c5240489558a760424287e521159df0d8442c62eb6ff12ef517a840e136fed0d`,
+  368 files, under the round-0 builder's ad-hoc serialization — the delta
+  between the trees is exactly the round-1 correction set in the Round-1
+  section below)
 - Entry: `worker/worker-entry-prod-d6.js` (the tree's `v2/` symlink mirrors `worker/`)
 - Changed-file SHA-256 prefixes: entry `3b377d25eecddfa9…`,
-  `generation/service.mjs` `9b4079232cb9cb2c…`,
+  `generation/service.mjs` `2ae2031dbe04f5357…` (round-1 corrected; round 0
+  was `9b4079232cb9cb2c…`),
   `generation/binding-projection.mjs` (new) `d100f02ce199bbcd…`,
   `generation/d6-executor.mjs` `df7e0003f76177a4…`
 
 ### Client candidate (base: ui-pkg-4, live `main` @ `7f443ffe`, build `d5b-v2-playback-client-15`)
 
 - Working tree: `~/workspace/gen-pkg-1/client-build/gen/` (`base/` = ui-pkg-4 publish tree, 73 paths)
-- Publish tree: `package/publish/`, 81 paths, tree hash
-  `bbbf6bb3e1251c453a48da5e2730690c36d1a5e889178e4dbb8e0b40c33179c8`
+- Publish tree: `package/publish/`, 81 paths, tree hash (same digest method
+  as the worker tree above): **round-1 corrected tree**
+  `558d090676c510e705e37acedeae4ff768443b70823263665188626b1c22ca2c`
+  (round 0 was `bbbf6bb3e1251c453a48da5e2730690c36d1a5e889178e4dbb8e0b40c33179c8`).
+  Round-1 changed delta files: `app-268.js` `dc44b698c3b511384d…`,
+  `modules/generation-surface.js` `6ce61c18ea9af0613f66…`,
+  `modules/entry-genpkg1.js` `f882feb17932a53603a8…` (export list only);
+  the other six delta paths are byte-identical to round 0. **Entry name and
+  build marker unchanged** (`app-268.js` / `d5b-v2-generation-client-2`) —
+  content-only corrections.
 - Entry `app-268.js`, service worker `sw-genpkg1.js`, stylesheet `styles-155.css`
 - Build marker **`d5b-v2-generation-client-2`** (the `-2` distinguishes this build
   from the WS-4 `d5b-v2-generation-client-1` candidate, which sat on the superseded
@@ -300,6 +314,150 @@ gap; surfacing it is a separate decision).
   follow-on, the adapters/timeout fix package, and any `reconcileUnknown`
   invocation path.
 
+## Round-1 corrections (Rowan source review, comment 6511518715)
+
+Applied locally to the round-0 trees; **no deploy, no publication, no
+production contact.** This section supersedes two round-0 statements: the
+worker delta's "Deliberately unchanged: `submitIntent`…" line and proof
+obligation 3's "unchanged machinery" — `submitIntent` DID change, narrowly,
+as follows. Everything else in the round-0 delta is untouched (adapters,
+the 120 s timeout, `reconcileUnknown` wiring, the parked Ch 3 fence, the
+Shelf bridge — re-verified `bc0a5879…` in the corrected publish tree).
+
+### B1 — server-side phase authority (`worker/generation/service.mjs`)
+
+New `admitPhase(bookId, callerPhase)` runs inside `submitIntent` after the
+lane gate and before any plan/ledger state moves. The grounded model: the
+registry `PHASE_BUDGET_MICRO_CENTS` defines which phase strings carry a
+budget at all, and a book's binding to a budgeted phase is server state —
+the phase of the plans already admitted for that book (the same
+`d6_plans` record `capabilities()` reads its phase→book link from).
+Rules:
+
+- **Bound book** (an earlier admitted plan carries a registry phase):
+  caller phase missing/null → rejected `phase_required`; any different
+  phase → rejected `phase_mismatch`; the exact bound phase → admitted.
+  No plan is created and no ledger/attempt/grant state moves on a
+  rejection (asserted by test).
+- **Unbound book**: a caller phase outside the registry → rejected
+  `phase_not_budgeted` (an invented phase string is never stored); a
+  registry phase → admitted and establishes the book's binding with the
+  created plan; no phase → admitted unbudgeted (phase null).
+- The plan stores the **server-admitted** phase, never the raw caller
+  value. The client's capabilities-derived phase remains a hint; a
+  disagreement is the rejection above, never a silent override.
+
+**Disclosure for round 2:** cross-book phase *exclusivity* is deliberately
+NOT enforced (a second book presenting `forever-pucked` first would bind
+itself to that phase). Grounds: the D6 system's own passing suites treat a
+phase as an accounting bucket a book binds to on first use —
+`tests/d6-service.test.mjs` admits two different books under
+`forever-pucked` in one database (quota parking depends on the shared
+bucket), and `tests/d6-correction.test.mjs` does the same through the
+public route; a hardcoded production-book binding or exclusivity rule
+would break both suites and the battery constraint. In production the
+Forever Pucked ↔ `forever-pucked` binding already exists in server state
+(the G10 smoke + Ch 2 plans), so every B1 attack against the budgeted
+book — null, wrong, or forged phase — is rejected by the rule above.
+
+### B2 — intent identity covers execution semantics (same function)
+
+`intentKey` now hashes `{bookId, scope, chapterIndex, occurrenceId,
+eligibleIds, lane, keepGoing, phase}` where `phase` is the B1-admitted
+(server-derived) value. Byte-identical retries still converge (the
+round-0 idempotency suite stays green, plus a new full-semantics
+convergence test); a semantics change mints its own plan. Note on lanes:
+the allowlist admits only `standard` today, so a lane change is exercised
+as the explicit `lane_not_allowed` rejection — the existing plan is never
+returned for a different-lane request; with lane inside the identity,
+arming Batch later makes a differing lane mint its own plan the same way
+`keepGoing` does now. Read surface: `planSummary` now also returns
+`keepGoing` (from `d6_plans.keep_going`) so the client can name a plan's
+own semantics.
+
+### Client corrections (`gen/src/modules/generation-surface.js`, `gen/new-sheet.js.txt`)
+
+- New pure helpers in `generation-surface.js`, exported via
+  `entry-genpkg1.js`: `rejectionText(reason)` (plain "nothing was
+  started" wording for `phase_required` / `phase_mismatch` /
+  `phase_not_budgeted` / `lane_not_allowed` / `scope_invalid` + a safe
+  default), `planSemanticsText(plan)` (the plan's own lane +
+  continuation: book scope honours `keepGoing`, chapter/segment are
+  scope-bounded), `planMoneyText(plan)` (below).
+- Sheet (`genSheetSubmit`): the intent route answers HTTP 200 with the
+  service result, so a rejection arrives as data with no `planId` — it
+  is now treated as a rejection (note = `rejectionText`, Start
+  re-enabled, never "Started"). The round-0 code reported "Started" for
+  any non-throwing receipt; that defect is fixed.
+- Lost-response recovery: the re-read now matches on the request's
+  semantics (lane + keepGoing) before claiming "Started"; if only a
+  different-semantics active plan matches, the sheet names THAT plan's
+  semantics and states this sheet's start wasn't submitted.
+- Active-plan rerouting (`prepareGenSheet`): the note names the
+  existing plan's `planSemanticsText` — never a bare "already running".
+- Plan lines (`genPlanLine`): meta is now `planMoneyText` + the plan's
+  semantics + publication counts (applies to the book screen's
+  Generation section and the Generation view alike).
+
+### Money/status accuracy (Rowan's required distinction)
+
+The client now speaks the server's three distinct figures distinctly:
+(a) the quote is an **estimate** (sheet labels it "(estimate)" — round 0,
+unchanged); (b) **known-settled accounting** — `settledMicroCents`, the
+attempt-log sum over confirmed outcomes, rendered "Settled $X"; (c) a
+phase's in-flight upper bound is **reserved** — the Generation view phase
+line appends "reserved up to $Y" when `inFlightUpperMicroCents > 0`. The
+grant-time estimated ledger debit (the Ch 2 $0.3537 class of figure) is
+server-internal and **no client surface displays it**; nothing anywhere
+calls any figure a bill or provider charge. For a `halted_unknown` plan,
+`planMoneyText` renders "Settled $X so far — plus a charge that isn't
+confirmed yet": the unconfirmed charge is called out, never folded into
+the settled figure, and the plan line carries no retry/resume affordance
+(there is none anywhere in the client, by design).
+
+### New and extended tests (all on the corrected final trees)
+
+- **Worker** `tests/genpkg1-phase-authority.test.mjs` — **8/8**: bound
+  book null/omitted phase → `phase_required` with plan/ledger/attempt/
+  grant counts provably unchanged; wrong phase → `phase_mismatch`;
+  correct phase admitted + converges; unbudgeted book admitted with
+  phase null; invented phase → `phase_not_budgeted`, nothing created;
+  registry phase establishes a binding (distinct plan under B2, book
+  budgeted thereafter); keepGoing-only change at book scope → distinct
+  plan, identical retry converges; different-lane request → explicit
+  rejection, never the existing plan; concurrent identical
+  full-semantics submissions → one plan.
+- **Client unit** GU11–GU13 added to `generation-unit.mjs` — **13/13**
+  (rejection wording, semantics text, money text incl. the
+  halted_unknown qualifier and a no-bill-language assertion).
+- **Chromium proof** — GP-4 additionally asserts the reroute note names
+  the existing plan's lane + continuation; new **GP-14** (halted_unknown
+  view test): a stub plan in the production Ch 2 halt's exact shape
+  renders "Stopped — a charge needs checking before it can continue",
+  "Settled $0.35 so far — plus a charge that isn't confirmed yet",
+  its lane, no retry/resume control, and zero submissions. The stub now
+  carries `keepGoing` on plans (seeded + intent-created), mirroring the
+  corrected worker surface. **14/14 PASS, 0 page exceptions** on tree-a
+  and on `package/publish`. Disclosure: the first tree-a run failed
+  GP-2→GP-5 on a null click inside the proof harness's own `openBook`
+  helper (a library-row element replaced between its wait and click —
+  code untouched by these corrections); the identical tree then passed
+  14/14 twice (tree-a re-run + package tree). First-run log preserved at
+  `~/workspace/gen-pkg-1/logs/round1/client-chromium-tree-a.log`.
+- **Store unit battery** (ui-pkg-4 battery vs the candidate tree):
+  **13/13**, unchanged.
+
+### Battery (corrected final trees)
+
+- Worker: **116 suite files: 94 pass / 22 fail** — the failing set is
+  byte-identical to the recorded 22-name baseline (20 legacy-fixture
+  ENOENT + 2 git-required envelope suites); zero assertion failures
+  anywhere. The one new file is the phase-authority suite (8/8, inside
+  the 94). Logs: `~/workspace/gen-pkg-1/logs/round1/worker-final/`.
+- Client package static checks: **ALL PASS** on the corrected tree
+  (publish = base + 9-path delta exact; bridge SHA pinned — independently
+  re-verified `bc0a5879fbf4a6f455170ead8e0fbe1aa19d82126df4eb631bd0ebad9112ec8e`).
+
 ## Pin
 
 Pinned to `jedavid33-design/opal-reader` branch `ui1-review` (review only;
@@ -311,3 +469,10 @@ sources, and the key logs). Artifacts pin commit:
 `7fb7443a87be374ca4671979d0a85600d37297f4`, 27 files). The completed-report
 follow-up commit SHA is recorded in the builder's completion message (a
 commit cannot contain its own SHA).
+
+**Round-1 re-pin:** the corrected trees were re-pinned on the same branch
+with parent `d4deb2d0ef58f49e1d6d4b6bf51001d843792540` (the round-0
+completed-report head), same `review/gen-pkg-1/` layout, plus the new
+worker suite and the round-1 logs. The re-pin commit SHA is recorded in
+the builder's completion message, and the branch head was verified by
+independent read-back after the push.
