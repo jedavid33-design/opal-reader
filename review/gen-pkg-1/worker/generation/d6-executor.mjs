@@ -52,6 +52,7 @@
 // (bounded by REPAIR_MAX_RETRIES and the shared 12-attempt segment
 // budget in the genstore attempt log).
 import { fingerprintFor } from "../executor.mjs";
+import { heldQuarantine } from "./quarantine.mjs";
 import { synthesizeSegment, stitchWav, TerminalBlock } from "./policy-split.mjs";
 import { FlushError } from "./flush-store.mjs";
 import { noteCommitted as noteBindingCommitted } from "./binding-projection.mjs";
@@ -476,6 +477,34 @@ export function createD6Executor({ coord, coordinator, store, providers, flushSt
     const jobAtStart = jobId ? c.jobView(jobId) : null;
     if (jobAtStart && !D6_LANE_ALLOWLIST.includes(jobAtStart.lane || "standard"))
       return { refused: "lane_not_allowed" };
+
+    // D7-2 executor defense (Rowan ruling 6524426826 req 2): the
+    // grant guard is the primary fence — a held plan's jobs can
+    // never be granted, so no legitimate message for one exists.
+    // This is the defense-in-depth layer for a replayed or
+    // hand-crafted message carrying a grant the guard never
+    // issued (or issued before a hold existed): if the job's plan
+    // (message-carried, job-data, or the d6_plan_jobs link) or the
+    // job itself is under a HELD quarantine, refuse BEFORE any
+    // claim, execution record, or provider contact. The reads are
+    // throw-safe (heldQuarantine): on a store where the lazily
+    // ensured quarantine table was never created there is no hold
+    // to find, and claim discipline below proceeds exactly as
+    // before — this layer can only ever refuse work that a
+    // server-stamped hold names.
+    if (jobId) {
+      let qPlanId = planIdFor(jobId, msg);
+      if (!qPlanId && typeof c._oneOrNull === "function") {
+        try {
+          const link = c._oneOrNull(
+            `SELECT plan_id FROM d6_plan_jobs WHERE job_id = ?`, jobId);
+          if (link) qPlanId = link.plan_id;
+        } catch { /* link is optional bookkeeping here */ }
+      }
+      if ((qPlanId && heldQuarantine(c, "plan", qPlanId)) ||
+          heldQuarantine(c, "job", jobId))
+        return { refused: "plan_quarantined" };
+    }
 
     const claim = c.claimGrant({ grantId, consumerId: cid });
     if (claim.status === "completed" || claim.status === "closed" || claim.status === "unknown_grant")

@@ -54,6 +54,15 @@ export function stopReasonText(reason) {
 
 export function planStatusText(plan) {
   if (!plan) return "Status unavailable";
+  // D7-2 (server birth-mark quarantine): a plan the server holds
+  // for approval is NOT working — its spend is fenced until an
+  // operator release clears the hold. The server says so on both
+  // shapes (list summaries carry approvalRequired; the single-
+  // plan status carries quarantine.held); say exactly that, in
+  // plain words, ahead of the state wording — the state itself
+  // stays 'active' and must never be rendered as "Working".
+  if (plan.approvalRequired === true || plan.quarantine?.held === true)
+    return "Waiting — needs approval before it can start";
   const t = plan.totals ?? { eligible: 0, done: 0, failed: 0, blocked: 0, prompts: 0 };
   const reason = stopReasonText(plan.stopReason);
   switch (plan.state) {

@@ -24,6 +24,11 @@ import {
   phaseBindingFor, phaseBindingForBook, phaseRegistryEstablished,
   recordPhaseBinding,
 } from "./phase-policy.mjs";
+import {
+  ensureQuarantineSchema, heldQuarantine, quarantineHoldRow,
+  quarantineHoldRowSafe, recordQuarantineHold, applyQuarantineRelease,
+  quarantineView,
+} from "./quarantine.mjs";
 
 // Voice mappings, recorded only (proposal §6.4): a voice-prompt row
 // names the character and the recorded mapping where one exists.
@@ -61,7 +66,8 @@ const JOB_TERMINAL = Object.freeze(
 export function createGenerationService({ coord, env = {}, store = null, sources = {},
                                           expectedStorageBase = null,
                                           recountBucket = undefined,
-                                          phasePolicyMode = "legacy" }) {
+                                          phasePolicyMode = "legacy",
+                                          quarantineMode = "legacy" }) {
   if (!coord) throw new Error("createGenerationService requires a coordinator");
   store = store || createGenStore(coord);
   store.ensureSchema();
@@ -91,6 +97,24 @@ export function createGenerationService({ coord, env = {}, store = null, sources
   // mode is fixed here, at construction, from the server's own
   // configuration.
   const enforcePhasePolicy = phasePolicyMode === "enforce";
+
+  // D7-2 QUARANTINE MODE (Rowan ruling 6524426826; Julie's
+  // approval 6524562842): the same construction-boundary law as
+  // the phase policy above. "enforce" is selected ONLY by trusted
+  // server-side construction — the production entry
+  // (worker-entry-prod-d6.js d6Service) constructs it
+  // UNCONDITIONALLY — and it enables exactly one behavior: a plan
+  // BORN while GENERATION_HALT !== "0" (missing/malformed counts
+  // as halted) is birth-marked in the quarantine store, atomically
+  // with its plan insert (see submitIntent). Direct construction
+  // (every test fixture, the legacy D6 suites) defaults to
+  // "legacy": no marking — the pre-D7-2 behavior, byte for byte.
+  // No request, command, or intent field can select the mode.
+  // The FENCE itself (grant guard, driver skip, executor defense)
+  // is data-driven and applies wherever a hold row exists, in any
+  // construction: a hold, once recorded, is never invisible.
+  const enforceQuarantine = quarantineMode === "enforce";
+  const generationHalted = () => env.GENERATION_HALT !== "0";
 
   function planRow(planId) {
     return coord._oneOrNull(`SELECT * FROM d6_plans WHERE plan_id = ?`, planId);
@@ -461,6 +485,85 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
     };
   }
 
+  // ---- D7-2 release: clearing a quarantine hold --------------
+  // releaseQuarantine({ planId | jobId, source }) — the ONLY way
+  // a quarantine hold clears (Rowan ruling 6524426826 req 3;
+  // Julie's approval 6524562842). Semantics:
+  //   * PER-SUBJECT and IDEMPOTENT: releasing plan A never
+  //     touches plan B (or any job); a second release of an
+  //     already-released subject is a safe no-op that returns the
+  //     standing released record (alreadyReleased: true).
+  //   * AUDITABLE: the release stamps the hold row itself —
+  //     released_at (server clock), release_source (the recorded
+  //     authorization source string; the entry stamps
+  //     "operator-route", never a caller-supplied value), and
+  //     release_actor_class ("operator"). The birth fields are
+  //     never rewritten; the row is never deleted.
+  //   * PRECONDITIONS, checked server-side: exactly one subject
+  //     named (subject_required / subject_ambiguous); the plan
+  //     exists (plan_not_found); a hold row exists
+  //     (subject_not_quarantined); and — the billing fence — a
+  //     plan in state 'halted_unknown' can NOT be released
+  //     (release_refused_halted_unknown): quarantine release is
+  //     NOT a reconciliation, and clearing a hold must never
+  //     paper over unresolved billing. A halted_unknown plan's
+  //     path remains reconcileUnknownAttempt + retireHaltedPlan,
+  //     under their own authorizations. (In practice the driver
+  //     skip means a born-held plan never transitions INTO
+  //     halted_unknown while held; this refusal also covers a
+  //     hold recorded against an already-halted plan's job space
+  //     and any future path that could produce the combination.)
+  //   * NOTHING ELSE CALLS THIS: no deploy, binding, publish, or
+  //     re-arm path invokes it; in the pinned production entry it
+  //     is reachable only through the operator-only
+  //     POST /v2/d6-release-quarantine route (the migration-
+  //     operator fence class — the client token alone is
+  //     refused), and each production USE remains Julie's
+  //     separate, per-plan approval. The route's existence is
+  //     not authority.
+  function getQuarantine({ planId = null, jobId = null } = {}) {
+    if (planId) return quarantineView(quarantineHoldRowSafe(coord, "plan", planId));
+    if (jobId) return quarantineView(quarantineHoldRowSafe(coord, "job", jobId));
+    return quarantineView(null);
+  }
+
+  function releaseQuarantine(input) {
+    const { planId = null, jobId = null, source = null } = input || {};
+    const hasPlan = typeof planId === "string" && planId.length > 0;
+    const hasJob = typeof jobId === "string" && jobId.length > 0;
+    if (!hasPlan && !hasJob)
+      return { outcome: "rejected", reason: "subject_required" };
+    if (hasPlan && hasJob)
+      return { outcome: "rejected", reason: "subject_ambiguous" };
+    const subjectKind = hasPlan ? "plan" : "job";
+    const subjectId = hasPlan ? planId : jobId;
+    if (hasPlan) {
+      const plan = planRow(planId);
+      if (!plan) return { outcome: "rejected", reason: "plan_not_found" };
+      if (plan.state === "halted_unknown")
+        return { outcome: "rejected", reason: "release_refused_halted_unknown",
+                 state: plan.state };
+    }
+    ensureQuarantineSchema(coord.sql);
+    const row = quarantineHoldRow(coord, subjectKind, subjectId);
+    if (!row)
+      return { outcome: "rejected", reason: "subject_not_quarantined" };
+    if (row.state === "released") {
+      return { outcome: "applied", alreadyReleased: true,
+               ...(hasPlan ? { planId } : { jobId }),
+               quarantine: quarantineView(row) };
+    }
+    let updated = null;
+    coord._tx(() => {
+      updated = applyQuarantineRelease(coord, {
+        subjectKind, subjectId, source, actorClass: "operator",
+      });
+    });
+    return { outcome: "applied", alreadyReleased: false,
+             ...(hasPlan ? { planId } : { jobId }),
+             quarantine: quarantineView(updated) };
+  }
+
   // R2-2 (Rowan round 2, comment 6511950562): the ACTIVE
   // OVERLAPPING-OCCURRENCE FENCE. B2 put execution semantics
   // inside intent identity, so a different-semantics request over
@@ -616,6 +719,27 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
             name ? (RECORDED_VOICE_MAPPINGS[name] ?? null) : null, t);
         }
       }
+      // D7-2 BIRTH-MARK: a plan born while generation is halted
+      // (GENERATION_HALT !== "0" — missing/malformed counts as
+      // halted) is quarantined AT BIRTH, in this same transaction
+      // as the plan + entries insert, so the mark can never be
+      // lost between admission and fencing. The mark is
+      // server-stamped from the service's own halt reading —
+      // nothing in the submission can request, prevent, or shape
+      // it — and it changes NOTHING about admission: the plan is
+      // durable, its state is 'active', its first job is created
+      // below, and zero grants/dispatches occur (C3's contract).
+      // What the mark fences is SPEND AUTHORITY (grant guard,
+      // driver, executor), until the operator-only per-plan
+      // release. Plans born while HALT === "0" are never marked;
+      // a converged resubmission returns above and never reaches
+      // here, so a pre-existing plan is never retro-marked.
+      if (enforceQuarantine && generationHalted()) {
+        recordQuarantineHold(coord, {
+          subjectKind: "plan", subjectId: planId,
+          reason: "born_while_halted", source: "submit_intent",
+        });
+      }
     });
     const plan = planRow(planId);
     // The FIRST job: the segment's own entry, the chapter's entries,
@@ -686,6 +810,20 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
     for (const plan of plans) {
       const out = { planId: plan.plan_id };
       outcomes.push(out);
+      // D7-2 DRIVER SKIP: a quarantined plan is never advanced —
+      // no grant step, no chapter advancement, no state
+      // transition (not even INTO halted_unknown if its phase
+      // later halts: the hold, not plan state, is its fence, and
+      // the release semantics below assume a held plan's state
+      // was never moved by the driver). The skip is reported
+      // truthfully on the pass outcome: approvalRequired, never
+      // a suggestion that work is in flight.
+      if (heldQuarantine(coord, "plan", plan.plan_id)) {
+        out.state = plan.state;
+        out.quarantined = true;
+        out.approvalRequired = true;
+        continue;
+      }
       // Unknown-billing halt for the plan's phase: no granting.
       if (plan.phase && d6PhaseHalt(coord, plan.phase)) {
         setPlanState(plan.plan_id, "halted_unknown", "phase_halted_unknown_billing");
@@ -810,6 +948,15 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
     return {
       planId: plan.plan_id, state: plan.state, stopReason: plan.stop_reason,
       totals, entries,
+      // D7-2: the truthful hold state. A held plan reports
+      // approvalRequired: true — a human authorization (the
+      // operator release, itself gated on Julie's separate
+      // approval) is required before any spend. The plan's state
+      // stays exactly what it is ('active' for a born-held plan):
+      // quarantine is reported BESIDE state, never AS a state,
+      // and never implies audio is generating.
+      quarantine: quarantineView(
+        quarantineHoldRowSafe(coord, "plan", plan.plan_id)),
     };
   }
 
@@ -851,6 +998,9 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
       chapterIndex, lane: plan.lane, phase: plan.phase,
       keepGoing: !!plan.keep_going,
       state: plan.state, stopReason: plan.stop_reason,
+      // D7-2: the list view carries the same truthful signal as
+      // the single-plan view (held === approvalRequired).
+      approvalRequired: status ? status.quarantine.held : false,
       totals,
       settledMicroCents: planSettledMicro(plan.plan_id),
       bindingsPublished: published,
@@ -1224,5 +1374,6 @@ CREATE TABLE IF NOT EXISTS d6_plan_retirements (
   return { submitIntent, driveOnce, planStatus, seedStorageBase, recover,
            bindPhaseBook, getPhaseBinding,
            reconcileUnknownAttempt, retireHaltedPlan,
+           releaseQuarantine, getQuarantine,
            listPlans, capabilities, eligibilityQuote, attemptDiagnostics };
 }

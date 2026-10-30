@@ -121,6 +121,14 @@ await row("GU8", "planStatusText: states and stop reasons in plain words", async
   assert(planStatusText({ state: "retired", stopReason: "retired_unknown_billing" }).includes("Closed"), "retired reads closed");
   assert(planStatusText({ state: "retired", stopReason: "retired_unknown_billing" }).includes("charge was checked"), "retired reason in plain words");
   eq(stopReasonText("some_new_reason"), "some new reason", "unknown reasons pass through, never invented");
+  // D7-2 (additive): a server-held plan reads as waiting for
+  // approval on BOTH server shapes — never as "Working".
+  eq(planStatusText({ state: "active", approvalRequired: true, totals: { eligible: 5, done: 0 } }),
+    "Waiting — needs approval before it can start", "held summary shape");
+  eq(planStatusText({ state: "active", quarantine: { held: true }, totals: { eligible: 5, done: 0 } }),
+    "Waiting — needs approval before it can start", "held status shape");
+  eq(planStatusText({ state: "active", approvalRequired: false, totals: { eligible: 5, done: 2 } }),
+    "Working — 2 of 5 done", "unheld active still reads working");
   assert(isTerminalPlanState("complete") && !isTerminalPlanState("active") && !isTerminalPlanState("parked_quota"), "terminal set");
   assert(isTerminalPlanState("retired") && !isTerminalPlanState("halted_unknown"), "round 3: retired is terminal, halted_unknown is not");
 });

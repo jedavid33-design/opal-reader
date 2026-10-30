@@ -1559,3 +1559,401 @@ logs). All client blobs are carried forward unchanged (the client
 publish tree is hash-identical to rounds 3/4). The re-pin commit
 SHA is recorded in the builder's completion message, and the
 branch head was verified by independent read-back after the push.
+
+## D7-2 code fence — STOPPED: the fence breaks baseline d6-correction C3 (decision required)
+
+Attempted Oct 30, 2026 under Julie's approval of the code-fence
+option (board comment 6524181512), answering Rowan's D7-2 in
+the deploy-evidence re-review (comment 6524120231): during the
+deploy plan's Gate 2/3 halted interval, `submitIntent` admits
+a durable `active` plan + first job once the phase registry is
+established — GENERATION_HALT gates dispatch only, not
+admission — so an authenticated request could stage paid work
+a later re-arm might grant. **The correction STOPPED at the
+targeted-baseline stage and was fully reverted, under the
+standing stop rule (Julie's D7-2 approval does not cover
+baseline-suite edits — the R4-2 precedent, round 4).** The
+candidate remains EXACTLY at the signed round-5 pin
+`5ae38942e493a4b53f541b5e1f589060d58d158d`. No re-pin, no
+client change, no deploy, no production contact. Full record:
+`~/workspace/gen-pkg-1/logs/d7-2/experiment-summary.txt` +
+the experiment logs in the same directory.
+
+### The fence as built (experiment; two production files)
+
+- `worker/generation/service.mjs`: new construction option
+  `haltFenceMode` (default `"legacy"`, mirroring
+  `phasePolicyMode`); under `"enforce"`, `submitIntent`
+  refuses — after the lane check, BEFORE `admitPhase` and any
+  plan/job/ledger/attempt/grant movement — with
+  `{outcome: "rejected", reason: "generation_halted"}` whenever
+  `env.GENERATION_HALT !== "0"` (fail-closed: only an exact
+  `"0"` admits; `"1"`, missing, or mistyped all refuse).
+- `worker/worker-entry-prod-d6.js`: `d6Service` constructs
+  `haltFenceMode: "enforce"` UNCONDITIONALLY (the round-5
+  pattern), and the class `/internal/d6/intent` route returns
+  HTTP **423 `{error: "generation_halted"}`** while halted,
+  after the round-5 503 config check and before any service
+  call (defense in depth). The reason string and status are
+  the codebase's OWN halt vocabulary
+  (`GenerationHaltedError.code` = `"generation_halted"`, HTTP
+  423 at the class catch) — no new strings were coined.
+  Operator surfaces (phase-binding write, retire/reconcile,
+  seed — whose law REQUIRES the halt — diagnostics) and all
+  reads were untouched, as were the driver/dispatch path and
+  R4-1's `halted_unknown` driver exclusion.
+
+### Why it stopped: baseline C3 IS the D7-2 exposure, staged as law
+
+Targeted runs against the fenced tree (experiment digest
+`210c0d23…`): `d6-correction2` 10/10, `d6-seed-hardening`
+12/12, `d6-service` 5/5, `d6-integration` 3/3,
+`d6-parked-inertness` 1/1 — and **`d6-correction` 4/5: C3
+FAILS** at line 393 (`assert.equal(ok.status, 200)` — actual
+423). C3's staged premise, in its own header: through the
+REAL production entry at `GENERATION_HALT="1"`, an intent is
+"admitted as durable state only (zero grants, zero
+dispatches, zero executions)" — it asserts HTTP 200,
+`created: true`, exactly one `d6_plan_jobs` row, and plan
+status `active` for a halted SubmitJob whose fixture binding
+was recorded in setup. That is precisely the Gate 2/3 shape
+D7-2 declares an exposure (registry established + halted +
+admitted). No fence keyed on the real GENERATION_HALT binding
+at the entry or service can refuse that submission without
+failing C3; shapes keyed on anything else violate D7-2's own
+terms (unconditional wiring, fail-closed) or leave the
+exposure open. C3's dispatch-side proofs (zero grants, 423 on
+`/internal/execute`, queue handler halting before the
+namespace) are orthogonal and unaffected by the fence — only
+its admission premise embodies the pre-D7-2 law. Candidate
+suites also fail under the fence, as expected and as would
+have been disclosed/re-staged had the round proceeded:
+`genpkg1-phase-enforce` 10/12 and `genpkg1-phase-policy`
+9/10 (their entry fixtures stage admission at HALT="1");
+`genpkg1-diagnostics` 9/9 and `genpkg1-halted-fence` 7/7
+(R4-1) pass. The full battery, envelope re-proof, and the
+Gate 2/3 simulation were NOT run — the stop rule fired first,
+exactly as at the round-4 R4-2 stop.
+
+### Revert (complete, verified)
+
+Both production files restored byte-identical (service
+`700b8a8d67a813d3…`, entry `9cfd4c40a2549fc9…`); the worker
+tree digest is back to the signed round-5 value
+`2d16fe291dfa8d067fae82110089e501ca28bd93e80a047ac5efd0ffee840fb2`
+(375 files); the reverted tree re-passes `d6-correction` 5/5
+and `genpkg1-phase-enforce` 12/12.
+
+### Decision required (Rowan's D7-2 framing + the R4-2 precedent)
+
+Either (a) Julie explicitly approves a disclosed
+`d6-correction` C3 fixture modernization — the exact shape of
+her round-5 R4-2 approval: re-stage C3's admission assertions
+at `GENERATION_HALT="0"`, preserve its dispatch-halt proofs at
+full strength, and add halted-refusal assertions; the fence
+then lands as built above, with the candidate-suite
+re-stagings disclosed — or (b) a different production
+boundary Rowan accepts (she has already characterized
+plan-only controls as weaker than the requested fence). The
+`DEPLOY-PLAN-ADDENDUM-D7.md` representation fix was NOT
+written: its specified content ("admission is now fenced
+while halted") is true only if the fence lands; until the
+decision, the plan's Gate 2/3 wording remains understated, as
+Rowan found, and this section is the record of why.
+
+## D7-2 quarantine — birth-mark + grant-quarantine (Rowan ruling, comment 6524426826; Julie's approval, comment 6524562842)
+
+Julie declined the C3 modernization (comment 6524334455) and
+approved instead the boundary Rowan accepted in principle in her
+D7 ruling: plans submitted while halted are ADMITTED exactly as
+C3 contracts, but BORN QUARANTINED; spend authority, not
+admission, is what is fenced. **Zero baseline suites were
+edited.** `d6-correction` C1–C5 pass UNMODIFIED on this tree —
+including C3, whose fixture plan (real entry, HALT="1", binding
+recorded) is now born quarantined and still satisfies every C3
+assertion (created:true, durable plan + first job, state
+`active`, zero grants/outbox/executions): C3 asserts nothing
+about grants after a re-arm, so the mark coexists with its
+contract, and the mark's presence under the real entry is
+asserted directly by the new suite's Q8.
+
+### Design as built
+
+- **Quarantine record** (`worker/generation/quarantine.mjs`,
+  new): table `d6_quarantine_holds` — `(subject_kind, subject_id)`
+  primary key (`plan` | `job`), `state` (`held` | `released`),
+  `reason`, `source`, `marked_at`, and the release audit fields
+  `released_at`, `release_source`, `release_actor_class`. Birth
+  fields are written once (INSERT OR IGNORE) and never updated;
+  the row is never deleted. The table is ADDITIVE and LAZILY
+  ENSURED (DDL beside its writers, the phase-policy /
+  plan-retirements precedent) — it is NOT in `gen-schema.mjs`,
+  so C2's pinned eight-table bootstrap set is untouched; a store
+  that never marks never grows it. All reads are throw-safe
+  (`_oneOrNull` / try-caught), never a bare `.one()`.
+- **Birth-mark** (service `submitIntent`): only in an
+  enforcement-bound construction (`quarantineMode: "enforce"`,
+  selected UNCONDITIONALLY by `worker-entry-prod-d6.js`
+  `d6Service`, exactly the round-5 phase-policy pattern; direct
+  constructions default to `"legacy"` = no marking, pre-D7-2
+  behavior byte for byte). When `GENERATION_HALT !== "0"`
+  (missing/malformed counts as halted), the hold
+  (`reason: "born_while_halted"`, `source: "submit_intent"`) is
+  inserted INSIDE the same coordinator transaction as the plan +
+  entries insert — atomic, server-stamped from the service's own
+  halt reading, independent of the submission's payload.
+  Admission is otherwise unchanged. Resubmission converges on the
+  existing plan BEFORE the insert path and is never retro-marked;
+  plans born at HALT === "0" are never marked; pre-existing plans
+  (incl. the halted Ch 2 plan's space) are never marked.
+- **Exposure**: `planStatus` gains a `quarantine` object
+  (`held`, `approvalRequired`, `state`, `reason`, `source`,
+  `markedAt`, `releasedAt`, `releaseSource`,
+  `releaseActorClass`); `planSummary` (list view) gains
+  `approvalRequired`. Plan `state` is never rewritten by the
+  hold — a born-held plan reads `active` + `approvalRequired:
+  true`, which does not imply audio is generating.
+- **Central enforcement** (`d6GrantGuard`, the proven seam —
+  `coordinator.mjs` is NOT touched by this build): after the
+  plan lookup (whose missing-table throw preserves the
+  fail-loud contract), the guard lazily ensures the quarantine
+  table and refuses, FIRST, any held subject:
+  plan hold → `{ ok: false, reason: "plan_quarantined" }`;
+  job hold → `reason: "job_quarantined"`. Only then do the
+  existing phase-budget/storage checks run, unchanged.
+- **Driver skip**: `driveOnce` checks the hold before ANY
+  per-plan work (before even the phase-halt transition INTO
+  `halted_unknown`) and reports `{ quarantined: true,
+  approvalRequired: true }` — a held plan is never granted,
+  advanced, finished, or state-transitioned by the driver.
+- **Executor defense**: `createD6Executor.handleMessage` refuses
+  `{ refused: "plan_quarantined" }` BEFORE claim, execution
+  records, or provider contact when the job's plan (message /
+  job-data / `d6_plan_jobs` link) or the job itself is held.
+  Throw-safe reads: on a store without the table there is no
+  hold to find and claim discipline proceeds exactly as before.
+- **Release** (service `releaseQuarantine` + operator route
+  `POST /v2/d6-release-quarantine` → internal
+  `/internal/d6/release-quarantine`): the migration-operator
+  fence class (production gate skips the client token, operator
+  admission block requires the credential, class gate requires
+  the stamped admission; the route stamps its own recorded
+  source `"operator-route"`). Per-subject (exact `planId`, or
+  exact `jobId` for guard-marked plan-less jobs — exactly one,
+  else `subject_required` / `subject_ambiguous`), idempotent
+  (a re-release returns `applied` + `alreadyReleased: true` +
+  the standing record), audited on the hold row, with the
+  read-back hold on every response. Refusals: `plan_not_found`,
+  `subject_not_quarantined`, and — the billing fence —
+  `release_refused_halted_unknown`: release is NOT a reconcile;
+  a `halted_unknown` plan's only path remains
+  reconcileUnknownAttempt + retireHaltedPlan under their own
+  gates. NO other code path calls the release: deploy, binding,
+  publication, re-arm, settings, and retry paths were audited
+  (inventory below) and none clears a hold.
+
+### Grant-path inventory (Rowan req 2 — every path, and its closure)
+
+| # | Path | Closure |
+|---|------|---------|
+| 1 | Service `driveOnce` grant step (plan jobs) | Driver skip (held plans never reach the grant step) + guard refusal inside `requestGrant`. |
+| 2 | Coordinator `requestGrant` (direct) | Guard inside `_issueGrant`'s transaction (flagged constructions). |
+| 3 | `RequestSynthesis` command (job + immediate grant) | Real entry: refused at ADMISSION while halted (423 `generation_halted`, public + class level). Flagged coordinator: guard refuses the immediate grant AND durably marks the job (`grant_attempt_while_halted`) in the same transaction. |
+| 4 | `RequestResume` (paused_quota grant probe) | Same as (3): entry admission refusal while halted; guard refusal + job mark on flagged paths. (A merely-queued job's resume issues no grant.) |
+| 5 | Plain `SubmitJob` (stages a queued job, no grant) | Creates no grant/ledger/outbox in any state. The staged job becomes grantable only through paths 2–4/6 — and its first halted grant ATTEMPT marks it durably at the guard, so it stays fenced after re-arm (`job_quarantined`) until individually released. Behavior of the command itself is unchanged (proven Q9). |
+| 6 | Watchdog `retry_grant` schedule → `requestGrant` | Guard (flagged constructions). Additionally inert for held subjects by state: `retry_grant` acts only on `generating` jobs, and a held job can never have been granted, hence never `generating`. |
+| 7 | Repair chain (report-driven follow-up job + grant) | The follow-up grant runs through `_issueGrant` (guard on flagged constructions). A repair chain can only originate from a job that already executed; held subjects never execute, so no chain can originate from them. |
+| 8 | Queue delivery (`drainOutbox`) | Delivers only grants ALREADY ISSUED. Held subjects can never be issued a grant (guard), so no held work can exist in the outbox. While halted the D6 entry wires no `sendGrant` at all (unchanged). |
+| 9 | Queue consumer → `/internal/execute` → D6 executor | Halt layers unchanged (`assertGenerationEnabled` at queue + execute) + the executor's pre-claim quarantine refusal for replayed/crafted messages (Q4). |
+| 10 | `/v2/commands` API dispatch (base coordinator, guard flag unreachable there) | The grant-PRODUCING command types (3)/(4) are refused at the D6 entry's admission while halted — the closure Rowan's ruling names for exactly this hole. All other command types (sync, settings, reads, migration fences) behave exactly as before. |
+| 11 | Coordinator alarm (base-class schedule processing) | Processes leases/parks/retries for work that already has grants; held subjects have none. The D6 continuation (recover + driveOnce) runs on the flagged construction (paths 1/6). |
+
+### Files changed (worker tree, vs the signed round-5 candidate)
+
+- `worker/generation/quarantine.mjs` — NEW (record, schema,
+  throw-safe reads, release write, read-surface view).
+- `worker/generation/grant-guards.mjs` — the guard gains the
+  quarantine fence + the plan-less halt fence (below).
+- `worker/generation/service.mjs` — `quarantineMode`
+  construction option; birth-mark in `submitIntent`;
+  driver skip; `planStatus`/`planSummary` exposure;
+  `releaseQuarantine` + `getQuarantine` + exports.
+- `worker/generation/d6-executor.mjs` — pre-claim quarantine
+  refusal (defense layer).
+- `worker/worker-entry-prod-d6.js` — `d6HostEnv` gains
+  `d6HaltFence: true`; `d6Service` gains
+  `quarantineMode: "enforce"` (unconditional); the release
+  route pair (public + internal); the admission fence for
+  grant-producing legacy commands while halted (public peek +
+  class-level backup, the D3-1 pattern).
+- `tests/genpkg1-quarantine.test.mjs` — NEW candidate suite
+  (the regression matrix, Q1–Q10).
+- `coordinator.mjs` — NOT TOUCHED. The guard seam sufficed for
+  every closure above; nothing in this build edits the frozen
+  coordinator.
+
+### The plan-less hole, and the flag that closes it
+
+Rowan's named hole: `d6GrantGuard` returned `ok: true` for jobs
+WITHOUT a D6 plan. The closure is flag-gated on the SAME pattern
+as `d6StandardOnly`: `d6HostEnv` (production entry only) sets
+`d6HaltFence: true`; with that flag on, a grant attempt for a
+plan-less job while `GENERATION_HALT !== "0"` is refused
+(`reason: "generation_halted"`) and the job is durably marked
+inside the grant transaction. Direct constructions never set
+the flag — so the baseline `d6-grant-guards` assertion
+"plan-less jobs are unguarded" (a fixture without the flag, and
+without `GENERATION_HALT` in its env) passes UNMODIFIED, and no
+baseline suite's semantics moved. The production entry ALSO
+refuses the two grant-producing command types at admission
+while halted (inventory #10), because the `/v2/commands`
+dispatch never reaches a flagged coordinator.
+
+### New strings (Wren's choices, disclosed)
+
+Guard reasons: `plan_quarantined`, `job_quarantined`,
+`generation_halted` (the last reuses the codebase's halt
+vocabulary; the entry admission refusal is HTTP 423
+`{ error: "generation_halted" }`, the `GenerationHaltedError`
+shape). Hold reasons: `born_while_halted`,
+`grant_attempt_while_halted`. Hold sources: `submit_intent`,
+`grant_guard`. Release refusals: `subject_required`,
+`subject_ambiguous`, `plan_not_found`,
+`subject_not_quarantined`, `release_refused_halted_unknown`.
+Read fields: `quarantine` object on plan status;
+`approvalRequired` on plan status + list summaries; driver
+outcome fields `quarantined` / `approvalRequired`. Client
+wording for a held plan: "Waiting — needs approval before it
+can start". Table: `d6_quarantine_holds`. Route:
+`POST /v2/d6-release-quarantine` (internal
+`/internal/d6/release-quarantine`). Env flag: `d6HaltFence`.
+Construction option: `quarantineMode`.
+
+### Candidate-suite amendments (one by one)
+
+- `genpkg1-quarantine.test.mjs` — NEW suite (Q1–Q10, below).
+  No existing suite file was amended.
+- Client `gen/tests/generation-unit.mjs` — ADDITIVE ONLY: three
+  assertions appended inside GU8 (held summary shape, held
+  status shape, unheld active unchanged). No assertion deleted,
+  skipped, or lowered; GU8's pre-existing assertions are
+  byte-identical.
+- Client `gen/src/modules/generation-surface.js` — the one
+  client change (below).
+- `genpkg1-phase-enforce` (12/12) and `genpkg1-phase-policy`
+  (10/10) pass UNAMENDED on this tree — unlike the stopped
+  admission-fence experiment, the quarantine needs no candidate
+  re-staging anywhere.
+
+### Regression matrix results (new suite `genpkg1-quarantine`, 10/10)
+
+Logs: `~/workspace/gen-pkg-1/logs/d7-2q/`.
+
+- Q1 born-marked admission = C3's contract + hold row shape +
+  truthful surfaces. Q2 convergence incl. a second service
+  instance (one plan, one hold). Q3 unhalted birth unmarked;
+  missing HALT counts as halted. Q4 post-re-arm matrix: driver
+  skip, direct `requestGrant` refusal, alarm pass, crafted
+  executor message refused pre-claim with ZERO provider calls —
+  zero grants/ledger/outbox for held plans throughout — while a
+  pre-existing unmarked plan grants normally. Q5 release:
+  per-plan, idempotent, audited (birth stamp immutable),
+  sibling untouched; refusal shapes. Q6 the plan-less hole:
+  halted `RequestSynthesis` rejected + job marked; plain
+  `SubmitJob` staged halted → first halted grant attempt refused
+  + marked; post-re-arm both stay fenced until individually
+  released; fresh post-re-arm synthesis is normal work. Q7
+  release refuses `halted_unknown` (with and without a hold);
+  Ch 2-shape plan row and Ch 3-shape `parked_policy` job row
+  BYTE-IDENTICAL after driver passes + release attempts, never
+  driven, zero grants. Q8 real entry: halted intent admitted +
+  born quarantined (the C3 coexistence proof); plan view shows
+  `active` + `approvalRequired`. Q9 real entry: legacy
+  grant-producing commands 423 at admission while halted (and
+  stage nothing); plain `SubmitJob` + other commands unchanged.
+  Q10 real entry release route: client token alone 403, forged
+  operator 403, absent credential 403, correct operator 200
+  applied with server-stamped source + read-back, duplicate =
+  idempotent no-op, unknown plan refused, direct internal call
+  without the stamp 403.
+
+### Batteries
+
+- Targeted: `d6-correction` **5/5 UNMODIFIED**;
+  `d6-grant-guards` 7/7; `d6-service` 5/5; `d6-integration`
+  3/3; `d6-executor-fi` 21/21; `d6-seed-hardening` 12/12;
+  `d6-parked-inertness` 1/1; all `genpkg1-*` suites green
+  (phase-enforce 12/12, phase-policy 10/10, surfaces 5/5,
+  diagnostics 9/9, projection 7/7, intent-idempotency 4/4,
+  quarantine 10/10).
+- Full worker battery, ONE complete run on the final tree:
+  **122 suite files, 100 pass / 22 fail — the failing set is
+  BYTE-IDENTICAL to the recorded 22-name baseline** (round-5
+  `failing-files.txt`); 952 tests, 930 pass, **zero assertion
+  failures**. Logs: `logs/d7-2q/worker-final/`.
+- Client (one minimal change, genuinely required — below):
+  store unit battery **13/13**, generation units **13/13**
+  (incl. the three additive GU8 assertions), Chromium proof
+  **14/14, 0 page exceptions**; twin trees byte-identical;
+  package checks PASS; Shelf bridge in the publish tree
+  byte-identical (`bc0a5879…`). Logs: `logs/d7-2q/client-*`.
+
+### Client impact (one minimal change, disclosed)
+
+`planStatusText` rendered state `active` as "Working — X of Y
+done". For a born-quarantined plan that is false: nothing is
+working; spend is fenced pending approval. The server surfaces
+now carry the truth (`approvalRequired` / `quarantine.held`),
+and `generation-surface.js` `planStatusText` gained ONE leading
+branch: a held plan reads **"Waiting — needs approval before
+it can start"** on both server shapes. Nothing else in the
+client changed. New client publish tree digest:
+`97e280948341e0d993975f46ebf089c10e9a2dfdc74487783ff80dd2069cc398`
+(81 files; previously `365ecbdd…` — the delta is exactly the
+`generation-surface.js` publish path + its tree copies, with
+package-assemble proving every non-delta path byte-identical).
+
+### Envelope
+
+The revised candidate still assembles to the pinned spec (7
+bindings, `OPALREADER_PHASE_POLICY` `enforce`, HALT spec value
+"1"): NO new bindings — the release route rides the existing
+operator fence, and the admission fence adds no surface the
+spec counts. The actual-D6-envelope proof harness was re-run
+against the revised tree with the new pin stamped (module bytes
+differ from the round-5 candidate as expected — quarantine.mjs
+joins the closure); the new envelope SHA-256 and part table are
+recorded in `logs/d7-2q/envelope-hashes.txt` and in the
+builder's completion message (a proof stamped with a commit's
+own SHA can only be run after that commit exists — the D7-1
+pattern). Deploy-gate D1 must re-verify against THAT hash.
+
+### Tree digests + pin
+
+- Worker tree (established digest method): SIGNED round-5
+  `2d16fe291dfa8d067fae82110089e501ca28bd93e80a047ac5efd0ffee840fb2`
+  (375 files) → D7-2 `d454c220def9832cff32a828324f60b8ee657b7d622671f40f1712ad24aa6b45`
+  (377 files: + `generation/quarantine.mjs`,
+  + `tests/genpkg1-quarantine.test.mjs`).
+- The `DEPLOY-PLAN-ADDENDUM-D7.md` representation fix IS written
+  in this round (the STOPPED section above recorded why it could
+  not be written for the admission fence): admission allowed
+  while halted; spend authority is what is fenced; per-plan
+  release = Julie's separate approvals; the pre-re-arm
+  exhaustive inventory retained as the second layer.
+- Re-pin: new commit on `ui1-review`, parent = the fresh-read
+  head at pin time (the D7-1 evidence head `1c7f0530…`), changing
+  ONLY `review/gen-pkg-1/**`; `review/gen-pkg-1-deploy/**`
+  preserved byte-identical. The pin SHA is recorded in the
+  builder's completion message (a commit cannot contain its own
+  SHA), with ref + parents + recursive tree diff read back after
+  the push.
+
+### NOT authorized / NOT done (unchanged gates)
+
+No deploy, no production contact, no board posts by the builder,
+no production registry/binding write, no client publication, no
+re-arm, no plan release, no Ch 2 reconciliation/retirement/
+retry, no Ch 3 resume, no Batch arming, no generation, no
+spending. The release route has never been invoked against
+production; its tests use synthetic operator auth only.
