@@ -1,0 +1,121 @@
+{
+  "mutate": "typo-enforce",
+  "pin": "288508073b5218a6e0dd90b68d497a331ad872b6",
+  "parts": 27,
+  "checks": 18,
+  "passed": 16,
+  "failed": [
+    "E8",
+    "E9"
+  ],
+  "results": [
+    {
+      "id": "E1",
+      "ok": true,
+      "label": "spec is the pinned D6 successor spec for opalreader-api-v2-prod",
+      "detail": "mutation mode: typo-enforce (metadata mutated AFTER spec read; spec itself intact)"
+    },
+    {
+      "id": "E2",
+      "ok": true,
+      "label": "entry module is the D6 production entry, exactly as specced, and is an actual envelope part",
+      "detail": "main_module=\"v2/worker-entry-prod-d6.js\""
+    },
+    {
+      "id": "E3",
+      "ok": true,
+      "label": "every relative import in the D6 closure resolves to an exactly-named part",
+      "detail": "27 modules in closure"
+    },
+    {
+      "id": "E4",
+      "ok": true,
+      "label": "bare specifiers are node:-only (covered by nodejs_compat)",
+      "detail": "node:crypto"
+    },
+    {
+      "id": "E5",
+      "ok": true,
+      "label": "every envelope part hash-compares to the signed candidate tree (build-identity: stamped part == tree with ONLY the pin substituted; tree still UNBUILT)",
+      "detail": "27 parts, 1217416 total module bytes"
+    },
+    {
+      "id": "E6",
+      "ok": true,
+      "label": "stamped build-identity carries the signed pin exactly once",
+      "detail": "pin=288508073b5218a6e0dd90b68d497a331ad872b6"
+    },
+    {
+      "id": "E7",
+      "ok": true,
+      "label": "exactly SEVEN spec bindings in the assembled metadata",
+      "detail": "count=7: COORDINATOR, OPALREADER_STORAGE, ALLOWED_ORIGIN, OPALREADER_V2_SCOPE, GENERATION_HALT, OPALREADER_PHASE_POLICY, OPALREADER_GENERATION_V2"
+    },
+    {
+      "id": "E8",
+      "ok": false,
+      "label": "each of the seven bindings has the specced name, type, and value-class fields",
+      "detail": "OPALREADER_PHASE_POLICY.text=\"enfore\" != \"enforce\""
+    },
+    {
+      "id": "E9",
+      "ok": false,
+      "label": "OPALREADER_PHASE_POLICY present exactly once, plain_text \"enforce\", no extra keys",
+      "detail": "[{\"name\":\"OPALREADER_PHASE_POLICY\",\"text\":\"enfore\",\"type\":\"plain_text\"}]"
+    },
+    {
+      "id": "E10",
+      "ok": true,
+      "label": "three required secrets ride as inherit-by-name only (10 bindings total); zero secret_text, zero secret values in the envelope",
+      "detail": "inherit: GEMINI_API_KEY, OPALREADER_ACCESS_TOKEN, OPALREADER_MIGRATION_OPERATOR_TOKEN"
+    },
+    {
+      "id": "E11",
+      "ok": true,
+      "label": "NO migrations key in the upload metadata; the D6 spec applies NO Durable Object migration (existing v1 migration / existing class only)",
+      "detail": ""
+    },
+    {
+      "id": "E12",
+      "ok": true,
+      "label": "DO topology: binding names the EXISTING production class OpalReaderCoordinatorProd (no script_name, no new class); the D6 entry exports that same class; spec records the existing v1 migration",
+      "detail": ""
+    },
+    {
+      "id": "E13",
+      "ok": true,
+      "label": "queue topology per spec: producer binding OPALREADER_GENERATION_V2 -> opalreader-generation-v2 in the envelope; spec declares exactly one consumer (this script, batch 10 / retries 3) on that queue; the v1 queue is not bound; no R2_KEY_PREFIX",
+      "detail": "consumer attachment itself is queue-side state (upload metadata cannot create it — G4 attempt 1) and is read-back-verified at the deploy gate per the plan"
+    },
+    {
+      "id": "E14",
+      "ok": true,
+      "label": "compatibility preserved: 2026-08-29 + nodejs_compat",
+      "detail": "date=2026-08-29, flags=[\"nodejs_compat\"]"
+    },
+    {
+      "id": "E15",
+      "ok": true,
+      "label": "observability object carried exactly per spec (enabled, head_sampling_rate 1, logs enabled + persist_invocations)",
+      "detail": "{\"enabled\":true,\"head_sampling_rate\":1,\"logs\":{\"enabled\":true,\"persist_invocations\":true}}"
+    },
+    {
+      "id": "E16",
+      "ok": true,
+      "label": "multipart envelope round-trips byte-identically; every module part has filename == part name and Content-Type application/javascript+module",
+      "detail": "28 parts total (metadata + 27 modules), envelope 1224334 bytes"
+    },
+    {
+      "id": "E17",
+      "ok": true,
+      "label": "the deploy lands HALTED: GENERATION_HALT \"1\" in the assembled metadata (spec value; the live \"0\" is not carried into the successor upload)",
+      "detail": ""
+    },
+    {
+      "id": "E18",
+      "ok": true,
+      "label": "metadata top-level keys are exactly the proven D6 upload set (no extra keys)",
+      "detail": "main_module, compatibility_date, compatibility_flags, bindings, observability"
+    }
+  ]
+}

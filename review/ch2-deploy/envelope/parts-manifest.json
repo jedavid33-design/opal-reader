@@ -1,0 +1,197 @@
+{
+  "pin": "288508073b5218a6e0dd90b68d497a331ad872b6",
+  "entry": "v2/worker-entry-prod-d6.js",
+  "totalModuleBytes": 1217416,
+  "envelopeBytes": 1224335,
+  "parts": [
+    {
+      "part": "v2/api.mjs",
+      "bytes": 13632,
+      "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d",
+      "tree": "worker/api.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/audio-route.mjs",
+      "bytes": 15965,
+      "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616",
+      "tree": "worker/audio-route.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/coordinator.mjs",
+      "bytes": 268522,
+      "sha256": "c31359ae87cf0271c2186a579e6540461089e0ffaa181e00c732ceed649d8eb3",
+      "tree": "worker/coordinator.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/executor.mjs",
+      "bytes": 13974,
+      "sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9",
+      "tree": "worker/executor.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/binding-projection.mjs",
+      "bytes": 12818,
+      "sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654",
+      "tree": "worker/generation/binding-projection.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/content-plane-adapter.mjs",
+      "bytes": 7577,
+      "sha256": "51c177dd8d2c4c85dbd1ce19180f60f70b3d037c53081be17c9762f93e7b8f38",
+      "tree": "worker/generation/content-plane-adapter.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/d6-executor.mjs",
+      "bytes": 44181,
+      "sha256": "68e3f84ed6ee9bd4ac59c4732f72ab1c53661df00798ad7cbe23a9a5a2c881b9",
+      "tree": "worker/generation/d6-executor.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/d6-work-source.mjs",
+      "bytes": 5981,
+      "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006",
+      "tree": "worker/generation/d6-work-source.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/eligible-set.mjs",
+      "bytes": 5978,
+      "sha256": "87b4b09ad08a23160a8b473bd0ecb88cf2f7b1d5fcf1ec0d52dbb96920e51a7c",
+      "tree": "worker/generation/eligible-set.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/flush-store.mjs",
+      "bytes": 8497,
+      "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325",
+      "tree": "worker/generation/flush-store.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/gen-constants.mjs",
+      "bytes": 3944,
+      "sha256": "6922ad7402bcc369bbd48b12d859ccdf93964dbd94ab593ce126aa7af0a2e4ee",
+      "tree": "worker/generation/gen-constants.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/gen-schema.mjs",
+      "bytes": 5307,
+      "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5",
+      "tree": "worker/generation/gen-schema.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/genstore.mjs",
+      "bytes": 27438,
+      "sha256": "f637a85929e91228d807d35bc4030ab2e9568df8ffc365cafa42b5f2786bdc66",
+      "tree": "worker/generation/genstore.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/grant-guards.mjs",
+      "bytes": 10018,
+      "sha256": "079b0ac6cb46b164fce1e3afe81dddde6d994413353597ab7a0271025805b5e7",
+      "tree": "worker/generation/grant-guards.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/phase-policy.mjs",
+      "bytes": 7299,
+      "sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f",
+      "tree": "worker/generation/phase-policy.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/policy-split.mjs",
+      "bytes": 15074,
+      "sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876",
+      "tree": "worker/generation/policy-split.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/quarantine.mjs",
+      "bytes": 15752,
+      "sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62",
+      "tree": "worker/generation/quarantine.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/generation/service.mjs",
+      "bytes": 69312,
+      "sha256": "de020adbd92d396457567a86d93e34eccf55897c3d353faaa2ba6e23c99e361d",
+      "tree": "worker/generation/service.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/host/adapters.mjs",
+      "bytes": 38162,
+      "sha256": "9d07f8db2836d775735eec0c2bc18c7ea6a0ed5b0771aea792ccabd11ea282dc",
+      "tree": "worker/host/adapters.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/host/build-identity.mjs",
+      "bytes": 411,
+      "sha256": "477c69ae9a60fed8670901c84039c97745a78071c8b45444f6e061ee1a21d7f9",
+      "tree": "worker/host/build-identity.mjs",
+      "stamped": true
+    },
+    {
+      "part": "v2/p8/approved-freeze-carry.mjs",
+      "bytes": 57703,
+      "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46",
+      "tree": "worker/p8/approved-freeze-carry.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/p8/approved-freeze-chunks.mjs",
+      "bytes": 6101,
+      "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a",
+      "tree": "worker/p8/approved-freeze-chunks.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/p8/approved-freeze-manifest.mjs",
+      "bytes": 467075,
+      "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd",
+      "tree": "worker/p8/approved-freeze-manifest.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/p8/migration-chunk-limits.mjs",
+      "bytes": 4733,
+      "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41",
+      "tree": "worker/p8/migration-chunk-limits.mjs",
+      "stamped": false
+    },
+    {
+      "part": "v2/worker-entry-prod-d6.js",
+      "bytes": 55962,
+      "sha256": "cfc645638bc1ec9cc32cc9322573e842e432255fbffcb731083990c962b3d055",
+      "tree": "worker/worker-entry-prod-d6.js",
+      "stamped": false
+    },
+    {
+      "part": "v2/worker-entry-prod.js",
+      "bytes": 14480,
+      "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5",
+      "tree": "worker/worker-entry-prod.js",
+      "stamped": false
+    },
+    {
+      "part": "v2/worker-entry.js",
+      "bytes": 21520,
+      "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5",
+      "tree": "worker/worker-entry.js",
+      "stamped": false
+    }
+  ]
+}

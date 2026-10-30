@@ -1,0 +1,50 @@
+[PASS] E1 spec is the pinned D6 successor spec for opalreader-api-v2-prod — mutation mode: wrong-entry (metadata mutated AFTER spec read; spec itself intact)
+[FAIL] E2 entry module is the D6 production entry, exactly as specced, and is an actual envelope part — main_module="v2/worker-entry-prod.js"
+[PASS] E3 every relative import in the D6 closure resolves to an exactly-named part — 27 modules in closure
+[PASS] E4 bare specifiers are node:-only (covered by nodejs_compat) — node:crypto
+
+PART TABLE (part name — bytes — sha256 — tree source)
+  v2/api.mjs  13632 B  sha256 9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d  <- worker/api.mjs
+  v2/audio-route.mjs  15965 B  sha256 b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616  <- worker/audio-route.mjs
+  v2/coordinator.mjs  268522 B  sha256 c31359ae87cf0271c2186a579e6540461089e0ffaa181e00c732ceed649d8eb3  <- worker/coordinator.mjs
+  v2/executor.mjs  13974 B  sha256 5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9  <- worker/executor.mjs
+  v2/generation/binding-projection.mjs  12818 B  sha256 d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654  <- worker/generation/binding-projection.mjs
+  v2/generation/content-plane-adapter.mjs  7577 B  sha256 51c177dd8d2c4c85dbd1ce19180f60f70b3d037c53081be17c9762f93e7b8f38  <- worker/generation/content-plane-adapter.mjs
+  v2/generation/d6-executor.mjs  44181 B  sha256 68e3f84ed6ee9bd4ac59c4732f72ab1c53661df00798ad7cbe23a9a5a2c881b9  <- worker/generation/d6-executor.mjs
+  v2/generation/d6-work-source.mjs  5981 B  sha256 8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006  <- worker/generation/d6-work-source.mjs
+  v2/generation/eligible-set.mjs  5978 B  sha256 87b4b09ad08a23160a8b473bd0ecb88cf2f7b1d5fcf1ec0d52dbb96920e51a7c  <- worker/generation/eligible-set.mjs
+  v2/generation/flush-store.mjs  8497 B  sha256 e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325  <- worker/generation/flush-store.mjs
+  v2/generation/gen-constants.mjs  3944 B  sha256 6922ad7402bcc369bbd48b12d859ccdf93964dbd94ab593ce126aa7af0a2e4ee  <- worker/generation/gen-constants.mjs
+  v2/generation/gen-schema.mjs  5307 B  sha256 d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5  <- worker/generation/gen-schema.mjs
+  v2/generation/genstore.mjs  27438 B  sha256 f637a85929e91228d807d35bc4030ab2e9568df8ffc365cafa42b5f2786bdc66  <- worker/generation/genstore.mjs
+  v2/generation/grant-guards.mjs  10018 B  sha256 079b0ac6cb46b164fce1e3afe81dddde6d994413353597ab7a0271025805b5e7  <- worker/generation/grant-guards.mjs
+  v2/generation/phase-policy.mjs  7299 B  sha256 09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f  <- worker/generation/phase-policy.mjs
+  v2/generation/policy-split.mjs  15074 B  sha256 61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876  <- worker/generation/policy-split.mjs
+  v2/generation/quarantine.mjs  15752 B  sha256 64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62  <- worker/generation/quarantine.mjs
+  v2/generation/service.mjs  69312 B  sha256 de020adbd92d396457567a86d93e34eccf55897c3d353faaa2ba6e23c99e361d  <- worker/generation/service.mjs
+  v2/host/adapters.mjs  38162 B  sha256 9d07f8db2836d775735eec0c2bc18c7ea6a0ed5b0771aea792ccabd11ea282dc  <- worker/host/adapters.mjs
+  v2/host/build-identity.mjs  411 B  sha256 477c69ae9a60fed8670901c84039c97745a78071c8b45444f6e061ee1a21d7f9  <- worker/host/build-identity.mjs  [STAMPED part-only: BUILD_COMMIT = pin; tree keeps UNBUILT]
+  v2/p8/approved-freeze-carry.mjs  57703 B  sha256 24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46  <- worker/p8/approved-freeze-carry.mjs
+  v2/p8/approved-freeze-chunks.mjs  6101 B  sha256 b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a  <- worker/p8/approved-freeze-chunks.mjs
+  v2/p8/approved-freeze-manifest.mjs  467075 B  sha256 e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd  <- worker/p8/approved-freeze-manifest.mjs
+  v2/p8/migration-chunk-limits.mjs  4733 B  sha256 886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41  <- worker/p8/migration-chunk-limits.mjs
+  v2/worker-entry-prod-d6.js  55962 B  sha256 cfc645638bc1ec9cc32cc9322573e842e432255fbffcb731083990c962b3d055  <- worker/worker-entry-prod-d6.js
+  v2/worker-entry-prod.js  14480 B  sha256 1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5  <- worker/worker-entry-prod.js
+  v2/worker-entry.js  21520 B  sha256 91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5  <- worker/worker-entry.js
+[PASS] E5 every envelope part hash-compares to the signed candidate tree (build-identity: stamped part == tree with ONLY the pin substituted; tree still UNBUILT) — 27 parts, 1217416 total module bytes
+[PASS] E6 stamped build-identity carries the signed pin exactly once — pin=288508073b5218a6e0dd90b68d497a331ad872b6
+[PASS] E7 exactly SEVEN spec bindings in the assembled metadata — count=7: COORDINATOR, OPALREADER_STORAGE, ALLOWED_ORIGIN, OPALREADER_V2_SCOPE, GENERATION_HALT, OPALREADER_PHASE_POLICY, OPALREADER_GENERATION_V2
+[PASS] E8 each of the seven bindings has the specced name, type, and value-class fields — all seven exact
+[PASS] E9 OPALREADER_PHASE_POLICY present exactly once, plain_text "enforce", no extra keys — [{"name":"OPALREADER_PHASE_POLICY","text":"enforce","type":"plain_text"}]
+[PASS] E10 three required secrets ride as inherit-by-name only (10 bindings total); zero secret_text, zero secret values in the envelope — inherit: GEMINI_API_KEY, OPALREADER_ACCESS_TOKEN, OPALREADER_MIGRATION_OPERATOR_TOKEN
+[PASS] E11 NO migrations key in the upload metadata; the D6 spec applies NO Durable Object migration (existing v1 migration / existing class only)
+[PASS] E12 DO topology: binding names the EXISTING production class OpalReaderCoordinatorProd (no script_name, no new class); the D6 entry exports that same class; spec records the existing v1 migration
+[PASS] E13 queue topology per spec: producer binding OPALREADER_GENERATION_V2 -> opalreader-generation-v2 in the envelope; spec declares exactly one consumer (this script, batch 10 / retries 3) on that queue; the v1 queue is not bound; no R2_KEY_PREFIX — consumer attachment itself is queue-side state (upload metadata cannot create it — G4 attempt 1) and is read-back-verified at the deploy gate per the plan
+[PASS] E14 compatibility preserved: 2026-08-29 + nodejs_compat — date=2026-08-29, flags=["nodejs_compat"]
+[PASS] E15 observability object carried exactly per spec (enabled, head_sampling_rate 1, logs enabled + persist_invocations) — {"enabled":true,"head_sampling_rate":1,"logs":{"enabled":true,"persist_invocations":true}}
+[PASS] E16 multipart envelope round-trips byte-identically; every module part has filename == part name and Content-Type application/javascript+module — 28 parts total (metadata + 27 modules), envelope 1224332 bytes
+[PASS] E17 the deploy lands HALTED: GENERATION_HALT "1" in the assembled metadata (spec value; the live "0" is not carried into the successor upload)
+[PASS] E18 metadata top-level keys are exactly the proven D6 upload set (no extra keys) — main_module, compatibility_date, compatibility_flags, bindings, observability
+
+ACTUAL D6 ENVELOPE VALIDATION: FAIL (17/18 assertions)
+failed: E2
