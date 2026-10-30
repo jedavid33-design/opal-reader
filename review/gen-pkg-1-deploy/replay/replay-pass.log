@@ -1,8 +1,8 @@
-candidate worker dir: /tmp/d7pin/checkout2/opal-reader-739fe3ada6b0f5489547e89482e48808840dd7a1/review/gen-pkg-1-deploy/candidate/worker (explicit --candidate-worker-dir)
-output dir: /tmp/d7pin/out-pos
+candidate worker dir: /tmp/d9e/checkout/opal-reader-f21238df2b92361e7d93395556b3cafae8972502/review/gen-pkg-1-deploy/candidate/worker (explicit --candidate-worker-dir)
+output dir: /tmp/d9e/out-pos
 [PASS] E1 spec is the pinned D6 successor spec for opalreader-api-v2-prod — spec main_module=v2/worker-entry-prod-d6.js
 [PASS] E2 entry module is the D6 production entry, exactly as specced, and is an actual envelope part — main_module="v2/worker-entry-prod-d6.js"
-[PASS] E3 every relative import in the D6 closure resolves to an exactly-named part — 26 modules in closure
+[PASS] E3 every relative import in the D6 closure resolves to an exactly-named part — 27 modules in closure
 [PASS] E4 bare specifiers are node:-only (covered by nodejs_compat) — node:crypto
 
 PART TABLE (part name — bytes — sha256 — tree source)
@@ -12,28 +12,29 @@ PART TABLE (part name — bytes — sha256 — tree source)
   v2/executor.mjs  13974 B  sha256 5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9  <- worker/executor.mjs
   v2/generation/binding-projection.mjs  12818 B  sha256 d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654  <- worker/generation/binding-projection.mjs
   v2/generation/content-plane-adapter.mjs  7577 B  sha256 51c177dd8d2c4c85dbd1ce19180f60f70b3d037c53081be17c9762f93e7b8f38  <- worker/generation/content-plane-adapter.mjs
-  v2/generation/d6-executor.mjs  31125 B  sha256 df7e0003f76177a4a6172bd965e998fc9abaad1deff509194eb22119458d29d0  <- worker/generation/d6-executor.mjs
+  v2/generation/d6-executor.mjs  33427 B  sha256 d3924554448f0476c54a69a1a8849afc619f093457e46dbea2eca05aab5d313e  <- worker/generation/d6-executor.mjs
   v2/generation/d6-work-source.mjs  5981 B  sha256 8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006  <- worker/generation/d6-work-source.mjs
   v2/generation/eligible-set.mjs  5978 B  sha256 87b4b09ad08a23160a8b473bd0ecb88cf2f7b1d5fcf1ec0d52dbb96920e51a7c  <- worker/generation/eligible-set.mjs
   v2/generation/flush-store.mjs  8497 B  sha256 e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325  <- worker/generation/flush-store.mjs
   v2/generation/gen-constants.mjs  3944 B  sha256 6922ad7402bcc369bbd48b12d859ccdf93964dbd94ab593ce126aa7af0a2e4ee  <- worker/generation/gen-constants.mjs
   v2/generation/gen-schema.mjs  5307 B  sha256 d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5  <- worker/generation/gen-schema.mjs
   v2/generation/genstore.mjs  22164 B  sha256 2e1eb5bd2b53fce4b58eb1b06f737326c385f1d49ba612e91a24f3ab43f311bb  <- worker/generation/genstore.mjs
-  v2/generation/grant-guards.mjs  4188 B  sha256 98a71d8a5b9ac4eba20f3ed48cbe6fcc2bd3a55f037c7dc7191a41650d95ea6a  <- worker/generation/grant-guards.mjs
+  v2/generation/grant-guards.mjs  10018 B  sha256 079b0ac6cb46b164fce1e3afe81dddde6d994413353597ab7a0271025805b5e7  <- worker/generation/grant-guards.mjs
   v2/generation/phase-policy.mjs  7299 B  sha256 09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f  <- worker/generation/phase-policy.mjs
   v2/generation/policy-split.mjs  9735 B  sha256 cc54ad7631ba51c834abfa33660cf5094ea06650f3c015a80077d230ad29662c  <- worker/generation/policy-split.mjs
-  v2/generation/service.mjs  58250 B  sha256 700b8a8d67a813d38597f9017fb24e1d773cac033788db17a4b475b456d087ef  <- worker/generation/service.mjs
+  v2/generation/quarantine.mjs  15752 B  sha256 64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62  <- worker/generation/quarantine.mjs
+  v2/generation/service.mjs  68101 B  sha256 5670dfb3739986c3473bea5ab913b9f1f005925523e1bbaee19f99c9b3b8d4d1  <- worker/generation/service.mjs
   v2/host/adapters.mjs  34359 B  sha256 22557b5993de13d20831eec0761a0c448cafd42d5698ace0f468352fbf825258  <- worker/host/adapters.mjs
-  v2/host/build-identity.mjs  411 B  sha256 39fd54f25c672a8057ac1d5d700d56e3015209447f90f35b73f8ca56982cb795  <- worker/host/build-identity.mjs  [STAMPED part-only: BUILD_COMMIT = pin; tree keeps UNBUILT]
+  v2/host/build-identity.mjs  411 B  sha256 35d00016862b995bfb6470e9bbce8a8d71d4da9acbf92b8536dbedaa8a523d20  <- worker/host/build-identity.mjs  [STAMPED part-only: BUILD_COMMIT = pin; tree keeps UNBUILT]
   v2/p8/approved-freeze-carry.mjs  57703 B  sha256 24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46  <- worker/p8/approved-freeze-carry.mjs
   v2/p8/approved-freeze-chunks.mjs  6101 B  sha256 b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a  <- worker/p8/approved-freeze-chunks.mjs
   v2/p8/approved-freeze-manifest.mjs  467075 B  sha256 e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd  <- worker/p8/approved-freeze-manifest.mjs
   v2/p8/migration-chunk-limits.mjs  4733 B  sha256 886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41  <- worker/p8/migration-chunk-limits.mjs
-  v2/worker-entry-prod-d6.js  35871 B  sha256 9cfd4c40a2549fc9667e8420ef09792897a2e43e751d5ac77d3462b340bfc77a  <- worker/worker-entry-prod-d6.js
+  v2/worker-entry-prod-d6.js  48854 B  sha256 1564b784557828b64b648a3e50360c80f340d5d587041416573857819ecd6de0  <- worker/worker-entry-prod-d6.js
   v2/worker-entry-prod.js  14480 B  sha256 1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5  <- worker/worker-entry-prod.js
   v2/worker-entry.js  21520 B  sha256 91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5  <- worker/worker-entry.js
-[PASS] E5 every envelope part hash-compares to the signed candidate tree (build-identity: stamped part == tree with ONLY the pin substituted; tree still UNBUILT) — 26 parts, 1137209 total module bytes
-[PASS] E6 stamped build-identity carries the signed pin exactly once — pin=5ae38942e493a4b53f541b5e1f589060d58d158d
+[PASS] E5 every envelope part hash-compares to the signed candidate tree (build-identity: stamped part == tree with ONLY the pin substituted; tree still UNBUILT) — 27 parts, 1183927 total module bytes
+[PASS] E6 stamped build-identity carries the signed pin exactly once — pin=f3b6e6e9fd7a44532ceef86e484a79e466b36d4d
 [PASS] E7 exactly SEVEN spec bindings in the assembled metadata — count=7: COORDINATOR, OPALREADER_STORAGE, ALLOWED_ORIGIN, OPALREADER_V2_SCOPE, GENERATION_HALT, OPALREADER_PHASE_POLICY, OPALREADER_GENERATION_V2
 [PASS] E8 each of the seven bindings has the specced name, type, and value-class fields — all seven exact
 [PASS] E9 OPALREADER_PHASE_POLICY present exactly once, plain_text "enforce", no extra keys — [{"name":"OPALREADER_PHASE_POLICY","text":"enforce","type":"plain_text"}]
@@ -43,7 +44,7 @@ PART TABLE (part name — bytes — sha256 — tree source)
 [PASS] E13 queue topology per spec: producer binding OPALREADER_GENERATION_V2 -> opalreader-generation-v2 in the envelope; spec declares exactly one consumer (this script, batch 10 / retries 3) on that queue; the v1 queue is not bound; no R2_KEY_PREFIX — consumer attachment itself is queue-side state (upload metadata cannot create it — G4 attempt 1) and is read-back-verified at the deploy gate per the plan
 [PASS] E14 compatibility preserved: 2026-08-29 + nodejs_compat — date=2026-08-29, flags=["nodejs_compat"]
 [PASS] E15 observability object carried exactly per spec (enabled, head_sampling_rate 1, logs enabled + persist_invocations) — {"enabled":true,"head_sampling_rate":1,"logs":{"enabled":true,"persist_invocations":true}}
-[PASS] E16 multipart envelope round-trips byte-identically; every module part has filename == part name and Content-Type application/javascript+module — 27 parts total (metadata + 26 modules), envelope 1143926 bytes
+[PASS] E16 multipart envelope round-trips byte-identically; every module part has filename == part name and Content-Type application/javascript+module — 28 parts total (metadata + 27 modules), envelope 1190846 bytes
 [PASS] E17 the deploy lands HALTED: GENERATION_HALT "1" in the assembled metadata (spec value; the live "0" is not carried into the successor upload)
 [PASS] E18 metadata top-level keys are exactly the proven D6 upload set (no extra keys) — main_module, compatibility_date, compatibility_flags, bindings, observability
 

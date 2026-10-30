@@ -7,11 +7,13 @@ IDENTICAL  proof-result-drop-seventh.json
 IDENTICAL  proof-result-typo-enforce.json
 IDENTICAL  proof-result-wrong-entry.json
 == sha256 of replay outputs ==
-2f5ce34ee47b822de9829890ae9878447c361d5f89abbe5440852d0a4f39e5f1  /tmp/d7pin/out-pos/assembled-envelope.bin
-e08b06bc840810739ef5a2fbd5279c6670c1759235fa830121964507f162a9fd  /tmp/d7pin/out-pos/assembled-metadata.json
-754876a832864fdf07e615a75a300f9b44472de5123e0c5ee141950f9eef4aeb  /tmp/d7pin/out-pos/parts-manifest.json
+9cb9d0da0d0790e2a5a0e558c6ff50d6958c83ab2942e487830e6132c15cd9ce  /tmp/d9e/out-pos/assembled-envelope.bin
+e08b06bc840810739ef5a2fbd5279c6670c1759235fa830121964507f162a9fd  /tmp/d9e/out-pos/assembled-metadata.json
+f20dee51ab011d8a931b41588b1cc235f9adf54072ad9a160c3b6ad247301d03  /tmp/d9e/out-pos/parts-manifest.json
 == checkout candidate/worker treehash ==
-fc5891f6f2c7568c4c454ca1c5acd4218a77d03bb2c158a95ea76d6a6e68a229  (56 files)  /tmp/d7pin/checkout2/opal-reader-739fe3ada6b0f5489547e89482e48808840dd7a1/review/gen-pkg-1-deploy/candidate/worker
+300568ad32d2a6ecb795509cbe1a4924f0275b39d37a486dd8d65748d903481a  (57 files)  /tmp/d9e/checkout/opal-reader-f21238df2b92361e7d93395556b3cafae8972502/review/gen-pkg-1-deploy/candidate/worker
 == checkout candidate/worker per-file manifest vs staged ==
 CHECKOUT MANIFEST == STAGED MANIFEST
-e522ee6d05c55f6a85edc4c66bd9ecbc884bfb12510b4e0d06f6403660b0acc0  /tmp/d7pin/manifest-checkout.txt
+de43523e5e912b1809d79147c23b5b90d1a66cb9fdb8508b6b9a7f5b6ecb3d0d  /tmp/d9e/manifest-checkout.txt
+9cb9d0da0d0790e2a5a0e558c6ff50d6958c83ab2942e487830e6132c15cd9ce  /tmp/d9e/checkout/opal-reader-f21238df2b92361e7d93395556b3cafae8972502/review/gen-pkg-1-deploy/assembled-envelope.bin
+e08b06bc840810739ef5a2fbd5279c6670c1759235fa830121964507f162a9fd  /tmp/d9e/checkout/opal-reader-f21238df2b92361e7d93395556b3cafae8972502/review/gen-pkg-1-deploy/assembled-metadata.json

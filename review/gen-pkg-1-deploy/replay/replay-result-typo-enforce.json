@@ -1,7 +1,7 @@
 {
   "mutate": "typo-enforce",
-  "pin": "5ae38942e493a4b53f541b5e1f589060d58d158d",
-  "parts": 26,
+  "pin": "f3b6e6e9fd7a44532ceef86e484a79e466b36d4d",
+  "parts": 27,
   "checks": 18,
   "passed": 16,
   "failed": [
@@ -25,7 +25,7 @@
       "id": "E3",
       "ok": true,
       "label": "every relative import in the D6 closure resolves to an exactly-named part",
-      "detail": "26 modules in closure"
+      "detail": "27 modules in closure"
     },
     {
       "id": "E4",
@@ -37,13 +37,13 @@
       "id": "E5",
       "ok": true,
       "label": "every envelope part hash-compares to the signed candidate tree (build-identity: stamped part == tree with ONLY the pin substituted; tree still UNBUILT)",
-      "detail": "26 parts, 1137209 total module bytes"
+      "detail": "27 parts, 1183927 total module bytes"
     },
     {
       "id": "E6",
       "ok": true,
       "label": "stamped build-identity carries the signed pin exactly once",
-      "detail": "pin=5ae38942e493a4b53f541b5e1f589060d58d158d"
+      "detail": "pin=f3b6e6e9fd7a44532ceef86e484a79e466b36d4d"
     },
     {
       "id": "E7",
@@ -103,7 +103,7 @@
       "id": "E16",
       "ok": true,
       "label": "multipart envelope round-trips byte-identically; every module part has filename == part name and Content-Type application/javascript+module",
-      "detail": "27 parts total (metadata + 26 modules), envelope 1143925 bytes"
+      "detail": "28 parts total (metadata + 27 modules), envelope 1190845 bytes"
     },
     {
       "id": "E17",

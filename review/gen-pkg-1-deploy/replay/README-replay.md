@@ -132,11 +132,34 @@ NAME only; the P8 freeze manifest is binding metadata only
 and a field-shape check confirmed no text/speechText fields
 anywhere in it.
 
-**Run record (clean-checkout replay).** Executed from a fresh
-GitHub tarball of the D9-E evidence commit that pins this
-package; the full record (tarball hash, commands, results,
-byte comparisons, checkout digests) is pinned alongside this
-file as `replay-pass.log`, `replay-negative-*.log`,
-`replay-result*.json`, `comparison.txt`, and
-`checkout-manifest.txt` in the child commit that carries the
-updated version of this README.
+**Run record (clean-checkout replay, executed 2026-10-30).**
+The package was materialized fresh from the GitHub tarball of
+commit `f21238df2b92361e7d93395556b3cafae8972502` (the D9-E
+package commit; parent `f3b6e6e9…`; tarball SHA-256
+`a6fb7c7ee20d99aa34417ae3d0179903dd668c39c9130e1bcd5c6cf903ac6ac0`,
+12,463,448 B — full details in `checkout-manifest.txt`) and
+the harness was run from `review/gen-pkg-1-deploy/` inside
+that checkout, with `--candidate-worker-dir` pointing at the
+checkout's own `candidate/worker` and outputs to temp dirs:
+
+```
+node replay/proof-d6-envelope-replay.mjs --candidate-worker-dir "$PWD/candidate/worker" --out <tmp>/out-pos           # exit 0
+node replay/proof-d6-envelope-replay.mjs --candidate-worker-dir "$PWD/candidate/worker" --out <tmp>/out-neg-drop  --mutate drop-seventh   # exit 1
+node replay/proof-d6-envelope-replay.mjs --candidate-worker-dir "$PWD/candidate/worker" --out <tmp>/out-neg-typo  --mutate typo-enforce   # exit 1
+node replay/proof-d6-envelope-replay.mjs --candidate-worker-dir "$PWD/candidate/worker" --out <tmp>/out-neg-entry --mutate wrong-entry    # exit 1
+```
+
+Results: positive **PASS 18/18**; negatives FAIL with exactly
+the filed failing-check sets (drop-seventh E7/E8/E9/E10,
+14/18; typo-enforce E8/E9, 16/18; wrong-entry E2, 17/18).
+Byte-compare (`comparison.txt`): generated
+`assembled-envelope.bin`, `assembled-metadata.json`,
+`parts-manifest.json` and all four `proof-result*.json` are
+**byte-identical** to the artifacts filed in the package
+commit. The checkout's `candidate/worker` digests match the
+staged/local values exactly (treehash `300568ad…`, 57 files;
+per-file manifest SHA-256 `de43523e…`). Logs and results are
+pinned alongside this file as `replay-pass.log`,
+`replay-negative-*.log`, `replay-result*.json`,
+`comparison.txt`, and `checkout-manifest.txt` in the child
+commit that carries this updated README.

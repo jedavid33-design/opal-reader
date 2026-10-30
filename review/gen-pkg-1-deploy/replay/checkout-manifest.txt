@@ -1,12 +1,12 @@
-# clean-checkout manifest — D7-1 replay of the pinned evidence package
-commit: 739fe3ada6b0f5489547e89482e48808840dd7a1
-commit parent: a6288de5926057536e78f46cc7e195205f334c8a
-source: https://codeload.github.com/jedavid33-design/opal-reader/tar.gz/739fe3ada6b0f5489547e89482e48808840dd7a1
-tarball sha256: 8752baccf1dfc7ce72b9605c2713fe4597e880eff4226a951b88adf6b133f2c8
-tarball bytes: 12362044
-tarball root: opal-reader-739fe3ada6b0f5489547e89482e48808840dd7a1/
+# clean-checkout manifest — D9-E replay of the pinned evidence package
+commit: f21238df2b92361e7d93395556b3cafae8972502
+commit parent: f3b6e6e9fd7a44532ceef86e484a79e466b36d4d
+source: https://codeload.github.com/jedavid33-design/opal-reader/tar.gz/f21238df2b92361e7d93395556b3cafae8972502
+tarball sha256: a6fb7c7ee20d99aa34417ae3d0179903dd668c39c9130e1bcd5c6cf903ac6ac0
+tarball bytes: 12463448
+tarball root: opal-reader-f21238df2b92361e7d93395556b3cafae8972502/
 extracted fresh into a clean temp dir; no prior checkout reused.
-candidate/worker in checkout: 56 files
-candidate/worker treehash (established method): fc5891f6f2c7568c4c454ca1c5acd4218a77d03bb2c158a95ea76d6a6e68a229
-candidate/worker per-file manifest sha256: e522ee6d05c55f6a85edc4c66bd9ecbc884bfb12510b4e0d06f6403660b0acc0 (== staged manifest == local source manifest)
-harness: review/gen-pkg-1-deploy/replay/proof-d6-envelope-replay.mjs, sha256 a1cc05c4af9e114ef7fcb36fdb0de37044918f62f84a4f4b5b5281d498ccd930, 21479 bytes
+candidate/worker in checkout: 57 files
+candidate/worker treehash (established method): 300568ad32d2a6ecb795509cbe1a4924f0275b39d37a486dd8d65748d903481a
+candidate/worker per-file manifest sha256: de43523e5e912b1809d79147c23b5b90d1a66cb9fdb8508b6b9a7f5b6ecb3d0d (== staged manifest == local source manifest)
+harness: review/gen-pkg-1-deploy/replay/proof-d6-envelope-replay.mjs, sha256 caefdc95221d16982185602b398ba33b3772d7a3ff4c914dffaed2dc37852102, 21587 bytes, PIN stamped f3b6e6e9fd7a44532ceef86e484a79e466b36d4d
