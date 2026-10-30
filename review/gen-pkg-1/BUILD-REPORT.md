@@ -188,14 +188,14 @@ Note: `modules/constants-ui4.js` remains in the publish tree and in the SW SHELL
 ### Client
 
 - Store unit battery (ui-pkg-4 battery against the candidate tree): **13/13** —
-  `~/workspace/gen-pkg-1/logs/client-unit-battery.log`
+  `~/workspace/gen-pkg-1/client-build/gen/logs/client-unit-battery.log`
 - Generation-surface unit battery: **10/10** (request shapes + gate headers,
   the exact SubmitJob contract, pagination, lane/exclusion/status renderers,
   active-plan matching, phase lookup, money formatting) —
-  `~/workspace/gen-pkg-1/logs/client-generation-unit.log`
+  `~/workspace/gen-pkg-1/client-build/gen/logs/client-generation-unit.log`
 - Chromium proof with a loopback stub coordinator implementing the new
   surfaces: **13/13 PASS, 0 page exceptions** —
-  `~/workspace/gen-pkg-1/logs/client-chromium-proof.log`
+  `~/workspace/gen-pkg-1/client-build/gen/logs/client-chromium-proof.log`
   - GP-1 boot under `sw-genpkg1.js` + connect; GP-2 server quote rendered
     (3 segments · 3,992 chars · $0.06 estimate · exclusions), Batch disabled
     with its reason; GP-3 double-tap = exactly one SubmitJob of the pinned
@@ -239,4 +239,75 @@ Note: `modules/constants-ui4.js` remains in the publish tree and in the SW SHELL
    hash binds the eligible ID set — left unchanged and proven, not assumed, by
    `genpkg1-surfaces` (quote == executed set on fixtures) and
    `genpkg1-intent-idem
-...[truncated 5880 chars]
+...[truncated 5880 chars]potency` (newly-eligible distinction).
+3. **Intent idempotency: cross-device convergence, lost-response retry,
+   later-run distinction.** Server intent identity (unchanged machinery) proven
+   by `genpkg1-intent-idempotency` 4/4; client side proven by GP-3 (double-tap
+   = one command), GP-4 (active-plan rerouting), and GP-10 (dropped responses:
+   one logical command, one plan, one client-minted `command_id` across all
+   wire copies).
+4. **Read surfaces: existing gates, stable pagination, no leakage, server
+   amounts only, no invented budgets.** All surfaces ride the entry's existing
+   production gate chain (scope config + header, client token, instance);
+   listPlans keyset pagination; capabilities reports only budgeted phases.
+   Proven by `genpkg1-surfaces` 5/5 (incl. no-text payload assertions and
+   settled == ledger SQL) and client GU1–GU10 + GP-2/GP-5.
+5. **Deploy gate (recorded pre/post state, in-flight assessment, pinned
+   envelope, rollback; prefer quiescent).** NOT part of this build — nothing
+   deploy-like was done, no production contact made. The candidate identities
+   and tree hashes above are the pinned envelope inputs for that future gate.
+6. **Test law, incl. throw-safe empty-result paths.** The harness `.one()`
+   throws on empty results (real-DO semantics); empty-store/unknown-target
+   tests exist for every new read surface (`genpkg1-surfaces`,
+   `genpkg1-diagnostics` Svc-4/Ent-5); the full battery's failing set equals
+   the base baseline exactly (see Test results).
+
+**Diagnostics instrument note (item 5):** the attempt-diagnostics surface is
+the instrument that will confirm the Ch 2 halt diagnosis findings against
+production attempt records after the deploy gate — specifically (a) the
+suspected 3.8-branch block-signal mapping gap in `worker/host/adapters.mjs`
+(a no-audio/blocked 200 on the interactions branch failing as a 502 provider
+error at stage `synthesis` after exactly one call, vs `policy_block` split
+detail), and (b) the 120 s fetch-timeout class for the unknown-billing attempt
+(its stored detail message + the attempt row's created→updated span). This
+build deliberately does **NOT** change the adapters or the timeout behavior —
+the fix package is separate and not yet scoped. `reconcileUnknown` also
+remains without an invocation path in this build (the diagnosis flagged the
+gap; surfacing it is a separate decision).
+
+## Deviations and open items, stated plainly
+
+- **Baseline count discrepancy:** brief said 90/22; the base tree's own
+  recorded run says 89/22 (111 files). The recorded set was used; the final
+  failing set matches it exactly. No new failures.
+- **Tree-layout note:** the worker tree carries the accepted `v2 -> worker`
+  symlink; the candidate's real paths are under `worker/` (the entry's
+  deployed path convention is unchanged).
+- **Client log locations:** the three Chromium/unit logs live under
+  `~/workspace/gen-pkg-1/client-build/gen/logs/`; the package-check log is at
+  `~/workspace/gen-pkg-1/logs/client-package.log`; worker logs under
+  `~/workspace/gen-pkg-1/logs/worker-final/`.
+- **Report assembly note:** the first pinned copy of this report was
+  truncated mid-obligation-2 by a write failure and pinned as-is in
+  `93d04f0a…`; an interim commit (`ea22a98b…`) re-pinned the same truncated
+  text under a correction message that the truncation prevented from taking
+  effect. THIS copy is the complete report; a follow-up pin commit on
+  `ui1-review` supersedes the report file at the same path. No artifact
+  (worker/client/test) file is affected — only this report was truncated.
+- **Not authorized by this build (unchanged gates):** worker deploy, client
+  publication, Batch arming, parked Ch 3 resume, the rest of Forever Pucked
+  beyond Ch 2, any generation/spend beyond the already-approved Ch 2
+  follow-on, the adapters/timeout fix package, and any `reconcileUnknown`
+  invocation path.
+
+## Pin
+
+Pinned to `jedavid33-design/opal-reader` branch `ui1-review` (review only;
+no production branch touched), parent `ac451df8b772ddc3f64d4c6418678ce78b243d58`,
+under `review/gen-pkg-1/` (this report, the four worker files, the four worker
+test suites, the nine client delta files at final paths, the three client test
+sources, and the key logs). Artifacts pin commit:
+**`93d04f0ab5bfc1aa6eccf2d9f0a34b568370906f`** (tree
+`7fb7443a87be374ca4671979d0a85600d37297f4`, 27 files). The completed-report
+follow-up commit SHA is recorded in the builder's completion message (a
+commit cannot contain its own SHA).
