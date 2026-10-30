@@ -326,6 +326,37 @@ export function createGenStore(coord) {
   function unverifiedAccounting(scopeSql, scopeParam) {
     if (adjudicationTablePresence() === "absent")
       return { estimatedMicro: 0, reservedMicro: 0, count: 0 };
+    // S2 (Rowan focused source review 6535697368): an
+    // estimated_unverified attempt WITHOUT its linked unamended
+    // adjudication row is a corrupt store, and the strict sum
+    // below — an inner JOIN — would silently DROP it, reporting
+    // a smaller reservation (or zero) and laundering an unknown
+    // exposure into apparent budget headroom. The disposition
+    // writes the attempt outcome and its adjudication row in ONE
+    // transaction, so this state is unreachable through the
+    // system's own writes; precisely for that reason it is LOUD
+    // here rather than read as zero. Every accounting read
+    // surface funnels through this function (phaseAccounting,
+    // capabilities, plan summaries, diagnostics), and at the
+    // grant guard the throw IS the refusal — it propagates out
+    // of the grant transaction and no grant issues. The error is
+    // named adjudication_row_missing, in the adjudication_*
+    // family beside adjudication_schema_inconsistent (the name
+    // the diagnostics per-attempt read in service.mjs uses for
+    // the same one-table-missing class of fault; this check
+    // covers the both-tables-present, row-missing case that read
+    // cannot see in aggregate).
+    const orphan = coord._one(
+      `SELECT COUNT(*) AS n FROM d6_attempt_log t
+        WHERE ${scopeSql}
+          AND t.outcome = 'estimated_unverified'
+          AND NOT EXISTS (
+            SELECT 1 FROM d6_billing_adjudications a
+             WHERE a.attempt_id = t.attempt_id
+               AND a.current_amendment = 0)`, scopeParam);
+    if (orphan.n > 0)
+      throw new Error(
+        `adjudication_row_missing: ${orphan.n} estimated_unverified attempt(s) in scope have no linked unamended adjudication row`);
     const row = coord._one(
       `SELECT COALESCE(SUM(a.estimated_cost_micro_cents), 0) AS est,
               COALESCE(SUM(a.reserved_cost_micro_cents), 0) AS res,
@@ -548,7 +579,13 @@ CREATE TABLE IF NOT EXISTS d6_reconcile_audit (
   //   * cost_micro_cents is never written — it stays NULL,
   //     preserving the ledger invariant that a numeric cost means
   //     a KNOWN cost. The estimate lives in the adjudication
-  //     table's own column (§5.1), never in the attempt's cost;
+  //     table's own column (§5.1), never in the attempt's cost.
+  //     And the pre-state is guarded (S1, Rowan focused source
+  //     review 6535697368): a confirmed/unknown row whose cost is
+  //     not precisely NULL refuses adjudication_cost_inconsistent
+  //     before any write, so a malformed row can never be
+  //     reclassified into an estimated_unverified attempt that
+  //     carries a numeric cost;
   //   * the figures are derived SERVER-SIDE ONLY, inside the
   //     transaction, from persisted records (§5.2): the estimate
   //     is the attempt's OWN-LENGTH expectedCostMicro from its
@@ -643,6 +680,19 @@ CREATE TABLE IF NOT EXISTS d6_billing_adjudication_amendments (
       // disposed attempt is no longer unknown.
       if (!(row.phase === "confirmed" && row.outcome === "unknown"))
         throw new Error(`attempt_not_unknown: ${attemptId} (${row.phase}/${row.outcome})`);
+      // Step 2b (S1, Rowan focused source review 6535697368): the
+      // source row's cost must be PRECISELY NULL. The valid writer
+      // (confirmAttempt) establishes NULL for an unknown attempt,
+      // and step 7's UPDATE never writes cost_micro_cents — so a
+      // confirmed/unknown row carrying a numeric cost is a
+      // malformed pre-state (the schema does not forbid it), and
+      // reclassifying it would leave an estimated_unverified
+      // attempt WITH a numeric cost, breaking the invariant above.
+      // This irreversible money-adjudication path therefore
+      // refuses it independently, with its own reason, before any
+      // DDL/UPDATE/INSERT.
+      if (row.cost_micro_cents !== null)
+        throw new Error(`adjudication_cost_inconsistent: attempt ${attemptId} is confirmed/unknown but carries cost_micro_cents=${row.cost_micro_cents} (expected NULL)`);
       // Step 3: the named plan must be the attempt's server-stamped
       // plan (the reconcile_plan_mismatch discipline).
       if (typeof planId !== "string" || row.plan_id !== planId)

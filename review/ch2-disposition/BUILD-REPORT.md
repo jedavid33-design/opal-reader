@@ -452,7 +452,98 @@ newer SHA/date/branch position. Build-side provisions:
 - `worker-tests/ch2disp-disposition.test.mjs`,
   `worker-tests/ch2disp-route.test.mjs` — the §10 suites.
 
-**Requested of Rowan:** source review of this pin against the
+## 8. Focused corrections — Rowan source review 6535697368 (S1 + S2)
+
+Rowan's source review of the candidate pin `76a9df55` returned
+a **FOCUSED SOURCE HOLD on S1 + S2 only** (core valid-path
+implementation sound; candidate not yet approved for a
+deployment proposal). Both are fail-closed validations, made
+repo-only inside the existing build scope — no redesign of the
+disposition, budget formula, evidence contract, or rollback
+floor; no baseline suite touched. This pin is the candidate's
+one clean child carrying exactly these corrections.
+
+- **S1 — NULL cost guarded before reclassification**
+  (`worker/generation/genstore.mjs`, `adjudicateEstimated`,
+  new step 2b): the source-row check now ALSO requires
+  `row.cost_micro_cents === null` (precisely NULL). A
+  confirmed/unknown row carrying a numeric cost — a malformed
+  pre-state the schema does not forbid and the valid writer
+  never produces — refuses with the distinct reason
+  **`adjudication_cost_inconsistent`** before any
+  DDL/UPDATE/INSERT (the service maps it to a rejected outcome
+  with that reason, in the `adjudication_*` family). The
+  UPDATE still never writes `cost_micro_cents`; valid legacy
+  behavior unchanged. New test **disp-16**: the anomalous row
+  refuses at store and service level with zero changes to
+  attempt, plan, phase, and audit (no adjudication tables even
+  created), and a NULL-restored control then applies cleanly.
+- **S2 — orphaned unverified attempt fails closed on the
+  accounting read path** (`genstore.mjs`,
+  `unverifiedAccounting`): before the strict sums, an orphan
+  check counts in-scope `estimated_unverified` attempts with
+  NO linked unamended adjudication row (`NOT EXISTS` on
+  `attempt_id` with `current_amendment = 0`); any such attempt
+  throws **`adjudication_row_missing`** instead of being
+  silently dropped by the inner JOIN. Because every accounting
+  read surface funnels through this one function, the throw
+  propagates through `phaseAccounting`, capabilities, plan
+  summaries, and diagnostics — and at the grant guard the
+  throw propagates out of the grant transaction, so no grant
+  issues. Normal zero-on-truly-empty behavior is unchanged
+  (both tables absent still returns exact zeros before the
+  check; disp-13 stands). New test **disp-17**: valid linked
+  control sums correctly on every surface; after the
+  adjudication row is deleted out of band (both tables
+  present), `phaseAccounting`, `planUnverifiedAccounting`,
+  `capabilities`, `listPlans`, and `d6GrantGuard` all throw
+  `adjudication_row_missing`, with zero grants issued.
+- **S2 (second half) — negative unverified figures rejected**
+  (`worker/generation/grant-guards.mjs`,
+  `d6PhaseBudgetCheck`): the shape fence now also requires
+  both unverified fields to be **non-negative**; a negative
+  estimate or reservation refuses
+  `phase_accounting_incomplete` identically to a missing or
+  non-integer field, so a negative reservation can never
+  decrease projected spend. New test **disp-18**: negative
+  estimate/reservation refuse; the discriminating case
+  (reservation −100, pending 100, budget 50 — which the old
+  shape-only fence would have projected as 0 and admitted)
+  refuses `phase_accounting_incomplete`; lawful controls still
+  admit / hit the ordinary `phase_budget` fence.
+
+**Corrections battery** (full battery rerun on the corrected
+tree, ONE complete run, same runner; full log at
+`~/workspace/ch2-program/disposition/logs/battery-corrections-full.log`,
+exit code 0):
+
+- **129 suites: 107 pass / 22 fail** (unchanged suite count —
+  the 3 new tests live in the existing candidate suite).
+- **1,041 tests: 1,019 pass / 22 fail** (candidate 1,038:
+  +3, all new — disp-16/17/18 — all passing).
+- **Zero assertion failures.**
+- The failing set is **byte-identical** to the candidate
+  run's pinned `logs/failing-files.txt` — i.e. still exactly
+  the D8 baseline 22, `diff`-verified (candidate record
+  preserved locally at `logs/candidate-76a9df55/`). No delta
+  was absorbed; there is none.
+- Paths changed vs the candidate pin `76a9df55`, all under
+  `review/ch2-disposition/`: `BUILD-REPORT.md` (this section),
+  `logs/summary.txt` (corrections battery),
+  `worker/generation/genstore.mjs` (S1 + S2),
+  `worker/generation/grant-guards.mjs` (S2 nonnegativity),
+  `worker-tests/ch2disp-disposition.test.mjs` (disp-16/17/18).
+  `logs/failing-files.txt` is byte-identical to the
+  candidate's (same blob); `service.mjs`,
+  `worker-entry-prod-d6.js`, and `ch2disp-route.test.mjs` are
+  unchanged.
+
+**Requested of Rowan:** focused source re-review of S1 + S2
+against the candidate. Deploy / adjudication / retire /
+re-arm remain separate Julie gates; nothing here performs or
+implies them.
+
+**Requested of Rowan (original build):** source review of this pin against the
 Rev 2 design at `d2daa2e5`. The judgment call flagged in Rev 2
 (reservation sourced from the attempt row's recorded upper,
 with the entry's upper validated and recorded in

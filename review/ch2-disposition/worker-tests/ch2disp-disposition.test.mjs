@@ -795,3 +795,140 @@ test("disp-15b exit-gate comparison: absent keys fail, mismatches fail, exact ma
     { ...summary, estimatedUnverifiedStatus: undefined }), false,
     "a summary that lost the provider_unverified status fails the gate");
 });
+
+// ---------------------------------------------------------------
+// FOCUSED CORRECTIONS — Rowan source review 6535697368 (FOCUSED
+// SOURCE HOLD on S1 + S2 only; corrections inside the existing
+// repo-only build scope, Julie's build approval 6535417583).
+// disp-16 = S1, disp-17 = S2 (orphan row), disp-18 = S2
+// (negative unverified figures at the budget check).
+// ---------------------------------------------------------------
+
+// S1: adjudicateEstimated must require cost_micro_cents === NULL
+// before reclassifying. An anomalous confirmed/unknown row WITH
+// a numeric cost refuses adjudication_cost_inconsistent, before
+// any DDL/UPDATE/INSERT, with zero changes to attempt, plan,
+// phase, and audit.
+test("disp-16 S1: a confirmed/unknown attempt carrying a numeric cost refuses adjudication_cost_inconsistent and moves nothing", () => {
+  const w = makeWorld();
+  // The anomalous pre-state: confirmed/unknown WITH a numeric
+  // cost. The schema does not forbid it; the valid writer
+  // (confirmAttempt) never produces it.
+  w.h.db.prepare(`UPDATE d6_attempt_log SET cost_micro_cents = 4242
+                   WHERE attempt_id = ?`).run(ATT);
+  const before = snapshot(w.h);
+  assert.throws(
+    () => w.store.adjudicateEstimated(ATT, {
+      planId: PLAN, authorizationRef: AUTH, note: "fixture disposition",
+      source: "operator-route", evidenceRefs: EVIDENCE }),
+    /adjudication_cost_inconsistent/,
+    "the store refuses the malformed pre-state with its own reason");
+  const r = dispose(w);
+  assert.equal(r.outcome, "rejected");
+  assert.equal(r.reason, "adjudication_cost_inconsistent",
+    "the service surfaces the distinct refusal reason");
+  const a = attemptRow(w.h);
+  assert.equal(a.outcome, "unknown",
+    "the attempt is NOT reclassified to estimated_unverified");
+  assert.equal(a.cost_micro_cents, 4242, "the attempt row is unchanged");
+  assert.equal(planRow(w.h).state, "halted_unknown", "the plan is untouched");
+  assert.equal(phaseFlag(w.h), 1, "the phase flag still stands");
+  assert.equal(adjudicationRows(w.h).length, 0, "no audit row from a refusal");
+  assert.ok(!tableNames(w.h).includes("d6_billing_adjudications"),
+    "the refusal ran before any DDL — no adjudication tables created");
+  assert.equal(snapshot(w.h), before, "zero state change anywhere");
+  // Control: with the cost restored to NULL, the very same
+  // disposition applies — the guard refuses the malformed ROW,
+  // not the shape of the request.
+  w.h.db.prepare(`UPDATE d6_attempt_log SET cost_micro_cents = NULL
+                   WHERE attempt_id = ?`).run(ATT);
+  assert.equal(dispose(w).outcome, "applied");
+  assert.equal(attemptRow(w.h).cost_micro_cents, null,
+    "and the applied disposition still never writes the cost");
+});
+
+// S2: an estimated_unverified attempt whose adjudication row is
+// missing (both tables present) must fail closed on the
+// accounting read path — phaseAccounting, the per-plan sibling,
+// capabilities, plan summaries, and the grant guard — never be
+// silently dropped from the sums by the inner JOIN.
+test("disp-17 S2: an estimated_unverified attempt with no adjudication row is loud on every accounting read surface", () => {
+  const w = makeWorld();
+  // Valid linked control first: a normal disposition, and every
+  // read surface agrees on the figures.
+  assert.equal(dispose(w).outcome, "applied");
+  const acct = w.store.phaseAccounting(PHASE);
+  assert.equal(acct.estimatedUnverifiedMicro, ESTIMATE);
+  assert.equal(acct.reservedUnverifiedMicro, ATTEMPT_UPPER);
+  assert.doesNotThrow(() => w.service.capabilities());
+  const okSummary = w.service.listPlans({}).plans.find(p => p.planId === PLAN);
+  assert.equal(okSummary.estimatedUnverifiedStatus, "provider_unverified");
+  assert.equal(okSummary.estimatedUnverifiedMicroCents, ESTIMATE);
+
+  // The corrupt state: both tables present, the attempt still
+  // estimated_unverified, but its adjudication row is GONE
+  // (deleted out of band — unreachable through the system's own
+  // writes, which set outcome + audit row in one transaction).
+  w.h.db.prepare(`DELETE FROM d6_billing_adjudications
+                   WHERE attempt_id = ?`).run(ATT);
+  assert.throws(() => w.store.phaseAccounting(PHASE),
+    /adjudication_row_missing/,
+    "phase accounting refuses to silently drop the orphan");
+  assert.throws(() => w.store.planUnverifiedAccounting(PLAN),
+    /adjudication_row_missing/,
+    "the per-plan sibling read is equally loud");
+  assert.throws(() => w.service.capabilities(),
+    /adjudication_row_missing/,
+    "capabilities throws — never a zero reservation");
+  assert.throws(() => w.service.listPlans({}),
+    /adjudication_row_missing/,
+    "plan summaries throw — never a silent figure");
+
+  // The grant guard: at the guard the throw IS the refusal — no
+  // grant issues. The disp-14a guard fixture shape: the plan
+  // active, one pending eligible occurrence on job-guard. (The
+  // disposition above already cleared the phase flag, so the
+  // guard reaches the budget check.)
+  seedEntry(w.h, { planId: PLAN, occ: "occ-g1", chars: 100,
+                   upper: 2250, jobId: "job-guard" });
+  w.h.db.prepare(`UPDATE d6_plans SET state = 'active'
+                   WHERE plan_id = ?`).run(PLAN);
+  w.h.db.prepare(`INSERT INTO d6_plan_jobs (plan_id, job_id, chapter_index, seq)
+                   VALUES (?, 'job-guard', 1, 0)`).run(PLAN);
+  w.h.db.prepare(`INSERT INTO occurrences (job_id, occurrence_id, revision_key, state)
+                   VALUES ('job-guard', 'occ-g1', 'rk-g1', 'pending')`).run();
+  assert.throws(() => d6GrantGuard(w.h.coord, guardJob),
+    /adjudication_row_missing/,
+    "the grant path throws on the orphan — the exposure is never laundered into headroom");
+  assert.equal(w.h.rows("grants").length, 0, "no grant issued");
+});
+
+// S2 (second half): a NEGATIVE unverified figure is a safe
+// integer in shape but must not decrease projected spend —
+// d6PhaseBudgetCheck rejects it as phase_accounting_incomplete.
+test("disp-18 S2: negative unverified figures refuse phase_accounting_incomplete at the budget check", () => {
+  const base = { settledMicro: 0, inFlightUpperMicro: 0,
+                 estimatedUnverifiedMicro: 0, reservedUnverifiedMicro: 0 };
+  assert.deepEqual(d6PhaseBudgetCheck(base, 0, BUDGET), { ok: true },
+    "control: exact zeros admit");
+  assert.deepEqual(d6PhaseBudgetCheck(
+    { ...base, estimatedUnverifiedMicro: -1 }, 0, BUDGET),
+    { ok: false, reason: "phase_accounting_incomplete" },
+    "a negative estimate refuses — safe-integer shape is not enough");
+  assert.deepEqual(d6PhaseBudgetCheck(
+    { ...base, reservedUnverifiedMicro: -1 }, 0, BUDGET),
+    { ok: false, reason: "phase_accounting_incomplete" },
+    "a negative reservation refuses identically");
+  // The discriminating case: without the nonnegativity fence, a
+  // reservation of -100 would let a pending upper of 100 project
+  // 0 against a budget of 50 and ADMIT. It must refuse.
+  assert.deepEqual(d6PhaseBudgetCheck(
+    { ...base, reservedUnverifiedMicro: -100 }, 100, 50),
+    { ok: false, reason: "phase_accounting_incomplete" },
+    "a negative reservation can never decrease projected spend");
+  // Control: the same figures with a lawful zero reservation hit
+  // the ordinary phase_budget fence instead.
+  assert.deepEqual(d6PhaseBudgetCheck(base, 100, 50),
+    { ok: false, reason: "phase_budget" },
+    "control: lawful figures still reach the projection fence");
+});

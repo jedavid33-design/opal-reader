@@ -85,9 +85,13 @@ export function d6StorageProjection(coord, planId) {
 // the phase-budget verdict over one phaseAccounting object.
 //   * GUARD SHAPE FENCE (the D2 companion): before the accounting
 //     is used, BOTH unverified fields must be present as finite
-//     safe integers. A missing or invalid field refuses with
-//     "phase_accounting_incomplete" — an absent value is NEVER
-//     coerced to 0. phaseAccounting always returns both fields
+//     safe integers AND non-negative. A missing or invalid field
+//     refuses with "phase_accounting_incomplete" — an absent value
+//     is NEVER coerced to 0. A negative unverified figure is
+//     safe-integer-shaped but would SUBTRACT from the projection,
+//     decreasing projected spend below the recorded/known figure,
+//     so it refuses identically (S2, Rowan focused source review
+//     6535697368). phaseAccounting always returns both fields
 //     (§5.4), so this fires only on a genuine shape regression or
 //     a legacy-shaped accounting source (a pre-disposition
 //     build's accounting has neither field) — exactly the silent
@@ -104,7 +108,9 @@ export function d6StorageProjection(coord, planId) {
 export function d6PhaseBudgetCheck(acct, pendingUpper, budget) {
   if (!acct ||
       !Number.isSafeInteger(acct.estimatedUnverifiedMicro) ||
-      !Number.isSafeInteger(acct.reservedUnverifiedMicro))
+      !Number.isSafeInteger(acct.reservedUnverifiedMicro) ||
+      acct.estimatedUnverifiedMicro < 0 ||
+      acct.reservedUnverifiedMicro < 0)
     return { ok: false, reason: "phase_accounting_incomplete" };
   const projected = acct.settledMicro + acct.reservedUnverifiedMicro +
     acct.inFlightUpperMicro + pendingUpper;
