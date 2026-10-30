@@ -1,3 +1,3 @@
 suite files: 127  pass: 105  fail: 22
-tests: 1007  pass: 985  fail: 22
+tests: 1015  pass: 993  fail: 22
 assertion failures: none

@@ -71,3 +71,27 @@ Runner: `~/workspace/ch2-program/fence/logs/run-worker-battery-fence.py`; logs: 
 Deployment of the fence + B package (halted/pause-first pattern); any production use of the reconcile route; retiring the halted Ch 2 plan; re-arm (halt flip + queue unpause); any generation. This build authorizes none of them, and the filing says so.
 
 — Wren (Workstream A build, Chapter 2 program)
+
+## 8. Corrections — Rowan's focused HOLD items F1/F2 (comment 6532568882)
+
+Rowan's source review of pin `ca504eea…` passed the fence's substantive design and evidence, and held sign-off on two fail-closed edge cases only. Both are corrected in this revision; nothing else changed. The diff of `d6-executor.mjs` against the `ca504eea…` pin is exactly the three hunks below (verified by direct blob diff), and every non-fence file remains byte-identical to that pin.
+
+### F1 — BOTH message-carried plan fields are validated
+
+`planStateFenceRefusal` previously selected `msg.planId || msg.d6PlanId` — the first truthy field — so a payload with `planId = P_resolved` and `d6PlanId = P_other` passed the mismatch guard and could dispatch on the active resolved plan. The check now iterates both fields: each **present** field (`undefined` = absent, skipped) must be a non-empty string and must equal the already-resolved persisted identity; any malformed or disagreeing present field refuses `plan_link_mismatch`. No fallback is selected; no message field becomes an authority.
+
+Tests (fence suite): **T16a** — matching `planId` + conflicting `d6PlanId` against an ACTIVE resolved plan → `plan_link_mismatch`, zero provider calls, zero row movement (the old code dispatched this shape). **T16b** — the reversed field order refuses identically. **T16c** — positive control: both fields present and both matching → normal dispatch + commit. **T16d** — malformed present fields (empty string beside a matching sibling, non-string number, non-string object, null) each refuse `plan_link_mismatch` with zero calls/movement; an undressed control dispatches.
+
+### F2 — empty persisted plan stamps are invalid, not absent
+
+`stampOf` previously converted a present empty string to `null`, so a link-absent job stamped `d6PlanId: ""` read as genuinely plan-less and could reach synthesis. A present stamp must now be a non-empty, non-whitespace string — empty or whitespace-only throws malformed job data (`plan_state_check_failed`). Absent keys and explicit `null` stamps keep the designed legacy readings exactly. Schema check (as Rowan asked): `d6_plan_jobs.plan_id` is declared `TEXT NOT NULL`, so a NULL link cannot be stored — but a **blank string can**; the resolver now rejects a non-string/empty/whitespace link `plan_id` as a corrupt link (`plan_state_check_failed`) instead of resolving to a blank identity that slipped past the caller's truthiness gate on the state fence.
+
+Tests: **T17a** — link-absent, active-grant shape with `d6PlanId: ""` → `plan_state_check_failed`, zero calls/rows (the old code dispatched this shape). **T17b** — whitespace-only `d6PlanId`, empty `planId`, whitespace-only `planId` → each refuses identically. **T17c** — preservation controls: explicit-null stamps with no link/plan row still dispatch plan-less (bookkeeping `plan_id` null), and a null stamp beside a valid link still resolves via the link. **T17d** — blank (`""`, `"   "`) link rows → corrupt-link refusal with zero calls/rows; with the corrupt row deleted the same world dispatches plan-less.
+
+### Results
+
+- Fence suite: **29/29 pass** (T1–T15 unchanged and unweakened; +8 tests: T16a–d, T17a–d).
+- Full battery (corrected tree, ONE complete run; runner exit 0; logs `~/workspace/ch2-program/fence/logs/battery-f1f2/`): **127 suite files: 105 pass / 22 fail. 1015 tests: 993 pass / 22 fail. Assertion failures: NONE.** Delta vs the `ca504eea…` battery reconciles exactly: +8 tests (the new F1/F2 tests), all passing; no suite changed pass/fail status. The 22 failing suites are **byte-identical as a set** to the fence pin's failing list — the recorded D8 baseline set, unchanged. **Zero baseline-suite edits.**
+- Delta vs pin `ca504eea…`: modified `worker/generation/d6-executor.mjs` — SHA-256 `68e3f84ed6ee9bd4ac59c4732f72ab1c53661df00798ad7cbe23a9a5a2c881b9`, 44,181 B (three hunks only, blob-diff verified); modified `tests/ch2fix-rearm-fence.test.mjs` — SHA-256 `07ff78bd44cfa13f71b5fcb6183569ed143e1c0f58a1911b04728d9658707176`, 32,799 B (header + T16/T17 additions only). All other files byte-identical to the pin.
+
+— Wren (Workstream A corrections, Chapter 2 program)

@@ -27,6 +27,24 @@
 // names a different, unheld, active plan — the same resolved
 // identity feeds both pre-claim checks.
 //
+// Focused re-review corrections (Rowan, board issue #15
+// comment 6532568882):
+//
+//   F1 — planStateFenceRefusal validates EACH present
+//     message-carried plan field (planId AND d6PlanId)
+//     independently against the resolved identity; the old
+//     first-truthy selection let a matching planId mask a
+//     conflicting d6PlanId. Malformed present fields
+//     (non-string / empty) refuse plan_link_mismatch; both
+//     fields matching is the positive control (T16*).
+//   F2 — a PRESENT persisted stamp must be a non-empty,
+//     non-whitespace string: empty/whitespace stamps are
+//     invalid data (plan_state_check_failed), not absent
+//     stamps; absent/null stamps keep the legitimate
+//     plan-less reading. The schema's plan_id is TEXT NOT
+//     NULL (NULL unstorable), but a BLANK link plan_id is
+//     storable and is rejected as a corrupt link (T17*).
+//
 // All fixtures synthetic; no book text anywhere. This suite is
 // the package's own candidate suite (Workstream A build);
 // no baseline suite is touched by it.
@@ -480,6 +498,146 @@ test("T15 — malformed job data: unparseable data_json refuses (plan_state_chec
   const before = snapshot(w.h);
   const r = await w.exec.handleMessage(w.msg);
   assertRefusal(w.h, w.providers, before, r, { refused: "plan_state_check_failed" });
+});
+
+test("T16a — Rowan F1: BOTH message fields validated — a matching planId cannot mask a conflicting d6PlanId", async () => {
+  const w = await makeWorld({ planState: "active" });
+  insertPlanRow(w.h, "plan:other-active", "active");
+  const before = snapshot(w.h);
+  // planId = P_resolved (matching), d6PlanId = P_other
+  // (conflicting). The old first-truthy guard checked only
+  // planId and DISPATCHED this (the resolved plan is active);
+  // per-field validation must refuse it.
+  const r = await w.exec.handleMessage(
+    { ...w.msg, planId: w.planId, d6PlanId: "plan:other-active" });
+  assertRefusal(w.h, w.providers, before, r, { refused: "plan_link_mismatch" });
+});
+
+test("T16b — Rowan F1: field order confers nothing — a conflicting planId with a matching d6PlanId also refuses", async () => {
+  const w = await makeWorld({ planState: "active" });
+  insertPlanRow(w.h, "plan:other-active", "active");
+  const before = snapshot(w.h);
+  const r = await w.exec.handleMessage(
+    { ...w.msg, planId: "plan:other-active", d6PlanId: w.planId });
+  assertRefusal(w.h, w.providers, before, r, { refused: "plan_link_mismatch" });
+});
+
+test("T16c — Rowan F1 (positive control): both message fields present and BOTH matching the resolved plan dispatch normally", async () => {
+  const w = await makeWorld({ planState: "active" });
+  const r = await w.exec.handleMessage(
+    { ...w.msg, planId: w.planId, d6PlanId: w.planId });
+  assert.equal(r.occurrences.o1.committed, true);
+  assert.equal(w.providers.calls.length, 1);
+  assert.equal(w.h.rows("d6_execution_records")[0].plan_id, w.planId);
+});
+
+test("T16d — Rowan F1: malformed present message fields refuse — no fallback is ever selected", async () => {
+  const w = await makeWorld({ planState: "active" });
+  const variants = [
+    ["empty planId beside a matching d6PlanId", { planId: "", d6PlanId: w.planId }],
+    ["empty d6PlanId beside a matching planId", { planId: w.planId, d6PlanId: "" }],
+    ["non-string planId", { planId: 42 }],
+    ["non-string d6PlanId", { d6PlanId: { id: w.planId } }],
+    ["null planId beside a matching d6PlanId", { planId: null, d6PlanId: w.planId }],
+  ];
+  for (const [label, fields] of variants) {
+    const before = snapshot(w.h);
+    const r = await w.exec.handleMessage({ ...w.msg, ...fields });
+    assert.deepEqual(r, { refused: "plan_link_mismatch" }, label);
+    assert.equal(w.providers.calls.length, 0, `${label}: zero provider calls`);
+    assert.equal(snapshot(w.h), before, `${label}: zero movement`);
+  }
+  // Control: with no malformed dressing the same world dispatches.
+  const r = await w.exec.handleMessage(w.msg);
+  assert.equal(r.occurrences.o1.committed, true);
+  assert.equal(w.providers.calls.length, 1);
+});
+
+// ---------------------------------------------------------------
+test("T17a — Rowan F2: an EMPTY persisted stamp is invalid data, not an absent stamp (link-absent, active-grant shape)", async () => {
+  const w = await makeWorld({ planState: "active", link: false, stamp: true });
+  w.h.db.prepare(`UPDATE jobs SET data_json = ? WHERE job_id = ?`)
+    .run(JSON.stringify({ estMicroCents: 1000, d6PlanId: "" }), w.jobId);
+  const before = snapshot(w.h);
+  // The old stampOf converted "" to null; with no link row the
+  // job then read as genuinely plan-less and DISPATCHED.
+  const r = await w.exec.handleMessage(w.msg);
+  assertRefusal(w.h, w.providers, before, r, { refused: "plan_state_check_failed" });
+});
+
+test("T17b — Rowan F2: whitespace-only and empty stamps refuse, in either stamp field", async () => {
+  const w = await makeWorld({ planState: "active", link: false, stamp: true });
+  const variants = [
+    ["whitespace-only d6PlanId", { estMicroCents: 1000, d6PlanId: "   " }],
+    ["empty planId stamp", { estMicroCents: 1000, planId: "" }],
+    ["whitespace-only planId stamp", { estMicroCents: 1000, planId: " \t " }],
+  ];
+  for (const [label, data] of variants) {
+    w.h.db.prepare(`UPDATE jobs SET data_json = ? WHERE job_id = ?`)
+      .run(JSON.stringify(data), w.jobId);
+    const before = snapshot(w.h);
+    const r = await w.exec.handleMessage(w.msg);
+    assert.deepEqual(r, { refused: "plan_state_check_failed" }, label);
+    assert.equal(w.providers.calls.length, 0, `${label}: zero provider calls`);
+    assert.equal(snapshot(w.h), before, `${label}: zero movement`);
+  }
+});
+
+test("T17c — Rowan F2 (preservation control): absent and explicit-null stamps keep the legitimate plan-less / link-resolved readings", async () => {
+  // (i) Explicit null stamps, no link, no plan row: genuinely
+  // plan-less — dispatches exactly as the pre-F2 build.
+  const w = await makeWorld({
+    planId: "plan:absent", jobId: "legacy-null-stamp-job",
+    planRow: false, stamp: false, link: false,
+  });
+  w.h.db.prepare(`UPDATE jobs SET data_json = ? WHERE job_id = ?`)
+    .run(JSON.stringify({ estMicroCents: 1000, d6PlanId: null, planId: null }),
+         w.jobId);
+  const r = await w.exec.handleMessage(w.msg);
+  assert.equal(r.occurrences.o1.committed, true);
+  assert.equal(w.providers.calls.length, 1);
+  assert.equal(w.h.rows("d6_execution_records")[0].plan_id, null,
+    "bookkeeping stays plan-less");
+
+  // (ii) A null stamp beside a valid link: the link resolves
+  // and the null does not poison it.
+  const w2 = await makeWorld({ planState: "active", stamp: false, link: true });
+  w2.h.db.prepare(`UPDATE jobs SET data_json = ? WHERE job_id = ?`)
+    .run(JSON.stringify({ estMicroCents: 1000, d6PlanId: null }), w2.jobId);
+  const r2 = await w2.exec.handleMessage(w2.msg);
+  assert.equal(r2.occurrences.o1.committed, true);
+  assert.equal(w2.providers.calls.length, 1);
+  assert.equal(w2.h.rows("d6_execution_records")[0].plan_id, w2.planId);
+});
+
+test("T17d — Rowan F2: a BLANK d6_plan_jobs.plan_id is a corrupt link, never 'no plan' (schema permits blank strings; NULL is NOT NULL-constrained)", async () => {
+  const w = await makeWorld({
+    planId: "plan:absent", jobId: "corrupt-link-job",
+    planRow: false, stamp: false, link: false,
+  });
+  for (const blank of ["", "   "]) {
+    w.h.db.prepare(`DELETE FROM d6_plan_jobs WHERE job_id = ?`).run(w.jobId);
+    w.h.db.prepare(`INSERT INTO d6_plan_jobs (plan_id, job_id, chapter_index, seq)
+                    VALUES (?, ?, 1, 0)`).run(blank, w.jobId);
+    const before = snapshot(w.h);
+    // A plan-less reading would DISPATCH here (live grant,
+    // active shape — the T6 world); refusal is the only pass.
+    // (The old resolver returned planId "" and the caller's
+    // truthiness gate skipped the state fence entirely.)
+    const r = await w.exec.handleMessage(w.msg);
+    assert.deepEqual(r, { refused: "plan_state_check_failed" },
+      `blank link ${JSON.stringify(blank)}`);
+    assert.equal(w.providers.calls.length, 0,
+      `blank link ${JSON.stringify(blank)}: zero provider calls`);
+    assert.equal(snapshot(w.h), before,
+      `blank link ${JSON.stringify(blank)}: zero movement`);
+  }
+  // Control: with the corrupt link row gone the same world is
+  // genuinely plan-less and dispatches.
+  w.h.db.prepare(`DELETE FROM d6_plan_jobs WHERE job_id = ?`).run(w.jobId);
+  const r = await w.exec.handleMessage(w.msg);
+  assert.equal(r.occurrences.o1.committed, true);
+  assert.equal(w.providers.calls.length, 1);
 });
 
 test("T15b — Rowan pin 2: present-but-non-object data_json is corruption, never a plan-less pass", async () => {

@@ -176,7 +176,19 @@ export function createD6Executor({ coord, coordinator, store, providers, flushSt
       : c.sql.exec(`SELECT DISTINCT plan_id FROM d6_plan_jobs WHERE job_id = ?`, jobId).toArray();
     let pLink = null;
     if (linkRows.length > 1) return { conflict: true };
-    if (linkRows.length === 1) pLink = linkRows[0].plan_id;
+    if (linkRows.length === 1) {
+      // Rowan F2 (comment 6532568882): the schema declares
+      // plan_id TEXT NOT NULL, so a NULL cannot be stored — but
+      // a blank string can. A present link row whose plan_id is
+      // not a non-empty, non-whitespace string is a CORRUPT
+      // link: refuse it as such, never read it as "no plan"
+      // (a blank would otherwise slip past the caller's
+      // truthiness gate on the resolved identity and dispatch).
+      const linkId = linkRows[0].plan_id;
+      if (typeof linkId !== "string" || linkId.trim().length === 0)
+        throw new Error("plan_resolution_corrupt_link");
+      pLink = linkId;
+    }
 
     // (2) Job stamp read. A present data_json that does not parse,
     // or parses to a non-object, is CORRUPTION (Rowan build pin
@@ -191,10 +203,17 @@ export function createD6Executor({ coord, coordinator, store, providers, flushSt
       if (!data || typeof data !== "object" || Array.isArray(data))
         throw new Error("plan_resolution_malformed_job_data");
       const stampOf = (v) => {
+        // Absent key (undefined) and explicit null stay "no
+        // stamp" — legitimate legacy plan-less records carry
+        // neither. But a PRESENT stamp must be a non-empty,
+        // non-whitespace string (Rowan F2, comment 6532568882):
+        // an empty or whitespace-only value is invalid persisted
+        // data, not an absent stamp — converting it to null let
+        // a stamped job masquerade as genuinely plan-less.
         if (v === null || v === undefined) return null;
-        if (typeof v !== "string")
+        if (typeof v !== "string" || v.trim().length === 0)
           throw new Error("plan_resolution_malformed_job_data");
-        return v.length > 0 ? v : null;
+        return v;
       };
       const stampA = stampOf(data.d6PlanId);
       const stampB = stampOf(data.planId);
@@ -218,11 +237,24 @@ export function createD6Executor({ coord, coordinator, store, providers, flushSt
   function planStateFenceRefusal(resolvedPlanId, msg) {
     // The message's own plan fields confer nothing and select
     // nothing; carried against a resolved plan they are only ever
-    // a discrepancy to refuse on.
-    const msgPlan = msg && (msg.planId || msg.d6PlanId)
-      ? (msg.planId || msg.d6PlanId) : null;
-    if (msgPlan !== null && msgPlan !== resolvedPlanId)
-      return { refused: "plan_link_mismatch" };
+    // a discrepancy to refuse on. EACH present field is validated
+    // independently (Rowan F1, comment 6532568882): the earlier
+    // first-truthy selection (msg.planId || msg.d6PlanId) let a
+    // matching planId mask a conflicting d6PlanId. A present
+    // field that is not a non-empty string is malformed, and any
+    // present field disagreeing with the resolved identity
+    // refuses — no fallback is ever selected, and no message
+    // field may become an authority.
+    if (msg) {
+      for (const key of ["planId", "d6PlanId"]) {
+        const carried = msg[key];
+        if (carried === undefined) continue; // absent: nothing to check
+        if (typeof carried !== "string" || carried.length === 0)
+          return { refused: "plan_link_mismatch" };
+        if (carried !== resolvedPlanId)
+          return { refused: "plan_link_mismatch" };
+      }
+    }
     const row = c._oneOrNull(
       `SELECT * FROM d6_plans WHERE plan_id = ?`, resolvedPlanId);
     // A persisted link to a plan that does not exist is a dangling
