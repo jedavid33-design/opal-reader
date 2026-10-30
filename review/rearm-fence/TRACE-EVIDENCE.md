@@ -160,4 +160,83 @@ fact cited is from the existing Gate-1/D0 evidence record.
   Gate-1-verified against this pin (etag `82b3be1d…`, /health
   build marker).
 
+---
+
+## Revision-1 addendum — verification for Rowan's corrections (Oct 30, 2026)
+
+Method: read-only source inspection of the Workstream B tree
+(`~/workspace/ch2-program/fix/worker-build/`, the fence build's
+base, pin `22a849a8…` lineage). Items 16–21 ground DESIGN-PACKET
+Revision 1. The original log above is unedited except item 10's
+driver citation (see item 20).
+
+16. **`planIdFor` is message-first and error-swallowing.**
+    `generation/d6-executor.mjs:110–122`: returns
+    `msg.planId || msg.d6PlanId` BEFORE any server record; then
+    the job's `data_json` (`d6PlanId`, then `planId`); the whole
+    lookup is wrapped in `catch { /* plan id is optional
+    bookkeeping; never fail work over it */ }`. It never queries
+    `d6_plan_jobs`. This is the helper the ruling's correction 1
+    excludes from fence decisions.
+
+17. **The quarantine check consumes `planIdFor`; its link
+    fallback is also swallowed.** `d6-executor.mjs:518–545` (the
+    pre-claim block): `qPlanId = planIdFor(jobId, msg)` at :520;
+    the `d6_plan_jobs` fallback runs ONLY when `qPlanId` is null
+    (:522–527) and is wrapped in `catch { /* link is optional
+    bookkeeping here */ }`. Strict branch :528–541:
+    `ensureQuarantineSchema`, `heldQuarantineStrict` for plan
+    (:534) and job (:535), catch → `{ refused:
+    "quarantine_check_failed" }` (:537), held → `{ refused:
+    "plan_quarantined" }` (:539). `claimGrant` is called at :547
+    — the block is the last checkpoint before claim. Consequence
+    verified: a message carrying a foreign planId steers the
+    quarantine plan-subject away from the job's real plan
+    (correction 2's bypass; test T10).
+
+18. **The authoritative persisted records.** Schema
+    `generation/gen-schema.mjs:37–44`: `d6_plans` (:37) and
+    `d6_plan_jobs (plan_id, job_id, chapter_index, seq, PRIMARY
+    KEY (plan_id, job_id))` (:42–44) — the PK admits multiple
+    rows per job under distinct plans (test T12). Writers:
+    `generation/service.mjs:156` stamps `d6PlanId: plan.plan_id`
+    into the SubmitJob payload (→ the job's `data_json`);
+    `:160–164` inserts the `d6_plan_jobs` row
+    (`INSERT OR IGNORE`) when the chapter job is applied. Both
+    records are server-written at plan/job creation; neither is
+    message-carried.
+
+19. **The strict read primitive.** `worker/coordinator.mjs:390–407`:
+    `_oneOrNull` is implemented over `toArray()` with an explicit
+    cardinality check — 0 rows → null, 1 row → the row, >1 rows →
+    throw, SQL errors propagate uncaught (header comment :390–399:
+    strict reads are the design intent). `heldQuarantineStrict`
+    (`generation/quarantine.mjs:164–167`) documents the D8-1 fence
+    discipline §2.1 mirrors: caller ensures schema, any SQL error
+    propagates, the fence treats the throw as a refusal, "never
+    returns a fabricated all-clear." (`d6_plans`/`d6_plan_jobs`
+    are core `GEN_SCHEMA` — genstore bootstrap ensures them — so
+    no lazy-ensure step applies to the new reads.)
+
+20. **Plan-state vocabulary is closed.** `setPlanState` write
+    sites (`generation/service.mjs`): `retired` :495,
+    `complete` :772 and :801, `partial` :801, `halted_unknown`
+    :877, `parked_storage` :885, `active` :911/:938 and at
+    creation :783; parked family map :55–59 (`parked_quota`,
+    `parked_cap`, `parked_budget`, `parked_storage`), applied
+    :915. Driver selection query: `:840–841` —
+    `state NOT IN ('complete', 'partial', 'retired',
+    'halted_unknown')`. (The original packet cited :824, the
+    selection block's R4-1 comment region; corrected to :840 in
+    Revision 1.) Plan-row read pattern:
+    `SELECT * FROM d6_plans WHERE plan_id = ?`
+    (`service.mjs:120`, `genstore.mjs:272`, `:372`).
+
+21. **Post-claim `planIdFor` use.** `d6-executor.mjs:552`:
+    `const planId = planIdFor(jobId, msg)` after claim, feeding
+    execution-record creation (e.g. the `removed_provider`
+    branch). Under the corrected design this bookkeeping adopts
+    the §2.1 resolved identity, so no executor surface attributes
+    work to a message-carried plan.
+
 — Wren (Workstream A, Chapter 2 program)

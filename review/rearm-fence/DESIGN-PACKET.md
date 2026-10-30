@@ -7,6 +7,63 @@ any build follows that ruling under the Chapter 2 program's standing
 authorization (Julie, Oct 30, 2026; board record 6531496748), and any
 deploy / re-arm remains a separate Julie gate.
 
+---
+
+## REVISION 1 — Rowan's design ruling applied (Oct 30, 2026)
+
+**Ruling (Rowan, Chapter 2 program review, Oct 30, 2026):** the
+design is **ACCEPTED IN PRINCIPLE** — a stale Chapter 2 message must
+be refused before claim, execution, spend intent, or provider
+contact whenever its authoritative plan is `halted_unknown`,
+`retired`, `complete`, or `partial`. Four corrections are required
+BEFORE building; no deploy or re-arm is authorized under the ruling.
+This revision applies all four. The original packet (pin
+`8bd9d4ac…`, filed 6531630012) is unchanged in the record; what
+follows is the packet's current text with the corrections folded in.
+
+**The delta, correction by correction:**
+
+1. **Authoritative resolution, never the message-first helper.**
+   The original §2 resolved the plan via "the `d6_plan_jobs` link
+   first, then the job's `data_json`" without naming the mechanism —
+   and the only resolver on the dispatch path today is
+   `planIdFor()` (`generation/d6-executor.mjs:110–122`), which is
+   **message-first** (`msg.planId || msg.d6PlanId` wins over every
+   server record), swallows **all** read errors ("plan id is
+   optional bookkeeping; never fail work over it"), and never reads
+   `d6_plan_jobs` at all. §2 now specifies a strict server-side
+   resolver (new §2.1) built from the persisted records only; the
+   message carries NO plan identity into any fence decision.
+2. **One resolution feeds BOTH fences.** The existing quarantine
+   check consumes `planIdFor` too (`d6-executor.mjs:520`, fallback
+   link read at :522–527 also error-swallowed), so a message
+   carrying a conflicting planId bypasses the link for the
+   quarantine check as well. §2.1/§5 now specify a single
+   resolution, computed once at the top of the pre-claim block,
+   whose result is the ONLY plan identity either check may use.
+3. **Fail closed, enumerated.** §2.1 gives the complete refusal
+   taxonomy: database read errors, malformed job data, conflicting
+   persisted links, missing referenced plans, and unrecognized
+   plan states each refuse before claim. Genuinely plan-less jobs
+   (no persisted link of either kind) still pass untouched.
+4. **Tests extended.** §4 grows from T1–T9 to T1–T15: T8 now
+   injects a read fault at EACH resolution step; T10 is the
+   correction-#2 headline (foreign planId against a held + halted
+   real plan); T11–T15 cover conflicting persisted links, multiple
+   link rows, missing referenced plan, unrecognized state, and
+   malformed job data. Every refusal asserts zero provider calls
+   and zero ledger/claim/attempt movement.
+
+Citation note: the original packet cited the driver selection as
+`service.mjs:824`; in the current tree the selection query is at
+`service.mjs:840` (the :824-region text is its R4-1 comment block).
+Citations corrected in §2/§3. Citations introduced by this revision
+are to the Workstream B tree (pin `22a849a8…` lineage) — the fence
+build's base — verified in `~/workspace/ch2-program/fix/worker-build/`;
+see TRACE-EVIDENCE Revision-1 addendum, items 16–21.
+
+---
+
 **The condition this case answers.** Rowan's D0 grant-lifecycle
 re-review (comment 6528590586) ruled Option A not accepted and held,
 as an operative condition later carried into the signed Option-B
@@ -118,7 +175,7 @@ real, and each lives somewhere else):
   consults it. `reserveAttempt` records an upper bound and checks
   nothing (`generation/genstore.mjs:127–145`).
 - *Driver exclusion* — `driveOnce` never selects `halted_unknown`
-  plans (`generation/service.mjs:824`), but that governs NEW grant
+  plans (`generation/service.mjs:840`), but that governs NEW grant
   issuance. This grant already exists; its message does not pass
   through the driver.
 - *Admission fence (R3-2)* — `PLAN_FENCE_TERMINAL`
@@ -154,29 +211,110 @@ plan-state read on the dispatch path.
 ### Option A — Plan-state dispatch fence in the D6 executor (RECOMMENDED)
 
 **Shape.** In `handleMessage`, inside the existing pre-claim
-defense block (after the quarantine read, before `claimGrant` at
-`generation/d6-executor.mjs:529`): resolve the job's plan
-AUTHORITATIVELY from server-side records — the `d6_plan_jobs`
-link first, then the job's `data_json` — never from message-carried
-fields. If a plan is resolved, read its state strictly (on a
-store-backed coordinator, a read failure refuses, mirroring D8-1:
-`{ refused: "plan_state_check_failed" }`). Refuse, with a normal
-return, iff the plan's state is one the driver itself can never
-drive:
+defense block (the D7-2/D8-1 quarantine block,
+`generation/d6-executor.mjs:518–545`, before the `claimGrant` call
+at :547): resolve the job's plan **once**, authoritatively, from
+persistent server records per §2.1 — never from message-carried
+fields, and never via the existing `planIdFor()` helper
+(`d6-executor.mjs:110–122`), whose message-first precedence and
+error-swallowing are exactly what the ruling excludes. The single
+resolved identity then feeds **both** pre-claim checks: the
+existing quarantine read (`heldQuarantineStrict(c, "plan",
+<resolved>)`, replacing its current `planIdFor` input) and the new
+plan-state fence. After both checks pass, the resolved identity is
+also the value the post-claim bookkeeping use (today
+`planIdFor(jobId, msg)` at `d6-executor.mjs:552`, stamping
+execution records) must adopt, so no surface in the executor ever
+attributes work to a message-carried plan.
+
+If a plan is resolved, refuse, with a normal return, iff its state
+is one the driver itself can never drive:
 
 ```
 REFUSED = { complete, partial, retired, halted_unknown }
         = the complement of driveOnce's selection
-          (service.mjs:824: state NOT IN (...those four...))
+          (service.mjs:840: state NOT IN (...those four...))
 ```
 
 Refusal shape: `{ refused: "plan_not_dispatchable", planId,
 planState }` — a normal return, so `_execute` answers 200 and the
 queue handler ACKs: the stale message is terminally consumed, not
 retried. If a message carries a `planId`/`d6PlanId` that disagrees
-with the server-resolved link, refuse
-(`plan_link_mismatch`) — fail-closed against mislabelled payloads.
-Plan-less jobs resolve no plan and pass unchanged.
+with the server-resolved plan, refuse (`plan_link_mismatch`) —
+fail-closed against mislabelled payloads; the message field is
+never used as an identity, only ever as a discrepancy to refuse
+on. Plan-less jobs (no persisted link of either kind, §2.1 step 4)
+resolve no plan and pass unchanged.
+
+### 2.1 Authoritative plan resolution (corrected per ruling)
+
+One resolver, run once per message at the top of the pre-claim
+block, on store-backed coordinators under strict discipline (the
+non-store-backed branch keeps the existing fixture-only behavior
+of the quarantine block: no store exists in which a plan could be
+persisted, so there is nothing to resolve — the same split D8-1
+already draws). Every read uses `_oneOrNull` cardinality
+discipline (`worker/coordinator.mjs:400–407`: implemented over
+`toArray()`; 0 rows → null, >1 rows → throw, SQL errors
+propagate), inside the block's catch-to-refusal pattern — the
+pattern the quarantine read already established at
+`d6-executor.mjs:531–538` (catch → `{ refused:
+"quarantine_check_failed" }`). The fence's refusal for any
+resolution failure is `{ refused: "plan_state_check_failed" }`.
+
+1. **Link read (strict).** `SELECT DISTINCT plan_id FROM
+   d6_plan_jobs WHERE job_id = ?` (table:
+   `generation/gen-schema.mjs:42–44`; written when a plan's
+   chapter job is submitted, `generation/service.mjs:160–164`).
+   More than one distinct plan_id for the job →
+   **conflicting persisted links** → refuse
+   `{ refused: "plan_link_conflict" }`. Exactly one → candidate
+   `P_link`. (The table's PK is `(plan_id, job_id)`, so multiple
+   rows per job are schema-possible; only a single DISTINCT plan
+   is a well-formed link.) Tables `d6_plan_jobs`/`d6_plans` are
+   core `GEN_SCHEMA`, ensured by the genstore bootstrap — unlike
+   the lazily-ensured quarantine tables they need no ensure step
+   here, and on a store-backed coordinator a missing table is a
+   fault (step 5), never an all-clear.
+2. **Job read (strict).** The job's own row
+   (`jobs.data_json`), parsed. The SubmitJob payload stamps
+   `d6PlanId: plan.plan_id` into the job's data at creation
+   (`generation/service.mjs:156`), so a D6 job carries a second
+   persisted plan record. Unparseable `data_json` → **malformed
+   job data** → refuse `plan_state_check_failed`. A
+   `d6PlanId`/`planId` field present → candidate `P_data`.
+3. **Cross-check.** `P_link` and `P_data` both present and
+   different → **conflicting persisted links** → refuse
+   `plan_link_conflict`. The message's own `planId`/`d6PlanId`,
+   if present and different from the resolved plan → refuse
+   `plan_link_mismatch` (the original packet's rule, retained;
+   the field confers nothing and selects nothing).
+4. **Resolved identity.** `P = P_link ?? P_data ?? null`.
+   `P = null` is the genuinely plan-less case — legacy jobs and
+   coordinator-level jobs like the parked Ch 3 job carry neither
+   record — and passes both checks exactly as today.
+5. **Any throw** from steps 1–2 or the state read below (SQL
+   error, cardinality throw) → refuse `plan_state_check_failed`.
+   A database fault never reads as "no plan" and never as
+   dispatchable — the precise inverse of `planIdFor`'s catch-all.
+6. **State read (strict).** `SELECT * FROM d6_plans WHERE
+   plan_id = ?` for `P` (the read pattern of
+   `generation/service.mjs:120` and `genstore.mjs:272`):
+   - **No row** → the persisted link references a plan that does
+     not exist → refuse `plan_state_check_failed` (**missing
+     referenced plan**; a dangling link is corruption, and
+     corruption fails closed).
+   - State in REFUSED → refuse `plan_not_dispatchable` (above).
+   - State in the recognized dispatchable vocabulary —
+     `active` plus the parked family `parked_quota`,
+     `parked_cap`, `parked_budget`, `parked_storage`
+     (`generation/service.mjs:55–59`; creation state `active`,
+     :783; driver applies the parked states at :915) → pass.
+   - **Any other state string** → refuse
+     `plan_state_check_failed` (**unrecognized state**). The
+     vocabulary is closed and enumerable from `setPlanState`
+     call sites; an unknown string is never waved through as
+     dispatchable-by-default.
 
 **What it proves.** For ANY message — stale, replayed, or
 hand-delivered — whose job belongs to a plan in a refused state:
@@ -215,7 +353,7 @@ independently, no grant — hence no message — exists for it, and a
 hypothetical message would die at claim discipline
 (`unknown_grant`). Its resume machinery never traverses this code.
 
-**Test strategy.** §4, T1–T9.
+**Test strategy.** §4, T1–T15.
 
 ### Option B — Retire-before-rearm sequencing + grant invalidation on retire
 
@@ -316,7 +454,7 @@ Reasons, in order of weight:
    server positive.** The safety claim stops being "no stale
    message exists" (unreadable) and becomes "any stale message is
    refused by durable state" (testable, §4).
-3. **Congruence with the driver** (`service.mjs:824`) means the
+3. **Congruence with the driver** (`service.mjs:840`) means the
    fence cannot diverge from issuance policy: dispatchable ⟺ the
    driver could have issued the grant in the plan's current
    state. No legitimate work changes behavior; parked plans and
@@ -334,14 +472,17 @@ Reasons, in order of weight:
 
 ---
 
-## 4. Adversarial test list (exact)
+## 4. Adversarial test list (exact; T10–T15 added by Revision 1)
 
 All tests on a store-backed coordinator harness whose `.one()`
 semantics mirror production (throws on empty) for every
 empty-result path the fence touches. Provider is a counting
 double; "zero movement" assertions compare full row sets of
 `grants`, `claims`, `d6_execution_records`, `spend_intents`,
-`d6_attempt_log`, `d6_plans`, `jobs` before/after.
+`d6_attempt_log`, `d6_plans`, `d6_plan_jobs`, `jobs` before/after.
+Every refusal below — T1–T3 and T8–T15 — asserts the same global
+pair: **provider calls 0, zero movement in every compared table**
+(per the ruling's correction 4).
 
 - **T1 — the headline replay.** Fixture = the production Ch 2
   shape: plan `halted_unknown`; job `generating` rev 2; grant
@@ -374,20 +515,59 @@ double; "zero movement" assertions compare full row sets of
   discipline (`unknown_grant`); the fence neither engages nor is
   needed; zero provider calls. Documents Ch 3 as out-of-scope
   and unaffected.
-- **T8 — fault injection (D8-1 discipline).** Plan read throws
-  on a store-backed coordinator → `{refused:
-  "plan_state_check_failed"}`, zero provider calls, zero
-  movement. A database fault never reads as dispatchable.
+- **T8 — fault injection at EACH resolution step (D8-1
+  discipline; extended by Revision 1).** On a store-backed
+  coordinator, inject a read fault at, in turn: (a) the
+  `d6_plan_jobs` link read, (b) the jobs-row read/parse path's
+  SQL read, (c) the `d6_plans` state read. Each case →
+  `{refused: "plan_state_check_failed"}`, zero provider calls,
+  zero movement. A database fault never reads as dispatchable
+  and never reads as "no plan" — at any step.
 - **T9 — mislabelled payload.** T1 fixture, but the message
   carries a `planId` naming a DIFFERENT, active plan → refused
   (`plan_link_mismatch` or the server-resolved halted state —
   either refusal is a pass; dispatch is a fail). The fence never
   trusts message-carried plan identity over the server link.
+- **T10 — foreign planId against BOTH fences (Revision 1,
+  correction 2 headline).** The job's server-resolved plan is
+  BOTH under a HELD quarantine AND in state `halted_unknown`;
+  the message carries a `planId` naming a third plan that is
+  unheld and `active`. Pre-correction code resolves the
+  message's plan and bypasses both checks. Expect refusal
+  (`plan_quarantined`, `plan_not_dispatchable`, or
+  `plan_link_mismatch` — any is a pass; dispatch is a fail),
+  zero provider calls, zero movement. This is the bypass the
+  single-resolution rule exists to close.
+- **T11 — conflicting persisted links.** `d6_plan_jobs` links
+  the job to plan A (`active`); the job's `data_json` carries
+  `d6PlanId` = plan B → refused (`plan_link_conflict`), zero
+  calls, zero movement. Neither record wins by precedence; the
+  conflict itself refuses.
+- **T12 — multiple link rows.** `d6_plan_jobs` holds rows
+  linking the job to two DISTINCT plan_ids → refused
+  (`plan_link_conflict`), zero calls, zero movement.
+- **T13 — missing referenced plan.** The link resolves plan P,
+  but no `d6_plans` row exists for P → refused
+  (`plan_state_check_failed`), zero calls, zero movement. A
+  dangling link never reads as plan-less.
+- **T14 — unrecognized plan state.** The resolved plan's row
+  carries a state string outside the closed vocabulary
+  (REFUSED ∪ {`active`, `parked_quota`, `parked_cap`,
+  `parked_budget`, `parked_storage`}) → refused
+  (`plan_state_check_failed`), zero calls, zero movement.
+- **T15 — malformed job data.** The job's `data_json` is
+  unparseable JSON → refused (`plan_state_check_failed`), zero
+  calls, zero movement.
 
 Plus the standing regression requirement: the full worker battery
 re-run on the fenced tree with the baseline failing set unchanged
 (the gen-pkg-1 discipline), and the D6 correction suites unmodified
-except candidate-suite additions for T1–T9.
+except candidate-suite additions for T1–T15. The positive cases
+are load-bearing and unchanged: T4 (legitimate active dispatch)
+and T5 (parked-plan congruence) must still dispatch exactly as
+the pre-fence build, and T6/T7 (plan-less job, Ch 3 shape) still
+pass through untouched — the fail-closed taxonomy refuses on
+corrupt or conflicting records, never on absent ones.
 
 ---
 
@@ -399,9 +579,16 @@ except candidate-suite additions for T1–T9.
   exit); the plan-state fence covers plans born under enablement
   whose exit is a state transition. Neither subsumes the other —
   the Ch 2 plan is exactly the case the hold system cannot see
-  and the state fence can. Order inside the block: hold read
-  first (preserves D8's tested behavior), state read second; a
-  refusal from either is terminal for the message.
+  and the state fence can. **Revision 1:** the two checks share
+  ONE authoritative resolution (§2.1) — the quarantine read's
+  plan subject is the resolved identity, not `planIdFor`'s
+  message-first answer, so no payload can steer either check to
+  a plan the server did not resolve. (The job-subject hold read
+  is unaffected: `jobId` is the message's routing key, validated
+  downstream by claim discipline, not a plan identity.) Order
+  inside the block: resolution first, hold read second
+  (preserves D8's tested behavior), state read third; a refusal
+  from any step is terminal for the message.
 - **R3-2 admission fence.** The two fences bookend a plan's life:
   `PLAN_FENCE_TERMINAL` + `halted_unknown` refuse NEW paid work
   over a fenced plan's occurrences at admission; the dispatch
@@ -426,7 +613,7 @@ except candidate-suite additions for T1–T9.
   the fenced build by the Gate-1 pause-first pattern (queue stays
   paused, halt stays "1"); (iii) re-arm preflight verifies the
   DEPLOYED build identity (build marker) — the fence's presence
-  is carried by pinned-tree adversarial proof (T1–T9) plus build
+  is carried by pinned-tree adversarial proof (T1–T15) plus build
   identity, NOT by a live replay of the real message, which would
   itself be a production action and is expressly not required:
   the fence is deterministic state logic, and T1 replays the
@@ -483,10 +670,16 @@ with zero provider contact and zero ledger movement — for this
 grant, and for any future plan that ever reaches a refused
 state. The unprovable fact stops being load-bearing.
 
-**Ask of Rowan:** a design ruling on Option A as specified
-(placement, authoritative resolution, refused set, refusal
-shape, strictness), or the corrections she requires. No build
-starts before the ruling; no deploy, re-arm, reconcile, retire,
-or generation is requested or implied by this packet.
+**Ask of Rowan:** *(Revision 1)* her design **re-review** of
+Option A as corrected — the strict single resolution of §2.1
+feeding both pre-claim checks, the fail-closed taxonomy, and
+the extended tests T1–T15 — accepting the design for build, or
+the further corrections she requires. The original ask (a
+design ruling on Option A as specified: placement, authoritative
+resolution, refused set, refusal shape, strictness) was answered
+by the Oct 30, 2026 ruling recorded in the Revision-1 note. No
+build starts before her re-review accepts the corrected design;
+no deploy, re-arm, reconcile, retire, or generation is
+requested or implied by this packet.
 
 — Wren (Workstream A, Chapter 2 program)
