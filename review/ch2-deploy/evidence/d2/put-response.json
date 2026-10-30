@@ -1,0 +1,67 @@
+{
+  "result": {
+    "created_on": "2026-10-23T13:50:20.500958Z",
+    "modified_on": "2026-10-30T20:53:21.209389Z",
+    "id": "opalreader-api-v2-prod",
+    "tag": "1e8c7528ac45435a9ce05d8f48b80f4b",
+    "entry_point": "v2/worker-entry-prod-d6.js",
+    "tags": [],
+    "deployment_id": "ccb584808ab84132a6484d0627463515",
+    "tail_consumers": null,
+    "logpush": false,
+    "observability": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "logs": {
+        "enabled": true,
+        "head_sampling_rate": null,
+        "persist": null,
+        "invocation_logs": null
+      }
+    },
+    "has_assets": false,
+    "has_modules": true,
+    "etag": "72a4ee815e01af5cd505c580999e73633bd355aceb8513f4e9b024eb526e4669",
+    "handlers": [
+      "fetch",
+      "queue"
+    ],
+    "named_handlers": [
+      {
+        "name": "GenerationHaltedError",
+        "handlers": [
+          "class"
+        ]
+      },
+      {
+        "name": "OpalReaderCoordinatorProd",
+        "handlers": [
+          "class"
+        ]
+      },
+      {
+        "name": "fetchHandler",
+        "handlers": [
+          "class"
+        ]
+      },
+      {
+        "name": "queueHandler",
+        "handlers": [
+          "class"
+        ]
+      }
+    ],
+    "last_deployed_from": "api",
+    "migration_tag": "v1",
+    "compatibility_date": "2026-08-29",
+    "compatibility_flags": [
+      "nodejs_compat"
+    ],
+    "usage_model": "standard",
+    "startup_time_ms": 8
+  },
+  "success": true,
+  "errors": [],
+  "messages": []
+}

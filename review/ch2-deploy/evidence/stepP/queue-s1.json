@@ -1,0 +1,40 @@
+{
+  "status": 200,
+  "body": {
+    "result": {
+      "queue_id": "93b6a35fb8cf4788a91a2c90b748ae66",
+      "queue_name": "opalreader-generation-v2",
+      "settings": {
+        "delivery_delay": 0,
+        "delivery_paused": true,
+        "message_retention_period": 86400
+      },
+      "created_on": "2026-10-29T17:02:56.569174Z",
+      "modified_on": "2026-10-30T17:34:39.85449Z",
+      "producers_total_count": 1,
+      "producers": [
+        {
+          "script": "opalreader-api-v2-prod",
+          "type": "worker"
+        }
+      ],
+      "consumers_total_count": 1,
+      "consumers": [
+        {
+          "script": "opalreader-api-v2-prod",
+          "settings": {
+            "batch_size": 10,
+            "max_retries": 3,
+            "max_wait_time_ms": 5000,
+            "retry_delay": 0
+          },
+          "consumer_id": "f260f2188d80426bb0588685e9d084eb",
+          "type": "worker"
+        }
+      ]
+    },
+    "success": true,
+    "errors": [],
+    "messages": []
+  }
+}

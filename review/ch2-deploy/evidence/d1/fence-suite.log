@@ -1,0 +1,37 @@
+✔ T1 — headline replay: the production Ch 2 shape is refused at the fence, zero calls, zero movement (80.220247ms)
+✔ T2 — retired plan: refused, zero calls, zero movement (12.341569ms)
+✔ T3 — complete plan: refused, zero calls, zero movement (15.31301ms)
+✔ T3b — partial plan (the fourth refused state): refused, zero calls, zero movement (35.360017ms)
+✔ T4 — legitimate active dispatch (smoke shape): the fence passes and the commit lands (14.468221ms)
+✔ T4b — link-only identity: resolution and bookkeeping come from d6_plan_jobs when the job carries no stamp (9.093913ms)
+✔ T4c — stamp-only identity: resolution comes from the job's data_json stamp when no link row exists (7.8801ms)
+✔ T5 — parked plan congruence: every parked_* state dispatches exactly as the pre-fence build (30.312208ms)
+✔ T6 — plan-less job: behavior identical to the pre-fence build (7.954983ms)
+✔ T7 — Ch 3 shape: a parked_policy coordinator job with no plan and no grant dies at claim discipline; the fence neither engages nor is needed (5.508791ms)
+✔ T8 — fault injection at EACH resolution step: a database fault never reads as dispatchable and never as 'no plan' (12.133987ms)
+✔ T9 — mislabelled payload: a message-carried planId naming a different, active plan never steers the fence (14.201441ms)
+✔ T10 — foreign planId against BOTH fences: one resolution feeds the quarantine read and the state fence (26.289139ms)
+✔ T11 — conflicting persisted links: the d6_plan_jobs link and the job stamp disagree — neither wins, the conflict refuses (6.465747ms)
+✔ T11b — Rowan pin 1: BOTH persisted stamps present and disagreeing refuse (plan_link_conflict) (7.669364ms)
+✔ T11c — Rowan pin 1 (agreement control): both stamps present and AGREEING dispatch normally (7.872279ms)
+✔ T12 — multiple link rows: two DISTINCT plan_ids for one job preserve plan_link_conflict (Rowan pin 3) (4.781689ms)
+✔ T13 — missing referenced plan: a dangling link never reads as plan-less (5.181379ms)
+✔ T14 — unrecognized plan state: a state outside the closed vocabulary fails closed (5.480588ms)
+✔ T15 — malformed job data: unparseable data_json refuses (plan_state_check_failed) (4.674468ms)
+✔ T16a — Rowan F1: BOTH message fields validated — a matching planId cannot mask a conflicting d6PlanId (4.549149ms)
+✔ T16b — Rowan F1: field order confers nothing — a conflicting planId with a matching d6PlanId also refuses (4.236611ms)
+✔ T16c — Rowan F1 (positive control): both message fields present and BOTH matching the resolved plan dispatch normally (6.46071ms)
+✔ T16d — Rowan F1: malformed present message fields refuse — no fallback is ever selected (8.384798ms)
+✔ T17a — Rowan F2: an EMPTY persisted stamp is invalid data, not an absent stamp (link-absent, active-grant shape) (4.008658ms)
+✔ T17b — Rowan F2: whitespace-only and empty stamps refuse, in either stamp field (5.697063ms)
+✔ T17c — Rowan F2 (preservation control): absent and explicit-null stamps keep the legitimate plan-less / link-resolved readings (13.322241ms)
+✔ T17d — Rowan F2: a BLANK d6_plan_jobs.plan_id is a corrupt link, never 'no plan' (schema permits blank strings; NULL is NOT NULL-constrained) (7.636705ms)
+✔ T15b — Rowan pin 2: present-but-non-object data_json is corruption, never a plan-less pass (12.000306ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 618.567383
