@@ -422,3 +422,32 @@ test("CH3R-9: method mismatch never applies anything", async () => {
   assert.equal(snapshot(w), before);
   assert.equal(tableExists(w, "d6_park_releases"), false);
 });
+
+test("CH3R-10: exemption journal through the entry — exempt/revoke/re-exempt appends the full ordered audit (Rowan 6548945443)", async () => {
+  const w = ch3World();
+  const journal = () => tableExists(w, "d6_chapter_exemption_events")
+    ? w.db.prepare("SELECT * FROM d6_chapter_exemption_events ORDER BY event_id").all() : [];
+  const ex1 = await asOperator(w, EXEMPT_PATH,
+    { body: { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-1", source: "test" } });
+  assert.equal(ex1.body.outcome, "applied", JSON.stringify(ex1.body));
+  const rv = await asOperator(w, REVOKE_EXEMPT_PATH,
+    { body: { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:revoke-1", source: "test" } });
+  assert.equal(rv.body.outcome, "applied");
+  const ex2 = await asOperator(w, EXEMPT_PATH,
+    { body: { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-2", source: "test" } });
+  assert.equal(ex2.body.outcome, "applied");
+  assert.equal(ex2.body.alreadyExempted, false);
+  // The singleton projection holds only the latest authorization;
+  // the journal holds all three transitions, in order.
+  assert.equal(rowCount(w, "d6_chapter_exemptions"), 1);
+  const rows = journal();
+  assert.deepEqual(rows.map(r => r.action), ["exempted", "revoked", "reactivated"]);
+  assert.deepEqual(rows.map(r => r.authorization_ref),
+    ["board:go-1", "board:revoke-1", "board:go-2"]);
+  assert.deepEqual(rows.map(r => r.resulting_state), ["live", "tombstoned", "live"]);
+  // A duplicate (no state change) appends nothing.
+  const dup = await asOperator(w, EXEMPT_PATH,
+    { body: { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-dup", source: "test" } });
+  assert.equal(dup.body.alreadyExempted, true);
+  assert.equal(journal().length, 3);
+});

@@ -29,6 +29,8 @@ import {
   deriveParkDefinition, releasePark, revokeParkRelease,
   exemptChapterOccurrence, revokeChapterExemption,
   getParkRelease, getChapterExemption, liveParkFenceRecords,
+  liveChapterExemptionRow, chapterExemptionView,
+  chapterExemptionEvents, chapterExemptionEventView,
   ensureParkReleaseSchema,
 } from "../worker/generation/park-release.mjs";
 import {
@@ -543,6 +545,179 @@ test("byte-identical: adapter plane with tables ABSENT vs tables EMPTY, and fenc
   const plane = planeFromCoordinator(h.coord, BOOK);
   assert.equal(plane.parkedJob.releasedIds.size, 0);
   assert.equal(plane.parkedJob.exemptIds.size, 0);
+});
+
+// ------------------------------------------------------------------
+// Exemption audit journal (Rowan 6548945443 — revision of judgment
+// call 5): reactivation must retain an append-only durable audit
+// trail of EVERY authorization and reversal. The singleton
+// d6_chapter_exemptions row is only the current-state projection;
+// the complete history lives in d6_chapter_exemption_events.
+
+test("journal: three revoke/reactivate cycles — exact ordered event sequence; projection matches the state at every step", () => {
+  const { h } = makeWorld();
+  const actions = () => chapterExemptionEvents(h.coord, IDX26).map(e => e.action);
+
+  const first = exemptChapterOccurrence(h.coord, {
+    jobId: JOB, occurrenceId: IDX26,
+    authorizationRef: "board:go-1", source: "test", note: "auth 1",
+  });
+  assert.equal(first.outcome, "applied");
+  assert.deepEqual(actions(), ["exempted"]);
+  const ev0 = chapterExemptionEvents(h.coord, IDX26)[0];
+  assert.equal(ev0.authorization_ref, "board:go-1");
+  assert.equal(ev0.source, "test");
+  assert.equal(ev0.note, "auth 1");
+  assert.equal(ev0.resulting_state, "live");
+  assert.equal(ev0.job_id, JOB);
+  assert.equal(ev0.book_id, BOOK);
+  assert.equal(getChapterExemption(h.coord, IDX26).tombstoned, 0);
+
+  // An idempotent duplicate is NOT a state change: no journal event.
+  const dup = exemptChapterOccurrence(h.coord, {
+    jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-dup", source: "test",
+  });
+  assert.equal(dup.alreadyExempted, true);
+  assert.deepEqual(actions(), ["exempted"],
+    "idempotent no-op appends no event");
+
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    const rv = revokeChapterExemption(h.coord, {
+      jobId: JOB, occurrenceId: IDX26,
+      authorizationRef: `board:revoke-${cycle}`, source: "test",
+      note: `revoke ${cycle}`,
+    });
+    assert.equal(rv.outcome, "applied");
+    assert.equal(rv.alreadyRevoked, false);
+    assert.equal(getChapterExemption(h.coord, IDX26).tombstoned, 1,
+      `projection is tombstoned after revoke ${cycle}`);
+    const rvDup = revokeChapterExemption(h.coord, {
+      jobId: JOB, occurrenceId: IDX26,
+      authorizationRef: `board:revoke-${cycle}-dup`, source: "test",
+    });
+    assert.equal(rvDup.alreadyRevoked, true);
+    const re = exemptChapterOccurrence(h.coord, {
+      jobId: JOB, occurrenceId: IDX26,
+      authorizationRef: `board:go-${cycle + 1}`, source: "test",
+      note: `auth ${cycle + 1}`,
+    });
+    assert.equal(re.outcome, "applied");
+    assert.equal(re.alreadyExempted, false);
+    assert.equal(getChapterExemption(h.coord, IDX26).tombstoned, 0,
+      `projection is live after reactivation ${cycle}`);
+  }
+
+  const events = chapterExemptionEvents(h.coord, IDX26);
+  assert.deepEqual(events.map(e => e.action),
+    ["exempted", "revoked", "reactivated", "revoked", "reactivated",
+     "revoked", "reactivated"]);
+  assert.deepEqual(events.map(e => e.resulting_state),
+    ["live", "tombstoned", "live", "tombstoned", "live", "tombstoned", "live"]);
+  assert.deepEqual(events.map(e => e.authorization_ref),
+    ["board:go-1", "board:revoke-1", "board:go-2", "board:revoke-2",
+     "board:go-3", "board:revoke-3", "board:go-4"],
+    "EVERY authorization and reversal survives — reactivation overwrote none");
+  assert.deepEqual(events.map(e => e.event_id), [1, 2, 3, 4, 5, 6, 7],
+    "event ids are the dense append sequence");
+  const proj = getChapterExemption(h.coord, IDX26);
+  assert.equal(proj.authorization_ref, "board:go-4",
+    "the projection carries only the LATEST authorization");
+  assert.equal(proj.tombstone_authorization_ref, "board:revoke-3",
+    "the projection carries only the MOST RECENT reversal");
+  assert.equal(h.rows("d6_chapter_exemptions").length, 1,
+    "still exactly one projection row (the §5B.2 primary key)");
+  assert.equal(h.rows("d6_chapter_exemption_events").length, 7);
+});
+
+test("journal: complete audit recovery — replaying the journal alone reconstructs every transition and the current state", () => {
+  const { h } = makeWorld();
+  exemptChapterOccurrence(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-a", source: "test" });
+  revokeChapterExemption(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:revoke-a", source: "test" });
+  exemptChapterOccurrence(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-b", source: "test" });
+  revokeChapterExemption(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:revoke-b", source: "test" });
+
+  // Replay from the journal alone: fold the events in order,
+  // tracking state + the authorization behind each state.
+  const events = chapterExemptionEvents(h.coord, IDX26)
+    .map(chapterExemptionEventView);
+  assert.equal(events.length, 4);
+  let state = "none", liveRef = null, lastRevokeRef = null;
+  for (const ev of events) {
+    if (ev.action === "exempted" || ev.action === "reactivated") {
+      state = "live"; liveRef = ev.authorizationRef;
+    } else if (ev.action === "revoked") {
+      state = "tombstoned"; lastRevokeRef = ev.authorizationRef;
+    }
+    assert.equal(ev.resultingState, state,
+      "each event's recorded resulting state matches the replay");
+    assert.equal(ev.occurrenceId, IDX26);
+    assert.equal(ev.jobId, JOB);
+  }
+  assert.equal(state, "tombstoned");
+  assert.equal(liveRef, "board:go-b",
+    "the journal recovers the SUPERSEDED authorization the projection overwrote");
+  assert.equal(lastRevokeRef, "board:revoke-b");
+
+  // The replay agrees with the projection on current state — and
+  // the projection demonstrably holds less than the journal.
+  const proj = chapterExemptionView(getChapterExemption(h.coord, IDX26));
+  assert.equal(proj.tombstoned, true);
+  assert.equal(proj.authorizationRef, liveRef);
+  assert.equal(proj.tombstoneAuthorizationRef, lastRevokeRef);
+  assert.equal(liveChapterExemptionRow(h.coord, IDX26), null);
+});
+
+test("journal: immutability — prior event rows are byte-stable across later operations; refusals append nothing", () => {
+  const { h } = makeWorld();
+  exemptChapterOccurrence(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-1", source: "test" });
+  const afterFirst = JSON.stringify(h.rows("d6_chapter_exemption_events"));
+  revokeChapterExemption(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:revoke-1", source: "test" });
+  const afterRevoke = JSON.stringify(h.rows("d6_chapter_exemption_events"));
+  exemptChapterOccurrence(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-2", source: "test" });
+
+  const rowsNow = h.rows("d6_chapter_exemption_events");
+  assert.equal(rowsNow.length, 3);
+  assert.equal(JSON.stringify(rowsNow.slice(0, 1)), afterFirst,
+    "the first event row is byte-identical after later writes");
+  assert.equal(JSON.stringify(rowsNow.slice(0, 2)), afterRevoke,
+    "the revoke event row is byte-identical after reactivation");
+
+  // Refusals are not transitions: no event, no write.
+  const member = exemptChapterOccurrence(h.coord,
+    { jobId: JOB, occurrenceId: IDS[9], ...AUTH });
+  assert.equal(member.reason, "chapter_exemption_inside_definition");
+  const missing = revokeChapterExemption(h.coord,
+    { jobId: JOB, occurrenceId: IDS[9], ...AUTH });
+  assert.equal(missing.reason, "chapter_exemption_not_found");
+  assert.equal(h.rows("d6_chapter_exemption_events").length, 3,
+    "refused calls append no journal events");
+});
+
+test("journal: fence output with journal history present is byte-identical once the exemption is tombstoned", () => {
+  const { h } = makeWorld();
+  const baselinePairs = pairList(chapterEntries(h));
+  const baselineDigest = buildEligibleSet(planeFromCoordinator(h.coord, BOOK), BOOK).digest;
+  exemptChapterOccurrence(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-1", source: "test" });
+  revokeChapterExemption(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:revoke-1", source: "test" });
+  exemptChapterOccurrence(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:go-2", source: "test" });
+  revokeChapterExemption(h.coord,
+    { jobId: JOB, occurrenceId: IDX26, authorizationRef: "board:revoke-2", source: "test" });
+  assert.equal(h.rows("d6_chapter_exemption_events").length, 4,
+    "the journal holds the full history");
+  assert.deepEqual(pairList(chapterEntries(h)), baselinePairs,
+    "journal writes never alter any fence output");
+  assert.equal(buildEligibleSet(planeFromCoordinator(h.coord, BOOK), BOOK).digest,
+    baselineDigest);
 });
 
 test("combined: release + exemption together clear the whole chapter (bound 3 / eligible 24 / parked 0)", async () => {

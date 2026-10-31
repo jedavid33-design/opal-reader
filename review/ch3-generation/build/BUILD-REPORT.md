@@ -266,3 +266,103 @@ absence, so the deployed-but-unused build is behaviorally identical to
    new authorization (the §5B.2 primary key leaves one row per occurrence);
    the prior tombstone's audit fields are preserved on the row. Release
    history, by contrast, is fully append-only.
+
+---
+
+## 7. REVISION — Rowan 6548945443: exemption audit journal (judgment call 5)
+
+**Ruling applied.** Rowan's CONDITIONAL PASS (board 6548945443) accepted
+judgment calls 1–4 as built and required ONE revision before deploy,
+against §6 item 5 above: *"exemption reactivation must retain an
+append-only durable audit trail of every authorization and reversal, not
+overwrite previous live authorization in the singleton row. A separate
+immutable exemption event table or equivalent append-only journal is
+acceptable, preserving the singleton current-state projection. Add tests
+for multiple revoke/reactivate cycles and complete audit recovery, and
+rerun baseline comparison."* This section is appended; §§1–6 above are
+unchanged, as filed at pin `540f6a06`.
+
+**What changed — `worker/generation/park-release.mjs` only (584 → 686
+lines; the `v2/` mirror is the same file via symlink, as in the original
+build).**
+
+- **New table `d6_chapter_exemption_events`** (park-release.mjs:105),
+  added to `PARK_RELEASE_SCHEMA` under the same lazy DDL-only idempotent
+  bootstrap discipline as the other two tables (not in gen-schema.mjs —
+  judgment call 1, accepted). Columns: `event_id` (AUTOINCREMENT, the
+  append sequence), `occurrence_id`, `job_id`, `book_id`,
+  `chapter_index`, `action`, `authorization_ref`, `source`, `note`,
+  `resulting_state` ('live' | 'tombstoned'), `event_at`.
+- **One append helper** `appendChapterExemptionEvent` (:520) holding the
+  module's ONLY statement against the journal — an INSERT (:524). It is
+  called inside the same `coord._tx` as the projection write, BEFORE
+  that write, so a failed projection write rolls the event back with
+  it: the journal can never record a transition the projection did not
+  take, nor miss one it did.
+- **Wiring**: initial authorization appends action `exempted` (:619);
+  reactivation appends `reactivated` (:605) and only then refreshes the
+  singleton projection exactly as before (prior tombstone fields stay on
+  the row as the most-recent-reversal record — the projection semantics
+  of §6 item 5 are otherwise unchanged); revocation appends `revoked`
+  (:668) before tombstoning the projection. Idempotent no-ops
+  (duplicate exempt / duplicate revoke) change no state and append NO
+  event; refusals append nothing and write nothing, as before.
+- **Audit recovery read** `chapterExemptionEvents(coord, occurrenceId)`
+  (:251) returns the complete ordered history from the journal alone;
+  `chapterExemptionEventView` (:201) is its read-back shape. No new
+  routes were added — the journal is internal audit; the adapter and
+  every eligibility path are untouched, and no read path consumes the
+  journal.
+- **Append-only is grep-provable**: across the whole tree, the journal
+  table is named in SQL only by its CREATE and the single INSERT above.
+  No UPDATE or DELETE against `d6_chapter_exemption_events` exists
+  anywhere in the tree (verified by grep over all .mjs/.js sources).
+
+**New tests (+5; the prior 32 ch3 tests pass unchanged in outcome).**
+
+- `tests/ch3-park-release.test.mjs` (23 → 27): three full
+  revoke/reactivate cycles asserting the exact ordered event sequence
+  (`exempted, revoked, reactivated ×3` after the initial), the
+  projection matching the state at every step, every authorizationRef
+  surviving, and the projection holding only the latest; complete audit
+  recovery by replaying the journal alone (reconstructs every
+  transition incl. the superseded authorization the projection
+  overwrote, agreeing with the projection on current state); journal
+  immutability (prior event rows byte-stable across later operations;
+  refusals append nothing); fence byte-identity with journal history
+  present once the exemption is tombstoned (builder pairs + digest).
+- `tests/ch3-park-routes.test.mjs` (9 → 10): CH3R-10 — exempt / revoke /
+  re-exempt through the entry appends the three ordered journal events
+  with their authorizationRefs; a duplicate appends nothing.
+
+**Battery (one complete run on the final tree; logs in `logs-fix/`,
+RUNNER_EXIT=0).** 137 suites: 115 pass / 22 fail. **1,136 tests: 1,114
+pass / 22 fail** — the original build's 1,131 / 1,109 / 22 plus exactly
+the 5 new tests. The failing suite set is identical to the original
+build's run (`logs/`), and the failing test names are identical after
+stripping run durations. Baseline comparison: the pristine-baseline run
+in `logs-baseline/` (135 suites, 1,099 tests, 1,077 pass / 22 fail)
+still stands and was NOT rerun — this revision changed no tree layout
+(no file added or removed; fileCount unchanged at 808) and touched no
+baseline suite or fixture, so the baseline measurement remains valid;
+the 22 failures in the fixed tree are the same baseline 22, name-for-
+name, via the original build's run as the intermediate link.
+
+**Diff surface vs the original build (pin `540f6a06` content),
+complete** — verified by full-tree SHA-256 comparison against the
+original `manifest.json` (805 of 808 entries identical; zero battery
+churn — the tree hashes the same before and after the battery run):
+
+| File | Change |
+|---|---|
+| `worker/generation/park-release.mjs` (+ its `v2/` pin blob, same file) | journal table + append helper + wiring (above) |
+| `tests/ch3-park-release.test.mjs` | +4 journal tests, +3 imports |
+| `tests/ch3-park-routes.test.mjs` | +1 journal test (CH3R-10) |
+| `BUILD-REPORT.md` | this appended §7 only |
+| `manifest.json` | regenerated (same format; 808 files) |
+
+Deploy-relevant parts vs live build `945875bc` are unchanged from §5:
+the same 4 worker parts, with `park-release.mjs` now carrying the
+journal. The journal table bootstraps lazily with the other two on the
+first operator write; a deployed-but-unused build remains behaviorally
+identical to `945875bc`.

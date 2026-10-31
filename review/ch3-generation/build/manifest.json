@@ -2931,13 +2931,13 @@
     },
     {
       "path": "tests/ch3-park-release.test.mjs",
-      "sha256": "7467896d64594ffe9ddf5f87f333024553ce647d3632254d683f6ea02867b815",
-      "bytes": 27248
+      "sha256": "9493d2caa032ac8289c1e40495ccb613c7f8065e584caa9edaa7eb7198f5671d",
+      "bytes": 35960
     },
     {
       "path": "tests/ch3-park-routes.test.mjs",
-      "sha256": "608ae3e47e659e74ec1667c6209f3b2c5a58f1e728377c16dab0baf60b3c90e9",
-      "bytes": 19049
+      "sha256": "c7c564c5fc3bc6a27a3a700466acd0c18f83243faf63d162baa7eb4bc9d57980",
+      "bytes": 20818
     },
     {
       "path": "tests/chapter-quota-banner.test.mjs",
@@ -3861,8 +3861,8 @@
     },
     {
       "path": "worker/generation/park-release.mjs",
-      "sha256": "cb05cdab811725eb8dc41e9941710c4d5c6c292ffe32a2d078a4764ef8fca084",
-      "bytes": 24398
+      "sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd",
+      "bytes": 29126
     },
     {
       "path": "worker/generation/phase-policy.mjs",

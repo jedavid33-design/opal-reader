@@ -12,7 +12,16 @@
 //     occurrence, admissible ONLY for an occurrence provably OUTSIDE
 //     the definition set (the beyond-definition set). A live
 //     exemption makes that occurrence skip BOTH parked dispositions
-//     in the eligible-set builder.
+//     in the eligible-set builder. The singleton row is the
+//     CURRENT-STATE PROJECTION only: the durable audit trail is
+//     d6_chapter_exemption_events, an append-only journal in which
+//     EVERY exemption state change (authorization, revocation,
+//     reactivation) is recorded as an immutable event BEFORE the
+//     projection is updated, in the same transaction (Rowan
+//     6548945443 — the revision of judgment call 5: reactivation
+//     must never overwrite the previous authorization's record).
+//     The journal is append-only by construction: this module
+//     issues INSERTs against it and no UPDATE/DELETE anywhere.
 //
 // The two mechanisms PARTITION the fenced set and never overlap
 // (§11): the release refuses any id outside the definition set
@@ -84,6 +93,27 @@ export const PARK_RELEASE_SCHEMA = [
      tombstone_authorization_ref TEXT,
      tombstone_source TEXT,
      tombstone_note TEXT
+   )`,
+  // Append-only exemption audit journal (Rowan 6548945443). One
+  // immutable row per state change, written BEFORE the singleton
+  // projection update in the same transaction. action is one of
+  // 'exempted' (initial authorization), 'revoked' (tombstone),
+  // 'reactivated' (authorization after a tombstone);
+  // resulting_state is the projection state the event leaves
+  // behind: 'live' or 'tombstoned'. APPEND-ONLY: no code path in
+  // this tree issues UPDATE or DELETE against this table.
+  `CREATE TABLE IF NOT EXISTS d6_chapter_exemption_events (
+     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+     occurrence_id TEXT NOT NULL,
+     job_id TEXT NOT NULL,
+     book_id TEXT NOT NULL,
+     chapter_index INTEGER NOT NULL,
+     action TEXT NOT NULL,
+     authorization_ref TEXT,
+     source TEXT,
+     note TEXT,
+     resulting_state TEXT NOT NULL,
+     event_at INTEGER NOT NULL
    )`,
 ];
 
@@ -168,6 +198,23 @@ export function chapterExemptionView(row) {
   };
 }
 
+export function chapterExemptionEventView(row) {
+  if (!row) return null;
+  return {
+    eventId: row.event_id,
+    occurrenceId: row.occurrence_id,
+    jobId: row.job_id,
+    bookId: row.book_id,
+    chapterIndex: row.chapter_index,
+    action: row.action,
+    authorizationRef: row.authorization_ref ?? null,
+    source: row.source ?? null,
+    note: row.note ?? null,
+    resultingState: row.resulting_state,
+    eventAt: row.event_at,
+  };
+}
+
 // ------------------------------------------------------------------
 // Reads.
 
@@ -192,6 +239,19 @@ export function getChapterExemption(coord, occurrenceId) {
 export function liveChapterExemptionRow(coord, occurrenceId) {
   const row = getChapterExemption(coord, occurrenceId);
   return row && !row.tombstoned ? row : null;
+}
+
+// The COMPLETE ordered audit history for one occurrence, from the
+// append-only journal alone (Rowan 6548945443: audit recovery must
+// not depend on the singleton projection, which by design carries
+// only current state). Strict read: callers ensure the schema
+// first, as with the other store reads. Returns raw rows in
+// event_id order; replaying them in order reconstructs every
+// transition the occurrence has undergone.
+export function chapterExemptionEvents(coord, occurrenceId) {
+  return coord._all(
+    `SELECT * FROM d6_chapter_exemption_events
+      WHERE occurrence_id = ? ORDER BY event_id ASC`, occurrenceId);
 }
 
 // Fence consumption for the content-plane adapter: the parked job's
@@ -449,6 +509,27 @@ export function revokeParkRelease(coord, { jobId, authorizationRef, source, note
   return result;
 }
 
+// Append ONE immutable event to the exemption audit journal. The
+// ONLY statement this module ever issues against
+// d6_chapter_exemption_events is this INSERT — events are never
+// updated or deleted (append-only by construction). Callers invoke
+// it inside the same coord._tx as the projection write, BEFORE
+// that write, so a failed projection write rolls the event back
+// with it: the journal can never record a transition the
+// projection did not take, nor miss one it did.
+function appendChapterExemptionEvent(coord, {
+  occurrenceId, job, action, authorizationRef, source, note, resultingState,
+}) {
+  coord.sql.exec(
+    `INSERT INTO d6_chapter_exemption_events
+       (occurrence_id, job_id, book_id, chapter_index, action,
+        authorization_ref, source, note, resulting_state, event_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    occurrenceId, job.job_id, job.book_id, job.chapter_index, action,
+    authorizationRef ?? null, source ?? null, note ?? null,
+    resultingState, coord._now());
+}
+
 // ------------------------------------------------------------------
 // POST /v2/d6-exempt-chapter-occurrence (§5B) — write the audited
 // singleton exemption.
@@ -459,11 +540,14 @@ export function revokeParkRelease(coord, { jobId, authorizationRef, source, note
 // refuses chapter_exemption_inside_definition; the occurrence is
 // unbound (no bindings row); the occurrence is not covered by a live
 // release (mutual exclusion). A duplicate exemption against the live
-// row is an idempotent no-op success; re-exempting a tombstoned row
-// reactivates it under the new authorization, keeping the prior
-// tombstone audit fields on the row as the record of the most
-// recent reversal (the `tombstoned` flag alone carries the CURRENT
-// state).
+// row is an idempotent no-op success (no state change, no journal
+// event); re-exempting a tombstoned row reactivates it under the
+// new authorization. The singleton row is refreshed as the
+// current-state projection and keeps the prior tombstone audit
+// fields (the most-recent-reversal record), but the DURABLE audit
+// trail is the append-only journal: every authorization and
+// reversal is an immutable event there, and reactivation never
+// overwrites a previous authorization's record (Rowan 6548945443).
 export function exemptChapterOccurrence(coord, { jobId, occurrenceId, authorizationRef, source, note } = {}) {
   if (!isNonblankString(jobId))
     return rejected("chapter_exemption_job_required");
@@ -514,8 +598,14 @@ export function exemptChapterOccurrence(coord, { jobId, occurrenceId, authorizat
     }
     const now = coord._now();
     if (existing) {
-      // Reactivation: refresh the live fields; the prior tombstone
-      // audit fields stay on the row (most-recent-reversal record).
+      // Reactivation: journal the new authorization FIRST, then
+      // refresh the projection's live fields; the prior tombstone
+      // audit fields stay on the row (most-recent-reversal record)
+      // and the journal keeps the complete history.
+      appendChapterExemptionEvent(coord, {
+        occurrenceId, job, action: "reactivated",
+        authorizationRef, source, note, resultingState: "live",
+      });
       coord.sql.exec(
         `UPDATE d6_chapter_exemptions
             SET job_id = ?, book_id = ?, chapter_index = ?,
@@ -526,6 +616,10 @@ export function exemptChapterOccurrence(coord, { jobId, occurrenceId, authorizat
         authorizationRef ?? null, source ?? null, note ?? null, now,
         occurrenceId);
     } else {
+      appendChapterExemptionEvent(coord, {
+        occurrenceId, job, action: "exempted",
+        authorizationRef, source, note, resultingState: "live",
+      });
       coord.sql.exec(
         `INSERT INTO d6_chapter_exemptions
            (occurrence_id, job_id, book_id, chapter_index,
@@ -544,8 +638,10 @@ export function exemptChapterOccurrence(coord, { jobId, occurrenceId, authorizat
 
 // POST /v2/d6-revoke-chapter-exemption (§5B tombstone) — tombstone
 // the singleton exemption, restoring BOTH parked fences for the
-// occurrence exactly. Idempotent on an already-tombstoned row; no
-// row (or a row under a different job) refuses
+// occurrence exactly. The reversal is journaled in
+// d6_chapter_exemption_events before the projection is updated.
+// Idempotent on an already-tombstoned row (no state change, no
+// journal event); no row (or a row under a different job) refuses
 // chapter_exemption_not_found.
 export function revokeChapterExemption(coord, { jobId, occurrenceId, authorizationRef, source, note } = {}) {
   if (!isNonblankString(jobId))
@@ -567,6 +663,12 @@ export function revokeChapterExemption(coord, { jobId, occurrenceId, authorizati
       };
       return;
     }
+    // Journal the reversal FIRST (the row itself carries the
+    // job/book/chapter identity), then tombstone the projection.
+    appendChapterExemptionEvent(coord, {
+      occurrenceId, job: row, action: "revoked",
+      authorizationRef, source, note, resultingState: "tombstoned",
+    });
     coord.sql.exec(
       `UPDATE d6_chapter_exemptions
           SET tombstoned = 1, tombstoned_at = ?,
