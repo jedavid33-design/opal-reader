@@ -1,0 +1,2 @@
+P1 PUT window start: 2026-10-31T17:35:32Z
+P1 PUT window end: 2026-10-31T17:35:34Z

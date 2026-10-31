@@ -1,0 +1,7 @@
+{
+  "_stub": "full snapshot replaced by digest (production text is never archived in evidence; digest + watermark are the census proof)",
+  "sha256": "a8413af2e3102c39d30609a2fafc496c88cd183308224aa48b2f21d2c438c2ae",
+  "bytes": 1815026,
+  "watermark": 1818,
+  "entities_n": 1818
+}

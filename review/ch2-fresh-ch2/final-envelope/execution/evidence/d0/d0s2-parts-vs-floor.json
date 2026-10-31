@@ -1,0 +1,169 @@
+{
+  "all_identical": true,
+  "compared": 27,
+  "extra_parts": [],
+  "rows": [
+    {
+      "part": "v2/api.mjs",
+      "present": true,
+      "bytes": 13632,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/audio-route.mjs",
+      "present": true,
+      "bytes": 15965,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/coordinator.mjs",
+      "present": true,
+      "bytes": 268522,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/executor.mjs",
+      "present": true,
+      "bytes": 13974,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/binding-projection.mjs",
+      "present": true,
+      "bytes": 12818,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/content-plane-adapter.mjs",
+      "present": true,
+      "bytes": 7577,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/d6-executor.mjs",
+      "present": true,
+      "bytes": 44181,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/d6-work-source.mjs",
+      "present": true,
+      "bytes": 5981,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/eligible-set.mjs",
+      "present": true,
+      "bytes": 5978,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/flush-store.mjs",
+      "present": true,
+      "bytes": 8497,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/gen-constants.mjs",
+      "present": true,
+      "bytes": 3944,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/gen-schema.mjs",
+      "present": true,
+      "bytes": 5307,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/genstore.mjs",
+      "present": true,
+      "bytes": 47108,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/grant-guards.mjs",
+      "present": true,
+      "bytes": 12936,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/phase-policy.mjs",
+      "present": true,
+      "bytes": 7299,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/policy-split.mjs",
+      "present": true,
+      "bytes": 15074,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/quarantine.mjs",
+      "present": true,
+      "bytes": 15752,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/generation/service.mjs",
+      "present": true,
+      "bytes": 76860,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/host/adapters.mjs",
+      "present": true,
+      "bytes": 38162,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/host/build-identity.mjs",
+      "present": true,
+      "bytes": 411,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/p8/approved-freeze-carry.mjs",
+      "present": true,
+      "bytes": 57703,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/p8/approved-freeze-chunks.mjs",
+      "present": true,
+      "bytes": 6101,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/p8/approved-freeze-manifest.mjs",
+      "present": true,
+      "bytes": 467075,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/p8/migration-chunk-limits.mjs",
+      "present": true,
+      "bytes": 4733,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/worker-entry-prod-d6.js",
+      "present": true,
+      "bytes": 64548,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/worker-entry-prod.js",
+      "present": true,
+      "bytes": 14480,
+      "byte_identical": true
+    },
+    {
+      "part": "v2/worker-entry.js",
+      "present": true,
+      "bytes": 21520,
+      "byte_identical": true
+    }
+  ]
+}

@@ -1,0 +1,455 @@
+{
+  "bindings": [
+    {
+      "name": "ALLOWED_ORIGIN",
+      "text": "https://jedavid33-design.github.io",
+      "type": "plain_text"
+    },
+    {
+      "name": "COORDINATOR",
+      "type": "durable_object_namespace"
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "GENERATION_HALT",
+      "text": "1",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_ACCESS_TOKEN",
+      "type": "secret_text"
+    },
+    {
+      "name": "OPALREADER_GENERATION_V2",
+      "type": "queue"
+    },
+    {
+      "name": "OPALREADER_MIGRATION_OPERATOR_TOKEN",
+      "type": "secret_text"
+    },
+    {
+      "name": "OPALREADER_PHASE_POLICY",
+      "text": "enforce",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_STORAGE",
+      "type": "r2_bucket"
+    },
+    {
+      "name": "OPALREADER_V2_SCOPE",
+      "text": "production",
+      "type": "plain_text"
+    }
+  ],
+  "capabilities": {
+    "configuredLane": null,
+    "generationState": "halted",
+    "lanes": {
+      "batch": {
+        "admitted": false,
+        "reason": "batch_not_armed"
+      },
+      "standard": {
+        "admitted": true
+      }
+    },
+    "phases": [
+      {
+        "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+        "budgetMicroCents": 13500000,
+        "estimatedUnverifiedMicroCents": 19018,
+        "inFlightUpperMicroCents": 0,
+        "phase": "forever-pucked",
+        "remainingMicroCents": 12915013,
+        "reservedUnverifiedMicroCents": 5648,
+        "settledMicroCents": 579339
+      }
+    ]
+  },
+  "conflicts": {
+    "body": {
+      "conflicts": [
+        {
+          "at": 1793423664089,
+          "cache_key": "lease",
+          "expected": "7",
+          "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+          "id": 3,
+          "occurrence_id": "grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full",
+          "reason": "schedule_dead"
+        },
+        {
+          "at": 1793319854632,
+          "cache_key": "lease",
+          "expected": "7",
+          "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+          "id": 2,
+          "occurrence_id": "grant:plan:603ab416bd67ab1b25de97be:ch1:1:full",
+          "reason": "schedule_dead"
+        },
+        {
+          "at": 1793318054808,
+          "cache_key": "lease",
+          "expected": "7",
+          "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+          "id": 1,
+          "occurrence_id": "grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full",
+          "reason": "schedule_dead"
+        }
+      ]
+    },
+    "raw_sha": "57258e91e77ac3c5cbe5498a9889111eea4644c9194d571dd8a2c7bbd806f436"
+  },
+  "diag-ch2": {
+    "attempt_outcomes": {
+      "estimated_unverified": 1,
+      "policy_block": 21,
+      "success": 29
+    },
+    "attempt_phases": {
+      "confirmed": 51
+    },
+    "attempts_n": 51,
+    "found": true,
+    "plan_phaseAccounting": {
+      "budgetMicroCents": 13500000,
+      "estimatedUnverifiedMicroCents": 19018,
+      "inFlightUpperMicroCents": 0,
+      "phase": "forever-pucked",
+      "remainingMicroCents": 12915013,
+      "reservedUnverifiedMicroCents": 5648,
+      "settledBasis": "recorded_known_existing_ledger",
+      "settledMicroCents": 579339,
+      "unknownOpen": 0,
+      "unverifiedStatus": "provider_unverified"
+    },
+    "plan_state": "retired",
+    "raw_sha": "b29660e5ec623d6ad7d7d90127f80b4a1ce986b07f2691da78f57155f6467994",
+    "record_stages": {
+      "None": 1,
+      "commit": 8
+    },
+    "record_states": {
+      "failed": 8,
+      "unknown_billing": 1
+    },
+    "records_n": 9
+  },
+  "diag-ch2fresh": {
+    "attempt_outcomes": {
+      "policy_block": 22,
+      "success": 57
+    },
+    "attempt_phases": {
+      "confirmed": 79
+    },
+    "attempts_n": 79,
+    "found": true,
+    "plan_phaseAccounting": {
+      "budgetMicroCents": 13500000,
+      "estimatedUnverifiedMicroCents": 19018,
+      "inFlightUpperMicroCents": 0,
+      "phase": "forever-pucked",
+      "remainingMicroCents": 12915013,
+      "reservedUnverifiedMicroCents": 5648,
+      "settledBasis": "recorded_known_existing_ledger",
+      "settledMicroCents": 579339,
+      "unknownOpen": 0,
+      "unverifiedStatus": "provider_unverified"
+    },
+    "plan_state": "complete",
+    "raw_sha": "80acbaa997ddb6713818e3b9a945e67b5015ae7c129b2e347dd137060a482823",
+    "record_stages": {
+      "None": 7,
+      "commit": 10,
+      "flush": 8
+    },
+    "record_states": {
+      "committed": 7,
+      "failed": 18
+    },
+    "records_n": 25
+  },
+  "diag-smoke": {
+    "attempt_outcomes": {
+      "policy_block": 3,
+      "success": 4
+    },
+    "attempt_phases": {
+      "confirmed": 7
+    },
+    "attempts_n": 7,
+    "found": true,
+    "plan_phaseAccounting": {
+      "budgetMicroCents": 13500000,
+      "estimatedUnverifiedMicroCents": 19018,
+      "inFlightUpperMicroCents": 0,
+      "phase": "forever-pucked",
+      "remainingMicroCents": 12915013,
+      "reservedUnverifiedMicroCents": 5648,
+      "settledBasis": "recorded_known_existing_ledger",
+      "settledMicroCents": 579339,
+      "unknownOpen": 0,
+      "unverifiedStatus": "provider_unverified"
+    },
+    "plan_state": "complete",
+    "raw_sha": "a85a54b91f30b4e01291bc3011819280677fff85918929a3a0354967f32d9519",
+    "record_stages": {
+      "None": 1,
+      "commit": 1
+    },
+    "record_states": {
+      "committed": 1,
+      "failed": 1
+    },
+    "records_n": 2
+  },
+  "etag-prod": {
+    "bytes": 1336783,
+    "etag": "d63b61c349a3518998d29d318ec465af24a63468df6cdf4876e4ba8862849039",
+    "status": 200
+  },
+  "etag-staging": {
+    "bytes": 888430,
+    "etag": "61553a072a162db80c606f9f3c03aea1c1344d57b0fefe11675acd470d200e81",
+    "status": 200
+  },
+  "etag-v1": {
+    "bytes": 213617,
+    "etag": "ea6f819665cb92ad91b5c42166704860e8a85c573cc86223b96ec3b722224891",
+    "status": 200
+  },
+  "health": {
+    "build": "945875bc26b0e2ca965d5c0f710f11c0164025f8",
+    "coordinator": "armed",
+    "generation": "halted",
+    "scope": "production",
+    "version": "2.0.0"
+  },
+  "job-ch2": {
+    "grants": [
+      {
+        "grant_id": "grant:plan:603ab416bd67ab1b25de97be:ch1:1:full",
+        "revision": 2,
+        "state": "issued"
+      }
+    ],
+    "jobId": "plan:603ab416bd67ab1b25de97be:ch1",
+    "raw_sha": "872fbbdf1ae34c437b10f00eacaf65933cdc3db2775d35ff8c74da29170971da",
+    "revision": 2,
+    "state": "generating"
+  },
+  "job-ch3": {
+    "fingerprint": "b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282",
+    "grants": [],
+    "jobId": "1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a",
+    "row_states": {
+      "pending": 24,
+      "ready": 3
+    },
+    "rows_n": 27,
+    "state": "parked_policy"
+  },
+  "job-smoke": {
+    "grants": [
+      {
+        "grant_id": "grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full",
+        "revision": 2,
+        "state": "issued"
+      }
+    ],
+    "jobId": "plan:3183ecbf2ac4bf50bbc6166e:seg",
+    "raw_sha": "45ba7931c953768097d513caf7c84b9967d6827e2733011429e92ada919b3615",
+    "revision": 2,
+    "state": "generating"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "redact_query_string": false,
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
+  "plan-ch2": {
+    "entries_n": 38,
+    "entry_dispositions": {
+      "bound_already": 20,
+      "eligible": 18
+    },
+    "entry_exec_states": {
+      "None": 29,
+      "failed": 8,
+      "unknown_billing": 1
+    },
+    "estimatedUnverifiedMicroCents": null,
+    "estimatedUnverifiedStatus": null,
+    "planId": "plan:603ab416bd67ab1b25de97be",
+    "quarantine": {
+      "approvalRequired": false,
+      "held": false,
+      "state": null
+    },
+    "raw_sha": "b49349fba4db6a46ae229b2b1593c1c436c1cc0e1a1e163ca8a9a88d6f4cd9bb",
+    "settledMicroCents": null,
+    "state": "retired",
+    "stopReason": "retired_unknown_billing",
+    "totals": {
+      "blocked": 0,
+      "done": 0,
+      "eligible": 18,
+      "failed": 8,
+      "prompts": 0
+    }
+  },
+  "plan-ch2fresh": {
+    "entries_n": 38,
+    "entry_dispositions": {
+      "bound_already": 20,
+      "eligible": 18
+    },
+    "entry_exec_states": {
+      "None": 20,
+      "committed": 18
+    },
+    "estimatedUnverifiedMicroCents": null,
+    "estimatedUnverifiedStatus": null,
+    "planId": "plan:b2dc2a3d1cd367a0245b9102",
+    "quarantine": {
+      "approvalRequired": false,
+      "held": false,
+      "state": null
+    },
+    "raw_sha": "5fa4211056bda47e694e3fa8e6e4c65f7aff2f247d747572e2a9dba7d8355b62",
+    "settledMicroCents": null,
+    "state": "complete",
+    "stopReason": null,
+    "totals": {
+      "blocked": 0,
+      "done": 18,
+      "eligible": 18,
+      "failed": 0,
+      "prompts": 0
+    }
+  },
+  "plan-list": {
+    "nextCursor": null,
+    "plans": [
+      {
+        "estimatedUnverifiedMicroCents": 0,
+        "estimatedUnverifiedStatus": null,
+        "planId": "plan:3183ecbf2ac4bf50bbc6166e",
+        "state": "complete"
+      },
+      {
+        "estimatedUnverifiedMicroCents": 19018,
+        "estimatedUnverifiedStatus": "provider_unverified",
+        "planId": "plan:603ab416bd67ab1b25de97be",
+        "state": "retired"
+      },
+      {
+        "estimatedUnverifiedMicroCents": 0,
+        "estimatedUnverifiedStatus": null,
+        "planId": "plan:b2dc2a3d1cd367a0245b9102",
+        "state": "complete"
+      }
+    ],
+    "raw_sha": "34ef83d542de1d9d8d99f62541db95495ffd56330ce1375a512189a08a184625"
+  },
+  "plan-smoke": {
+    "entries_n": 1,
+    "entry_dispositions": {
+      "eligible": 1
+    },
+    "entry_exec_states": {
+      "committed": 1
+    },
+    "estimatedUnverifiedMicroCents": null,
+    "estimatedUnverifiedStatus": null,
+    "planId": "plan:3183ecbf2ac4bf50bbc6166e",
+    "quarantine": {
+      "approvalRequired": false,
+      "held": false,
+      "state": null
+    },
+    "raw_sha": "9e2f90171a0c406903773b8fc5dfbe39d22c29b76eb244a61285994d1ea1d891",
+    "settledMicroCents": null,
+    "state": "complete",
+    "stopReason": null,
+    "totals": {
+      "blocked": 0,
+      "done": 1,
+      "eligible": 1,
+      "failed": 0,
+      "prompts": 0
+    }
+  },
+  "queue": {
+    "consumers": [
+      {
+        "consumer_id": "f260f2188d80426bb0588685e9d084eb",
+        "script": "opalreader-api-v2-prod"
+      }
+    ],
+    "delivery_paused": true,
+    "producers": [
+      "opalreader-api-v2-prod"
+    ],
+    "queue_name": "opalreader-generation-v2"
+  },
+  "queue-v1": {
+    "consumers": [
+      {
+        "consumer_id": "b278d659fa2147da9e80ebe1aa0a5548",
+        "script": "opalreader-api"
+      }
+    ],
+    "delivery_paused": true,
+    "producers": [
+      "opalreader-api",
+      "opalreader-api-v2"
+    ],
+    "queue_name": "opalreader-generation"
+  },
+  "quota": {
+    "attemptsToday": 0,
+    "basis": "Reader estimate (server attempt ledger)",
+    "dailyLimit": 100,
+    "dayKey": "2026-10-31",
+    "ledgerSeq": 37,
+    "monthKey": "2026-10",
+    "monthlyCap": 50,
+    "parked": null,
+    "settingsRevision": 1,
+    "spentMicroCents": 725221
+  },
+  "settings": {
+    "geminiLane": "standard",
+    "monthlyCap": 50,
+    "raw_sha": "f60f3e0befe5a187f2b2d124159dff55fd780dda51dd770518948f54b01e682b",
+    "revision": 1
+  },
+  "snap-bindings": {
+    "entities_n": 1818,
+    "raw_sha": "837d25db00183d6a3e6e0a216ebb9254348614294b3d0b5b03ad86f051e87a07",
+    "watermark": 1818
+  },
+  "snap-content": {
+    "entities_n": 7,
+    "raw_sha": "ee73adc9649722bbf1fccef3ffa24c32642e4540736bc9d32afc97147ebb8267",
+    "watermark": 18
+  },
+  "timestamp": "2026-10-31T17:48:27Z"
+}
