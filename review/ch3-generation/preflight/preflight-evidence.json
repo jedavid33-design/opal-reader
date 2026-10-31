@@ -1,0 +1,1391 @@
+{
+ "preflight": "ch3-fingerprint-collision-preflight",
+ "proposal": "CH3-GENERATION-PROPOSAL-v2.md \u00a79 (P1-P5)",
+ "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+ "chapterIndex": 2,
+ "checkedAtET": "2026-10-31 16:34 EDT (America/New_York)",
+ "checkedAtUTC": "2026-10-31T20:34:24Z",
+ "p1": {
+  "contentSnapshot": {
+   "family": "content",
+   "watermark": 18,
+   "servedBodySha256": "e879f9de9ba1e36fb2a398eba8f4a4a884a098fef438912d5db79dac43789ce9",
+   "fpEntityRevision": 3,
+   "chaptersInBook": 21,
+   "segmentsInChapter": 27
+  },
+  "bindingsSnapshot": {
+   "family": "bindings",
+   "watermark": 1818,
+   "servedBodySha256": "fde0c05002557dc1671696e8ed4392fcd16bc78ecc40a001d6bd674e14847342",
+   "ch3BindingsFound": 3
+  },
+  "note": "Payloads computed from the LIVE plane text (snapshot), not the census. No text or speechText is recorded in this evidence \u2014 ids, counts, fingerprints, keys only."
+ },
+ "p3": {
+  "recordedRevisionKeysFromLiveBindings": {
+   "idx0_6bd358a7": "e240adac1f4e35072575b61882ed08964d82c2a96e5829c28a61016157aeaa8e",
+   "idx1_16e860aa": "8963058e19995243df630f501078b232c2b29c727dc3bf0870c35bd21ecc4758",
+   "idx2_467174dd": "987636ed2df4a51be87e34b787aabc274ddf7c862107b46593609153d4961e1e"
+  },
+  "pinAgreement": "Live binding revision keys are byte-identical to the approved freeze-carry pin values (\u00a713).",
+  "speechTextBasis": {
+   "idx0": "MATCH",
+   "idx1": "MATCH",
+   "idx2": "MATCH",
+   "verdict": "PASS 3/3"
+  },
+  "segmentTextBasis_shippedWorkSource": {
+   "idx0": "MATCH",
+   "idx1": "MATCH",
+   "idx2": "MISMATCH (computed 3c9de805b19c9462\u2026, recorded 987636ed2df4a51b\u2026)",
+   "explanation": "The shipped D6 work source builds payload.text from segment.text; the recorded (migration-era) fingerprints and \u00a79's prescribed basis use segment.speechText. The two strings are identical for 23 of 27 Ch 3 segments; they differ at idx 2 (bound), 4, 5, 18 (generatable). See the report caveat \u2014 occupancy was therefore checked on BOTH bases."
+  }
+ },
+ "derivation": {
+  "voiceResolution": "All 27 segments pov=Alex -> cast voice Charon / gemini / gemini-3.8-flash-tts; style direction 289 chars, sha256 947c6ac695d91571bcb759d546463d76a7a0c0cddcbace3159a5ca2907ac1025",
+  "workSourceStatusAll": "ok (27/27)",
+  "preSplit": "Shipped preSplitText(text, 1200); chunk concatenation exact for all 27 segments; idx 3-25 -> 2 chunks each on both bases; idx 26 -> 1 chunk",
+  "textSha256FieldNote": "Segment textSha256 equals sha256(speechText) for all 27 segments (and sha256(text) exactly where the strings are identical)."
+ },
+ "p4": {
+  "method": "cf-api R2 objects LIST per unique prefix audio/<fingerprint> (metadata only; no object bodies downloaded)",
+  "summary": {
+   "setA_s9_as_written": {
+    "keys": 47,
+    "occupied": 0,
+    "free": 47
+   },
+   "setB_flush_whole_text_basis": {
+    "keys": 24,
+    "occupied": 0,
+    "free": 24
+   },
+   "setC_whole_speech_basis": {
+    "keys": 23,
+    "occupied": 0,
+    "free": 23
+   },
+   "uniquePrefixesChecked": 73,
+   "uniqueOccupied": 0
+  }
+ },
+ "keys": [
+  {
+   "set": "A-s9-chunk",
+   "idx": 3,
+   "chunk": 0,
+   "chars": 716,
+   "fingerprint": "1bf13ac334b25de0a38b35ae4f8112263d42cd89ff8d2764ad324b7ffc9f40ce",
+   "prefix": "audio/1bf13ac334b25de0a38b35ae4f8112263d42cd89ff8d2764ad324b7ffc9f40ce",
+   "r2KeyForms": [
+    "audio/1bf13ac334b25de0a38b35ae4f8112263d42cd89ff8d2764ad324b7ffc9f40ce.mp3",
+    "audio/1bf13ac334b25de0a38b35ae4f8112263d42cd89ff8d2764ad324b7ffc9f40ce.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 3,
+   "chunk": 1,
+   "chars": 714,
+   "fingerprint": "b731164a0423f80dee1b7bc31c4225ab209f4c649f9c9867c4f5c04d60aed546",
+   "prefix": "audio/b731164a0423f80dee1b7bc31c4225ab209f4c649f9c9867c4f5c04d60aed546",
+   "r2KeyForms": [
+    "audio/b731164a0423f80dee1b7bc31c4225ab209f4c649f9c9867c4f5c04d60aed546.mp3",
+    "audio/b731164a0423f80dee1b7bc31c4225ab209f4c649f9c9867c4f5c04d60aed546.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 4,
+   "chunk": 0,
+   "chars": 680,
+   "fingerprint": "4ea73b4996a34399ecf2e3f5bce9c8d1655731385acaad50b5ab96245755319d",
+   "prefix": "audio/4ea73b4996a34399ecf2e3f5bce9c8d1655731385acaad50b5ab96245755319d",
+   "r2KeyForms": [
+    "audio/4ea73b4996a34399ecf2e3f5bce9c8d1655731385acaad50b5ab96245755319d.mp3",
+    "audio/4ea73b4996a34399ecf2e3f5bce9c8d1655731385acaad50b5ab96245755319d.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 4,
+   "chunk": 1,
+   "chars": 641,
+   "fingerprint": "68ebf1509ad6eafb74acfff5c01670c38fc94d42a70e87aaa1d960f9d636e649",
+   "prefix": "audio/68ebf1509ad6eafb74acfff5c01670c38fc94d42a70e87aaa1d960f9d636e649",
+   "r2KeyForms": [
+    "audio/68ebf1509ad6eafb74acfff5c01670c38fc94d42a70e87aaa1d960f9d636e649.mp3",
+    "audio/68ebf1509ad6eafb74acfff5c01670c38fc94d42a70e87aaa1d960f9d636e649.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 5,
+   "chunk": 0,
+   "chars": 682,
+   "fingerprint": "bfe09257e0d176240fe71f5d83dd4a2c5788b9274fd280228bd8123539a84283",
+   "prefix": "audio/bfe09257e0d176240fe71f5d83dd4a2c5788b9274fd280228bd8123539a84283",
+   "r2KeyForms": [
+    "audio/bfe09257e0d176240fe71f5d83dd4a2c5788b9274fd280228bd8123539a84283.mp3",
+    "audio/bfe09257e0d176240fe71f5d83dd4a2c5788b9274fd280228bd8123539a84283.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 5,
+   "chunk": 1,
+   "chars": 661,
+   "fingerprint": "fc3906f3189f4f5c937873b290cd495b679f0a64121e9d6169758ca268801bb4",
+   "prefix": "audio/fc3906f3189f4f5c937873b290cd495b679f0a64121e9d6169758ca268801bb4",
+   "r2KeyForms": [
+    "audio/fc3906f3189f4f5c937873b290cd495b679f0a64121e9d6169758ca268801bb4.mp3",
+    "audio/fc3906f3189f4f5c937873b290cd495b679f0a64121e9d6169758ca268801bb4.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 6,
+   "chunk": 0,
+   "chars": 673,
+   "fingerprint": "3d190ad0eb68d7e0c4413ae4697a6f0841ff24498ad06bcc16a8975411613d1c",
+   "prefix": "audio/3d190ad0eb68d7e0c4413ae4697a6f0841ff24498ad06bcc16a8975411613d1c",
+   "r2KeyForms": [
+    "audio/3d190ad0eb68d7e0c4413ae4697a6f0841ff24498ad06bcc16a8975411613d1c.mp3",
+    "audio/3d190ad0eb68d7e0c4413ae4697a6f0841ff24498ad06bcc16a8975411613d1c.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 6,
+   "chunk": 1,
+   "chars": 583,
+   "fingerprint": "43119bf4a271ce5d57f3e6ed03cf0a08027cd55a0f5c0282fa072163dad301f6",
+   "prefix": "audio/43119bf4a271ce5d57f3e6ed03cf0a08027cd55a0f5c0282fa072163dad301f6",
+   "r2KeyForms": [
+    "audio/43119bf4a271ce5d57f3e6ed03cf0a08027cd55a0f5c0282fa072163dad301f6.mp3",
+    "audio/43119bf4a271ce5d57f3e6ed03cf0a08027cd55a0f5c0282fa072163dad301f6.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 7,
+   "chunk": 0,
+   "chars": 700,
+   "fingerprint": "043f14ca50e59ee0b06dbcec6cdb84afd05fa1147cec7e32b1137a853bae1bfc",
+   "prefix": "audio/043f14ca50e59ee0b06dbcec6cdb84afd05fa1147cec7e32b1137a853bae1bfc",
+   "r2KeyForms": [
+    "audio/043f14ca50e59ee0b06dbcec6cdb84afd05fa1147cec7e32b1137a853bae1bfc.mp3",
+    "audio/043f14ca50e59ee0b06dbcec6cdb84afd05fa1147cec7e32b1137a853bae1bfc.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 7,
+   "chunk": 1,
+   "chars": 713,
+   "fingerprint": "c5a9032d07bffb8a97fbc8efbb9f392c03db674471e8f850f5cc3204c24b97bd",
+   "prefix": "audio/c5a9032d07bffb8a97fbc8efbb9f392c03db674471e8f850f5cc3204c24b97bd",
+   "r2KeyForms": [
+    "audio/c5a9032d07bffb8a97fbc8efbb9f392c03db674471e8f850f5cc3204c24b97bd.mp3",
+    "audio/c5a9032d07bffb8a97fbc8efbb9f392c03db674471e8f850f5cc3204c24b97bd.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 8,
+   "chunk": 0,
+   "chars": 732,
+   "fingerprint": "1316fca6f07b6ada39ddd3724470e1dc5825a940644ce960504097bd44e17136",
+   "prefix": "audio/1316fca6f07b6ada39ddd3724470e1dc5825a940644ce960504097bd44e17136",
+   "r2KeyForms": [
+    "audio/1316fca6f07b6ada39ddd3724470e1dc5825a940644ce960504097bd44e17136.mp3",
+    "audio/1316fca6f07b6ada39ddd3724470e1dc5825a940644ce960504097bd44e17136.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 8,
+   "chunk": 1,
+   "chars": 724,
+   "fingerprint": "e52470e94464f98157133f36485900f303cca06bfd13365eef34014ae3986fd3",
+   "prefix": "audio/e52470e94464f98157133f36485900f303cca06bfd13365eef34014ae3986fd3",
+   "r2KeyForms": [
+    "audio/e52470e94464f98157133f36485900f303cca06bfd13365eef34014ae3986fd3.mp3",
+    "audio/e52470e94464f98157133f36485900f303cca06bfd13365eef34014ae3986fd3.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 9,
+   "chunk": 0,
+   "chars": 793,
+   "fingerprint": "8e467385930412b9efabd1483a76588513da8a4ee2da0b6ff3be1a5ad55a6a10",
+   "prefix": "audio/8e467385930412b9efabd1483a76588513da8a4ee2da0b6ff3be1a5ad55a6a10",
+   "r2KeyForms": [
+    "audio/8e467385930412b9efabd1483a76588513da8a4ee2da0b6ff3be1a5ad55a6a10.mp3",
+    "audio/8e467385930412b9efabd1483a76588513da8a4ee2da0b6ff3be1a5ad55a6a10.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 9,
+   "chunk": 1,
+   "chars": 658,
+   "fingerprint": "37ef6b0d9bcc23ade092c1a4c2a55c667de6cddce5e8a019674bea865dcbc2ea",
+   "prefix": "audio/37ef6b0d9bcc23ade092c1a4c2a55c667de6cddce5e8a019674bea865dcbc2ea",
+   "r2KeyForms": [
+    "audio/37ef6b0d9bcc23ade092c1a4c2a55c667de6cddce5e8a019674bea865dcbc2ea.mp3",
+    "audio/37ef6b0d9bcc23ade092c1a4c2a55c667de6cddce5e8a019674bea865dcbc2ea.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 10,
+   "chunk": 0,
+   "chars": 732,
+   "fingerprint": "f05afb81ac962f7427d12d0687a58601bdc30d6b566f8d093388f8d3d0f1423b",
+   "prefix": "audio/f05afb81ac962f7427d12d0687a58601bdc30d6b566f8d093388f8d3d0f1423b",
+   "r2KeyForms": [
+    "audio/f05afb81ac962f7427d12d0687a58601bdc30d6b566f8d093388f8d3d0f1423b.mp3",
+    "audio/f05afb81ac962f7427d12d0687a58601bdc30d6b566f8d093388f8d3d0f1423b.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 10,
+   "chunk": 1,
+   "chars": 665,
+   "fingerprint": "116776330ad4d0f0596747fec8e0e009f1c5716b9432370582356275e26edae5",
+   "prefix": "audio/116776330ad4d0f0596747fec8e0e009f1c5716b9432370582356275e26edae5",
+   "r2KeyForms": [
+    "audio/116776330ad4d0f0596747fec8e0e009f1c5716b9432370582356275e26edae5.mp3",
+    "audio/116776330ad4d0f0596747fec8e0e009f1c5716b9432370582356275e26edae5.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 11,
+   "chunk": 0,
+   "chars": 710,
+   "fingerprint": "717eafdcaa1fac0588b7cd00642a7d782cdf77816736785c5d3bcf07878aea07",
+   "prefix": "audio/717eafdcaa1fac0588b7cd00642a7d782cdf77816736785c5d3bcf07878aea07",
+   "r2KeyForms": [
+    "audio/717eafdcaa1fac0588b7cd00642a7d782cdf77816736785c5d3bcf07878aea07.mp3",
+    "audio/717eafdcaa1fac0588b7cd00642a7d782cdf77816736785c5d3bcf07878aea07.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 11,
+   "chunk": 1,
+   "chars": 632,
+   "fingerprint": "dfc9f12b20624368a6070fcfa754777a4e417eb21fd4c4b25fb9ea6eacbe9f49",
+   "prefix": "audio/dfc9f12b20624368a6070fcfa754777a4e417eb21fd4c4b25fb9ea6eacbe9f49",
+   "r2KeyForms": [
+    "audio/dfc9f12b20624368a6070fcfa754777a4e417eb21fd4c4b25fb9ea6eacbe9f49.mp3",
+    "audio/dfc9f12b20624368a6070fcfa754777a4e417eb21fd4c4b25fb9ea6eacbe9f49.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 12,
+   "chunk": 0,
+   "chars": 739,
+   "fingerprint": "aa5c5563eccbff80010b4f20680c9d656720b1ec0e3a30565524cf104a169d69",
+   "prefix": "audio/aa5c5563eccbff80010b4f20680c9d656720b1ec0e3a30565524cf104a169d69",
+   "r2KeyForms": [
+    "audio/aa5c5563eccbff80010b4f20680c9d656720b1ec0e3a30565524cf104a169d69.mp3",
+    "audio/aa5c5563eccbff80010b4f20680c9d656720b1ec0e3a30565524cf104a169d69.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 12,
+   "chunk": 1,
+   "chars": 677,
+   "fingerprint": "44c93657be77458e02a0284e1f51d25977a4bac6fd978b6767ac641d95c10cd4",
+   "prefix": "audio/44c93657be77458e02a0284e1f51d25977a4bac6fd978b6767ac641d95c10cd4",
+   "r2KeyForms": [
+    "audio/44c93657be77458e02a0284e1f51d25977a4bac6fd978b6767ac641d95c10cd4.mp3",
+    "audio/44c93657be77458e02a0284e1f51d25977a4bac6fd978b6767ac641d95c10cd4.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 13,
+   "chunk": 0,
+   "chars": 715,
+   "fingerprint": "6680617f2e730b451f32e3f187dc6f0082d0997d7bf00168fc5bb4c44aa7e95b",
+   "prefix": "audio/6680617f2e730b451f32e3f187dc6f0082d0997d7bf00168fc5bb4c44aa7e95b",
+   "r2KeyForms": [
+    "audio/6680617f2e730b451f32e3f187dc6f0082d0997d7bf00168fc5bb4c44aa7e95b.mp3",
+    "audio/6680617f2e730b451f32e3f187dc6f0082d0997d7bf00168fc5bb4c44aa7e95b.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 13,
+   "chunk": 1,
+   "chars": 656,
+   "fingerprint": "cca17f43f6e6579d5168b7e78956b71a48b5769bc4035cecc5e739e9cf727465",
+   "prefix": "audio/cca17f43f6e6579d5168b7e78956b71a48b5769bc4035cecc5e739e9cf727465",
+   "r2KeyForms": [
+    "audio/cca17f43f6e6579d5168b7e78956b71a48b5769bc4035cecc5e739e9cf727465.mp3",
+    "audio/cca17f43f6e6579d5168b7e78956b71a48b5769bc4035cecc5e739e9cf727465.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 14,
+   "chunk": 0,
+   "chars": 565,
+   "fingerprint": "08acc303d7870ecd96e94295e95e8728e6843d341e958e77df580f20240760cb",
+   "prefix": "audio/08acc303d7870ecd96e94295e95e8728e6843d341e958e77df580f20240760cb",
+   "r2KeyForms": [
+    "audio/08acc303d7870ecd96e94295e95e8728e6843d341e958e77df580f20240760cb.mp3",
+    "audio/08acc303d7870ecd96e94295e95e8728e6843d341e958e77df580f20240760cb.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 14,
+   "chunk": 1,
+   "chars": 650,
+   "fingerprint": "6629c4229787e53197df71f661dd01e399eaec1a6e104a29699f4a1ff1a7f0c3",
+   "prefix": "audio/6629c4229787e53197df71f661dd01e399eaec1a6e104a29699f4a1ff1a7f0c3",
+   "r2KeyForms": [
+    "audio/6629c4229787e53197df71f661dd01e399eaec1a6e104a29699f4a1ff1a7f0c3.mp3",
+    "audio/6629c4229787e53197df71f661dd01e399eaec1a6e104a29699f4a1ff1a7f0c3.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 15,
+   "chunk": 0,
+   "chars": 737,
+   "fingerprint": "cdbe2e66495e2a87b3df2344fee0858f61f89e7153466022547a8b2b8472b228",
+   "prefix": "audio/cdbe2e66495e2a87b3df2344fee0858f61f89e7153466022547a8b2b8472b228",
+   "r2KeyForms": [
+    "audio/cdbe2e66495e2a87b3df2344fee0858f61f89e7153466022547a8b2b8472b228.mp3",
+    "audio/cdbe2e66495e2a87b3df2344fee0858f61f89e7153466022547a8b2b8472b228.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 15,
+   "chunk": 1,
+   "chars": 734,
+   "fingerprint": "6a95781a5491e855ad8bd1b7a8e61234ebf493d2fb52c3e9db93a245836d1316",
+   "prefix": "audio/6a95781a5491e855ad8bd1b7a8e61234ebf493d2fb52c3e9db93a245836d1316",
+   "r2KeyForms": [
+    "audio/6a95781a5491e855ad8bd1b7a8e61234ebf493d2fb52c3e9db93a245836d1316.mp3",
+    "audio/6a95781a5491e855ad8bd1b7a8e61234ebf493d2fb52c3e9db93a245836d1316.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 16,
+   "chunk": 0,
+   "chars": 766,
+   "fingerprint": "7d9a9e1cd982f51fbba984e409360c9e71275bf7164f1c24c58f36f8cb95bdfa",
+   "prefix": "audio/7d9a9e1cd982f51fbba984e409360c9e71275bf7164f1c24c58f36f8cb95bdfa",
+   "r2KeyForms": [
+    "audio/7d9a9e1cd982f51fbba984e409360c9e71275bf7164f1c24c58f36f8cb95bdfa.mp3",
+    "audio/7d9a9e1cd982f51fbba984e409360c9e71275bf7164f1c24c58f36f8cb95bdfa.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 16,
+   "chunk": 1,
+   "chars": 691,
+   "fingerprint": "1b651634588c18ed2d89a85f0304e998e60ac7ce0f3d16ec8a056bbab444942d",
+   "prefix": "audio/1b651634588c18ed2d89a85f0304e998e60ac7ce0f3d16ec8a056bbab444942d",
+   "r2KeyForms": [
+    "audio/1b651634588c18ed2d89a85f0304e998e60ac7ce0f3d16ec8a056bbab444942d.mp3",
+    "audio/1b651634588c18ed2d89a85f0304e998e60ac7ce0f3d16ec8a056bbab444942d.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 17,
+   "chunk": 0,
+   "chars": 746,
+   "fingerprint": "41015e1507358cd6afd9ca10cfbb641e20a870376a93265d5cddf6837fc60d7e",
+   "prefix": "audio/41015e1507358cd6afd9ca10cfbb641e20a870376a93265d5cddf6837fc60d7e",
+   "r2KeyForms": [
+    "audio/41015e1507358cd6afd9ca10cfbb641e20a870376a93265d5cddf6837fc60d7e.mp3",
+    "audio/41015e1507358cd6afd9ca10cfbb641e20a870376a93265d5cddf6837fc60d7e.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 17,
+   "chunk": 1,
+   "chars": 743,
+   "fingerprint": "5a725af0459ee3e7a7021cfd6e2ef1ef2e5dbec276f3fe799575a1ad9375f0fc",
+   "prefix": "audio/5a725af0459ee3e7a7021cfd6e2ef1ef2e5dbec276f3fe799575a1ad9375f0fc",
+   "r2KeyForms": [
+    "audio/5a725af0459ee3e7a7021cfd6e2ef1ef2e5dbec276f3fe799575a1ad9375f0fc.mp3",
+    "audio/5a725af0459ee3e7a7021cfd6e2ef1ef2e5dbec276f3fe799575a1ad9375f0fc.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 18,
+   "chunk": 0,
+   "chars": 727,
+   "fingerprint": "a518357758d486128927d3bbe6aa7a4810239b62938b9cbfce4edcf898b4755e",
+   "prefix": "audio/a518357758d486128927d3bbe6aa7a4810239b62938b9cbfce4edcf898b4755e",
+   "r2KeyForms": [
+    "audio/a518357758d486128927d3bbe6aa7a4810239b62938b9cbfce4edcf898b4755e.mp3",
+    "audio/a518357758d486128927d3bbe6aa7a4810239b62938b9cbfce4edcf898b4755e.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 18,
+   "chunk": 1,
+   "chars": 721,
+   "fingerprint": "7533a692c8051db222918bb12c347720356d8c41ae852d931144030c5b25f954",
+   "prefix": "audio/7533a692c8051db222918bb12c347720356d8c41ae852d931144030c5b25f954",
+   "r2KeyForms": [
+    "audio/7533a692c8051db222918bb12c347720356d8c41ae852d931144030c5b25f954.mp3",
+    "audio/7533a692c8051db222918bb12c347720356d8c41ae852d931144030c5b25f954.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 19,
+   "chunk": 0,
+   "chars": 809,
+   "fingerprint": "dd1c89cc9bd9dff73cdcf6e52d599998f3ebd1cb1c59e4ab0d34fb0456f3764e",
+   "prefix": "audio/dd1c89cc9bd9dff73cdcf6e52d599998f3ebd1cb1c59e4ab0d34fb0456f3764e",
+   "r2KeyForms": [
+    "audio/dd1c89cc9bd9dff73cdcf6e52d599998f3ebd1cb1c59e4ab0d34fb0456f3764e.mp3",
+    "audio/dd1c89cc9bd9dff73cdcf6e52d599998f3ebd1cb1c59e4ab0d34fb0456f3764e.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 19,
+   "chunk": 1,
+   "chars": 684,
+   "fingerprint": "8579756945b8f8a695d1966cb1a6665b406fc0f53a8fc495853252f1036b068f",
+   "prefix": "audio/8579756945b8f8a695d1966cb1a6665b406fc0f53a8fc495853252f1036b068f",
+   "r2KeyForms": [
+    "audio/8579756945b8f8a695d1966cb1a6665b406fc0f53a8fc495853252f1036b068f.mp3",
+    "audio/8579756945b8f8a695d1966cb1a6665b406fc0f53a8fc495853252f1036b068f.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 20,
+   "chunk": 0,
+   "chars": 598,
+   "fingerprint": "8a100f3fc861b76a4c060b57c0568002a82d4779f6c4f896e933d35ed593889f",
+   "prefix": "audio/8a100f3fc861b76a4c060b57c0568002a82d4779f6c4f896e933d35ed593889f",
+   "r2KeyForms": [
+    "audio/8a100f3fc861b76a4c060b57c0568002a82d4779f6c4f896e933d35ed593889f.mp3",
+    "audio/8a100f3fc861b76a4c060b57c0568002a82d4779f6c4f896e933d35ed593889f.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 20,
+   "chunk": 1,
+   "chars": 620,
+   "fingerprint": "92a42a9914887421ca8b708bc93bc9ccc16e46c2a2ad67000e64ca1d8fe3a6f1",
+   "prefix": "audio/92a42a9914887421ca8b708bc93bc9ccc16e46c2a2ad67000e64ca1d8fe3a6f1",
+   "r2KeyForms": [
+    "audio/92a42a9914887421ca8b708bc93bc9ccc16e46c2a2ad67000e64ca1d8fe3a6f1.mp3",
+    "audio/92a42a9914887421ca8b708bc93bc9ccc16e46c2a2ad67000e64ca1d8fe3a6f1.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 21,
+   "chunk": 0,
+   "chars": 626,
+   "fingerprint": "2e9c966515b6d9e4bbed297b09d043449d871a0f59e4e934fd807aaa2642b7fd",
+   "prefix": "audio/2e9c966515b6d9e4bbed297b09d043449d871a0f59e4e934fd807aaa2642b7fd",
+   "r2KeyForms": [
+    "audio/2e9c966515b6d9e4bbed297b09d043449d871a0f59e4e934fd807aaa2642b7fd.mp3",
+    "audio/2e9c966515b6d9e4bbed297b09d043449d871a0f59e4e934fd807aaa2642b7fd.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 21,
+   "chunk": 1,
+   "chars": 665,
+   "fingerprint": "3f13d8ba3d8020a430a1c95fd7d1628d74d6b03ef26f28f5615144fd61d55bbc",
+   "prefix": "audio/3f13d8ba3d8020a430a1c95fd7d1628d74d6b03ef26f28f5615144fd61d55bbc",
+   "r2KeyForms": [
+    "audio/3f13d8ba3d8020a430a1c95fd7d1628d74d6b03ef26f28f5615144fd61d55bbc.mp3",
+    "audio/3f13d8ba3d8020a430a1c95fd7d1628d74d6b03ef26f28f5615144fd61d55bbc.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 22,
+   "chunk": 0,
+   "chars": 691,
+   "fingerprint": "b2db2c285266b5fc20109d03413485919824f6de6b42706ba2d1d538ddf20a8b",
+   "prefix": "audio/b2db2c285266b5fc20109d03413485919824f6de6b42706ba2d1d538ddf20a8b",
+   "r2KeyForms": [
+    "audio/b2db2c285266b5fc20109d03413485919824f6de6b42706ba2d1d538ddf20a8b.mp3",
+    "audio/b2db2c285266b5fc20109d03413485919824f6de6b42706ba2d1d538ddf20a8b.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 22,
+   "chunk": 1,
+   "chars": 739,
+   "fingerprint": "7fce29006c0a59e10971b009083258f3c47a632b2ee1c6033ece34b9c7ad8112",
+   "prefix": "audio/7fce29006c0a59e10971b009083258f3c47a632b2ee1c6033ece34b9c7ad8112",
+   "r2KeyForms": [
+    "audio/7fce29006c0a59e10971b009083258f3c47a632b2ee1c6033ece34b9c7ad8112.mp3",
+    "audio/7fce29006c0a59e10971b009083258f3c47a632b2ee1c6033ece34b9c7ad8112.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 23,
+   "chunk": 0,
+   "chars": 777,
+   "fingerprint": "1976187c29b5989fca77ac8efcf22c73b78f9a640ee29ce157e872bbc2319d8f",
+   "prefix": "audio/1976187c29b5989fca77ac8efcf22c73b78f9a640ee29ce157e872bbc2319d8f",
+   "r2KeyForms": [
+    "audio/1976187c29b5989fca77ac8efcf22c73b78f9a640ee29ce157e872bbc2319d8f.mp3",
+    "audio/1976187c29b5989fca77ac8efcf22c73b78f9a640ee29ce157e872bbc2319d8f.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 23,
+   "chunk": 1,
+   "chars": 701,
+   "fingerprint": "cace77a75f1ce8c5df63e29d55fc7e756734c9e9f0b8d49c9c96907893239dd1",
+   "prefix": "audio/cace77a75f1ce8c5df63e29d55fc7e756734c9e9f0b8d49c9c96907893239dd1",
+   "r2KeyForms": [
+    "audio/cace77a75f1ce8c5df63e29d55fc7e756734c9e9f0b8d49c9c96907893239dd1.mp3",
+    "audio/cace77a75f1ce8c5df63e29d55fc7e756734c9e9f0b8d49c9c96907893239dd1.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 24,
+   "chunk": 0,
+   "chars": 706,
+   "fingerprint": "cacad33b749546fe932a099870fe72eaa25d030de25d1ab8911c3675f357f90a",
+   "prefix": "audio/cacad33b749546fe932a099870fe72eaa25d030de25d1ab8911c3675f357f90a",
+   "r2KeyForms": [
+    "audio/cacad33b749546fe932a099870fe72eaa25d030de25d1ab8911c3675f357f90a.mp3",
+    "audio/cacad33b749546fe932a099870fe72eaa25d030de25d1ab8911c3675f357f90a.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 24,
+   "chunk": 1,
+   "chars": 747,
+   "fingerprint": "c6f114f49f4afebbe9b85d3d137e60ed82c4981fb5cab02ad00f1a106d8c8546",
+   "prefix": "audio/c6f114f49f4afebbe9b85d3d137e60ed82c4981fb5cab02ad00f1a106d8c8546",
+   "r2KeyForms": [
+    "audio/c6f114f49f4afebbe9b85d3d137e60ed82c4981fb5cab02ad00f1a106d8c8546.mp3",
+    "audio/c6f114f49f4afebbe9b85d3d137e60ed82c4981fb5cab02ad00f1a106d8c8546.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 25,
+   "chunk": 0,
+   "chars": 686,
+   "fingerprint": "475c0c820d7d36315477d15533e1d58fde14cd9c083d4bb6a8a0a7696b11442b",
+   "prefix": "audio/475c0c820d7d36315477d15533e1d58fde14cd9c083d4bb6a8a0a7696b11442b",
+   "r2KeyForms": [
+    "audio/475c0c820d7d36315477d15533e1d58fde14cd9c083d4bb6a8a0a7696b11442b.mp3",
+    "audio/475c0c820d7d36315477d15533e1d58fde14cd9c083d4bb6a8a0a7696b11442b.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-chunk",
+   "idx": 25,
+   "chunk": 1,
+   "chars": 681,
+   "fingerprint": "ddfcb31ee56ff2b78e498cfc215b7d814571e52e06bc0169b9647d0d009aaa00",
+   "prefix": "audio/ddfcb31ee56ff2b78e498cfc215b7d814571e52e06bc0169b9647d0d009aaa00",
+   "r2KeyForms": [
+    "audio/ddfcb31ee56ff2b78e498cfc215b7d814571e52e06bc0169b9647d0d009aaa00.mp3",
+    "audio/ddfcb31ee56ff2b78e498cfc215b7d814571e52e06bc0169b9647d0d009aaa00.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "A-s9-whole26",
+   "idx": 26,
+   "chunk": null,
+   "chars": 569,
+   "fingerprint": "07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590",
+   "prefix": "audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590",
+   "r2KeyForms": [
+    "audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590.mp3",
+    "audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 3,
+   "chunk": null,
+   "chars": 1430,
+   "fingerprint": "a0b6e95f4e8357b345ecfb142eb0d453b04672f6d6e39b70dd1306d69082574b",
+   "prefix": "audio/a0b6e95f4e8357b345ecfb142eb0d453b04672f6d6e39b70dd1306d69082574b",
+   "r2KeyForms": [
+    "audio/a0b6e95f4e8357b345ecfb142eb0d453b04672f6d6e39b70dd1306d69082574b.mp3",
+    "audio/a0b6e95f4e8357b345ecfb142eb0d453b04672f6d6e39b70dd1306d69082574b.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 4,
+   "chunk": null,
+   "chars": 1300,
+   "fingerprint": "6bc78cfb6f932e83a0b0aa3d524b27c42b182b7d1def4d30cf5e7085056d8cb6",
+   "prefix": "audio/6bc78cfb6f932e83a0b0aa3d524b27c42b182b7d1def4d30cf5e7085056d8cb6",
+   "r2KeyForms": [
+    "audio/6bc78cfb6f932e83a0b0aa3d524b27c42b182b7d1def4d30cf5e7085056d8cb6.mp3",
+    "audio/6bc78cfb6f932e83a0b0aa3d524b27c42b182b7d1def4d30cf5e7085056d8cb6.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 5,
+   "chunk": null,
+   "chars": 1322,
+   "fingerprint": "d590241a20b1854c354731a95b2a259525da7f1881c12b92f8f5a207fdd7fd5c",
+   "prefix": "audio/d590241a20b1854c354731a95b2a259525da7f1881c12b92f8f5a207fdd7fd5c",
+   "r2KeyForms": [
+    "audio/d590241a20b1854c354731a95b2a259525da7f1881c12b92f8f5a207fdd7fd5c.mp3",
+    "audio/d590241a20b1854c354731a95b2a259525da7f1881c12b92f8f5a207fdd7fd5c.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 6,
+   "chunk": null,
+   "chars": 1256,
+   "fingerprint": "dcc097bdc6cc77f7d463213e506d124ed01cf9d1ee26aa64bd6e655748a09208",
+   "prefix": "audio/dcc097bdc6cc77f7d463213e506d124ed01cf9d1ee26aa64bd6e655748a09208",
+   "r2KeyForms": [
+    "audio/dcc097bdc6cc77f7d463213e506d124ed01cf9d1ee26aa64bd6e655748a09208.mp3",
+    "audio/dcc097bdc6cc77f7d463213e506d124ed01cf9d1ee26aa64bd6e655748a09208.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 7,
+   "chunk": null,
+   "chars": 1413,
+   "fingerprint": "5da475e255f1b37cfcae4033f4183eae27cd2c7588b84bf7c7c73ef6cff4daa5",
+   "prefix": "audio/5da475e255f1b37cfcae4033f4183eae27cd2c7588b84bf7c7c73ef6cff4daa5",
+   "r2KeyForms": [
+    "audio/5da475e255f1b37cfcae4033f4183eae27cd2c7588b84bf7c7c73ef6cff4daa5.mp3",
+    "audio/5da475e255f1b37cfcae4033f4183eae27cd2c7588b84bf7c7c73ef6cff4daa5.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 8,
+   "chunk": null,
+   "chars": 1456,
+   "fingerprint": "1a586b45f7644ae062223503e6a157ca3ebf35a4f799bf71b3214270c2abf74d",
+   "prefix": "audio/1a586b45f7644ae062223503e6a157ca3ebf35a4f799bf71b3214270c2abf74d",
+   "r2KeyForms": [
+    "audio/1a586b45f7644ae062223503e6a157ca3ebf35a4f799bf71b3214270c2abf74d.mp3",
+    "audio/1a586b45f7644ae062223503e6a157ca3ebf35a4f799bf71b3214270c2abf74d.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 9,
+   "chunk": null,
+   "chars": 1451,
+   "fingerprint": "0cc6d7ea8ba2548618650131a7e206a7baa9ea181c27be4e709cda95d10f3e5e",
+   "prefix": "audio/0cc6d7ea8ba2548618650131a7e206a7baa9ea181c27be4e709cda95d10f3e5e",
+   "r2KeyForms": [
+    "audio/0cc6d7ea8ba2548618650131a7e206a7baa9ea181c27be4e709cda95d10f3e5e.mp3",
+    "audio/0cc6d7ea8ba2548618650131a7e206a7baa9ea181c27be4e709cda95d10f3e5e.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 10,
+   "chunk": null,
+   "chars": 1397,
+   "fingerprint": "55c05ecb3458ca77f7c9c209e4aabfebb957d224a97a9c0827f2fda35709c6f8",
+   "prefix": "audio/55c05ecb3458ca77f7c9c209e4aabfebb957d224a97a9c0827f2fda35709c6f8",
+   "r2KeyForms": [
+    "audio/55c05ecb3458ca77f7c9c209e4aabfebb957d224a97a9c0827f2fda35709c6f8.mp3",
+    "audio/55c05ecb3458ca77f7c9c209e4aabfebb957d224a97a9c0827f2fda35709c6f8.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 11,
+   "chunk": null,
+   "chars": 1342,
+   "fingerprint": "38fae69bff0dd58581a7efe4a3816a59b79665d5dc529980218ad9cad9104b33",
+   "prefix": "audio/38fae69bff0dd58581a7efe4a3816a59b79665d5dc529980218ad9cad9104b33",
+   "r2KeyForms": [
+    "audio/38fae69bff0dd58581a7efe4a3816a59b79665d5dc529980218ad9cad9104b33.mp3",
+    "audio/38fae69bff0dd58581a7efe4a3816a59b79665d5dc529980218ad9cad9104b33.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 12,
+   "chunk": null,
+   "chars": 1416,
+   "fingerprint": "fe6075faccaf68a1f1551b2c96ef347e9368a360d3e5ea5b45b0f5462a183a8e",
+   "prefix": "audio/fe6075faccaf68a1f1551b2c96ef347e9368a360d3e5ea5b45b0f5462a183a8e",
+   "r2KeyForms": [
+    "audio/fe6075faccaf68a1f1551b2c96ef347e9368a360d3e5ea5b45b0f5462a183a8e.mp3",
+    "audio/fe6075faccaf68a1f1551b2c96ef347e9368a360d3e5ea5b45b0f5462a183a8e.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 13,
+   "chunk": null,
+   "chars": 1371,
+   "fingerprint": "a34b33e2fa4e010b9dc23d3119a2a2528423d757229973799435ec52b1b467b0",
+   "prefix": "audio/a34b33e2fa4e010b9dc23d3119a2a2528423d757229973799435ec52b1b467b0",
+   "r2KeyForms": [
+    "audio/a34b33e2fa4e010b9dc23d3119a2a2528423d757229973799435ec52b1b467b0.mp3",
+    "audio/a34b33e2fa4e010b9dc23d3119a2a2528423d757229973799435ec52b1b467b0.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 14,
+   "chunk": null,
+   "chars": 1215,
+   "fingerprint": "b5ab7b6c2493cdbf68811f2e7a43c8cdbf34552cd84f31e13e1c9f59db91260a",
+   "prefix": "audio/b5ab7b6c2493cdbf68811f2e7a43c8cdbf34552cd84f31e13e1c9f59db91260a",
+   "r2KeyForms": [
+    "audio/b5ab7b6c2493cdbf68811f2e7a43c8cdbf34552cd84f31e13e1c9f59db91260a.mp3",
+    "audio/b5ab7b6c2493cdbf68811f2e7a43c8cdbf34552cd84f31e13e1c9f59db91260a.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 15,
+   "chunk": null,
+   "chars": 1471,
+   "fingerprint": "c1c17deebe3c7fa8cb4e0f6455dc5bee35d05fcd8fe392a5d5c5c636a813f6a7",
+   "prefix": "audio/c1c17deebe3c7fa8cb4e0f6455dc5bee35d05fcd8fe392a5d5c5c636a813f6a7",
+   "r2KeyForms": [
+    "audio/c1c17deebe3c7fa8cb4e0f6455dc5bee35d05fcd8fe392a5d5c5c636a813f6a7.mp3",
+    "audio/c1c17deebe3c7fa8cb4e0f6455dc5bee35d05fcd8fe392a5d5c5c636a813f6a7.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 16,
+   "chunk": null,
+   "chars": 1457,
+   "fingerprint": "c423ea015961f3b10cdad3a6764636022eca7f651eebc7157be7fa130be25137",
+   "prefix": "audio/c423ea015961f3b10cdad3a6764636022eca7f651eebc7157be7fa130be25137",
+   "r2KeyForms": [
+    "audio/c423ea015961f3b10cdad3a6764636022eca7f651eebc7157be7fa130be25137.mp3",
+    "audio/c423ea015961f3b10cdad3a6764636022eca7f651eebc7157be7fa130be25137.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 17,
+   "chunk": null,
+   "chars": 1489,
+   "fingerprint": "104da525302013f70b35aef2aaa4b275b75da09572638108e9e4a249e3967d15",
+   "prefix": "audio/104da525302013f70b35aef2aaa4b275b75da09572638108e9e4a249e3967d15",
+   "r2KeyForms": [
+    "audio/104da525302013f70b35aef2aaa4b275b75da09572638108e9e4a249e3967d15.mp3",
+    "audio/104da525302013f70b35aef2aaa4b275b75da09572638108e9e4a249e3967d15.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 18,
+   "chunk": null,
+   "chars": 1427,
+   "fingerprint": "1edb0d1fac467fe976f75e11c21e2f8d3cc6696cb710ff877aee582144f3af5b",
+   "prefix": "audio/1edb0d1fac467fe976f75e11c21e2f8d3cc6696cb710ff877aee582144f3af5b",
+   "r2KeyForms": [
+    "audio/1edb0d1fac467fe976f75e11c21e2f8d3cc6696cb710ff877aee582144f3af5b.mp3",
+    "audio/1edb0d1fac467fe976f75e11c21e2f8d3cc6696cb710ff877aee582144f3af5b.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 19,
+   "chunk": null,
+   "chars": 1493,
+   "fingerprint": "6c4d359ec9294194da53520c00ad4edd3c815008c41f1e7d5d453352e617d837",
+   "prefix": "audio/6c4d359ec9294194da53520c00ad4edd3c815008c41f1e7d5d453352e617d837",
+   "r2KeyForms": [
+    "audio/6c4d359ec9294194da53520c00ad4edd3c815008c41f1e7d5d453352e617d837.mp3",
+    "audio/6c4d359ec9294194da53520c00ad4edd3c815008c41f1e7d5d453352e617d837.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 20,
+   "chunk": null,
+   "chars": 1218,
+   "fingerprint": "91a39f0adc05a97ee40c5b17250da15f9e7c62520aad20113707b1cb844810e4",
+   "prefix": "audio/91a39f0adc05a97ee40c5b17250da15f9e7c62520aad20113707b1cb844810e4",
+   "r2KeyForms": [
+    "audio/91a39f0adc05a97ee40c5b17250da15f9e7c62520aad20113707b1cb844810e4.mp3",
+    "audio/91a39f0adc05a97ee40c5b17250da15f9e7c62520aad20113707b1cb844810e4.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 21,
+   "chunk": null,
+   "chars": 1291,
+   "fingerprint": "9cc2c0d0b53b24e95f191e142024c546862268b3bb963188a9a0fbbf929cff8f",
+   "prefix": "audio/9cc2c0d0b53b24e95f191e142024c546862268b3bb963188a9a0fbbf929cff8f",
+   "r2KeyForms": [
+    "audio/9cc2c0d0b53b24e95f191e142024c546862268b3bb963188a9a0fbbf929cff8f.mp3",
+    "audio/9cc2c0d0b53b24e95f191e142024c546862268b3bb963188a9a0fbbf929cff8f.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 22,
+   "chunk": null,
+   "chars": 1430,
+   "fingerprint": "21a52e870f508f4756b2b44ef7f135eb358cb9b02878544d127b6358de2dbd12",
+   "prefix": "audio/21a52e870f508f4756b2b44ef7f135eb358cb9b02878544d127b6358de2dbd12",
+   "r2KeyForms": [
+    "audio/21a52e870f508f4756b2b44ef7f135eb358cb9b02878544d127b6358de2dbd12.mp3",
+    "audio/21a52e870f508f4756b2b44ef7f135eb358cb9b02878544d127b6358de2dbd12.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 23,
+   "chunk": null,
+   "chars": 1478,
+   "fingerprint": "860ecfcd7570707eb4636ee97f14b8e463bf879a3948ea10fee74c5abe9c202d",
+   "prefix": "audio/860ecfcd7570707eb4636ee97f14b8e463bf879a3948ea10fee74c5abe9c202d",
+   "r2KeyForms": [
+    "audio/860ecfcd7570707eb4636ee97f14b8e463bf879a3948ea10fee74c5abe9c202d.mp3",
+    "audio/860ecfcd7570707eb4636ee97f14b8e463bf879a3948ea10fee74c5abe9c202d.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 24,
+   "chunk": null,
+   "chars": 1453,
+   "fingerprint": "df883ce900458a2effe3e2e028927816cc672b98fab157380ccee73533fdf557",
+   "prefix": "audio/df883ce900458a2effe3e2e028927816cc672b98fab157380ccee73533fdf557",
+   "r2KeyForms": [
+    "audio/df883ce900458a2effe3e2e028927816cc672b98fab157380ccee73533fdf557.mp3",
+    "audio/df883ce900458a2effe3e2e028927816cc672b98fab157380ccee73533fdf557.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 25,
+   "chunk": null,
+   "chars": 1367,
+   "fingerprint": "2b7fbef0f2e0de6984f8d2c85947f482a9d1e60bcddf06a681ce30a1456da310",
+   "prefix": "audio/2b7fbef0f2e0de6984f8d2c85947f482a9d1e60bcddf06a681ce30a1456da310",
+   "r2KeyForms": [
+    "audio/2b7fbef0f2e0de6984f8d2c85947f482a9d1e60bcddf06a681ce30a1456da310.mp3",
+    "audio/2b7fbef0f2e0de6984f8d2c85947f482a9d1e60bcddf06a681ce30a1456da310.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "B-flush-whole-text",
+   "idx": 26,
+   "chunk": null,
+   "chars": 569,
+   "fingerprint": "07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590",
+   "prefix": "audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590",
+   "r2KeyForms": [
+    "audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590.mp3",
+    "audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 3,
+   "chunk": null,
+   "chars": 1430,
+   "fingerprint": "a0b6e95f4e8357b345ecfb142eb0d453b04672f6d6e39b70dd1306d69082574b",
+   "prefix": "audio/a0b6e95f4e8357b345ecfb142eb0d453b04672f6d6e39b70dd1306d69082574b",
+   "r2KeyForms": [
+    "audio/a0b6e95f4e8357b345ecfb142eb0d453b04672f6d6e39b70dd1306d69082574b.mp3",
+    "audio/a0b6e95f4e8357b345ecfb142eb0d453b04672f6d6e39b70dd1306d69082574b.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 4,
+   "chunk": null,
+   "chars": 1321,
+   "fingerprint": "06c64e58a230e88a36726d922dc80f0840ec5ca3e07b36db99b3d0634e81e1eb",
+   "prefix": "audio/06c64e58a230e88a36726d922dc80f0840ec5ca3e07b36db99b3d0634e81e1eb",
+   "r2KeyForms": [
+    "audio/06c64e58a230e88a36726d922dc80f0840ec5ca3e07b36db99b3d0634e81e1eb.mp3",
+    "audio/06c64e58a230e88a36726d922dc80f0840ec5ca3e07b36db99b3d0634e81e1eb.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 5,
+   "chunk": null,
+   "chars": 1343,
+   "fingerprint": "d1aa5adc302fdace37f29e8b1dd9e0bacff1a128f312ddea40841c8e693e7c6a",
+   "prefix": "audio/d1aa5adc302fdace37f29e8b1dd9e0bacff1a128f312ddea40841c8e693e7c6a",
+   "r2KeyForms": [
+    "audio/d1aa5adc302fdace37f29e8b1dd9e0bacff1a128f312ddea40841c8e693e7c6a.mp3",
+    "audio/d1aa5adc302fdace37f29e8b1dd9e0bacff1a128f312ddea40841c8e693e7c6a.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 6,
+   "chunk": null,
+   "chars": 1256,
+   "fingerprint": "dcc097bdc6cc77f7d463213e506d124ed01cf9d1ee26aa64bd6e655748a09208",
+   "prefix": "audio/dcc097bdc6cc77f7d463213e506d124ed01cf9d1ee26aa64bd6e655748a09208",
+   "r2KeyForms": [
+    "audio/dcc097bdc6cc77f7d463213e506d124ed01cf9d1ee26aa64bd6e655748a09208.mp3",
+    "audio/dcc097bdc6cc77f7d463213e506d124ed01cf9d1ee26aa64bd6e655748a09208.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 7,
+   "chunk": null,
+   "chars": 1413,
+   "fingerprint": "5da475e255f1b37cfcae4033f4183eae27cd2c7588b84bf7c7c73ef6cff4daa5",
+   "prefix": "audio/5da475e255f1b37cfcae4033f4183eae27cd2c7588b84bf7c7c73ef6cff4daa5",
+   "r2KeyForms": [
+    "audio/5da475e255f1b37cfcae4033f4183eae27cd2c7588b84bf7c7c73ef6cff4daa5.mp3",
+    "audio/5da475e255f1b37cfcae4033f4183eae27cd2c7588b84bf7c7c73ef6cff4daa5.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 8,
+   "chunk": null,
+   "chars": 1456,
+   "fingerprint": "1a586b45f7644ae062223503e6a157ca3ebf35a4f799bf71b3214270c2abf74d",
+   "prefix": "audio/1a586b45f7644ae062223503e6a157ca3ebf35a4f799bf71b3214270c2abf74d",
+   "r2KeyForms": [
+    "audio/1a586b45f7644ae062223503e6a157ca3ebf35a4f799bf71b3214270c2abf74d.mp3",
+    "audio/1a586b45f7644ae062223503e6a157ca3ebf35a4f799bf71b3214270c2abf74d.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 9,
+   "chunk": null,
+   "chars": 1451,
+   "fingerprint": "0cc6d7ea8ba2548618650131a7e206a7baa9ea181c27be4e709cda95d10f3e5e",
+   "prefix": "audio/0cc6d7ea8ba2548618650131a7e206a7baa9ea181c27be4e709cda95d10f3e5e",
+   "r2KeyForms": [
+    "audio/0cc6d7ea8ba2548618650131a7e206a7baa9ea181c27be4e709cda95d10f3e5e.mp3",
+    "audio/0cc6d7ea8ba2548618650131a7e206a7baa9ea181c27be4e709cda95d10f3e5e.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 10,
+   "chunk": null,
+   "chars": 1397,
+   "fingerprint": "55c05ecb3458ca77f7c9c209e4aabfebb957d224a97a9c0827f2fda35709c6f8",
+   "prefix": "audio/55c05ecb3458ca77f7c9c209e4aabfebb957d224a97a9c0827f2fda35709c6f8",
+   "r2KeyForms": [
+    "audio/55c05ecb3458ca77f7c9c209e4aabfebb957d224a97a9c0827f2fda35709c6f8.mp3",
+    "audio/55c05ecb3458ca77f7c9c209e4aabfebb957d224a97a9c0827f2fda35709c6f8.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 11,
+   "chunk": null,
+   "chars": 1342,
+   "fingerprint": "38fae69bff0dd58581a7efe4a3816a59b79665d5dc529980218ad9cad9104b33",
+   "prefix": "audio/38fae69bff0dd58581a7efe4a3816a59b79665d5dc529980218ad9cad9104b33",
+   "r2KeyForms": [
+    "audio/38fae69bff0dd58581a7efe4a3816a59b79665d5dc529980218ad9cad9104b33.mp3",
+    "audio/38fae69bff0dd58581a7efe4a3816a59b79665d5dc529980218ad9cad9104b33.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 12,
+   "chunk": null,
+   "chars": 1416,
+   "fingerprint": "fe6075faccaf68a1f1551b2c96ef347e9368a360d3e5ea5b45b0f5462a183a8e",
+   "prefix": "audio/fe6075faccaf68a1f1551b2c96ef347e9368a360d3e5ea5b45b0f5462a183a8e",
+   "r2KeyForms": [
+    "audio/fe6075faccaf68a1f1551b2c96ef347e9368a360d3e5ea5b45b0f5462a183a8e.mp3",
+    "audio/fe6075faccaf68a1f1551b2c96ef347e9368a360d3e5ea5b45b0f5462a183a8e.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 13,
+   "chunk": null,
+   "chars": 1371,
+   "fingerprint": "a34b33e2fa4e010b9dc23d3119a2a2528423d757229973799435ec52b1b467b0",
+   "prefix": "audio/a34b33e2fa4e010b9dc23d3119a2a2528423d757229973799435ec52b1b467b0",
+   "r2KeyForms": [
+    "audio/a34b33e2fa4e010b9dc23d3119a2a2528423d757229973799435ec52b1b467b0.mp3",
+    "audio/a34b33e2fa4e010b9dc23d3119a2a2528423d757229973799435ec52b1b467b0.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 14,
+   "chunk": null,
+   "chars": 1215,
+   "fingerprint": "b5ab7b6c2493cdbf68811f2e7a43c8cdbf34552cd84f31e13e1c9f59db91260a",
+   "prefix": "audio/b5ab7b6c2493cdbf68811f2e7a43c8cdbf34552cd84f31e13e1c9f59db91260a",
+   "r2KeyForms": [
+    "audio/b5ab7b6c2493cdbf68811f2e7a43c8cdbf34552cd84f31e13e1c9f59db91260a.mp3",
+    "audio/b5ab7b6c2493cdbf68811f2e7a43c8cdbf34552cd84f31e13e1c9f59db91260a.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 15,
+   "chunk": null,
+   "chars": 1471,
+   "fingerprint": "c1c17deebe3c7fa8cb4e0f6455dc5bee35d05fcd8fe392a5d5c5c636a813f6a7",
+   "prefix": "audio/c1c17deebe3c7fa8cb4e0f6455dc5bee35d05fcd8fe392a5d5c5c636a813f6a7",
+   "r2KeyForms": [
+    "audio/c1c17deebe3c7fa8cb4e0f6455dc5bee35d05fcd8fe392a5d5c5c636a813f6a7.mp3",
+    "audio/c1c17deebe3c7fa8cb4e0f6455dc5bee35d05fcd8fe392a5d5c5c636a813f6a7.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 16,
+   "chunk": null,
+   "chars": 1457,
+   "fingerprint": "c423ea015961f3b10cdad3a6764636022eca7f651eebc7157be7fa130be25137",
+   "prefix": "audio/c423ea015961f3b10cdad3a6764636022eca7f651eebc7157be7fa130be25137",
+   "r2KeyForms": [
+    "audio/c423ea015961f3b10cdad3a6764636022eca7f651eebc7157be7fa130be25137.mp3",
+    "audio/c423ea015961f3b10cdad3a6764636022eca7f651eebc7157be7fa130be25137.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 17,
+   "chunk": null,
+   "chars": 1489,
+   "fingerprint": "104da525302013f70b35aef2aaa4b275b75da09572638108e9e4a249e3967d15",
+   "prefix": "audio/104da525302013f70b35aef2aaa4b275b75da09572638108e9e4a249e3967d15",
+   "r2KeyForms": [
+    "audio/104da525302013f70b35aef2aaa4b275b75da09572638108e9e4a249e3967d15.mp3",
+    "audio/104da525302013f70b35aef2aaa4b275b75da09572638108e9e4a249e3967d15.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 18,
+   "chunk": null,
+   "chars": 1448,
+   "fingerprint": "321fcc8b3865fc464ddb6a6e78898337fbcc5b72ee3ad2302e0a470c84daee25",
+   "prefix": "audio/321fcc8b3865fc464ddb6a6e78898337fbcc5b72ee3ad2302e0a470c84daee25",
+   "r2KeyForms": [
+    "audio/321fcc8b3865fc464ddb6a6e78898337fbcc5b72ee3ad2302e0a470c84daee25.mp3",
+    "audio/321fcc8b3865fc464ddb6a6e78898337fbcc5b72ee3ad2302e0a470c84daee25.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 19,
+   "chunk": null,
+   "chars": 1493,
+   "fingerprint": "6c4d359ec9294194da53520c00ad4edd3c815008c41f1e7d5d453352e617d837",
+   "prefix": "audio/6c4d359ec9294194da53520c00ad4edd3c815008c41f1e7d5d453352e617d837",
+   "r2KeyForms": [
+    "audio/6c4d359ec9294194da53520c00ad4edd3c815008c41f1e7d5d453352e617d837.mp3",
+    "audio/6c4d359ec9294194da53520c00ad4edd3c815008c41f1e7d5d453352e617d837.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 20,
+   "chunk": null,
+   "chars": 1218,
+   "fingerprint": "91a39f0adc05a97ee40c5b17250da15f9e7c62520aad20113707b1cb844810e4",
+   "prefix": "audio/91a39f0adc05a97ee40c5b17250da15f9e7c62520aad20113707b1cb844810e4",
+   "r2KeyForms": [
+    "audio/91a39f0adc05a97ee40c5b17250da15f9e7c62520aad20113707b1cb844810e4.mp3",
+    "audio/91a39f0adc05a97ee40c5b17250da15f9e7c62520aad20113707b1cb844810e4.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 21,
+   "chunk": null,
+   "chars": 1291,
+   "fingerprint": "9cc2c0d0b53b24e95f191e142024c546862268b3bb963188a9a0fbbf929cff8f",
+   "prefix": "audio/9cc2c0d0b53b24e95f191e142024c546862268b3bb963188a9a0fbbf929cff8f",
+   "r2KeyForms": [
+    "audio/9cc2c0d0b53b24e95f191e142024c546862268b3bb963188a9a0fbbf929cff8f.mp3",
+    "audio/9cc2c0d0b53b24e95f191e142024c546862268b3bb963188a9a0fbbf929cff8f.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 22,
+   "chunk": null,
+   "chars": 1430,
+   "fingerprint": "21a52e870f508f4756b2b44ef7f135eb358cb9b02878544d127b6358de2dbd12",
+   "prefix": "audio/21a52e870f508f4756b2b44ef7f135eb358cb9b02878544d127b6358de2dbd12",
+   "r2KeyForms": [
+    "audio/21a52e870f508f4756b2b44ef7f135eb358cb9b02878544d127b6358de2dbd12.mp3",
+    "audio/21a52e870f508f4756b2b44ef7f135eb358cb9b02878544d127b6358de2dbd12.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 23,
+   "chunk": null,
+   "chars": 1478,
+   "fingerprint": "860ecfcd7570707eb4636ee97f14b8e463bf879a3948ea10fee74c5abe9c202d",
+   "prefix": "audio/860ecfcd7570707eb4636ee97f14b8e463bf879a3948ea10fee74c5abe9c202d",
+   "r2KeyForms": [
+    "audio/860ecfcd7570707eb4636ee97f14b8e463bf879a3948ea10fee74c5abe9c202d.mp3",
+    "audio/860ecfcd7570707eb4636ee97f14b8e463bf879a3948ea10fee74c5abe9c202d.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 24,
+   "chunk": null,
+   "chars": 1453,
+   "fingerprint": "df883ce900458a2effe3e2e028927816cc672b98fab157380ccee73533fdf557",
+   "prefix": "audio/df883ce900458a2effe3e2e028927816cc672b98fab157380ccee73533fdf557",
+   "r2KeyForms": [
+    "audio/df883ce900458a2effe3e2e028927816cc672b98fab157380ccee73533fdf557.mp3",
+    "audio/df883ce900458a2effe3e2e028927816cc672b98fab157380ccee73533fdf557.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  },
+  {
+   "set": "C-whole-speech",
+   "idx": 25,
+   "chunk": null,
+   "chars": 1367,
+   "fingerprint": "2b7fbef0f2e0de6984f8d2c85947f482a9d1e60bcddf06a681ce30a1456da310",
+   "prefix": "audio/2b7fbef0f2e0de6984f8d2c85947f482a9d1e60bcddf06a681ce30a1456da310",
+   "r2KeyForms": [
+    "audio/2b7fbef0f2e0de6984f8d2c85947f482a9d1e60bcddf06a681ce30a1456da310.mp3",
+    "audio/2b7fbef0f2e0de6984f8d2c85947f482a9d1e60bcddf06a681ce30a1456da310.wav"
+   ],
+   "occupied": false,
+   "objects": []
+  }
+ ]
+}
