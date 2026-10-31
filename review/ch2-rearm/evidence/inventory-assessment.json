@@ -1,0 +1,134 @@
+{
+  "kind": "gate7_rearm_inventory_assessment",
+  "capturedAtUtc": "2026-10-31T01:55:55Z",
+  "captureMethod": "Read-only GETs only: client connector (v2prod-api), operator connector diagnostics read (v2prod-operator-api), Cloudflare GETs (cf-api). No POST, no mutation, no provider call. Raw captures remain local under inventory/ (not pinned).",
+  "liveBuild": {
+    "worker": "opalreader-api-v2-prod",
+    "build": "6a73d9622e1b4eac00c58e289de1c674ed6b3d6b",
+    "healthGeneration": "halted",
+    "generationHaltBinding": "1",
+    "phasePolicyBinding": "enforce",
+    "bindingsCount": 10
+  },
+  "retiredPlan": {
+    "planId": "plan:603ab416bd67ab1b25de97be",
+    "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+    "scope": "chapter",
+    "chapterIndex": 1,
+    "lane": "standard",
+    "phase": "forever-pucked",
+    "keepGoing": false,
+    "state": "retired",
+    "stopReason": "retired_unknown_billing",
+    "createdAtUtc": "2026-10-29T23:05:43.846Z",
+    "updatedAtUtc": "2026-10-31T01:49:05.449Z",
+    "quarantine": { "held": false, "approvalRequired": false, "state": null },
+    "entries": { "total": 38, "bound_already": 20, "eligible": 18, "eligibleChars": 25091 },
+    "totals": { "eligible": 18, "done": 0, "failed": 8, "blocked": 0, "prompts": 0 },
+    "planSettledMicroCents": 179991,
+    "bindingsPublished": 0,
+    "bindingsPending": 0
+  },
+  "staleJob": {
+    "jobId": "plan:603ab416bd67ab1b25de97be:ch1",
+    "kind": "job",
+    "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+    "chapterIndex": 1,
+    "lane": "standard",
+    "state": "generating",
+    "revision": 2,
+    "occurrenceRows": { "granted": 18 },
+    "quarantine": { "held": false, "approvalRequired": false, "state": null }
+  },
+  "staleGrant": {
+    "grantId": "grant:plan:603ab416bd67ab1b25de97be:ch1:1:full",
+    "state": "issued",
+    "revision": 2
+  },
+  "conflicts": [
+    {
+      "id": 2,
+      "atUtc": "2026-10-30T00:24:14.632Z",
+      "subject": "grant:plan:603ab416bd67ab1b25de97be:ch1:1:full",
+      "cacheKey": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "reason": "schedule_dead"
+    },
+    {
+      "id": 1,
+      "atUtc": "2026-10-29T23:54:14.808Z",
+      "subject": "grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full",
+      "cacheKey": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "reason": "schedule_dead"
+    }
+  ],
+  "executionPlane": {
+    "executionsForPlan": { "total": 9, "failed": 8, "unknown_billing": 1, "committed": 0, "granted": 0, "attempted": 0, "flushed": 0, "verified": 0, "synthesized": 0 },
+    "soleNonTerminalExecution": {
+      "executionId": "exec-6a9c4e14-2223-4806-9694-90cd140cbd8e",
+      "occurrenceId": "59acff00-d6a4-4e2b-9734-34d50f4f59f0",
+      "state": "unknown_billing",
+      "recoveryScanAction": "reconcile_hold"
+    },
+    "attemptCensusConfirmed": { "total": 51, "success": 29, "policy_block": 21, "estimated_unverified": 1, "unknown": 0 },
+    "disposedAttempt": {
+      "attemptId": "att-37d63768-db4b-447d-8150-580b7c6ee257",
+      "outcome": "estimated_unverified",
+      "costMicroCents": null,
+      "estimatedMicroCents": 19018,
+      "reservedMicroCents": 5648
+    }
+  },
+  "queue": {
+    "name": "opalreader-generation-v2",
+    "id": "93b6a35fb8cf4788a91a2c90b748ae66",
+    "deliveryPaused": true,
+    "deliveryDelay": 0,
+    "messageRetentionPeriodSec": 86400,
+    "producers": ["opalreader-api-v2-prod"],
+    "consumers": ["opalreader-api-v2-prod"]
+  },
+  "settings": { "revision": 1, "geminiLane": "standard", "monthlyCap": 50 },
+  "quotaView": { "dayKey": "2026-10-30", "attemptsToday": 0, "dailyLimit": 100, "spentMicroCents": 371485, "ledgerSeq": 19, "note": "Grant-time estimate debits from the coordinator ledger, NOT provider-confirmed spend." },
+  "phaseAccounting": {
+    "phase": "forever-pucked",
+    "budgetMicroCents": 13500000,
+    "settledMicroCents": 199665,
+    "settledBasis": "recorded_known_existing_ledger",
+    "estimatedUnverifiedMicroCents": 19018,
+    "reservedUnverifiedMicroCents": 5648,
+    "unverifiedStatus": "provider_unverified",
+    "inFlightUpperMicroCents": 0,
+    "unknownOpen": 0,
+    "remainingMicroCents": 13294687
+  },
+  "allPlans": [
+    { "planId": "plan:603ab416bd67ab1b25de97be", "state": "retired" },
+    { "planId": "plan:3183ecbf2ac4bf50bbc6166e", "state": "complete", "note": "G10 smoke plan; settled 19674 plan-level micro-cents." }
+  ],
+  "chapter3JobUnchanged": {
+    "jobId": "1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a",
+    "state": "parked_policy",
+    "revision": 1,
+    "grants": [],
+    "occurrenceRows": { "ready": 3, "pending": 24 }
+  },
+  "observabilityLimits": {
+    "observable": [
+      "Plan, job, and grant records (client plan/job views).",
+      "Execution records and the attempt log (operator diagnostics; execution plane only).",
+      "The binding_conflicts table, including the two schedule_dead lease rows (GET /v2/conflicts).",
+      "Queue settings: delivery_paused, retention period, producer/consumer attachments (Cloudflare GET).",
+      "Worker bindings incl. GENERATION_HALT (names + values of plain_text bindings), settings revision, quota view."
+    ],
+    "notObservable": [
+      "The queue's message backlog: no read surface used exposes queued message contents or depth. NO claim is made that the queue is empty; the safety demonstration does not depend on emptiness (see the retention bound in the proposal).",
+      "The coordinator outbox table: no read surface. Delivery of the stale grant's original dispatch is established indirectly: the original run's attempts exist and were executed under it.",
+      "The claims table rows directly: visible only through the two schedule_dead lease conflict records above.",
+      "Workers Logs telemetry (route 403s on the available credential; not attempted)."
+    ]
+  }
+}
