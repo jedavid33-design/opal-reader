@@ -1,0 +1,1 @@
+{"status": 200, "body": {"armed": false, "ok": false, "reason": "not_armed"}, "body_raw": "{\"armed\":false,\"ok\":false,\"reason\":\"not_armed\"}"}

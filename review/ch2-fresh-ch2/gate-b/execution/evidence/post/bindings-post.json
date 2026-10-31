@@ -1,0 +1,88 @@
+{
+  "status": 200,
+  "body": {
+    "result": {
+      "placement": {},
+      "compatibility_date": "2026-08-29",
+      "compatibility_flags": [
+        "nodejs_compat"
+      ],
+      "usage_model": "standard",
+      "tags": [],
+      "tail_consumers": [],
+      "logpush": false,
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "redact_query_string": false,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "persist": true,
+          "invocation_logs": true
+        },
+        "traces": {
+          "enabled": false,
+          "persist": true,
+          "head_sampling_rate": 1
+        }
+      },
+      "annotations": {
+        "workers/triggered_by": "upload"
+      },
+      "bindings": [
+        {
+          "name": "ALLOWED_ORIGIN",
+          "text": "https://jedavid33-design.github.io",
+          "type": "plain_text"
+        },
+        {
+          "class_name": "OpalReaderCoordinatorProd",
+          "name": "COORDINATOR",
+          "namespace_id": "005ba6f8634a43b99543036d7ad99510",
+          "type": "durable_object_namespace"
+        },
+        {
+          "name": "GEMINI_API_KEY",
+          "type": "secret_text"
+        },
+        {
+          "name": "GENERATION_HALT",
+          "text": "1",
+          "type": "plain_text"
+        },
+        {
+          "name": "OPALREADER_ACCESS_TOKEN",
+          "type": "secret_text"
+        },
+        {
+          "name": "OPALREADER_GENERATION_V2",
+          "queue_name": "opalreader-generation-v2",
+          "type": "queue"
+        },
+        {
+          "name": "OPALREADER_MIGRATION_OPERATOR_TOKEN",
+          "type": "secret_text"
+        },
+        {
+          "name": "OPALREADER_PHASE_POLICY",
+          "text": "enforce",
+          "type": "plain_text"
+        },
+        {
+          "bucket_name": "opalreader-storage",
+          "name": "OPALREADER_STORAGE",
+          "type": "r2_bucket"
+        },
+        {
+          "name": "OPALREADER_V2_SCOPE",
+          "text": "production",
+          "type": "plain_text"
+        }
+      ]
+    },
+    "success": true,
+    "errors": [],
+    "messages": []
+  }
+}
