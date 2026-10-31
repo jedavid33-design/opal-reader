@@ -1,0 +1,299 @@
+`GENERATION_HALT` flipped to `"0"`** — the full re-armed
+state. "Refuses" means: returns normally with a refusal
+result, zero provider contact, zero ledger/attempt/execution
+movement, unless a path says otherwise in so many words.
+
+### 5.0 The core invariant (PROVEN from source)
+
+The only executor the production entry constructs is the D6
+executor (`worker-entry-prod-d6.js`, `_execute`). Its
+`handleMessage` runs, **before `claimGrant` is ever
+called**, a strict pre-claim fence over persisted server
+records (`d6-executor.mjs`):
+
+1. **Strict plan resolution** (`resolvePlanForFence`): the
+   plan identity comes from the `d6_plan_jobs` link
+   cross-checked against the job's own `data_json` stamp —
+   never from the message. Multiplicity, blank/corrupt
+   records, disagreement, or any read fault all refuse
+   (`plan_link_conflict` / `plan_state_check_failed` /
+   `plan_link_mismatch`). A database fault never reads as
+   "no plan" and never as dispatchable.
+2. **Quarantine read** (strict, D8-1) against the resolved
+   identity: a hold on the plan or the job refuses
+   (`plan_quarantined`); a read failure refuses
+   (`quarantine_check_failed`).
+3. **Plan-state fence** (`planStateFenceRefusal`):
+   `PLAN_STATES_REFUSED = {complete, partial, retired,
+   halted_unknown}` — the exact complement of the driver's
+   own selection — refuses `plan_not_dispatchable` **before
+   claim**; any state outside the refused set *and* outside
+   the recognized dispatchable set (`active` + the parked
+   family) also refuses (`plan_state_check_failed`).
+
+So a message can reach `claimGrant` only if its job
+resolves to a plan in a dispatchable state with no hold —
+or the job is genuinely plan-less. **Every D6 job in the
+current inventory resolves to a plan in the REFUSED set**
+(smoke → complete; stale Ch 2 → retired; fresh Ch 2 →
+complete). The one plan-less job (Chapter 3) is covered
+separately in Path A4: it holds no grant, so there is
+nothing for `claimGrant` to claim.
+
+Behind the fence — never reached by stale work — sit two
+further layers, named so nobody mistakes them for the
+proof: the **grant guard** (`grant-guards.mjs`, inside
+`_issueGrant`: quarantine → phase halt → phase budget →
+storage) for any grant *issuance*, and the now-**armed
+quota guard** (`quota-budget.mjs`, written inside
+`markDispatching`'s transaction — a call site reachable
+only after a successful claim and a granted occurrence,
+`d6-executor.mjs` per-occurrence dispatch path) for any
+actual dispatch. The armed guard is a backstop for future
+legitimate dispatch; §5's conclusions do not rest on it.
+
+### Path A — a queue message naming stale work is delivered
+
+The queue handler (halt layer 1) passes after the flip; the
+message reaches `_execute` (halt layer 2 also passes);
+`handleMessage` runs the §5.0 fence:
+
+- **A1 — stale Ch 2 job** (`…:ch1`, grant `issued`): resolves
+  to `plan:603ab416…` → state `retired` ∈ REFUSED →
+  `{ refused: "plan_not_dispatchable", planState: "retired" }`
+  before `claimGrant`, before any execution record, spend
+  intent, or provider contact. `_execute` returns HTTP 200
+  with the refusal, so the queue handler **ACKs — the
+  message is consumed permanently**, never retried into the
+  fence. (This is Gate-7's Path A; the fence code in this
+  build is the same Workstream A construction, re-read and
+  confirmed at the lines cited in the source index — not
+  assumed from lineage.)
+- **A2 — smoke job** (grant `issued`, plan `complete`):
+  identical refusal, `planState: "complete"`. Gate-7 did not
+  need this case (its smoke job was residue in the same
+  shape but the demonstration centered on Ch 2); it is
+  traced here because the residue shape — `generating` job
+  + `issued` grant under a terminal plan — is identical.
+- **A3 — fresh Ch 2 job** (plan `complete`): identical
+  refusal on plan state, whatever its job/grant residue
+  states read at R0.
+- **A4 — Chapter 3 job** (plan-less, `parked_policy`,
+  grants []): resolution yields null, so both fence checks
+  pass *as designed for genuinely plan-less jobs* — and
+  then there is nothing to execute: `claimGrant` can only
+  claim a grant row that exists, and this job has **no
+  grant** (a message naming it with any fabricated grant id
+  gets `unknown_grant` → dropped; see Path G for why
+  message provenance is closed). Even past a hypothetical
+  claim, the per-occurrence loop skips every row whose
+  state is not `granted` — Ch 3's rows are `ready` /
+  `pending`, none `granted`. Triple-covered: no grant, no
+  granted rows, and the driver (Path B) never drives
+  plan-less jobs.
+
+### Path B — the coordinator alarm: driver selection
+
+`alarm()` (entry) runs the base coordinator alarm, then
+`service.recover()`, then `service.driveOnce()`, on the
+10-minute watchdog cycle (`WATCHDOG_PERIOD_MS`), in the
+re-armed state exactly as now.
+
+- **Driver** (`service.mjs` `driveOnce`): plans are
+  selected with `state NOT IN ('complete', 'partial',
+  'retired', 'halted_unknown')`. **All three current plans
+  are in the excluded set** — the driver iterates zero
+  plans, reaches no job, runs no grant step, on every pass,
+  however often the alarm fires. (Gate-7's exclusion proof
+  covered `retired`; this build's selection line is
+  re-read and additionally disposes of both `complete`
+  plans, including the fresh Ch 2 plan Gate-7 never had.)
+  For completeness: even a selected plan would next meet
+  the strict quarantine skip and the phase-halt check in
+  the same function.
+- **No plan → no re-advance, no new grant, no state
+  transition.** `retired` and `complete` are terminal in
+  the driver; nothing flips them back to `active` (the
+  only exit from `halted_unknown` ever built was
+  retirement, and no plan is in that state anyway).
+
+### Path C — the coordinator alarm: recovery
+
+`service.recover()` performs only the non-spending
+`release_and_fail` action (release *reserved* attempts of
+never-dispatched executions, mark those executions failed).
+Current inputs (gate-(b) B0 diagnostics, re-verified at R0
+item 11): every execution across the three plans is
+terminal — old Ch 2: 8 `failed` + 1 `unknown_billing`
+(whose scan action is `reconcile_hold`, **skipped** by
+`recover()`); fresh Ch 2: all `committed`/`failed` from
+its completed run; smoke: terminal. **Zero executions are
+in a `release_and_fail` class**, so recovery is a no-op on
+this inventory. The executor's own `recover()` (the only
+code that re-verifies or re-enters flush states) is never
+invoked by the production entry. Recovery never synthesizes
+under any circumstances — `verifyAndCommit` /
+`reenterFlush` commit only from already-flushed R2
+objects, and neither is reachable here. Note also:
+`recover()` has been running on every alarm cycle
+throughout the halted era with exactly these inputs and
+produced zero movement (gate-(a) D0's identical samples;
+gate-(b) B0's identical inventory) — its post-flip behavior
+differs in no input.
+
+### Path D — the coordinator alarm: outbox drain (the one wiring change the flip makes)
+
+While halted, `d6HostEnv` wires **no** `sendGrant`, so the
+base alarm's watchdog step leaves outbox rows unsent and
+visible. After the flip, `sendGrant` **is** wired to the v2
+queue, and the first post-flip alarm drains any unsent
+`dispatch` outbox rows into the queue (they then deliver
+when the queue unpauses — R-unpause is LAST, so during the
+armed-idle window they can only accumulate, not execute).
+
+- **What could be in the outbox:** a `dispatch` row is
+  written exactly once, at grant issuance, inside
+  `_issueGrant`'s transaction (coordinator source). Every
+  grant in the current inventory was issued in October
+  runs whose dispatches demonstrably delivered (their
+  attempts exist). No grant has been issued since gate (a)
+  (no plan selected → no grant step → no issuance), so no
+  new row can have been written in the halted era.
+- **The outbox has no read surface** (OPEN, §5.9): this
+  proposal makes **no claim that the outbox is empty.**
+  It doesn't need one: any drained row names a
+  (jobId, grantId) pair written by the server at issuance
+  — for the stale, smoke, or fresh job that is a Path A
+  refusal on delivery, ACKed and gone; there is no
+  inventory job for which a drained dispatch can dispatch.
+  Queue retention (86,400 s) additionally bounds any
+  hypothetical survivor's queue lifetime after the drain.
+
+### Path E — the coordinator alarm: the schedule machinery (leases, handoffs, retries)
+
+The base alarm processes due `schedule` rows; a row that
+throws repeatedly backs off and finally parks as `dead`,
+writing a `schedule_dead` row into `binding_conflicts`.
+That is the machinery that produced all 3 current conflict
+rows. Each row kind, against this inventory:
+
+- **E1 — `watchdog`:** re-arms the chain + drains the
+  outbox (Path D). Nothing else.
+- **E2 — `lease` rows for terminal grants** (`reported` /
+  `voided`): the handler breaks immediately
+  (coordinator source, lease case, first check).
+- **E3 — `lease` row for the stale grant, hypothetical:**
+  two independent reasons no such row can be pending.
+  (i) Its lease row already ran to exhaustion and parked
+  `dead` on 2026-10-30T00:24:14Z (conflict id 2); `dead`
+  rows are never re-selected (the alarm selects
+  `state = 'pending'` only). (ii) Lease rows are created
+  only at grant issuance and at handoff anchors
+  (coordinator source: the `_schedule(…, "lease", …)` call
+  sites) — the stale grant has had neither event since
+  (no issuance is possible, Paths B/F; it never entered
+  `handoff_uncertain`, so no handoff anchor exists).
+  **PROVEN** from the call sites + the dead-row record.
+  And even under the counterfactual — a pending row,
+  processed: the handler's delivered branch reads the
+  grant's attempt ledger ops and applies `lease_expired`
+  only to still-`granted` occurrences **with** attempt
+  records; its reconciliation (`reconcileUnknown`) adopts
+  only from provably-landed cache audio or records spend
+  only on a confirmed provider outcome — **it never
+  dispatches and never calls a provider.** Its worst case
+  is bookkeeping movement (occurrence/job unknown-marking),
+  which is precisely what §6's armed-idle read set watches
+  (jobs, plans, phase figures, conflicts) — any such
+  movement is a containment trigger, not a silent outcome.
+- **E4 — `lease` row for the fresh Ch 2 grant (conflict
+  id 3's subject):** its lease row likewise parked `dead`
+  (2026-10-31T05:14:24Z) after the handler's delivered
+  branch threw on the attempt-ledger `LIKE` query — the
+  known, **unfixed** lease SQL defect
+  (`LIKE or GLOB pattern too complex: SQLITE_ERROR`),
+  preserved as a known issue; this gate does not fix it
+  and does not clear the rows. Counterfactual processing
+  is even more benign than E3: the fresh job's occurrences
+  are `ready`, not `granted`, so the delivered branch's
+  occurrence loop selects **zero rows** — the only
+  reachable outcomes are a no-op, or the same `LIKE` fault
+  backing off toward a **new `schedule_dead` row**: visible,
+  non-dispatching, and — under §6 — a movement/containment
+  trigger (conflict count and max id are in the read set).
+- **E5 — `handoff_check` rows:** exist only for grants in
+  `handoff_uncertain`. No current grant is in that state
+  (stale/smoke read `issued`; the fresh grant's state is
+  an R0 read — if it read `handoff_uncertain`, that is an
+  **R0 STOP**: unexpected state, filed for review, gate
+  does not proceed on a trace-it-live basis).
+- **E6 — `retry_grant` rows:** scheduled only by a void
+  re-advance or a rate-limited grant attempt, with 30–60 s
+  fuses (coordinator source). Any row from October fired
+  within a minute of its scheduling, in eras when the
+  alarm ran continuously; the inventories at gate-(a) D0
+  and gate-(b) B0 are byte-identical, so no such row has
+  an un-fired effect outstanding. Counterfactually, a
+  firing calls `requestGrant` **only** for a job in state
+  `generating` — the stale and smoke jobs qualify by state
+  — and lands in Path F, which refuses on
+  `nothing_pending`. For the Chapter 3 job (state
+  `parked_policy` ≠ `generating`) the handler does not
+  even call `requestGrant`. INFERRED (fuse lengths +
+  call sites + era evidence), and backstopped by §6's
+  movement watch.
+
+### Path F — could anything issue a NEW grant for stale work?
+
+`_issueGrant` is reached from `requestGrant` (commands /
+driver steps — none run for unselected plans) and the
+schedule paths of Path E. Inside its single transaction,
+for the stale job it terminates at **`nothing_pending`**:
+grant targets are occurrences in state `pending`, and the
+stale job's 18 rows are all `granted` — zero targets,
+refusal, no grant row, no outbox row, no reservation. The
+same holds for the smoke job (rows `ready`) and the fresh
+job (rows `ready`). Behind that, in order: the derived
+grant id for the stale job at rev 2 **already exists**
+(`grant_exists` refusal); the D6 grant guard
+(quarantine → phase → budget → storage) for any D6 job;
+and the armed quota guard's grant-time reservation block
+for armed non-probe grants. Chapter 3's job *does* hold
+`pending` rows — and is the one job with no grant path:
+never selected by the driver (plan-less), never the
+subject of a `retry_grant` call (Path E6), and no command
+surface is exercised by this gate (§8). Its resume
+mechanism is a **separate verification** belonging to its
+own future gate (§10) — this proposal asserts nothing
+about it beyond: nothing in the re-arm sequence touches
+it, and its fingerprint is in §6's read set.
+
+### Path G — grant consumption without a queue message
+
+There is no other consumer. Message provenance is closed:
+queue messages are produced only by the Worker's own
+`sendGrant` from server-written outbox rows (Path D), and
+`/internal/execute` is reachable only DO-internally,
+running the identical `_execute` → fence chain — Gate-7's
+Path C, re-confirmed in this build's entry. The legacy v1
+executor is not constructed anywhere in the production
+entry; the v1 queue/consumer belong to the separate frozen
+v1 script. A message mislabeled with a different plan's id
+is still refused, because plan identity never comes from
+the message (§5.0; Gate-7's fence test T9 lineage).
+
+### 5.8 What this assessment does NOT rest on
+
+- **Not** on the `schedule_dead` rows (Rowan's standing
+  condition from Gate-7, carried): delete all three from
+  the record and every path above is unchanged. They are
+  inventoried (§2) and watched (§6) as *symptoms*, never
+  used as a fence.
+- **Not** on queue emptiness, and **not** on outbox
+  emptiness (neither is observable; Paths A + D cover
+  delivery from either).
+- **Not** on the halt or the pause — both are assumed away
+  throughout this section.
+- **Not** on the armed quota guard — it sits behind the
+  fence (§5.0) and would only ever *add* refusals.
+

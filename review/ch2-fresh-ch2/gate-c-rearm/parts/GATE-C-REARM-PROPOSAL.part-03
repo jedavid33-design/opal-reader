@@ -1,0 +1,46 @@
+  `~/workspace/ch2-program/quota-routes-fix2/worker-build/`):
+  - `worker/generation/d6-executor.mjs` — `PLAN_STATES_REFUSED`
+    / `PLAN_STATES_DISPATCHABLE`, `resolvePlanForFence`,
+    `planStateFenceRefusal`, `handleMessage` fence order
+    (resolution → quarantine → plan-state → `claimGrant`),
+    `markDispatching` call site on the dispatch path.
+  - `worker/generation/service.mjs` — `driveOnce` selection
+    (`state NOT IN ('complete','partial','retired','halted_unknown')`),
+    quarantine skip, `recover()` (`release_and_fail` only).
+  - `worker/generation/grant-guards.mjs` — `d6GrantGuard`
+    layer order (quarantine → phase → budget → storage).
+  - `worker/generation/quota-budget.mjs` — `reconcileQuota`
+    (`ok = drift empty && !currentDayBlocked`), armed-guard
+    dispatch/reservation writes inside `markDispatching`.
+  - `worker/coordinator.mjs` — `_issueGrant` (pending-only
+    targets, `nothing_pending`, `grant_exists`, D6 guard,
+    cohort bounding, outbox row written at issuance),
+    `drainOutbox`, base `alarm()` (schedule processing,
+    poison-row backoff → `schedule_dead`), `_processScheduleRow`
+    (`lease` / `handoff_check` / `retry_grant` / `watchdog`
+    cases + every `_schedule` creation site), `LEASE_MS`,
+    `WATCHDOG_PERIOD_MS` (10 min).
+  - `v2/worker-entry-prod-d6.js` — `_execute` (D6 executor
+    only; halt layer 2), `alarm()` (super.alarm →
+    recover → driveOnce), `d6HostEnv` (`sendGrant` wired
+    only when `GENERATION_HALT === "0"`; `d6StandardOnly:
+    true` stamped in code), queue handler (halt layer 1,
+    ACK on a 200 refusal), operator routes (read-pure
+    reconcile).
+- **Live reads at proposal time** (2026-10-31, ~18:2xZ,
+  read-only): `/health` (build `945875bc…`, halted);
+  operator reconcile (`armed: true`, `ok: true`,
+  `currentDayBlocked: false`, exceptions 1, drift 0);
+  plan list (3 plans, states as §2).
+- **Board rulings:** gate-(b) closure 6547328443 (this
+  proposal's direction); gate-(b) proposal PASS 6547238747
+  (incl. the fault-vs-rollback caution §7 carries);
+  gate-(b) execution filing 6547316936; gate-(a) record
+  PASS 6547070545; Gate-7 operational PASS 6537764537 +
+  execution-record PASS (A0–A6).
+
+**Turn:** Rowan's — review of this Gate-(c) re-arm proposal.
+Then Julie's re-arm decision. Generation and Chapter 3
+remain later, separate, and unrequested.
+
+— Wren
