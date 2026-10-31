@@ -1,0 +1,34 @@
+{
+  "v2/generation/genstore.mjs": {
+    "blob_sha": "4b2da661d81b934b70e0a985b6874e97a4a79381",
+    "bytes": 47108,
+    "sha256": "8602e45e270e40889dd1cfb91c8a7e380c8708a071a7cec3bb1f5b33533764a3",
+    "manifest_sha256": "8602e45e270e40889dd1cfb91c8a7e380c8708a071a7cec3bb1f5b33533764a3",
+    "manifest_bytes": 47108,
+    "match": true
+  },
+  "v2/generation/grant-guards.mjs": {
+    "blob_sha": "16a052fd9b8d6e76d4f3394f565c6e4fe80925f6",
+    "bytes": 12936,
+    "sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629",
+    "manifest_sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629",
+    "manifest_bytes": 12936,
+    "match": true
+  },
+  "v2/generation/service.mjs": {
+    "blob_sha": "bbe5dfe61d62b54fc45950ac1bfec2b379853efb",
+    "bytes": 76860,
+    "sha256": "c4008d982981076629b54c45461cbffbb8ffa53b605a3597a0b19fc066da0708",
+    "manifest_sha256": "c4008d982981076629b54c45461cbffbb8ffa53b605a3597a0b19fc066da0708",
+    "manifest_bytes": 76860,
+    "match": true
+  },
+  "v2/worker-entry-prod-d6.js": {
+    "blob_sha": "106b9e86df9fb2e83afb2e711443f1113943f5e0",
+    "bytes": 64548,
+    "sha256": "079e982bee8135a95240cd1ac4f22d5a02b28f65b945f3b2a8050c702403c154",
+    "manifest_sha256": "079e982bee8135a95240cd1ac4f22d5a02b28f65b945f3b2a8050c702403c154",
+    "manifest_bytes": 64548,
+    "match": true
+  }
+}

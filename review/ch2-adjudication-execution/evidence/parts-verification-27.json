@@ -1,0 +1,230 @@
+{
+  "parts_compared": 28,
+  "all_identical": false,
+  "parts": [
+    {
+      "part": "metadata",
+      "in_envelope": true,
+      "in_download": false,
+      "byte_identical": false,
+      "sha256": "e08b06bc840810739ef5a2fbd5279c6670c1759235fa830121964507f162a9fd",
+      "bytes": 1352
+    },
+    {
+      "part": "v2/api.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d",
+      "bytes": 13632
+    },
+    {
+      "part": "v2/audio-route.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616",
+      "bytes": 15965
+    },
+    {
+      "part": "v2/coordinator.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "c31359ae87cf0271c2186a579e6540461089e0ffaa181e00c732ceed649d8eb3",
+      "bytes": 268522
+    },
+    {
+      "part": "v2/executor.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9",
+      "bytes": 13974
+    },
+    {
+      "part": "v2/generation/binding-projection.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654",
+      "bytes": 12818
+    },
+    {
+      "part": "v2/generation/content-plane-adapter.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "51c177dd8d2c4c85dbd1ce19180f60f70b3d037c53081be17c9762f93e7b8f38",
+      "bytes": 7577
+    },
+    {
+      "part": "v2/generation/d6-executor.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "68e3f84ed6ee9bd4ac59c4732f72ab1c53661df00798ad7cbe23a9a5a2c881b9",
+      "bytes": 44181
+    },
+    {
+      "part": "v2/generation/d6-work-source.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006",
+      "bytes": 5981
+    },
+    {
+      "part": "v2/generation/eligible-set.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "87b4b09ad08a23160a8b473bd0ecb88cf2f7b1d5fcf1ec0d52dbb96920e51a7c",
+      "bytes": 5978
+    },
+    {
+      "part": "v2/generation/flush-store.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325",
+      "bytes": 8497
+    },
+    {
+      "part": "v2/generation/gen-constants.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "6922ad7402bcc369bbd48b12d859ccdf93964dbd94ab593ce126aa7af0a2e4ee",
+      "bytes": 3944
+    },
+    {
+      "part": "v2/generation/gen-schema.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5",
+      "bytes": 5307
+    },
+    {
+      "part": "v2/generation/genstore.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "8602e45e270e40889dd1cfb91c8a7e380c8708a071a7cec3bb1f5b33533764a3",
+      "bytes": 47108
+    },
+    {
+      "part": "v2/generation/grant-guards.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629",
+      "bytes": 12936
+    },
+    {
+      "part": "v2/generation/phase-policy.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f",
+      "bytes": 7299
+    },
+    {
+      "part": "v2/generation/policy-split.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876",
+      "bytes": 15074
+    },
+    {
+      "part": "v2/generation/quarantine.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62",
+      "bytes": 15752
+    },
+    {
+      "part": "v2/generation/service.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "c4008d982981076629b54c45461cbffbb8ffa53b605a3597a0b19fc066da0708",
+      "bytes": 76860
+    },
+    {
+      "part": "v2/host/adapters.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "9d07f8db2836d775735eec0c2bc18c7ea6a0ed5b0771aea792ccabd11ea282dc",
+      "bytes": 38162
+    },
+    {
+      "part": "v2/host/build-identity.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "1a8497ad5b453cd4efdb82f08e70c53c9826fafc65b158149910c068f3405faf",
+      "bytes": 411
+    },
+    {
+      "part": "v2/p8/approved-freeze-carry.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46",
+      "bytes": 57703
+    },
+    {
+      "part": "v2/p8/approved-freeze-chunks.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a",
+      "bytes": 6101
+    },
+    {
+      "part": "v2/p8/approved-freeze-manifest.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd",
+      "bytes": 467075
+    },
+    {
+      "part": "v2/p8/migration-chunk-limits.mjs",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41",
+      "bytes": 4733
+    },
+    {
+      "part": "v2/worker-entry-prod-d6.js",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "079e982bee8135a95240cd1ac4f22d5a02b28f65b945f3b2a8050c702403c154",
+      "bytes": 64548
+    },
+    {
+      "part": "v2/worker-entry-prod.js",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5",
+      "bytes": 14480
+    },
+    {
+      "part": "v2/worker-entry.js",
+      "in_envelope": true,
+      "in_download": true,
+      "byte_identical": true,
+      "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5",
+      "bytes": 21520
+    }
+  ]
+}
