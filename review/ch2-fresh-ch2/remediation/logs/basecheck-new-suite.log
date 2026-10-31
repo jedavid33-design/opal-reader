@@ -1,0 +1,42 @@
+✖ (a) single-invocation first-pass commit: prime -> synthesize -> flush -> commit in ONE invocation (73.782015ms)
+✔ (b) genuine preexisting winner with identical bytes is adopted and commits first-pass (16.900453ms)
+✔ (c) different-byte conditional-PUT winner still fails closed with winner_digest_mismatch (11.123573ms)
+✔ (d) fresh-invocation intent recovery commits with ZERO new provider calls (10.337644ms)
+✖ refreshKey: only a memoized miss is invalidated; positive and pending entries cost no read (0.877437ms)
+✔ (e) read-heavy behavior unchanged: hydrateKeys / byteCheck / primeForMigration read counts stay at baseline bounds (2.989065ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 4
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 305.965474
+
+✖ failing tests:
+
+test at tests/remediation-cache-refresh.test.mjs:104:1
+✖ (a) single-invocation first-pass commit: prime -> synthesize -> flush -> commit in ONE invocation (73.782015ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - 'success'
+  
+      at TestContext.<anonymous> (file:///tmp/remed-basecheck/tests/remediation-cache-refresh.test.mjs:109:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'success',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/remediation-cache-refresh.test.mjs:203:1
+✖ refreshKey: only a memoized miss is invalidated; positive and pending entries cost no read (0.877437ms)
+  TypeError [Error]: cache.refreshKey is not a function
+      at TestContext.<anonymous> (file:///tmp/remed-basecheck/tests/remediation-cache-refresh.test.mjs:217:29)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
