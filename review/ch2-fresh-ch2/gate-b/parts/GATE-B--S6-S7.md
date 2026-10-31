@@ -63,8 +63,13 @@ dispositionable under §7 in any case.)
 ## 7. B3 — dispositions: a presentation protocol, not a pre-approval
 
 B3 exists only if the B2 census surfaces exceptions. This proposal
-pre-approves **none** of them. Each disposition is its own
-sub-decision, presented to Julie individually with:
+pre-approves **none** of them. **Sequencing (DP-B1, RULED by Rowan
+2026-10-31): the complete B2 census is filed for Rowan's review
+before any B3 disposition is presented or executed — B3 never
+runs in the bootstrap session, and no disposition is proposed to
+Julie until Rowan has seen the census it comes from.** Each
+disposition is its own sub-decision, presented to Julie
+individually with:
 
 1. the attempt's identity (attempt id, plan, occurrence);
 2. its evidence interval `[created_at, updated_at]` and the proof

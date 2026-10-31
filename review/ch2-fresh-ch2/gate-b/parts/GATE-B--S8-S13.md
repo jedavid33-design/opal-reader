@@ -36,10 +36,18 @@ under §10. Generation is later still, under gate (c).
 - **Containment during gate (b):** every step runs behind the halt
   fence with the queue paused; the only writes gate (b) can make
   are the bootstrap record, the quota ledgers' bootstrap rows, and
-  (under §7) disposition records. A fault at any step leaves the
-  system halted + paused + (at worst) partially bootstrapped in a
-  state the reconcile census can still describe truthfully —
-  there is no step whose failure hides state.
+  (under §7) disposition records. **There is no "partially
+  bootstrapped" state** (clarification, Rowan 2026-10-31,
+  reconciling this section with §4.4): the bootstrap is a single
+  atomic transaction — it has either committed whole or not at
+  all. A fault at any step leaves the system halted + paused and
+  either fully bootstrapped or provably at the gate-(a) floor
+  shape; the only uncertainty a fault can create is
+  *observational* (a response lost after a possible commit,
+  §4.4 class (b)), and it is resolved by read-back, never by
+  retry. The reconcile census can describe the resulting state
+  truthfully in every case — there is no step whose failure
+  hides state.
 
 ---
 
@@ -85,32 +93,30 @@ system exactly as fenced as it is today.
 
 ## 12. Decision points for Rowan
 
-**DP-B1 — B3 timing.** When a complete B2 census surfaces provably
-same-day exceptions, may B3 dispositions be presented to Julie and
-executed in the same session, or must the census first be filed
-and reviewed before any disposition? *Wren's lean: same-session
-permitted, never required* — each disposition still carries its
-own individual Julie approval with the §7 presentation, and the
-census is complete and archived before the first B3 call either
-way. Filing-first remains available whenever the census is large
-or surprising.
+**DP-B1 — B3 timing: RULED (Rowan, 2026-10-31).** The complete
+B2 census is **filed for Rowan's review before any B3
+disposition** is presented or executed (§7 carries the rule).
+Same-session B3 is not permitted under this proposal. Every
+disposition still requires Julie's individual approval.
 
-**DP-B2 — Hold closure.** If gate (b) ends as an explained hold,
-who declares it closed? *Wren's lean: Wren files the execution
-record; Rowan reviews and closes it* — mirroring the gate-(a)
-pattern (execution record → Rowan record review → closure), so no
-hold is ever closed on Wren's say-so alone.
+**DP-B2 — Hold closure: RULED (Rowan, 2026-10-31).** Wren files
+the execution record; **Rowan reviews and rules on closure**.
+An explained accounting hold never permits re-arm (§10).
 
-No other forks are presented: everything else in this proposal is
-fixed by the prior rulings cited in the source index.
+Both decision points are closed; no forks remain open in this
+proposal. Everything else is fixed by the prior rulings cited in
+the source index.
 
 ---
 
 ## 13. Non-authorizations and the approval sequence
 
 This proposal authorizes nothing. The sequence is: Rowan's review
-of this proposal → Julie's gate-(b) decision → execution of exactly
-B0–B3 as approved → execution record → Rowan's record review.
+of this proposal → Julie's gate-(b) decision → execution of B0–B2
+as approved → **the complete census filed for Rowan's review
+(DP-B1)** → only then any B3 items, each with Julie's individual
+approval → execution record → Rowan's record review and closure
+ruling (DP-B2).
 Not included at any step: re-arm, queue unpause, halt flip,
 generation of any kind, provider calls, spending, dispositions
 beyond the individually approved §7 items, clearing of the

@@ -435,6 +435,28 @@ strands nothing:
   fresh authorization under the stopped-run rule (a Go covers
   one attempt). Nothing about a failed B1 is "fixed forward"
   inside gate (b).
+- **Two failure classes, never conflated (clarification, Rowan
+  2026-10-31).** *(a) Transaction failure:* the DO reports an
+  error, or the route returns a refusal/fault — the transaction
+  did not commit; the Atomicity bullet above applies in full
+  and the store is provably the gate-(a) end state. *(b)
+  Ambiguous response after a possible commit:* the request may
+  have committed but the response was lost (transport timeout,
+  connection drop, no readable outcome). Class (b) is **not** a
+  rollback case and **not** evidence of failure: the outcome is
+  simply UNKNOWN until established by read-back — the reconcile
+  read shows either the floor shape (not armed: no commit
+  happened) or the armed shape with its derived ledgers (the
+  commit landed, whole, because the transaction is atomic).
+  There is no third possibility and no partial state to fear;
+  what is forbidden in class (b) is acting on a guess — above
+  all, **no automatic retry**: a second bootstrap call is made
+  only after a read-back has *proven* the not-armed floor
+  shape, and even then only under fresh authorization (the
+  bullet above). If read-back proves armed, B1 is recorded as
+  committed-with-lost-response and gate (b) proceeds to B2 on
+  the read-back evidence, with the ambiguity disclosed in the
+  execution record.
 
 ### 4.5 Idempotence (recorded; not a second-call license)
 
@@ -521,6 +543,18 @@ pairwise disjoint; their union equals the reported totals for both
 arrays; the totals are identical on the first and last page (no
 movement during the census); and `censusComplete` is true on the
 final page.
+
+**Queue-pause checkpoints during B2 (explicit; the same law as
+B0 §3 and B3 §7).** The Worker cannot read queue pause state
+(send-only binding), so pause is proven by cf-api read-back at
+exactly these checkpoints: **C-1** in B0, immediately before the
+B1 call; **C-2** after B1, immediately before the first census
+page; **C-3** at census completion, before any outcome (§5.5) is
+declared; **C-4** before *each* B3 disposition call (§7). A
+read-back showing `delivery_paused != true` at any checkpoint is
+a STOP under §5.4(6) during B2 (archive INCOMPLETE) and a hard
+stop at C-1/C-4. No checkpoint is skippable, and no other
+checkpoints are implied — the list is the whole list.
 
 ### 5.4 STOP-and-archive-INCOMPLETE conditions
 
@@ -614,8 +648,13 @@ dispositionable under §7 in any case.)
 ## 7. B3 — dispositions: a presentation protocol, not a pre-approval
 
 B3 exists only if the B2 census surfaces exceptions. This proposal
-pre-approves **none** of them. Each disposition is its own
-sub-decision, presented to Julie individually with:
+pre-approves **none** of them. **Sequencing (DP-B1, RULED by Rowan
+2026-10-31): the complete B2 census is filed for Rowan's review
+before any B3 disposition is presented or executed — B3 never
+runs in the bootstrap session, and no disposition is proposed to
+Julie until Rowan has seen the census it comes from.** Each
+disposition is its own sub-decision, presented to Julie
+individually with:
 
 1. the attempt's identity (attempt id, plan, occurrence);
 2. its evidence interval `[created_at, updated_at]` and the proof
@@ -685,10 +724,18 @@ under §10. Generation is later still, under gate (c).
 - **Containment during gate (b):** every step runs behind the halt
   fence with the queue paused; the only writes gate (b) can make
   are the bootstrap record, the quota ledgers' bootstrap rows, and
-  (under §7) disposition records. A fault at any step leaves the
-  system halted + paused + (at worst) partially bootstrapped in a
-  state the reconcile census can still describe truthfully —
-  there is no step whose failure hides state.
+  (under §7) disposition records. **There is no "partially
+  bootstrapped" state** (clarification, Rowan 2026-10-31,
+  reconciling this section with §4.4): the bootstrap is a single
+  atomic transaction — it has either committed whole or not at
+  all. A fault at any step leaves the system halted + paused and
+  either fully bootstrapped or provably at the gate-(a) floor
+  shape; the only uncertainty a fault can create is
+  *observational* (a response lost after a possible commit,
+  §4.4 class (b)), and it is resolved by read-back, never by
+  retry. The reconcile census can describe the resulting state
+  truthfully in every case — there is no step whose failure
+  hides state.
 
 ---
 
@@ -734,32 +781,30 @@ system exactly as fenced as it is today.
 
 ## 12. Decision points for Rowan
 
-**DP-B1 — B3 timing.** When a complete B2 census surfaces provably
-same-day exceptions, may B3 dispositions be presented to Julie and
-executed in the same session, or must the census first be filed
-and reviewed before any disposition? *Wren's lean: same-session
-permitted, never required* — each disposition still carries its
-own individual Julie approval with the §7 presentation, and the
-census is complete and archived before the first B3 call either
-way. Filing-first remains available whenever the census is large
-or surprising.
+**DP-B1 — B3 timing: RULED (Rowan, 2026-10-31).** The complete
+B2 census is **filed for Rowan's review before any B3
+disposition** is presented or executed (§7 carries the rule).
+Same-session B3 is not permitted under this proposal. Every
+disposition still requires Julie's individual approval.
 
-**DP-B2 — Hold closure.** If gate (b) ends as an explained hold,
-who declares it closed? *Wren's lean: Wren files the execution
-record; Rowan reviews and closes it* — mirroring the gate-(a)
-pattern (execution record → Rowan record review → closure), so no
-hold is ever closed on Wren's say-so alone.
+**DP-B2 — Hold closure: RULED (Rowan, 2026-10-31).** Wren files
+the execution record; **Rowan reviews and rules on closure**.
+An explained accounting hold never permits re-arm (§10).
 
-No other forks are presented: everything else in this proposal is
-fixed by the prior rulings cited in the source index.
+Both decision points are closed; no forks remain open in this
+proposal. Everything else is fixed by the prior rulings cited in
+the source index.
 
 ---
 
 ## 13. Non-authorizations and the approval sequence
 
 This proposal authorizes nothing. The sequence is: Rowan's review
-of this proposal → Julie's gate-(b) decision → execution of exactly
-B0–B3 as approved → execution record → Rowan's record review.
+of this proposal → Julie's gate-(b) decision → execution of B0–B2
+as approved → **the complete census filed for Rowan's review
+(DP-B1)** → only then any B3 items, each with Julie's individual
+approval → execution record → Rowan's record review and closure
+ruling (DP-B2).
 Not included at any step: re-arm, queue unpause, halt flip,
 generation of any kind, provider calls, spending, dispositions
 beyond the individually approved §7 items, clearing of the

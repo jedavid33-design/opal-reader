@@ -53,6 +53,18 @@ arrays; the totals are identical on the first and last page (no
 movement during the census); and `censusComplete` is true on the
 final page.
 
+**Queue-pause checkpoints during B2 (explicit; the same law as
+B0 §3 and B3 §7).** The Worker cannot read queue pause state
+(send-only binding), so pause is proven by cf-api read-back at
+exactly these checkpoints: **C-1** in B0, immediately before the
+B1 call; **C-2** after B1, immediately before the first census
+page; **C-3** at census completion, before any outcome (§5.5) is
+declared; **C-4** before *each* B3 disposition call (§7). A
+read-back showing `delivery_paused != true` at any checkpoint is
+a STOP under §5.4(6) during B2 (archive INCOMPLETE) and a hard
+stop at C-1/C-4. No checkpoint is skippable, and no other
+checkpoints are implied — the list is the whole list.
+
 ### 5.4 STOP-and-archive-INCOMPLETE conditions
 
 B2 stops, and the census is archived explicitly as **INCOMPLETE**,
