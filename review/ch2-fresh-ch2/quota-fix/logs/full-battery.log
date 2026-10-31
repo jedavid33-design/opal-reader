@@ -1,0 +1,3220 @@
+===== adaptive-background-repair exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-241.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/adaptive-background-repair.test.mjs:6:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-241.js'
+}
+
+Node.js v24.22.1
+✖ tests/adaptive-background-repair.test.mjs (120.543ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 132.846764
+
+✖ failing tests:
+
+test at tests/adaptive-background-repair.test.mjs:1:1
+✖ tests/adaptive-background-repair.test.mjs (120.543ms)
+  'test failed'
+
+===== audio-chunk-playback exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/audio-chunk-playback.test.mjs:6:10
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+}
+
+Node.js v24.22.1
+✖ tests/audio-chunk-playback.test.mjs (174.442426ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 189.455247
+
+✖ failing tests:
+
+test at tests/audio-chunk-playback.test.mjs:1:1
+✖ tests/audio-chunk-playback.test.mjs (174.442426ms)
+  'test failed'
+
+===== auto-split-quota-guard exit=0 =====
+✔ auto-split stages nothing while a watchlist job is quota-parked (1.733602ms)
+✔ auto-split stages nothing while the SLOT job is quota-parked (0.530676ms)
+✔ auto-split still runs when nothing is parked, and a manual tap always reaches the queue entry (1.225449ms)
+✔ auto-split stays off when the chapter is not armed (0.447772ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 149.083811
+
+===== batch-attempt-markers exit=0 =====
+✔ a Batch submission writes a route:'batch' marker BEFORE the provider POST; polls write nothing (41.460631ms)
+✔ a rejected Batch submission is still counted, and its daily evidence parks the job + writes the park (44.761234ms)
+✔ the quota report's daily attempted total includes Standard + Batch (25.081731ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 264.180768
+
+===== cap-pause-rearm exit=0 =====
+✔ legacy cap banner (no stored reason) maps to cap and surfaces when work exists (2.334974ms)
+✔ legacy cap banner with NO blocked work derives no affordance (migration gate) (0.285519ms)
+✔ other legacy banners do not map to cap (0.342384ms)
+✔ stored reason wins over the banner text (0.19288ms)
+✔ base forecast sums repairable blocked segments only (0.321543ms)
+✔ base forecast alone over the cap reports overCap (0.316665ms)
+✔ spent plus base forecast exactly at the cap is not overCap (0.245268ms)
+✔ cap of zero disables the cap check (never overCap) (0.24655ms)
+✔ base forecast can fit the cap while the repair tree does not — helper reports base only (1.97197ms)
+✔ blocked segment whose voice cannot resolve: no throw, no affordance (0.683976ms)
+✔ blocked segment with a non-Gemini voice is not repairable work (3.567023ms)
+✔ blocked segment with no safe split point is not repairable work (0.319419ms)
+✔ user-stopped chapter never gets a Resume, even under the cap (0.153501ms)
+✔ non-cap reasons never get a Resume (0.194762ms)
+✔ armed chapter (flag true) has no pause UI state, even with a stored cap reason (0.097386ms)
+✔ helpers are null-safe (0.10012ms)
+✔ every autoSplitEnabled assignment in the client also assigns the pause reason (6.204982ms)
+✔ cap pause sites store the cap reason; the true sites clear it (0.756095ms)
+✔ banner never claims cap eligibility; Resume defers to the queue-time plan check (0.764347ms)
+✔ Resume click path delegates to the guarded queue entry (0.38672ms)
+✔ queue entry performs the Worker status lookup before any submission (0.211617ms)
+✔ index.html cache-busts the client for this branch (0.065759ms)
+✔ behavior: confirmed-absent server job (404) submits exactly once, with the deterministic id (4.941035ms)
+✔ behavior: cross-device stale snapshot — server already runs the job; adopt, never submit (1.225229ms)
+✔ behavior: unknown submission (submitUnconfirmed) reconciles with the server, never blind-resubmits (0.37296ms)
+✔ behavior: finished server job is adopted through lt (results path), not resubmitted (0.250015ms)
+✔ behavior: server paused_quota blocks the queue and re-pins the quota pause (0.575233ms)
+✔ behavior: server parked job is reconciled, not duplicated (0.53993ms)
+✔ behavior: unverifiable server state fails closed — no submission, clear message (0.572519ms)
+✔ behavior: malformed server status also fails closed (0.378438ms)
+✔ behavior: server-confirmed failed job restarts via the normal submit (a reconciled decision) (0.594452ms)
+✔ behavior: near-cap boundary — base fits, repair tree does not; the queue-time guard decides (0.770116ms)
+✔ ledger: queue staging seeds recordedCost from the verified server status (0.372819ms)
+✔ ledger: Rowan repro — adopting a ready job already paid into synced usage (16.61 incl. 0.18) does not re-credit (1.11997ms)
+✔ ledger (a): adopting ready/partial jobs whose spend is already in synced usage leaves spent unchanged (0.758909ms)
+✔ ledger (b): confirmed-failed restart seeds the retained generated_cost — no re-credit (0.555975ms)
+✔ ledger (c): spend accruing after adoption is credited once, as the increment only (0.681282ms)
+✔ ledger (d): two devices, one synced ledger — adoption adds nothing, later accrual adds only the delta (0.54635ms)
+✔ ledger: fresh 404 submission still seeds zero and accrues normally (regression) (0.343896ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 228.888163
+
+===== ch2disp-disposition exit=0 =====
+✔ disp-1 happy path: disposition applies with the exact write set (9.85579ms)
+✔ disp-3 exactly-once: a second disposition refuses and changes nothing (3.450398ms)
+✔ disp-4 refusal matrix: every refusal moves nothing and writes no audit (33.360685ms)
+✔ disp-6 fault injection: throw after the attempt UPDATE rolls back whole (4.608046ms)
+✔ disp-7a accounting exactness: all five figures + remainder + admit (6.295768ms)
+✔ disp-7b discriminating case: the estimate would fit; the reservation refuses (4.341685ms)
+✔ disp-8 retirement after disposition applies; before, it refuses (4.000874ms)
+✔ disp-10 amendment ships as schema only — no entry point exists (3.456608ms)
+✔ disp-11 legacy vocabulary and reconcile machinery unchanged (5.315076ms)
+✔ disp-12 read-surface honesty, before and after retirement (9.117212ms)
+✔ disp-13 cold store: exact zeros, legacy-identical, reads non-mutating (9.044063ms)
+✔ disp-13b cold guard: a phase_budget refusal on legacy figures alone (3.530098ms)
+✔ disp-14a split schema: exactly one table -> loud inconsistency everywhere (3.99759ms)
+✔ disp-14b genuine fault: a missing summed column propagates, never zeros (3.788585ms)
+✔ disp-15a shape fence: legacy-shaped accounting refuses phase_accounting_incomplete (3.519662ms)
+✔ disp-15b exit-gate comparison: absent keys fail, mismatches fail, exact match passes (4.500483ms)
+✔ disp-16 S1: a confirmed/unknown attempt carrying a numeric cost refuses adjudication_cost_inconsistent and moves nothing (4.126753ms)
+✔ disp-17 S2: an estimated_unverified attempt with no adjudication row is loud on every accounting read surface (12.789263ms)
+✔ disp-18 S2: negative unverified figures refuse phase_accounting_incomplete at the budget check (0.339951ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 360.535738
+
+===== ch2disp-route exit=0 =====
+✔ disp-5 fence: no operator token, client token alone, unstamped internal — all refused (22.657933ms)
+✔ disp-5 closed allowlist: figure keys and foreign keys refuse the whole request (25.360218ms)
+✔ disp-2 (GENERATION_HALT "1"): route disposition -> drives NEVER resume the halted plan (11.278205ms)
+✔ disp-2 (GENERATION_HALT "0"): route disposition -> drives NEVER resume the halted plan (6.938793ms)
+✔ disp-2b admission fence: a fresh intent over the disposed plan's occurrences stays fenced (10.145476ms)
+✔ disp-9 stale message after disposition + retirement: fence refusal, zero contact, zero movement (31.373873ms)
+✔ disp-10 route inventory: disposition route present, amendment route absent (3.665621ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 449.869732
+
+===== ch2fix-adapter-block exit=0 =====
+✔ fix1: a text-refusal interactions 200 maps to contentBlocked (POLICY_BLOCK), not a bare 502 (3.295276ms)
+✔ fix1: an explicit PROHIBITED_CONTENT signal maps blockReason PROHIBITED_CONTENT (generateContent parity) (0.734913ms)
+✔ fix1/B1: a policy signal in the structured fields (no text) is sufficient refusal evidence (0.465298ms)
+✔ fix1/B1: no-audio WITHOUT refusal evidence is unclassified — unknown-billing shape, NOT a known zero-cost block (0.694453ms)
+✔ fix1/B1: the splitter does NOT engage on an unclassified no-audio response — one call, error rethrown untouched (0.708273ms)
+✔ fix1: a clean interactions response is unchanged — one call, audio returned as-is (2.275504ms)
+✔ fix1: non-block provider errors keep their classification — no contentBlocked, no split fuel (1.360162ms)
+✔ fix1: splitter engagement end-to-end — blocked whole splits, halves succeed, voice identical on every call (1.455955ms)
+✔ fix1: a segment that blocks at every depth still terminates as TerminalBlock through the adapter mapping (1.043746ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 153.342051
+
+===== ch2fix-presplit exit=0 =====
+✔ fix3/B3: the threshold is the fetch ceiling at the pinned slowest rate (120 s × 10 chars/s = 1200) — a duration bound, NOT a completion guarantee (1.600282ms)
+✔ fix3: preSplitText — identity at and under the ceiling; exact-concat chunks above it (1.969936ms)
+✔ fix3: an under-threshold segment passes through untouched — one call, the original text (0.930206ms)
+✔ fix3: an over-threshold segment is pre-split before its first attempt (0.7795ms)
+✔ fix3: pre-split composes with the policy path — a blocked chunk still splits further, order preserved (1.969876ms)
+✔ fix3: the 12-attempt ceiling binds across ALL pre-split chunks (no per-chunk budget reset) (2.588845ms)
+✔ fix3: synthesizeSegment itself is unperturbed — a >1200-char direct call keeps whole-segment semantics (10.272146ms)
+✔ fix3 executor: an over-threshold segment commits from pre-split chunks — every call within the ceiling, stitched in order (65.152535ms)
+✔ fix3 executor: an under-threshold segment is the unchanged single call (9.097112ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 395.54056
+
+===== ch2fix-rearm-fence exit=0 =====
+✔ T1 — headline replay: the production Ch 2 shape is refused at the fence, zero calls, zero movement (70.062763ms)
+✔ T2 — retired plan: refused, zero calls, zero movement (22.20973ms)
+✔ T3 — complete plan: refused, zero calls, zero movement (35.305653ms)
+✔ T3b — partial plan (the fourth refused state): refused, zero calls, zero movement (16.183417ms)
+✔ T4 — legitimate active dispatch (smoke shape): the fence passes and the commit lands (39.498876ms)
+✔ T4b — link-only identity: resolution and bookkeeping come from d6_plan_jobs when the job carries no stamp (12.030174ms)
+✔ T4c — stamp-only identity: resolution comes from the job's data_json stamp when no link row exists (12.60775ms)
+✔ T5 — parked plan congruence: every parked_* state dispatches exactly as the pre-fence build (64.20977ms)
+✔ T6 — plan-less job: behavior identical to the pre-fence build (7.733315ms)
+✔ T7 — Ch 3 shape: a parked_policy coordinator job with no plan and no grant dies at claim discipline; the fence neither engages nor is needed (5.573314ms)
+✔ T8 — fault injection at EACH resolution step: a database fault never reads as dispatchable and never as 'no plan' (11.804485ms)
+✔ T9 — mislabelled payload: a message-carried planId naming a different, active plan never steers the fence (21.2096ms)
+✔ T10 — foreign planId against BOTH fences: one resolution feeds the quarantine read and the state fence (5.224831ms)
+✔ T11 — conflicting persisted links: the d6_plan_jobs link and the job stamp disagree — neither wins, the conflict refuses (4.005641ms)
+✔ T11b — Rowan pin 1: BOTH persisted stamps present and disagreeing refuse (plan_link_conflict) (4.185211ms)
+✔ T11c — Rowan pin 1 (agreement control): both stamps present and AGREEING dispatch normally (6.944682ms)
+✔ T12 — multiple link rows: two DISTINCT plan_ids for one job preserve plan_link_conflict (Rowan pin 3) (4.169667ms)
+✔ T13 — missing referenced plan: a dangling link never reads as plan-less (4.022236ms)
+✔ T14 — unrecognized plan state: a state outside the closed vocabulary fails closed (4.03847ms)
+✔ T15 — malformed job data: unparseable data_json refuses (plan_state_check_failed) (3.917659ms)
+✔ T16a — Rowan F1: BOTH message fields validated — a matching planId cannot mask a conflicting d6PlanId (4.047324ms)
+✔ T16b — Rowan F1: field order confers nothing — a conflicting planId with a matching d6PlanId also refuses (4.069057ms)
+✔ T16c — Rowan F1 (positive control): both message fields present and BOTH matching the resolved plan dispatch normally (6.33038ms)
+✔ T16d — Rowan F1: malformed present message fields refuse — no fallback is ever selected (12.173709ms)
+✔ T17a — Rowan F2: an EMPTY persisted stamp is invalid data, not an absent stamp (link-absent, active-grant shape) (4.274104ms)
+✔ T17b — Rowan F2: whitespace-only and empty stamps refuse, in either stamp field (5.347695ms)
+✔ T17c — Rowan F2 (preservation control): absent and explicit-null stamps keep the legitimate plan-less / link-resolved readings (13.494261ms)
+✔ T17d — Rowan F2: a BLANK d6_plan_jobs.plan_id is a corrupt link, never 'no plan' (schema permits blank strings; NULL is NOT NULL-constrained) (7.620957ms)
+✔ T15b — Rowan pin 2: present-but-non-object data_json is corruption, never a plan-less pass (8.713928ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 721.352036
+
+===== ch2fix-reconcile-route exit=0 =====
+✔ fix2 fence: no operator token, client token alone, and unstamped internal calls are all refused (16.029466ms)
+✔ fix2 validation: malformed settlements are refused and move nothing (absent cost NEVER settles as no-charge) (9.801859ms)
+✔ fix2/B2: planId is REQUIRED on the route, and outcome is REQUIRED and explicit (6.29042ms)
+✔ fix2/B2: contradictory settlements refuse with ZERO state movement and ZERO audit rows (8.658504ms)
+✔ fix2 plan guard: a planId that does not own the attempt refuses with reconcile_plan_mismatch (6.851983ms)
+✔ fix2 applied: a proven no-charge settles the attempt, clears the phase halt, and audits in the same motion (5.446223ms)
+✔ fix2 store preconditions through the route: unknown attempts only, exactly once (6.380124ms)
+✔ fix2 R4-1 regression (GENERATION_HALT "1"): route reconcile -> drive cycles NEVER resume the halted plan (10.12896ms)
+✔ fix2 R4-1 regression (GENERATION_HALT "0"): route reconcile -> drive cycles NEVER resume the halted plan (7.641928ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 297.164807
+
+===== chapter-quota-banner exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-234.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/chapter-quota-banner.test.mjs:6:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-234.js'
+}
+
+Node.js v24.22.1
+✖ tests/chapter-quota-banner.test.mjs (128.914233ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 141.677316
+
+✖ failing tests:
+
+test at tests/chapter-quota-banner.test.mjs:1:1
+✖ tests/chapter-quota-banner.test.mjs (128.914233ms)
+  'test failed'
+
+===== chapter-truth-projection exit=0 =====
+✔ complete chapter: every leaf playable -> Complete N/N (1.900041ms)
+✔ S1: complete-with-stale-park — a parked job record cannot un-complete a finished chapter (0.364767ms)
+✔ partial with blocked: blocked counts MISSING leaves only (0.317126ms)
+✔ device-fallback segments count as playable; stale audio does not (0.203195ms)
+✔ annotations reflect CURRENT blockers of missing work (0.272579ms)
+✔ not started: no audio yet (0.19979ms)
+✔ the Forever Pucked shape: 3/27 with a ready 2/2 repair stays 3/27 (0.241873ms)
+✔ knownChapterJobs unions slots and the watchlist (watch wins on fresher state) (0.425649ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 157.715665
+
+===== client-review-stage23 exit=0 =====
+✔ review (1): two funnel instances sharing one storage serialize their durable writes — concurrent discards on different books BOTH survive (28.323545ms)
+✔ review (2a): restart DURING retry setup — setup marked, command issued, id-marking never written: settle still clears the park by payload identity (8.237873ms)
+✔ review (2b): restart during retry setup BEFORE any command was issued — the park is not stuck; an explicit retry still lands it (10.915121ms)
+✔ review (regression): an UNRESOLVED park survives an unrelated applied save with an identical payload — only an explicit retry/discard resolves it (6.649078ms)
+✔ review (3a): settings PENDING — a failed send reports pending (not success, not conflict); the durable command lands after healing (3.486131ms)
+✔ review (3b): settings OUTCOME UNKNOWN — reported as unknown, never dressed as applied; the standing value is untouched (3.483978ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 327.641403
+
+===== client-stage1-followups exit=0 =====
+✔ FU1: in the shipped bundle, every book upload routes pe -> Er -> Ee -> _r; _r is called from nowhere else (22.244752ms)
+✔ FU3: restart recovery — a pending command survives, flushes to a surfaced conflict, and the stale working copy converges (18.027924ms)
+✔ durability: restart after DISCARD does not resurrect the park (7.374467ms)
+✔ durability: restart after a successful RETRY keeps the park cleared and the edit applied (11.877224ms)
+✔ durability: a FAILED retry preserves the parked payload across a restart; a later informed retry lands it (10.227789ms)
+✔ FU3b: a parked edit can be discarded — explicitly, by the user's choice only (5.015417ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 242.218288
+
+===== client-stage1-substitution exit=0 =====
+✔ substituted extracted path: the bundle's own pe() drives a save that lands via the funnel (21.435969ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 175.617991
+
+===== client-stage1 exit=0 =====
+✔ stage1 write path: a funnel save lands on the coordinator and converges to a second device (11.573028ms)
+✔ stage1: the v1 LWW data-loss scenario replays as a surfaced conflict — the newer content survives (7.414467ms)
+✔ stage1: saving an unchanged book enqueues nothing (the funnel diffs honestly) (4.348106ms)
+✔ stage1 delete path: funnel delete tombstones; a later stale save is rejected_tombstoned, surfaced (7.666755ms)
+✔ stage1 seam + no old writers: pe is ONE definition in the shipped bundle; the assembled client contains no v1 write machinery (13.900851ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 253.389873
+
+===== client-stage2 exit=0 =====
+✔ stage2: all four surfaces render the SAME model for the same chapter, across the state battery (11.892136ms)
+✔ stage2 twins: identical text, independent fates — no text-keyed confusion (10.351584ms)
+✔ stage2 split: a content revision replacing a segment with two children re-derives from the children (8.12243ms)
+✔ stage2: a second device projects the identical model after sync + its own byte verification (5.527686ms)
+✔ stage2 guard: the assembled client defines none of the v1 derivations; the projection is the only chapter-truth source (15.978529ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 205.520826
+
+===== client-stage3 exit=0 =====
+✔ stage3 position: the surface reads the coordinator's fold — a second device sees the position with no local state of its own (10.350483ms)
+✔ stage3 position: a stale backward event is recorded but superseded — and the surface SHOWS it instead of hiding it (4.704991ms)
+✔ stage3 position: journal gaps are surfaced, not smoothed over (3.255837ms)
+✔ stage3 settings: one writer path; a stale writer gets a surfaced conflict — never a merge, never a silent win (7.72994ms)
+✔ stage3 quota (F8): Settings-resident, as-of stamped; a failed refresh keeps the last view and marks it STALE — never zeros (29.569164ms)
+✔ stage3 guard: the surfaces write only through the store's journal and the SetSettings intent — no hand-rolled commands, no local position truth (8.352615ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 230.507534
+
+===== client-stage4 exit=0 =====
+✔ stage4 FIRST — Find works in the assembled client, with no lab anywhere in the composition (20.084761ms)
+✔ stage4 removals: azure/fish generation intents are rejected locally before persistence; kept providers pass (3.675836ms)
+✔ stage4 legacy playback: bindings from EVERY former provider resolve and count — audio is preserved (5.424151ms)
+✔ stage4 review gate: an UNMAPPED removed-provider voice cannot submit new generation — the flag enforces, not warns (3.203748ms)
+✔ stage4 review gate 2: a bare { bookId } request is checked against the SAVED book — POVs, default voice, SubmitJob and RepairJob (4.763589ms)
+✔ stage4 review gate 3: missing cache — the gate FETCHES the book; unverifiable (offline/absent) FAILS CLOSED; mappings must name supported providers (5.059774ms)
+✔ stage4 review gate 4: inline vs saved representations are BOTH checked; a job with no verifiable book data may not enqueue (4.918041ms)
+✔ stage4 voice mapping: removed-provider POVs are flagged for a decision; the book is never rewritten (2.27927ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 256.506571
+
+===== client-store-p5 exit=0 =====
+✔ census: the shipped bundle's writers match the inventory exactly — 94 pe() sites + fallback writers (14.976265ms)
+✔ outbox: intent + idempotency key are durable BEFORE any dispatch (7.818703ms)
+✔ outbox: a lost ACK replays the SAME command id — the coordinator sees exactly one command (22.310913ms)
+✔ outbox: conflicts are surfaced as outcomes, never dressed as completion (2.543897ms)
+✔ providers: azure/fish generation intents are rejected locally before persistence; their existing audio still plays (2.59855ms)
+✔ cache: sync pulls coordinator deltas; a torn page is rejected whole and changes nothing (5.581226ms)
+✔ cache: truncated server history triggers resync; snapshot converges incl. tombstones (5.022317ms)
+✔ chapter display: bindings without confirmed bytes read Uncertain — never a false Complete; verification earns Complete (4.637349ms)
+✔ chapter display: a policy-blocked binding reads Blocked; a missing binding reads Partial (6.27697ms)
+✔ journal: offline events keep stable device sequence across a restart and reconcile from receipts (5.701516ms)
+✔ atomicity: a crash inside the persistence write leaves NO partial state — no burned id, no orphan intent (4.480444ms)
+✔ atomicity: simultaneous store instances over one storage allocate disjoint command + event ids (3.454404ms)
+✔ bytes: a binding revision change invalidates prior confirmations; a missing-bytes report does too (4.643318ms)
+✔ race: overlapping flushOutbox calls dispatch each pending command exactly once (29.297848ms)
+✔ race: a binding change DURING byte verification discards the confirmation (4.710288ms)
+✔ stable device id: a second device id over the same storage cannot write (2.033121ms)
+✔ money: Settings view carries its as-of revisions; a failed refresh marks stale and keeps the last view (2.507413ms)
+✔ find: works over the content cache with Prosody Lab entirely absent (5.320564ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 285.213782
+
+===== composite-cache-isolation exit=0 =====
+✔ cached WAV is copied into an independent Blob before playback (1.834613ms)
+✔ large cached WAV bypasses memory copy (0.331167ms)
+✔ unreadable cache causes one deduplicated Worker fetch, no TTS requests (1.055954ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 173.543909
+
+===== continue-chunked-staging exit=0 =====
+✔ slices stage every job parked; nothing is enqueued before finalize (40.292106ms)
+✔ finalize before the plan is complete refuses and activates nothing (18.533213ms)
+✔ finalize activates exactly the first job, exactly once (8.1033ms)
+✔ interrupted setup resumes idempotently; re-staged jobs are not rewritten (7.446455ms)
+✔ a job already owned by another session cannot be claimed (7.305042ms)
+✔ the plan cannot change mid-staging (3.868535ms)
+✔ out-of-order chapters assembled across slices fail at finalize; all stay parked (3.850538ms)
+✔ stage rejects oversize slices and oversize plans (2.61855ms)
+✔ a payload-only partial job is re-staged, not skipped (3.446843ms)
+✔ legacy one-shot continue is unchanged (2.708725ms)
+✔ lost finalize acknowledgement: stage on an active session reconciles without re-staging or re-activating (15.146931ms)
+✔ an unstaged job cannot be staged with altered contents under its original ID (14.221182ms)
+✔ fingerprints are required, and a later slice cannot re-pin the plan (2.976357ms)
+✔ the complete 30-job plan stages in client-sized slices and activates once (36.331603ms)
+✔ manifest read failure fails closed: no repin, no job rewrite, no activation (5.750951ms)
+✔ worker and reader canonical JSON agree byte-for-byte (16.260172ms)
+✔ client submits the saved plan in acknowledged slices, then finalizes (3.178781ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 376.706746
+
+===== continue-preparation-progress exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-254.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/continue-preparation-progress.test.mjs:5:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-254.js'
+}
+
+Node.js v24.22.1
+✖ tests/continue-preparation-progress.test.mjs (101.686011ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 113.040511
+
+✖ failing tests:
+
+test at tests/continue-preparation-progress.test.mjs:1:1
+✖ tests/continue-preparation-progress.test.mjs (101.686011ms)
+  'test failed'
+
+===== continue-setup-recovery exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-254.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/continue-setup-recovery.test.mjs:7:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-254.js'
+}
+
+Node.js v24.22.1
+✖ tests/continue-setup-recovery.test.mjs (104.353564ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 116.39888
+
+✖ failing tests:
+
+test at tests/continue-setup-recovery.test.mjs:1:1
+✖ tests/continue-setup-recovery.test.mjs (104.353564ms)
+  'test failed'
+
+===== continue-to-quota exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-242.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/continue-to-quota.test.mjs:6:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-242.js'
+}
+
+Node.js v24.22.1
+✖ tests/continue-to-quota.test.mjs (139.538626ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 153.644595
+
+✖ failing tests:
+
+test at tests/continue-to-quota.test.mjs:1:1
+✖ tests/continue-to-quota.test.mjs (139.538626ms)
+  'test failed'
+
+===== coordinator-api exit=0 =====
+✔ I2: every GET route leaves the store byte-identical (37.600968ms)
+✔ API round trip: command receipt and job view agree with the coordinator (5.786934ms)
+✔ F7 derivation: all seven chapter states from one function (0.324317ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 196.9671
+
+===== coordinator-bindings exit=0 =====
+✔ clean bind: identity matches the recorded cache identity (4.620835ms)
+✔ first write binds and records the identity for future checks (2.026361ms)
+✔ identity mismatch: no bind, conflict visible, correct key still binds after (1.92533ms)
+✔ format invalid and object missing are distinct, and missing is not a conflict (1.777428ms)
+✔ legacy anchoring: a legacy revision binds only its own verified artifact (§1.3) (1.875705ms)
+✔ an existing binding for the occurrence is never silently replaced (2.109426ms)
+✔ byte verification: bytes changed under a key after a bind are caught (finding 3) (1.917788ms)
+✔ byte verification: a stated expected hash must match the actual bytes (1.922986ms)
+✔ gap 3: a new recording with NO verifiable digest does not bind; legacy may (2.016696ms)
+✔ AdoptAudio command: applied when valid, recorded rejection on conflict (3.068946ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 177.871192
+
+===== coordinator-commands exit=0 =====
+✔ submit applies once; the same command_id replays the original outcome (5.79061ms)
+✔ a lost acknowledgement is recoverable: crash, re-send, same outcome (seam i) (2.657709ms)
+✔ duplicate job under a new command id is a recorded rejection (2.190908ms)
+✔ unknown command types are refused before recording (1.712099ms)
+✔ freeze directive: mutations reject as frozen, unfreeze restores (2.909206ms)
+✔ pause / resume / cancel flow through the transition table (50.025333ms)
+✔ settings: versioned updates, stale base revision conflicts (3.730818ms)
+✔ gap 1: two devices requesting the same audio share one in-flight operation (6.520436ms)
+✔ RequestSynthesis: cached answer first, otherwise a gated grant (4.902417ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 252.343063
+
+===== coordinator-grants exit=0 =====
+✔ grant: occurrences granted, attempts reserved, outbox + lease written, one transaction (27.756925ms)
+✔ quota estimate guard: a full day blocks grants before any spend (3.783318ms)
+✔ spending cap is adjudicated inside the grant transaction (5.706534ms)
+✔ daily-limit evidence parks; the attempted occurrence is preserved pending (6.47082ms)
+✔ generic 429 is weather: backoff + retry, never a park (B5) (6.245393ms)
+✔ probe resume: one occurrence, success releases the park, no clock restart (B6) (7.461438ms)
+✔ stale reports are rejected for state; replays are harmless (4.472612ms)
+✔ repair chains: follow-on is created AND granted server-side, then completes (B7 + finding 5) (6.389008ms)
+✔ finding 4 regression: an all-failed report marks the job failed, not generating (4.053783ms)
+✔ finding 3: a success report whose bytes don't match the stated hash does not bind (7.36336ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 243.522606
+
+===== coordinator-p3-claims exit=0 =====
+✔ claim lifecycle: claim -> read-only re-claims -> probe accepted -> report completes the claim (29.720833ms)
+✔ a voided grant claims as CLOSED; terminal closure refuses a claimed grant and rejects later claims (9.262269ms)
+✔ spend intent: exactly once, holder-only, and a claim alone never suffices (condition 1) (4.52441ms)
+✔ batch map: fence needs the intent; fenced -> submitted; ambiguous -> adopted by lookup (5.566564ms)
+✔ resolveBatchNeverAccepted: explicit evidence closes the map, voids the grant, releases the spend, re-advances (43.752049ms)
+✔ CLAIM FENCE: a contradictory not_accepted verdict against a claimed, spend-fenced, in-flight grant voids NOTHING (round 2) (12.097024ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 309.04841
+
+===== coordinator-recovery exit=0 =====
+✔ seam ii: a grant committed but never sent is delivered after a crash, exactly once (28.617387ms)
+✔ seam iii: executor dies after dispatch -> lease expiry -> outcome_unknown, never re-dispatched (8.593747ms)
+✔ seam iii-a + gap 4: lease expiry auto-adopts cached audio and the JOB completes (7.577041ms)
+✔ seam iii-b: automatic reconciliation records spent-without-audio from a CONFIRMED provider outcome (6.111021ms)
+✔ seam iii-c: no cache, no provider record -> stays unknown until Julie authorizes (6.62369ms)
+✔ seam iv + finding 1: unvalidated success -> outcome_unknown (never stuck), reconciliation recovers it (5.516178ms)
+✔ seam v: a crash mid-report rolls the whole report back; re-report applies cleanly (7.066685ms)
+✔ gap 2: pause/cancel void a queued dispatch before it can spend; freeze only holds it (13.28668ms)
+✔ gap 5: scheduling a 30s retry advances an alarm that was 10 minutes out (3.893944ms)
+✔ finding 2: unacknowledged deliveries are never marked sent (9.051264ms)
+✔ finding 2/5: the watchdog drain with no delivery handler leaves grants visibly unsent (3.723328ms)
+✔ autonomous recovery: a poison schedule row backs off, dies visibly, and never kills the chain (5.535307ms)
+✔ autonomous recovery: alarm handler throwing wholesale still re-arms (finally) (2.554633ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 277.868729
+
+===== coordinator-round3 exit=0 =====
+✔ fix 1: pause -> void -> resume cycles at the cap release every reservation; one sent request counts once (38.965856ms)
+✔ fix 1: voided dispatches release the 100/day estimate at the threshold (8.876141ms)
+✔ fix 2a: an identical re-bind after a silent byte swap is a conflict, not idempotent success (3.169917ms)
+✔ fix 2b: an executor-supplied digest matching swapped bytes cannot bless them over the anchored digest (2.024298ms)
+✔ fix 2c: the legacy exemption never ignores a known digest (2.066621ms)
+✔ fix 3: dispatch recorded right before a crash, no provider outcome -> stays outcome_unknown, never replayed; confirmed outcome settles spent (7.406095ms)
+✔ fix 4: pause -> delivered grant reports full success -> resume ends Complete, nothing new dispatched (6.088547ms)
+✔ fix 4 (queued): resume lands in queued before the in-flight report arrives -> the report still settles Complete (4.57158ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 227.515824
+
+===== coordinator-round4 exit=0 =====
+✔ blocker 1a: absent queue handler for >15 min -> no phantom unknown; dispatch voided, reservation released, work re-grantable (30.555105ms)
+✔ blocker 1b: freeze for >15 min holds the dispatch (no void, no unknown); thaw delivers it, lease anchored to handoff (6.91632ms)
+✔ blocker 1c: a send attempted after the delivery window closed is fenced — never sent, reservation released, fresh grant works (6.418202ms)
+✔ blocker 1d: watchdog and lease due in the same alarm, work DELIVERED -> truthful unknown, no double-send; creation lease superseded at handoff (4.728566ms)
+✔ blocker 2a: two jobs share an occurrenceId — the other job's confirmed spent evidence settles nothing here (7.430791ms)
+✔ blocker 2b: same job, earlier grant — a confirmed outcome under grant A does not settle grant B's unknown (7.124542ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 228.656536
+
+===== coordinator-round5 exit=0 =====
+✔ A1: queue accepted, ACK lost -> uncertain (no void, no release, no re-grant); queue probe confirms -> delivered exactly once (31.970519ms)
+✔ A2: send pending while the alarm runs -> uncertain, not voided; the late ACK resolves it; a second drain never double-invokes (5.102377ms)
+✔ A2b: pause lands while a send is in flight -> the in-flight dispatch settles by report, exactly once (4.783148ms)
+✔ A3: crash after the queue accepted but before the ACK was processed -> new instance reconciles from the queue record (5.168286ms)
+✔ A4: queue probe stays unknown -> bounded checks, then the uncertainty simply stays VISIBLE (no void, no release, no spin) (6.774046ms)
+✔ B1: undelivered grant expires and voids -> the scheduler re-grants and delivers with NO client call (6.679935ms)
+✔ B2: the re-advance respects a freeze — it defers while frozen and fires after thaw (5.534405ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 220.291302
+
+===== coordinator-round6 exit=0 =====
+✔ race 1a: probe says ACCEPTED after a report already settled the grant -> stale, logged, grant stays reported (29.267863ms)
+✔ race 1b: probe says NOT_ACCEPTED after a report already settled the grant -> stale, nothing voided or released (5.481627ms)
+✔ race 2: freeze at verdict time -> decision defers; thaw -> void + exactly one durable retry -> fresh grant, alarms only (8.618724ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 194.269472
+
+===== coordinator-transitions exit=0 =====
+✔ job transition table is exhaustive: declared or rejected, always logged (203.350509ms)
+✔ occurrence transition table is exhaustive (138.915942ms)
+✔ single applier: a stale expected revision is a conflict, never a write (4.406323ms)
+✔ outcome_unknown has no re-dispatch exit in the table (1.584338ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 560.285414
+
+===== cross-device-chapter-handoff exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-253.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/cross-device-chapter-handoff.test.mjs:7:12
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-253.js'
+}
+
+Node.js v24.22.1
+✖ tests/cross-device-chapter-handoff.test.mjs (97.877545ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 108.668359
+
+✖ failing tests:
+
+test at tests/cross-device-chapter-handoff.test.mjs:1:1
+✖ tests/cross-device-chapter-handoff.test.mjs (97.877545ms)
+  'test failed'
+
+===== d5-audio-route exit=0 =====
+✔ gate order on the audio route: scope → token → instance, earliest refusal wins (10.089191ms)
+✔ gate: token unconfigured on the surface → 503 production_token_not_configured (0.808373ms)
+✔ gate: operator routes remain closed to the client token (1.438609ms)
+✔ full-object GET (mp3): byte-for-byte equal, digest compared, contract headers + §2.6 cache privacy (5.621566ms)
+✔ full-object GET (wav): byte-for-byte equal with audio/wav (1.14612ms)
+✔ large object (>1 MiB): full digest equal; a ranged read returns only its slice from R2 (80.245205ms)
+✔ CORS stays exact-origin on audio responses: a foreign origin gets no CORS headers (0.936845ms)
+▶ §2.5 matrix: every row, with per-row R2 operation counts (§6.2-3a)
+  ✔ no Range → 200 full (0.966561ms)
+  ℹ §2.5 row | no Range → 200 full | metadata=1 reads=1
+  ✔ closed range bytes=10-19 → 206 slice (0.942103ms)
+  ℹ §2.5 row | closed range bytes=10-19 → 206 slice | metadata=1 reads=1
+  ✔ oversized end bytes=990-999999 → 206 clamped to size-1 (0.803596ms)
+  ℹ §2.5 row | oversized end bytes=990-999999 → 206 clamped to size-1 | metadata=1 reads=1
+  ✔ open-ended bytes=995- → 206 to end (0.735914ms)
+  ℹ §2.5 row | open-ended bytes=995- → 206 to end | metadata=1 reads=1
+  ✔ suffix bytes=-25 → 206 final bytes (0.792429ms)
+  ℹ §2.5 row | suffix bytes=-25 → 206 final bytes | metadata=1 reads=1
+  ✔ suffix ≥ size bytes=-2000 → 206 whole object (0.654602ms)
+  ℹ §2.5 row | suffix ≥ size bytes=-2000 → 206 whole object | metadata=1 reads=1
+  ✔ zero suffix bytes=-0 → 416 (0.424377ms)
+  ℹ §2.5 row | zero suffix bytes=-0 → 416 | metadata=1 reads=0
+  ✔ start ≥ size bytes=1000- → 416 (0.381793ms)
+  ℹ §2.5 row | start ≥ size bytes=1000- → 416 | metadata=1 reads=0
+  ✔ start ≥ size closed bytes=1500-1600 → 416 (0.393871ms)
+  ℹ §2.5 row | start ≥ size closed bytes=1500-1600 → 416 | metadata=1 reads=0
+  ✔ start > end bytes=50-40 → 416 (0.379259ms)
+  ℹ §2.5 row | start > end bytes=50-40 → 416 | metadata=1 reads=0
+  ✔ multiple ranges → 416 intentional refusal, never multipart (0.297266ms)
+  ℹ §2.5 row | multiple ranges → 416 intentional refusal, never multipart | metadata=1 reads=0
+  ✔ unknown unit items=0-9 → Range ignored, 200 full (0.570486ms)
+  ℹ §2.5 row | unknown unit items=0-9 → Range ignored, 200 full | metadata=1 reads=1
+  ✔ malformed Range bytes=abc → ignored, 200 full (0.52665ms)
+  ℹ §2.5 row | malformed Range bytes=abc → ignored, 200 full | metadata=1 reads=1
+  ✔ malformed Range bytes=- → ignored, 200 full (0.41311ms)
+  ℹ §2.5 row | malformed Range bytes=- → ignored, 200 full | metadata=1 reads=1
+  ✔ malformed Range bytes=1-2-3 → ignored, 200 full (0.586109ms)
+  ℹ §2.5 row | malformed Range bytes=1-2-3 → ignored, 200 full | metadata=1 reads=1
+  ✔ If-Range strong match + range → 206 honoured (0.717587ms)
+  ℹ §2.5 row | If-Range strong match + range → 206 honoured | metadata=1 reads=1
+  ✔ If-Range mismatch + range → Range ignored, 200 full (0.42005ms)
+  ℹ §2.5 row | If-Range mismatch + range → Range ignored, 200 full | metadata=1 reads=1
+  ✔ If-Range date-form + range → Range ignored, 200 full (0.525148ms)
+  ℹ §2.5 row | If-Range date-form + range → Range ignored, 200 full | metadata=1 reads=1
+  ✔ If-Range weak tag + range → Range ignored, 200 full (0.605459ms)
+  ℹ §2.5 row | If-Range weak tag + range → Range ignored, 200 full | metadata=1 reads=1
+  ✔ If-None-Match match → 304, no body (0.549084ms)
+  ℹ §2.5 row | If-None-Match match → 304, no body | metadata=1 reads=0
+  ✔ If-None-Match match WITH Range → 304 (conditional precedence over Range) (0.304076ms)
+  ℹ §2.5 row | If-None-Match match WITH Range → 304 (conditional precedence over Range) | metadata=1 reads=0
+  ✔ If-None-Match * → 304 (0.228763ms)
+  ℹ §2.5 row | If-None-Match * → 304 | metadata=1 reads=0
+  ✔ If-None-Match list containing the etag → 304 (0.39344ms)
+  ℹ §2.5 row | If-None-Match list containing the etag → 304 | metadata=1 reads=0
+  ✔ If-None-Match weak form of the etag → 304 (weak comparison) (0.247471ms)
+  ℹ §2.5 row | If-None-Match weak form of the etag → 304 (weak comparison) | metadata=1 reads=0
+  ✔ If-None-Match non-matching → 200 full (0.44656ms)
+  ℹ §2.5 row | If-None-Match non-matching → 200 full | metadata=1 reads=1
+  ✔ HEAD, no Range → 200 full metadata, no body, no read (0.395814ms)
+  ℹ §2.5 row | HEAD, no Range → 200 full metadata, no body, no read | metadata=1 reads=0
+  ✔ HEAD with Range → Range ignored, 200 full metadata, no body (0.262674ms)
+  ℹ §2.5 row | HEAD with Range → Range ignored, 200 full metadata, no body | metadata=1 reads=0
+  ✔ HEAD with If-Range + Range → still 200 full metadata (0.270135ms)
+  ℹ §2.5 row | HEAD with If-Range + Range → still 200 full metadata | metadata=1 reads=0
+  ✔ HEAD + matching If-None-Match → 304 (0.335764ms)
+  ℹ §2.5 row | HEAD + matching If-None-Match → 304 | metadata=1 reads=0
+✔ §2.5 matrix: every row, with per-row R2 operation counts (§6.2-3a) (20.034495ms)
+✔ If-Modified-Since is inert on this route (no Last-Modified is issued): processed as if absent (0.529976ms)
+✔ OPTIONS: HEAD advertised, range/conditional headers allowed, expose list present, exact-origin echo + Vary preserved (0.55298ms)
+✔ absent object → 404 audio_not_found, truthful, after exactly one metadata lookup (0.57311ms)
+✔ format mismatch → 404: the other format is never probed (exactly one key touched) (0.736145ms)
+✔ malformed cache key or format → 400 invalid_audio_key, with zero R2 contact (1.220562ms)
+✔ size-mutated stored object → 503 audio_storage_unavailable, never served as playable bytes (0.809915ms)
+✔ storage failures the entry can distinguish → 503 audio_storage_unavailable (0.76585ms)
+✔ methods other than GET/HEAD on the audio route → 405, no R2 or coordinator contact (0.797807ms)
+✔ A1: production scope + non-empty R2_KEY_PREFIX → 503 production_r2_prefix_forbidden with ZERO R2 contact (GET and HEAD) (0.651758ms)
+✔ A1: production with an empty or unset R2_KEY_PREFIX keeps serving (the production shape) (1.236475ms)
+✔ A1: non-production scope at the route layer keeps its existing behaviour (no production check inferred) (0.781673ms)
+✔ A2: same-size replacement between HEAD and GET (different ETag, same size) → 503 audio_storage_unavailable, never served under the stale validator (1.208353ms)
+✔ A2: a GET ETag that is the HEAD ETag in bare (unquoted) form is the same validator → served normally (0.639159ms)
+✔ no-write audit: a full battery of audio requests writes nothing, anywhere (0.939951ms)
+✔ control: non-audio routes still forward to the coordinator exactly as before (1.362254ms)
+ℹ tests 52
+ℹ suites 0
+ℹ pass 52
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 327.194753
+
+===== d6-correction exit=0 =====
+✔ C1: same class identity; spec binds it with no new-class migration (6.019834ms)
+✔ C2: D6 bootstrap over carried state rewrites nothing; D6 operates on it (48.346173ms)
+✔ C3: halted host entry preserves production gates and halts (18.222046ms)
+✔ C4: crafted grant fails exactly as production; batch lane refused (11.250744ms)
+✔ C5: real-entry alarm restart + day-boundary rollover, zero duplicates (30.084187ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 310.54753
+
+===== d6-correction2 exit=0 =====
+✔ A/B: adapter resolves live-shaped names to cast ids; Goal dispositions (3.390428ms)
+✔ A: name-shaped and id-shaped planes yield IDENTICAL eligible sets (1.440733ms)
+✔ A: defaultVoice fallback resolves by (provider, voice_id) when the entity carries it; no cast match -> unresolved (0.39966ms)
+✔ A: duplicate cast name is unresolved and NAMED by the POV proof; named-but-unknown never falls through (1.448694ms)
+✔ C: anchor is the lineage ROOT; live-only parked row named, proof passes (1.426801ms)
+✔ C: record-carrying fallback names the anchor when a plane has no lineage ids (0.796315ms)
+✔ D: schema evolution over the DEPLOYED 3-column table preserves rows; idempotent (3.464058ms)
+✔ D: store seed semantics — first seed, idempotent re-seed, provenance on change (4.652542ms)
+✔ D: service halt fence (G2-amended contract: figureless; the executor never seeds implicitly) (3.189386ms)
+✔ D: entry fence — public gate chain, class gate, halt fence end-to-end (G2-amended) (44.141664ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 306.539015
+
+===== d6-eligible-set exit=0 =====
+FP Ch 2: 18 unbound eligible; 18 carry block history
+✔ audio cross-check: bound counts equal audio-results uses per book (1.331529ms)
+✔ per-book disposition counts match the census derivation (0.794392ms)
+✔ totals: eligible 688 + voice_prompt 99 = 787 non-Ch3 unbound of 811 (0.400631ms)
+✔ voice_prompt exception is exactly The Goal's removed-provider cast (1.38605ms)
+✔ FP eligible = 333; Ch 2's 18 POLICY_BLOCK unbound are eligible (1.115754ms)
+✔ no Ch 3 occurrence is ever eligible or voice_prompt (0.601122ms)
+✔ entries are in reading order, complete, and digest is deterministic (2.702325ms)
+✔ synthetic fixture dispositions incl. removed-provider + parked chapter (0.64629ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 675.861619
+
+===== d6-enrichment-tooling exit=0 =====
+✔ manifest verification: honest dir loads; tampered file and wrong corpus digest fail closed (8.644533ms)
+✔ dry run: N/N digest equality, whitelist plan, run-scoped command IDs — and it writes nothing (8.628539ms)
+✔ execution: per-book CAS pushes land whitelist-only additions; parked fingerprint unmoved (9.546226ms)
+✔ idempotence: a second dry run plans zero commands; execution skips every book as no-op (6.919514ms)
+✔ hard stops: present-and-different text, a moved digest, and a differing defaultVoice — named, unwritten (8.486285ms)
+✔ mid-run failure posture: a conflicted book stops the run; completed stand, remainder untouched, no rollback (5.843319ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 295.196923
+
+===== d6-executor-fi exit=0 =====
+[d6-executor-fi] genstore backing = real: worker/generation/genstore.mjs
+[d6-executor-fi] backing confirmed: real: worker/generation/genstore.mjs
+✔ happy path: synthesize -> flush -> verify -> commit; binding, claim and job all settle (46.343118ms)
+✔ POLICY_BLOCK integration: split inside the executor, stitched WAV committed, attempts logged per part (24.235881ms)
+✔ FI-1 kill after synthesis, before flush: no object, no commit, attempt recorded once; recovery fails flush_interrupted without re-synthesizing (10.615981ms)
+✔ FI-2 kill after flush, before verify completes: object present, no commit; recovery re-verifies and commits, never re-synthesizes (9.639977ms)
+✔ FI-3 verify mismatch (size): no commit, stage=verify surfaced, object preserved and flagged by key (6.866004ms)
+✔ FI-3 verify mismatch (etag): no commit, stage=verify surfaced (6.358252ms)
+✔ FI-4 kill after verify, before commit: recovery commits WITHOUT re-synthesis; commit is idempotent (one binding) (8.818404ms)
+✔ FI-5 R2 write error mid-flush: no commit, no partial object treated as valid, attempt recorded (7.002018ms)
+✔ FI-6 attempted with a dispatching attempt: recovery is a reconcile hold — zero retries, zero provider calls (10.610834ms)
+✔ FI-6 flushed record: scan classifies reverify_and_commit; recovery commits with zero provider calls (7.264772ms)
+✔ FI-6 verified record: recovery commits with zero provider calls (6.082348ms)
+✔ batch refusal: a batch-lane job is refused whole-message with zero provider contact (3.713983ms)
+✔ batch refusal: a batch dispatch payload on a standard job is refused (3.33885ms)
+✔ removed-provider prompt: zero synthesis, prompt row recorded with the recorded mapping (4.915477ms)
+✔ work source discrimination: ok | no_content | unmapped_pov | removed_provider (4.177059ms)
+✔ unknown outcome: non-HTTP throw -> unknown_billing, phase halt set, message stops, later occurrences untouched (5.385291ms)
+✔ quota: 429 quotaExceeded confirms failed_known and returns quotaExhausted for the driver to park (6.575327ms)
+✔ retryable known failure (HTTP 503): failed_known cost 0, repair marker returned, executor does not loop (5.752653ms)
+✔ non-retryable known failure (HTTP 400, not a block): reported once, no repair marker (5.632803ms)
+✔ terminal POLICY_BLOCK through the executor: blocked outcome, no binding, job not halted for others (8.929089ms)
+✔ genstore backing used by this suite (reported, never blurred) (0.3263ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 404.996711
+
+===== d6-genstore exit=0 =====
+✔ genstore: execution state machine — legal path walks, illegal jumps throw (7.472444ms)
+✔ genstore: createExecution never opens a second live execution for (job, occurrence) (2.946822ms)
+✔ genstore: reserved attempt released after a crash counts as NO call (3.490418ms)
+✔ genstore: dispatching + confirmed attempts count; confirm enforces the cost rules (3.872631ms)
+✔ genstore: commitVerified is atomic — sabotaged probe leaves NO binding, NO commit, occurrence untouched (28.058808ms)
+✔ genstore: unknown billing halts the phase in the same tx; reconciliation clears it (5.014916ms)
+✔ genstore: phaseAccounting counts in-flight uppers only while reserved/dispatching (3.001625ms)
+✔ genstore: storageAccounting — seeded base + flushed/verified/committed bytes only (3.793022ms)
+✔ genstore: recoveryScan classifies every non-terminal state (4.292802ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 217.330338
+
+===== d6-grant-guards exit=0 =====
+✔ guard: phase budget grants AT the exact boundary (settled + in-flight + target upper == budget) (60.177709ms)
+✔ guard: one micro-cent of settled known cost over the boundary refuses with phase_budget (5.71079ms)
+✔ guard: in-flight upper bounds count against the budget; releasing the reservation frees it (5.703689ms)
+✔ guard: unknown-billing halt refuses every grant for the phase until reconcileUnknown (8.144102ms)
+✔ guard: storage projection crossing 10 GB refuses with storage_boundary; plan-less jobs are unguarded (5.631401ms)
+✔ guard: flag ON rejects a batch-lane SubmitJob; flag OFF behaves exactly as before (5.091511ms)
+✔ guard: flag ON with the d6 tables missing fails LOUD (throws), never a silent pass (3.623298ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 246.644601
+
+===== d6-integration exit=0 =====
+✔ end-to-end: intent -> plan -> drive -> execute -> committed bindings; parked job untouched (58.619371ms)
+✔ adapter: unknown book fails closed with a named error (2.494904ms)
+✔ voice_prompt book: intent plans prompts, creates no jobs, provider never called (3.966072ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 225.792008
+
+===== d6-parked-inertness exit=0 =====
+inertness backing: generation service + executor present
+requestGrant(parked) -> {"ok":false,"reason":"illegal_transition"}
+✔ parked Ch 3 job is inert across a full generation cycle for other work (61.473904ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 649.145396
+
+===== d6-policy-split exit=0 =====
+✔ splitText: sentence boundary nearest the midpoint, concat exact, floor respected (2.408234ms)
+✔ splitText: word-boundary fallback when there is no sentence boundary (0.510486ms)
+✔ splitText: char-midpoint fallback for one long token; null below the floor (1.364037ms)
+✔ single split: whole blocked, both halves succeed; voice identical on every call; concat exact (1.991078ms)
+✔ recursive multi-level split resolves to depth 2 with attempts counted across the tree (0.734642ms)
+✔ depth cap: a tree that only resolves at the sixteenth leaf reaches depth 4 and succeeds within a large budget (3.555285ms)
+✔ floor terminal: a blocked part that cannot split without breaching the floor is TerminalBlock (1.320372ms)
+✔ budget exhaustion is terminal, reported as TerminalBlock, and spends no further calls (0.572339ms)
+✔ max depth is terminal even when budget remains (depth <= 4 pinned) (0.876205ms)
+✔ non-block provider errors propagate untouched (the executor classifies them) (0.695464ms)
+✔ stitchWav: PCM concat + rewrap; format mismatch throws (0.59271ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 238.500139
+
+===== d6-proofs exit=0 =====
+Ch 3: absent=2a85f74f-353d-4c25-a86a-4a4db392868b policyBlock=6bd358a7-f590-4c49-8c07-dacf558c2721
+✔ all five proofs PASS on the real census fixture (1.397247ms)
+✔ Ch 3 reconciliation: exactly 27 rows with the expected dispositions (2.506352ms)
+✔ negative: removing a text payload fails completeness naming the ID (1.233802ms)
+✔ negative: a phantom plane ID fails ID stability naming it (0.761463ms)
+✔ negative: an unmapped POV fails the POV proof naming the occurrence (0.380201ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 433.306586
+
+===== d6-seed-hardening exit=0 =====
+✔ S1: caller figures are refused — either field, no write (6.008677ms)
+✔ S2: halt fence kept verbatim — unhalted and missing-flag both refuse figureless calls (4.27094ms)
+✔ S3: unconfigured expected base fails closed (2.353512ms)
+✔ S4: recount failures refuse and write nothing (throw, bad page, cursorless truncation, no bucket) (8.859776ms)
+✔ S5: zero tolerance — a one-byte or one-object drift refuses with both figures, no write (5.720094ms)
+✔ S6: exact match across multiple pages seeds the BUCKET'S OWN figures; re-seed idempotent (3.509627ms)
+✔ E1: client token alone cannot seed — operator header missing or wrong -> 403, no row (11.165797ms)
+✔ E2: fail-closed configuration — operator unset, or equal to the client token -> 503 (5.651702ms)
+✔ E3: the admitted stamp cannot be forged through public routing (3.231219ms)
+✔ E4: the class gate requires the stamp — internal header + scope alone do not suffice (10.171855ms)
+✔ E5: full public chain with both credentials seeds from the worker's own recount (5.970349ms)
+✔ E6: figures through the full chain are refused at the service; bucket drift refuses too (9.176061ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 281.921351
+
+===== d6-service exit=0 =====
+✔ service: duplicate intent produces exactly ONE plan and ONE first job (14.559439ms)
+✔ service: driveOnce grants + drains, advances chapters, and completes the plan (34.60398ms)
+✔ service: quota exhaustion parks the plan at 100 ledger attempts; rollover resumes without re-granting settled work (20.881988ms)
+✔ service: restart mid-job — crash between drive passes produces no duplicate grants (7.691963ms)
+✔ service: recover() releases reserved attempts and fails their executions (non-spending) (4.253483ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 272.234183
+
+===== d6-settings-cas exit=0 =====
+✔ settings CAS: revision 0 -> 1, lane becomes standard, cap unchanged (6.206434ms)
+✔ settings CAS: stale revision (record already at revision 1) is rejected, record untouched (2.37158ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 154.528341
+
+===== d6-syncpush-payload exit=0 =====
+[d6-syncpush-payload] enriched entity / envelope sizes (bytes):
+  In Her Own League: entity=1440764 envelope=1441029 text=203 speechText=203 defaultVoice=source-null-noop
+  Pucked: entity=1330538 envelope=1330803 text=654 speechText=654 defaultVoice=source-null-noop
+  Pucked Over: entity=1280560 envelope=1280825 text=510 speechText=510 defaultVoice=source-null-noop
+  Forever Pucked: entity=1144602 envelope=1144867 text=407 speechText=407 defaultVoice=restore
+  Pucked Up: entity=1102169 envelope=1102434 text=475 speechText=475 defaultVoice=restore
+  The Goal: entity=654043 envelope=654308 text=209 speechText=0 defaultVoice=source-null-noop
+  Finding Home: entity=436905 envelope=437170 text=152 speechText=152 defaultVoice=restore
+[d6-syncpush-payload] largest = In Her Own League; aggregate enriched entities = 7389581 bytes
+[d6-syncpush-payload] push elapsed=31.9ms heapDelta~8853048B sqlitePages 68->1464 (page growth includes entity + history row, each ~1440764B)
+✔ sizes: largest envelope is inside the design's per-book range and far under platform ceilings (1.343286ms)
+✔ largest book: REAL SyncPush applies the enriched entity whole — CAS, read-back, history growth (74.080212ms)
+✔ CAS discipline at this size: a stale baseRevision conflicts and writes nothing (35.115688ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 845.285134
+
+===== d6-work-source exit=0 =====
+✔ 1+4: exact text, cast-by-name resolution, style direction, fingerprint (2.520662ms)
+✔ 2: pov by id resolves to the same cast entry (0.358769ms)
+✔ 3: defaultVoice title segment — voice, provider, AND style from the fallback (0.326159ms)
+✔ 4b: style chain — a cast voice without style inherits the fallback's (design §2.2 order) (0.249444ms)
+✔ 2b: removed-provider voice — named disposition, recorded mapping, no payload (0.261883ms)
+✔ 2c: unresolvable pov -> unmapped_pov (named, never a throw) (0.258427ms)
+✔ 5: no_content — textless segment, unknown occurrence, missing entity, unknown job (1.223956ms)
+✔ 3b: without defaultVoice the title segment is unmapped (the pre-enrichment live truth) (0.367241ms)
+✔ 6: regression guard — the same fixture keyed `povs` resolves identically (0.675523ms)
+✔ 7: executor path — title (defaultVoice) + main (cast name) synthesize and commit (42.67313ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 259.428485
+
+===== discovery-instance-safety exit=0 =====
+✔ R1: reopening a book with fresh chapter objects restores its parked job inside the throttle window (4.295165ms)
+✔ R2: a discovery response landing after a book switch is dropped whole (2.849276ms)
+✔ R1+R2 combined: first discovery in flight across a switch and a same-book reopen lands on the reopened instance (1.423266ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 310.20761
+
+===== dormant-playback-start exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/dormant-playback-start.test.mjs:6:14
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+}
+
+Node.js v24.22.1
+✖ tests/dormant-playback-start.test.mjs (101.114953ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 112.981431
+
+✖ failing tests:
+
+test at tests/dormant-playback-start.test.mjs:1:1
+✖ tests/dormant-playback-start.test.mjs (101.114953ms)
+  'test failed'
+
+===== executor-p3 exit=0 =====
+✔ standard end-to-end: claim -> one call -> verified store -> report -> job complete, claim completed (36.071623ms)
+✔ redelivery of the same message never re-spends (condition 1) (4.908777ms)
+✔ crash after the provider call, before the report: recovery re-reports from the paid intent — still one call (6.804512ms)
+✔ ambiguous standard call: no report, no outcome note, redelivery cannot re-spend (5.458902ms)
+✔ known standard failure: reported once, intent marked, redelivery spends nothing (6.609749ms)
+✔ two consumers, one message: the second stands down (5.094556ms)
+✔ batch happy path: submit once, poll to done across redeliveries, one spend (7.992755ms)
+✔ batch ambiguous submit: fence stands, lookup adopts, missing lookup proves nothing (condition 2) (6.57008ms)
+✔ batch rejection is a KNOWN outcome: fence clears, failure reported, no resubmit (5.251621ms)
+✔ the re-grant trap: a deferred batch occurrence meets its SAME map under a new grant — no second POST (7.733336ms)
+✔ after an evidenced never-accepted resolution, the re-grant is REALLY processed: audited generation-2 attempt completes the job (review fix 2) (11.21482ms)
+✔ cache verification failure is reported as failure, never as playable audio (6.855959ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 351.475621
+
+===== first-chapter-segment-joining exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/first-chapter-segment-joining.test.mjs:7:14
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+}
+
+Node.js v24.22.1
+✖ tests/first-chapter-segment-joining.test.mjs (106.835539ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 119.246544
+
+✖ failing tests:
+
+test at tests/first-chapter-segment-joining.test.mjs:1:1
+✖ tests/first-chapter-segment-joining.test.mjs (106.835539ms)
+  'test failed'
+
+===== flip-flop-regression exit=0 =====
+✔ park 1/26 -> repair adopted 2/2 -> repeated merges: the card never flip-flops (4.092141ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 149.545704
+
+===== freeze-build exit=0 =====
+✔ (1) every mutating census route returns 423 and writes nothing (18.752072ms)
+✔ (1b) unauthenticated requests get the shipped 401 — the refusal never precedes auth (6.457621ms)
+✔ (2) D1 status GET: stored status served, watchdog/marker/catch-up all disabled (5.56384ms)
+✔ (2b) D1 status GET on a terminal job: mirror catch-up is never scheduled (2.249025ms)
+✔ (2c) D1 books/jobs GET: discovery from stored state, backfill/reconcile deferred (4.371521ms)
+✔ (3) D2 export GET: shipped auth failures precede the 423; a valid link is refused unconsumed (4.678241ms)
+✔ (4) D3 composite POST: hit serves read-only, miss 423s, segment fallback intact (19.621767ms)
+✔ (5) queue consumer under freeze retries (preservation) without processing or writing (0.949385ms)
+✔ (5b) a job delivered while frozen resumes and completes after the lift — segment generated exactly once (14.718748ms)
+✔ (6) freeze engaging mid-job blocks every subsequent write from that job (2.277928ms)
+✔ (6b) freeze engaging mid-job: message preserved, resumption completes the job exactly once in effect (7.077491ms)
+✔ (8) recordTtsUsage: speech records usage unfrozen, and is fenced at 423 frozen (24.674459ms)
+✔ copy fidelity: with the freeze lifted, a mutating route behaves as shipped (1.933482ms)
+✔ (9) every READ-ONLY census route is byte-identical shipped vs frozen variant (31.621314ms)
+✔ (10) fail-closed: every census route has a freeze disposition; every fence is present in the variant (4.782357ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 328.283286
+
+===== freeze-route-census exit=0 =====
+✔ audited artifacts are the shipped 1.4.43 / 1.4.117 sources (2.217418ms)
+✔ route census: extraction matches the audit classification exactly (2.790548ms)
+✔ every classified route key appears in the audit document (0.268193ms)
+✔ Correction-C coverage and non-route inventory are present in the audit (0.436265ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 147.272923
+
+===== gemini-400-hydration exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-232.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/gemini-400-hydration.test.mjs:10:16
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-232.js'
+}
+
+Node.js v24.22.1
+✖ tests/gemini-400-hydration.test.mjs (111.266198ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 122.573177
+
+✖ failing tests:
+
+test at tests/gemini-400-hydration.test.mjs:1:1
+✖ tests/gemini-400-hydration.test.mjs (111.266198ms)
+  'test failed'
+
+===== gemini-batch-lane exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-254.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/gemini-batch-lane.test.mjs:6:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-254.js'
+}
+
+Node.js v24.22.1
+✖ tests/gemini-batch-lane.test.mjs (114.569395ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 127.562173
+
+✖ failing tests:
+
+test at tests/gemini-batch-lane.test.mjs:1:1
+✖ tests/gemini-batch-lane.test.mjs (114.569395ms)
+  'test failed'
+
+===== gemini-quota-diagnostics exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-240.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/gemini-quota-diagnostics.test.mjs:7:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-240.js'
+}
+
+Node.js v24.22.1
+✖ tests/gemini-quota-diagnostics.test.mjs (102.190748ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 113.417226
+
+✖ failing tests:
+
+test at tests/gemini-quota-diagnostics.test.mjs:1:1
+✖ tests/gemini-quota-diagnostics.test.mjs (102.190748ms)
+  'test failed'
+
+===== generation-flow-scenarios exit=0 =====
+✔ §5.1 clean chapter: segments generate sequentially, in order, no intervention (32.580764ms)
+✔ §5.2 single block: the split tree fully resolves before the next original segment is attempted (13.456884ms)
+✔ §5.3 nested block: a blocked child subdivides and completes before generation advances (8.531854ms)
+✔ §5.4 irreducible block: piece is marked blocked, surrounding audio retained, chapter NOT complete (9.12224ms)
+✔ §5.5 quota during splitting: a daily 429 parks the job with the split tree and audio intact (32.123668ms)
+✔ §5.5b a temporary 429 is NOT treated as exhausted daily quota (4.825021ms)
+✔ §5.6 Resume during a park spends exactly one test dispatch, then re-parks (9.038304ms)
+✔ §5.7 Batch and Standard share one cache: mode switches never regenerate existing audio (12.220099ms)
+✔ §5.7b a Batch policy block marks the segment blocked and the job partial — never complete (10.670283ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 325.377395
+
+===== generation-inline-ordering exit=0 =====
+✔ parity: the Worker's split functions are the client's, verbatim (1.429526ms)
+✔ (a) Standard: segment 1 blocks -> splits -> all pieces succeed -> ONLY THEN segment 2 generates (39.086217ms)
+✔ (b) nested: a split child blocks again -> subdivides -> completes before the next original segment (13.125518ms)
+✔ (c) irreducible leaf mid-chapter: marked blocked for fallback, job advances past it only after the tree is exhausted (10.945295ms)
+✔ (c2) a short unsplittable segment behaves exactly as before: blocked, advance, no tree invented (4.152472ms)
+✔ (d) quota mid-tree: a daily 429 during inline splitting parks everything, tree + prior audio preserved, no further dispatches (29.924888ms)
+✔ (e) Batch: a blocked root splits inside the batch job's own lifecycle; pieces submit in order before the next segment (17.756767ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 246.745672
+
+===== generation-manual-queue-reuse exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-239.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/generation-manual-queue-reuse.test.mjs:6:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-239.js'
+}
+
+Node.js v24.22.1
+✖ tests/generation-manual-queue-reuse.test.mjs (126.583184ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 139.592858
+
+✖ failing tests:
+
+test at tests/generation-manual-queue-reuse.test.mjs:1:1
+✖ tests/generation-manual-queue-reuse.test.mjs (126.583184ms)
+  'test failed'
+
+===== generation-playback-concurrency exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/generation-playback-concurrency.test.mjs:7:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+}
+
+Node.js v24.22.1
+✖ tests/generation-playback-concurrency.test.mjs (106.578393ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 120.517692
+
+✖ failing tests:
+
+test at tests/generation-playback-concurrency.test.mjs:1:1
+✖ tests/generation-playback-concurrency.test.mjs (106.578393ms)
+  'test failed'
+
+===== generation-session-sync-guard exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-254.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/generation-session-sync-guard.test.mjs:5:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-254.js'
+}
+
+Node.js v24.22.1
+✖ tests/generation-session-sync-guard.test.mjs (98.532849ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 110.215281
+
+✖ failing tests:
+
+test at tests/generation-session-sync-guard.test.mjs:1:1
+✖ tests/generation-session-sync-guard.test.mjs (98.532849ms)
+  'test failed'
+
+===== genpkg1-diagnostics exit=0 =====
+✔ Svc-1: fixture records read back — stage/detail, attempts, the 120 s unknown span (7.379555ms)
+✔ Svc-2: no segment text can ride the surface — sentinels absent, whitelist only (4.230418ms)
+✔ Svc-3: keyset pagination over executions + jobId targeting (21.070871ms)
+✔ Svc-4: unknown targets -> found:false without throwing; bad targeting rejected (3.173082ms)
+✔ Ent-1: operator credential admitted with NO client token; fixtures read (16.301634ms)
+✔ Ent-2: the client token alone is refused — and refusals read nothing (6.516039ms)
+✔ Ent-3: fail-closed configuration — operator unset or equal to client token -> 503 (5.47768ms)
+✔ Ent-4: the stamp cannot be forged publicly; the class gate requires it (6.633946ms)
+✔ Ent-5: unknown plan through the public chain -> 200 found:false, no throw (5.809148ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 399.000202
+
+===== genpkg1-envelope-policy exit=0 =====
+✔ R5 envelope: the real D6 spec passes the seventh-binding gate (P6 + P7) (101.566492ms)
+✔ R5 envelope: a MISSING seventh binding fails the release gate (P6) (113.135483ms)
+✔ R5 envelope: a MALFORMED seventh binding (mistyped value) fails the release gate (P6) (133.949509ms)
+✔ R5 envelope: a MALFORMED seventh binding (wrong type) fails the release gate (P6) (91.711021ms)
+✔ R5 envelope: an EXTRA eighth binding fails the gate (P6 count + P7 set) (97.074671ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 683.257278
+
+===== genpkg1-halted-fence exit=0 =====
+✔ R3-2: a halted_unknown plan fences same- and different-semantics submissions from two devices — zero new plans or grants (40.669773ms)
+✔ R3-2: non-overlapping submissions remain admissible beside a halted plan (8.597252ms)
+✔ R3-2: clearance is never inferred — the fence survives reconciliation and the phase-halt flip; only retirement clears it (9.976492ms)
+✔ R3-2: retirement refuses unknown plans and non-halted plans, by name (4.023178ms)
+✔ R3-2: after retirement a fresh submission over the same occurrences is admitted — and the retired plan is never driven again (12.040789ms)
+✔ R4-1: reconciliation NEVER resumes the halted plan in the driver — drives after reconcile leave it halted, byte-identical, and fencing; retirement after the drives still applies (15.816496ms)
+✔ R3-2: the parked Ch 3 job is byte-identical throughout the halt → fence → reconcile → retire → re-admit lifecycle (9.390813ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 281.023122
+
+===== genpkg1-intent-idempotency exit=0 =====
+✔ simultaneous identical submissions from two devices converge on one plan (11.26152ms)
+✔ retry after a lost response returns the same plan, still one job (4.11808ms)
+✔ a later run for newly eligible segments is a NEW plan, not the stale one (41.706138ms)
+✔ after completion, resubmission over the shrunk set is a new plan; the empty set is then stable (20.82391ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 243.820032
+
+===== genpkg1-overlap-fence exit=0 =====
+✔ R2-2: a keepGoing change over the same set is fenced — the conflict names the existing plan's semantics (12.856264ms)
+✔ R2-2: a byte-identical retry still converges — the fence never fires on convergence (4.180904ms)
+✔ R2-2: non-overlapping sets still admit; a later overlapping scope is fenced by whichever plan owns the segment (8.065634ms)
+✔ R2-2: a book-scope intent is fenced by an active chapter plan over a subset of its set (4.531741ms)
+✔ R2-2: a batch-shaped request meets the lane gate BEFORE the fence (documented ordering) (5.899874ms)
+✔ R2-2: terminal plans (complete, partial) do not fence (5.572142ms)
+✔ R3-2 (amends R2-2): a halted_unknown plan FENCES a fresh intent — and is left byte-identical (never resumed) (6.727616ms)
+✔ R2-2: a parked plan (parked_quota) DOES fence — driveOnce resumes parks without a fresh decision (4.615246ms)
+✔ R2-2: two racing different-semantics submissions over one set create exactly one plan (5.241236ms)
+✔ R2-2: the parked Ch 3 job is untouched by admission and by the fence; its segments never enter a plan (5.228377ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 230.257208
+
+===== genpkg1-phase-authority exit=0 =====
+✔ B1: budgeted book — missing/null phase is rejected, nothing is created, no ledger movement (11.973519ms)
+✔ B1: budgeted book — a wrong phase string is rejected (phase_mismatch) (3.83137ms)
+✔ B1: budgeted book — the correct phase is admitted and converges on the existing plan (5.139503ms)
+✔ B1: unbudgeted book — no phase is admitted; an invented phase is rejected (6.752994ms)
+✔ B1+B2: a registry phase establishes the book's binding; afterwards the book is budgeted (5.22371ms)
+✔ B2: changing only keepGoing at book scope is a distinct intent — fenced while the first plan is active (R2-2), minted once it is terminal (5.428246ms)
+✔ B2: a different-lane request never returns the existing plan (explicit rejection today) (3.820964ms)
+✔ B2: concurrent identical submissions with full semantics converge on one plan (4.286463ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 206.42971
+
+===== genpkg1-phase-enforce exit=0 =====
+✔ R3-1+R5: enforce construction, registry ABSENT — the bootstrap gate refuses EVERY intent (phase_binding_required), nothing moves (7.502659ms)
+✔ R3-1+R5: enforce construction — null-phase work is refused while the registry is empty, and admitted once the binding is recorded (8.151082ms)
+✔ R3-1: legacy construction, registry ABSENT — the same claim is admitted (the boundary is construction, not the request) (3.820914ms)
+✔ R3-1: enforce capabilities never derives the phase's book from plan history — registry row or null (7.240466ms)
+✔ R3-1+R5 entry: registry ABSENT + enforce — EVERY submission is refused by the bootstrap gate over the public route (25.283494ms)
+✔ R3-1 entry: the recording route refuses everything except the operator credential (3.381154ms)
+✔ R3-1 entry: operator credential unconfigured — the route fails closed (503), nothing recorded (2.687183ms)
+✔ R3-1 entry: the internal route refuses a direct call without the entry's operator-admitted stamp (3.563067ms)
+✔ R3-1 entry: the operator records forever-pucked → the Forever Pucked book — read-back, idempotency, conflict refusal (6.123319ms)
+✔ R3-1 entry: after the binding — the mapped book is admitted, the phase is closed to everyone else (9.209761ms)
+✔ R5 entry: MISSING phase-policy flag — every submission fails 503 phase_policy_not_configured, zero movement (5.065422ms)
+✔ R5 entry: MISTYPED phase-policy flag — every submission fails 503 phase_policy_not_configured, zero movement (6.907847ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 288.178251
+
+===== genpkg1-phase-policy exit=0 =====
+✔ R2-1: capabilities derives the phase's book from the registry — before any plan exists (7.763981ms)
+✔ R2-1: the mapped book with its registry phase is admitted; the plan stores the registry phase (6.710501ms)
+✔ R2-1: the mapped book with a missing/null phase is rejected (phase_required), nothing moves (2.854163ms)
+✔ R2-1: the mapped book with a different phase is rejected (phase_mismatch), nothing moves (2.786572ms)
+✔ R2-1: an unrelated book's forged claim on the bound phase is rejected (phase_bound_to_other_book) (2.929606ms)
+✔ R2-1: an unbound book runs unbudgeted with no phase; an invented phase is rejected (registry mode) (6.064972ms)
+✔ R2-1: no submission field opts out of the registry — spoofed mode fields change nothing (2.826102ms)
+✔ R2-1: bindPhaseBook — idempotent re-record, conflict keeps the original, shape/budget validation (2.927012ms)
+✔ R2-1 legacy mode: with NO binding recorded, the round-1 first-use rules stand (explicit fixture behavior) (5.253514ms)
+✔ R2-1 entry level: once the binding is recorded, the public path enforces it (23.455349ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 240.827812
+
+===== genpkg1-projection exit=0 =====
+✔ happy path: commit publishes the binding to the sync plane, server-derived (51.50874ms)
+✔ crash between commit and publication: reconciliation publishes (13.7865ms)
+✔ watchdog integration: driveOnce sweep republishes and reports the outcome (15.261614ms)
+✔ duplicate sweeps and racing projectors: exactly one publication (13.419419ms)
+✔ existing equal binding (G10 hand-published shape) is a no-op (20.19055ms)
+✔ a different binding at the destination is never overwritten (12.299137ms)
+✔ incomplete commit metadata stays pending, then publishes when repaired (11.611475ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 301.530839
+
+===== genpkg1-quarantine-d8 exit=0 =====
+✔ D8-1a: a failing hold SELECT at the grant guard THROWS — zero spend, hold intact; an unmarked plan is refused the same way (39.705196ms)
+✔ D8-1b: a failing hold SELECT for a held plan-less job THROWS — zero spend, hold intact (6.935508ms)
+✔ D8-1c: executor refuses a crafted message when the hold read fails — quarantine_check_failed, zero provider contact (5.631552ms)
+✔ D8-1d: driver treats a failed hold read as held-for-driving (quarantineCheckFailed) and never reaches a grant (5.424251ms)
+✔ D8-2a: real entry refuses plain SubmitJob + RequestRepair while halted (public AND class level); re-arm spends nothing on the held intent plan (26.862502ms)
+✔ D8-2b: jobs whose halted attempts died before the guard (park, quota) are epoch-fenced after re-arm; pre-halt work is not (14.438428ms)
+✔ D8-2c: production-class alarm audit — the base alarm cannot grant staged or held work; the guard sees every base grant path (15.67959ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 291.602179
+
+===== genpkg1-quarantine exit=0 =====
+✔ Q1: a plan born while halted is admitted per C3's contract AND born quarantined (11.248801ms)
+✔ Q2: duplicate submission (incl. a second service instance) converges — one plan, one hold (4.099122ms)
+✔ Q3: born while HALT === '0' is never marked; a MISSING halt value counts as halted (15.597157ms)
+✔ Q4: after re-arm, EVERY grant path refuses the held plans; unmarked work proceeds (42.702384ms)
+✔ Q5: release is per-plan, idempotent, audited — and the ONLY clearance (11.857324ms)
+✔ Q6: plan-less legacy work — halted grant attempts are refused AND durably marked (14.852079ms)
+✔ Q7: release is NOT a reconcile — halted_unknown is refused; Ch2/Ch3 fixture shapes stay byte-identical (5.941517ms)
+✔ Q8: real entry — halted intent is admitted + born quarantined; the plan view tells the truth (25.705306ms)
+✔ Q9: real entry — legacy grant-producing commands are refused at admission while halted; other commands unchanged (8.691343ms)
+✔ Q10: real entry — the release route is operator-only, audited, idempotent, read-back verified (10.914519ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 328.519011
+
+===== genpkg1-surfaces exit=0 =====
+✔ empty store: surfaces answer sane empties under production .one() semantics (8.608679ms)
+✔ capabilities: generation state follows the halt flag (6.128207ms)
+✔ eligibility quote equals the executed plan's eligible set (all scopes) (9.837303ms)
+✔ eligibility quote: voice_prompt exclusions for removed-provider casts (3.401474ms)
+✔ plan list: pagination is stable, amounts are ledger-true, payload carries no text (48.635087ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 250.479987
+
+===== inline-split-client-merge exit=0 =====
+✔ a finished inline job expands the root into its leaves and or() applies every result (4.639042ms)
+✔ integrity: leaves whose text does not reproduce the passage change NOTHING (0.385027ms)
+✔ nested trees expand to their terminal leaves in reading order (0.667512ms)
+✔ a non-inline status is ignored (repair jobs and legacy jobs keep their own paths) (0.263796ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 153.751686
+
+===== inline-split-integration exit=0 =====
+✔ Test A: ordinary Generate stages segmentIndices itself; the finished inline tree expands with correct per-leaf audio (16.010637ms)
+✔ Test A2: replacement generation (real Wr init) stages segmentIndices itself and expands the tree (5.585763ms)
+✔ Test A3: generate-rest-of-chapter stages the subset mapping (non-contiguous roots) (3.022145ms)
+✔ Test B: a quota park mid-tree never shifts audio onto the wrong text; Resume rebuilds the tree (4.494144ms)
+✔ Test B2: during a mid-tree park, an unsplit root still merges — by job order, not shifted position (1.61959ms)
+✔ Test C: a legacy record with segmentKeys but NO segmentIndices still applies its split tree (2.293552ms)
+✔ Test C2: a record with neither keys nor indices backfills from the status cache keys (qe fingerprint match) (2.556207ms)
+✔ Test D: or() never positionally maps a grown inline status through stale root keys (1.137106ms)
+✔ Test E: a legacy subset job on the SECOND of two identical twins expands the second, anchored by repair_source_index (1.914253ms)
+✔ Test E2: with repair_source_index unavailable, duplicate identities make recovery REFUSE — chapter untouched, audio kept (2.664649ms)
+✔ Test E3: a stored mapping that contradicts the Worker anchor is corrected to the anchor before expansion (1.420712ms)
+✔ Test F: a pending tree defers an unsplit root whose identity is ambiguous between identical twins (0.692038ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 175.181356
+
+===== kernel-split-fingerprint exit=0 =====
+✔ fingerprint formula: golden vector pins inputs, key order and separator (7.845624ms)
+✔ fingerprint identity: style, voice and markup are all part of identity (3.829257ms)
+✔ plainSpeechText strips only emphasis tags (0.57954ms)
+✔ word-token tiling catches a merged word (lost space) (1.697498ms)
+✔ split prefers the paragraph break and children tile the parent (0.908874ms)
+✔ split falls back to sentence boundaries without a paragraph break (0.421262ms)
+✔ split picks the candidate closest to the middle (0.245628ms)
+✔ unsplittable passages return -1 (caller must block, never rewrite) (0.431697ms)
+✔ emphasis spanning the seam is closed and reopened, wording intact (0.499119ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 149.473535
+
+===== kv-coalescing exit=0 =====
+Generation status KV mirror write failed Error: KV put() limit exceeded for the day.
+    at Object.onPut (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/kv-coalescing.test.mjs:272:17)
+    at MockKV.put (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/support/mock-env.mjs:57:44)
+    at runMirrorAttempt (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:2149:31)
+    at async mirrorGenerationStatus (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:1984:12)
+    at async saveGenerationStatus (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:1805:3)
+    at async Object.fetch (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:4272:9)
+    at async TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/kv-coalescing.test.mjs:277:15)
+    at async Test.run (node:internal/test_runner/test:1409:7)
+    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+Generation status KV mirror write failed Error: KV put() limit exceeded for the day.
+    at Object.onPut (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/kv-coalescing.test.mjs:272:17)
+    at MockKV.put (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/support/mock-env.mjs:57:44)
+    at runMirrorAttempt (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:2149:31)
+    at async mirrorGenerationStatus (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:1984:12)
+    at async saveGenerationStatus (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:1805:3)
+    at async processGenerationJobLocked (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:3051:5)
+    at async processGenerationJob (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:3685:15)
+    at async Object.queue (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:4634:9)
+    at async Object.drain (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/support/mock-env.mjs:401:7)
+    at async TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/kv-coalescing.test.mjs:283:3)
+Generation status KV mirror write failed Error: KV put() limit exceeded for the day.
+    at Object.onPut (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/kv-coalescing.test.mjs:341:17)
+    at MockKV.put (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/support/mock-env.mjs:57:44)
+    at runMirrorAttempt (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:2149:31)
+    at async mirrorGenerationStatus (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:1984:12)
+Generation status KV mirror write failed Error: KV put() limit exceeded for the day.
+    at Object.onPut (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/kv-coalescing.test.mjs:383:27)
+    at MockKV.put (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/support/mock-env.mjs:57:44)
+    at runMirrorAttempt (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:2149:31)
+    at async mirrorGenerationStatus (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:1984:12)
+    at async saveGenerationStatus (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:1805:3)
+    at async stepGeminiBatch (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:2735:5)
+    at async processGenerationJobLocked (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:2990:11)
+    at async processGenerationJob (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:3685:15)
+    at async Object.queue (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/cloudflare-worker.js:4634:9)
+    at async deliverUntil (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/kv-coalescing.test.mjs:71:5)
+✔ standard generation coalesces KV writes: creation, volume catch-up, terminal only (77.213024ms)
+✔ interrupted generation resumes from R2 state and completes (9.653056ms)
+✔ duplicate Queue deliveries synthesize each segment once (7.131883ms)
+✔ Batch recovery: op assigned, restart, completes without resubmission; assignment mirrored (9.949341ms)
+✔ adaptive splits activate children, mirror the split, and complete (10.057092ms)
+✔ KV quota exhaustion: generation completes on R2; mirror catches up after recovery (7.036169ms)
+✔ R2 write failure surfaces the error and leaves no ghost KV progress (2.403376ms)
+✔ catch-up safety (a): KV down + 100 polls in a minute makes at most one mirror attempt (24.664044ms)
+✔ catch-up safety (b)+(c): stalled writer is fenced; successor's stamps stand; KV converges to newest (19.134636ms)
+✔ catch-up safety (c): writer stalled before its fence check writes nothing after a steal (4.633333ms)
+✔ catch-up safety (d): stamp persistence racing a concurrent watchdog save keeps both (9.353777ms)
+✔ catch-up safety (e): a stale writer's lock release cannot delete its successor's lock (reversed order) (9.464734ms)
+✔ status polling never waits on a stalled KV catch-up write (3.578901ms)
+✔ quota: standard success counts one attempt and sets last-success from the ledger (24.124724ms)
+✔ quota: concurrent last-success updates never move the pointer backward (reversed completion order) (6.123048ms)
+✔ quota: standard 429 counts the attempt, records a failed event, sets no success (7.127836ms)
+✔ quota: cache hit counts no attempt and makes no provider call (2.427623ms)
+✔ quota: batch submission counts one attempt and sets last-success; batch failure now writes a failed ledger event (16.757999ms)
+✔ quota: Pacific-day and rolling-24h windows over R2 markers plus legacy KV keys (read-only union) (1.625349ms)
+✔ quota: tracking reports unavailable (not zero) when R2 storage is missing (1.140201ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 403.166284
+
+===== migration-p7 exit=0 =====
+✔ transform: legacy anchoring, device-voice, blocked outcome, provenance labels (3.123878ms)
+✔ transform: cast-inferred provenance when the pov has exactly one stamped model (0.428514ms)
+✔ jobs: census-live carries parked, complete-book remnants supersede, drift is held for review (16.026141ms)
+✔ orphans: unreferenced audio is inventoried, never assigned (1.975785ms)
+✔ chapter truth: playable counts r2 + device-voice; blocked counted separately (0.756686ms)
+✔ adjudication: checkpoint history that passes the rival explains it — furthest wins (0.911287ms)
+✔ adjudication: a rival claim the winner's history cannot explain is flagged, winner stands on evidence (0.404137ms)
+✔ adjudication: nothing corroborated — the cloud claim stands as fail-safe, flagged (0.584578ms)
+✔ adjudication: invalid device position is discarded with evidence; tombstone flags but migrates (0.450987ms)
+✔ verifier: a faithful transform passes all seven §5.4 checks (1.740863ms)
+✔ verifier: a missing R2 object is a STOP (check 2), a wrong blocked set is a STOP (check 4) (0.888724ms)
+✔ outbox import: ids, attempts, order and failure stamps preserved byte-for-byte (1.10611ms)
+✔ outbox import + P6 bridge: FIFO flush, attempts continue from imported values, merge honors attempts (3.403127ms)
+✔ rollback: reverse deltas are computed from state and every one is reconciled (1.795274ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 191.274086
+
+===== p8-b1-carry exit=0 =====
+✔ B1 happy path: chunks + positions + jobs carries land exactly as pinned; the view verifies three-way; the gate applies (22.320897ms)
+✔ B1: carries compose with the whole-book import path as well (staging surface shape) (8.034057ms)
+✔ checkpoint 1a: swapped-POV content (identical binding IDs) is refused at chunk 1 — zero GETs, zero migration business rows, durable rejected receipt (3.792161ms)
+✔ checkpoint 1b: reordered-chapters content (identical binding IDs) is refused the same way; the pin-correct content then applies under a retry-generation id (4.106032ms)
+✔ checkpoint 2: the carried position has the correct occ_index; a genuine baseSeq-0 event folds as receipt 1; a stale backward event is superseded, never a regression (6.890861ms)
+✔ checkpoint 3: a carried parked_policy job with pending occurrences refuses direct + indirect grants with full rollback; RequestResume refuses; the quota ledger is byte-identical after every carry operation (32.236778ms)
+✔ checkpoint 3b: a carried superseded job refuses grants and resume identically (6.611352ms)
+✔ checkpoint 3c: no lifecycle event transitions a carried job — the parked_policy / superseded rows of the table are empty and enforced (6.653845ms)
+✔ P5: omitting one pinned aggregate refuses the whole jobs transaction (5.451901ms)
+✔ P5: an extra aggregate refuses the whole jobs transaction (5.51727ms)
+✔ P5: a duplicated aggregate refuses (duplicate_row) (4.983459ms)
+✔ P5: a wrong state refuses the whole jobs transaction (4.906813ms)
+✔ P5: a wrong definition digest refuses the whole jobs transaction (4.792913ms)
+✔ P5: a wrong occurrence digest refuses the whole jobs transaction (10.143623ms)
+✔ P5: a non-carryable state is refused by construction (state_not_carryable) (6.049278ms)
+✔ P5: the jobs carry before the import completes refuses (import_incomplete) (2.530087ms)
+✔ P5 empty set: a signed-empty book carries with receipt + audit and zero job rows; replay returns the same receipt; a new id converges without a second audit (4.849978ms)
+✔ positions negatives: offset / occurrence / checkpoint divergence from the pin each refuse with zero rows (11.473779ms)
+✔ positions negatives: carry before the import completes refuses; wrong migration identity refuses; a book with no carry pin refuses (book_unpinned) (10.70879ms)
+✔ positions: the same payload under a new command id converges (one audit row); a divergent second carry refuses (4.89113ms)
+✔ positions: a fail-safe-shaped position (first occurrence, offset 0) is carried exactly as pinned (4.388626ms)
+✔ P6: gate after chunks only refuses flip_gate_carry_incomplete with zero gate rows, naming both missing carries (11.006708ms)
+✔ P6: gate after positions only / after jobs only refuses, naming the missing carry, zero gate rows (11.427148ms)
+✔ P6: tampering the positions audit after a full carry makes the gate refuse, zero gate rows (6.131312ms)
+✔ P6: tampering a stored job row after a full carry makes the gate refuse, zero gate rows (6.358342ms)
+✔ P6: deleting a pinned job row after a full carry makes the gate refuse (missing_job), zero gate rows (6.480305ms)
+✔ P6 regression: G4 binding completeness still refuses FIRST (a deleted binding is a G4 refusal, not a carry refusal) (6.308027ms)
+✔ P6 regression: a book with NO carry pin keeps the pre-B1 gate semantics — no carries required (11.677335ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 401.285452
+
+===== p8-b1-correction exit=0 =====
+✔ C1: altered content preseeded via SyncPush (same occurrence IDs, changed cast) + first chunk WITHOUT content refuses migration_content_mismatch pre-prime — zero GETs, zero migration business rows, durable rejected receipt (11.221641ms)
+✔ C1: the same preseed refuses even when the chunk PRESENTS the pin-correct content — the stored entity is the effective content and it mismatches (3.301935ms)
+✔ C1 positive control: pin-correct content preseeded via SyncPush is a trustworthy source — chunks without content import against it and complete (11.788391ms)
+✔ C1: a carry-pinned book with NO content source anywhere refuses migration_content_mismatch pre-prime (no priming for an import that cannot be verified) (3.906092ms)
+✔ C1: after a legitimate import + both carries, altering the stored content via SyncPush (same ID membership, reversed order, changed cast) makes the gate refuse flip_gate_content_mismatch with zero gate rows; restoring the pinned content lets the gate apply (24.454389ms)
+✔ C2 control: an untouched complete book (chunks + both carries) still gates (32.675436ms)
+✔ C2: mutating the stored job's chapter_index makes the gate refuse (chapter_index), zero gate rows (10.757354ms)
+✔ C2: mutating the stored job's lane makes the gate refuse (lane), zero gate rows (14.08674ms)
+✔ C2: mutating the stored job's kind makes the gate refuse (kind), zero gate rows (9.180978ms)
+✔ C2: mutating the stored job's revision makes the gate refuse (revision), zero gate rows (9.178024ms)
+✔ C2: a nonzero position tip makes the gate refuse (tip), zero gate rows (8.40945ms)
+✔ C2: a position_events journal row for the book makes the gate refuse (position_events), zero gate rows (12.94051ms)
+✔ C2: playing = 1 on the carried position makes the gate refuse (playing), zero gate rows (7.57645ms)
+✔ C2: superseded_count > 0 on the carried position makes the gate refuse (superseded_count), zero gate rows (6.934607ms)
+✔ C2 scoping: the no-playback baseline binds the gate only — after a successful gate, genuine device position events fold onto the carried state by the normal rules (9.350172ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 343.929637
+
+===== p8-b1-runner exit=0 =====
+✔ deriver: re-running the carry deriver reproduces the committed pin byte-for-byte (--check) (930.983692ms)
+✔ pin self-consistency: the runner's independent content construction hashes to the carry pin for all seven real books; counts and job sets match the freeze record (1422.952212ms)
+✔ pin job sets: Forever Pucked carries exactly one parked_policy (chapter 2); Pucked Over exactly three superseded; the other five are SIGNED empty sets (9.441869ms)
+✔ runner determinism: the same freeze in produces byte-identical plans and hash sheets; a content/pin mismatch refuses to build (189.85069ms)
+✔ FP shape through the REAL production Worker: 1 chunk of 50 + positions + 1 parked job + gate, driven by the runner; PUT 0; GETs match the hash-sheet estimate; a dropped positions response resolves from the stored receipt with no double-apply (120.680967ms)
+✔ PO shape through the REAL production Worker: 6 chunks + positions + 3 superseded jobs + gate, driven by the runner; PUT 0; GETs match the estimate (369.977978ms)
+✔ Option D admission: the carry commands pend under the client credential alone, and only an operator approval — never the submit — executes them (25.298927ms)
+✔ driver discipline: a digest-pending chunk is never sent; a durable rejection halts the book with no retry and no repair (8.241708ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3422.149408
+
+===== p8-d3-chunk-mandate exit=0 =====
+✔ D3-1 (a): whole-book import on production is refused migration_chunk_required with a CORRECT operator credential — zero R2 GETs, zero commands written (2434.166707ms)
+✔ D3-1 (b): the refusal is identical with chunk 1 already applied — zero additional GETs, the applied chunk's state untouched (2671.795417ms)
+✔ D3-1 (c): after the refusal, MigrateImportChunk and MigrateRecordFlipGate are still admitted in their intended order (4882.509799ms)
+✔ D3-1 (d): DO/API backup — a direct internal request to the production coordinator (public entry bypassed) is refused the same way, and the API layer refuses a production-marked whole-book command on its own (2156.617478ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12519.590237
+
+===== p8-d3-chunking exit=0 =====
+✔ chunked import: partial state is invisible and ungated; completion derives the one whole-book certificate; the existing gate applies unchanged (22.931764ms)
+✔ chunked and whole-book imports of the same book anchor the IDENTICAL certificate (14.404868ms)
+✔ retry (b): the same command id replays the stored receipt — zero additional R2 GETs, single effect (3.733423ms)
+✔ retry (a): an ambiguous transport interruption resolves to the true outcome under the same command id (4.825682ms)
+✔ retry (c): a durably rejected chunk replays ONLY its refusal under the same id; a corrected attempt needs a new retry-generation id (9.381558ms)
+✔ out-of-order chunk: durable refusal; the in-order retry still needs a new generation id (4.308476ms)
+✔ duplicate chunk under a NEW command id converges on the recorded application — zero GETs, no double effect (5.751962ms)
+✔ negative: missing chunk — the gate cannot pass and the view names the gap (4.301715ms)
+✔ negative: reordered rows inside a chunk payload are refused as a chunk mismatch, pre-prime (2.483226ms)
+✔ negative: substituted chunks — another chunk's rows, and another book's rows, are refused (3.194123ms)
+✔ negative: wrong migrationId mid-sequence is a divergence; earlier verified chunks stand, the book stays ungated (3.464609ms)
+✔ negative: altered freeze digest, altered payload row, and a book with no chunk pin are refused (3.182536ms)
+✔ negative: late bytes drift and late metadata drift reject the affected chunk only (5.202959ms)
+✔ negative: the two import paths never interleave on one book (7.624242ms)
+✔ negative: first chunk without content (and none stored) is unknown_book; a divergent carried content is refused (4.02496ms)
+✔ crash durability: a crash between chunks and after the final chunk loses nothing (6.06392ms)
+✔ attested rows flow through chunking with provenance intact; a bad attestation rejects its chunk (16.364018ms)
+✔ the shared object: two rows, one cache key, split across chunks — anchored once, provenance intact (4.507495ms)
+✔ limits: an oversize item, an over-cap chunk (bytes), and an over-cap chunk (rows) are all refused pre-prime (6.562137ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 372.606012
+
+===== p8-d3-prod-envelope exit=1 =====
+node:internal/errors:986
+  const err = new Error(message);
+              ^
+
+Error: Command failed: /usr/bin/node /home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs --out /tmp/opal-prod-envelope-1VCCMx/dist
+fatal: not a git repository (or any parent up to mount point /home)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+node:internal/errors:986
+  const err = new Error(message);
+              ^
+
+Error: Command failed: git rev-parse HEAD
+fatal: not a git repository (or any parent up to mount point /home)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+
+    at genericNodeError (node:internal/errors:986:15)
+    at wrappedFn (node:internal/errors:540:14)
+    at checkExecSyncError (node:child_process:943:11)
+    at execFileSync (node:child_process:979:15)
+    at git (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:29:23)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:30:22
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  status: 128,
+  signal: null,
+  output: [
+    null,
+    '',
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n'
+  ],
+  pid: 21066,
+  stdout: '',
+  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n'
+}
+
+Node.js v24.22.1
+
+    at genericNodeError (node:internal/errors:986:15)
+    at wrappedFn (node:internal/errors:540:14)
+    at checkExecSyncError (node:child_process:943:11)
+    at execFileSync (node:child_process:979:15)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/p8-d3-prod-envelope.test.mjs:35:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  status: 1,
+  signal: null,
+  output: [
+    null,
+    '',
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+      'node:internal/errors:986\n' +
+      '  const err = new Error(message);\n' +
+      '              ^\n' +
+      '\n' +
+      'Error: Command failed: git rev-parse HEAD\n' +
+      'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+      '\n' +
+      '    at genericNodeError (node:internal/errors:986:15)\n' +
+      '    at wrappedFn (node:internal/errors:540:14)\n' +
+      '    at checkExecSyncError (node:child_process:943:11)\n' +
+      '    at execFileSync (node:child_process:979:15)\n' +
+      '    at git (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:29:23)\n' +
+      '    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:30:22\n' +
+      '    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n' +
+      '    at async node:internal/modules/esm/loader:647:26\n' +
+      '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n' +
+      '  status: 128,\n' +
+      '  signal: null,\n' +
+      '  output: [\n' +
+      '    null,\n' +
+      "    '',\n" +
+      "    'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+      "      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+      '  ],\n' +
+      '  pid: 21066,\n' +
+      "  stdout: '',\n" +
+      "  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+      "    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+      '}\n' +
+      '\n' +
+      'Node.js v24.22.1\n'
+  ],
+  pid: 21058,
+  stdout: '',
+  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+    'node:internal/errors:986\n' +
+    '  const err = new Error(message);\n' +
+    '              ^\n' +
+    '\n' +
+    'Error: Command failed: git rev-parse HEAD\n' +
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+    '\n' +
+    '    at genericNodeError (node:internal/errors:986:15)\n' +
+    '    at wrappedFn (node:internal/errors:540:14)\n' +
+    '    at checkExecSyncError (node:child_process:943:11)\n' +
+    '    at execFileSync (node:child_process:979:15)\n' +
+    '    at git (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:29:23)\n' +
+    '    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:30:22\n' +
+    '    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n' +
+    '    at async node:internal/modules/esm/loader:647:26\n' +
+    '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n' +
+    '  status: 128,\n' +
+    '  signal: null,\n' +
+    '  output: [\n' +
+    '    null,\n' +
+    "    '',\n" +
+    "    'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+    "      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+    '  ],\n' +
+    '  pid: 21066,\n' +
+    "  stdout: '',\n" +
+    "  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+    "    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+    '}\n' +
+    '\n' +
+    'Node.js v24.22.1\n'
+}
+
+Node.js v24.22.1
+✖ tests/p8-d3-prod-envelope.test.mjs (218.780996ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 230.182306
+
+✖ failing tests:
+
+test at tests/p8-d3-prod-envelope.test.mjs:1:1
+✖ tests/p8-d3-prod-envelope.test.mjs (218.780996ms)
+  'test failed'
+
+===== p8-d3-production-surface exit=0 =====
+✔ prod surface serves its OWN coordinator: health names the production scope, settings round-trip on the account instance, staging state untouched (20.286484ms)
+✔ the fences are disjoint in both directions: staging-shaped requests die on prod, production-shaped requests die on staging (7.27688ms)
+✔ prod DO class enforces the production scope on direct internal calls (5.230179ms)
+✔ prod surface imports from the UNPREFIXED namespace; smoke-prefixed objects are invisible to it (25.584935ms)
+✔ prod class refuses ANY configured R2 prefix before bucket contact (the mirror of the staging namespace fence) (3.47142ms)
+✔ Option D admission on the production surface: submits pend under the client credential alone; approvals are operator-fenced and fail closed (16.106291ms)
+✔ chunked import runs end-to-end on the production surface (unprefixed keys, per-chunk invisibility, gate) (23.862771ms)
+✔ the production deploy spec describes a distinct script that owns its class — and the staging spec is untouched (3.637349ms)
+✔ operator routes refuse when the CLIENT secret is unconfigured — either-secret rule, both surfaces, both routes (4.87768ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 297.457296
+
+===== p8-d3-resource-proofs exit=0 =====
+  [resource] largest object: size=5787234 wall=28.5ms cpu=30.4ms memDelta rss=6.4MiB heap=0.7MiB external=5.5MiB arrayBuffers=5.5MiB (abs peak AB=12.4MiB)
+  [resource] Pucked Over chunk table: [{"chunk":0,"rows":88,"bytes":261811618,"gets":176,"wallMs":557,"cpuMs":536},{"chunk":1,"rows":84,"bytes":261414666,"gets":168,"wallMs":499,"cpuMs":483},{"chunk":2,"rows":85,"bytes":259925106,"gets":170,"wallMs":443,"cpuMs":485},{"chunk":3,"rows":82,"bytes":262076378,"gets":164,"wallMs":381,"cpuMs":467},{"chunk":4,"rows":88,"bytes":260027916,"gets":176,"wallMs":405,"cpuMs":440},{"chunk":5,"rows":83,"bytes":250737188,"gets":166,"wallMs":471,"cpuMs":515}]
+  [resource] totals: gets=1020 wall=2756ms memDelta rss=35.1MiB heap=11.3MiB external=40.4MiB arrayBuffers=40.4MiB (abs peaks rss=143.5MiB AB=41.7MiB)
+✔ resource proof: the corpus' largest single object (5,787,234 B) primes with a one-object buffer footprint (49.41018ms)
+✔ resource proof: the largest book (Pucked Over shape — 510 rows, 1,555,992,872 B) imports in its pinned chunks through the production Worker path (5163.875617ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5426.25534
+
+===== p8-d3-scale-rehearsal exit=0 =====
+  [scale] partition counts (row-cap-bound, small bytes): {"syn-finding-home":2,"syn-forever-pucked":1,"syn-in-her-own-league":3,"syn-pucked":4,"syn-pucked-over":6,"syn-pucked-up":5,"syn-the-goal":2}; total chunks 23
+✔ scale rehearsal: 1,799 synthetic bindings import CHUNKED cold, certify per book, gate — with zero storage writes and the retry cases exercised at scale (821.484787ms)
+✔ scale rehearsal, retry case (c): a sabotaged chunk in the largest attested book rejects durably; chunk-generation discipline repairs it (231.230619ms)
+✔ the committed real-freeze chunk pin: 7 books, 1,799 rows, 25 chunks under the code limits (1.904318ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1397.253225
+
+===== p8-migration-corrections exit=0 =====
+✔ G1 worker path: imports fetch only their own book's bytes; read-only surfaces fetch ZERO audio (186.806802ms)
+✔ G2 worker entry (Option D): submits pend under the client credential; approvals are operator-only and fail closed (35.245904ms)
+✔ G2 pinned freeze: caller input may only MATCH the approved freeze, never define it (10.105595ms)
+✔ G3: only the coordinator-anchored certificate opens the gate (11.295732ms)
+✔ G4 baseline: the unmutated import gates (4.983328ms)
+✔ G4 mutation refuses the gate: extra sync row (5.688156ms)
+✔ G4 mutation refuses the gate: extra SQL row for an unbound content occurrence (5.531972ms)
+✔ G4 mutation refuses the gate: wrong sync revisionKey (4.871791ms)
+✔ G4 mutation refuses the gate: changed index format (5.991692ms)
+✔ G4 mutation refuses the gate: changed size (sync plane) (5.495607ms)
+✔ G4 mutation refuses the gate: missing provenance audit row (4.315216ms)
+✔ G4 mutation refuses the gate: tampered provenance audit row (10.09519ms)
+✔ G4 mutation refuses the gate: foreign-migration audit row (5.0243ms)
+✔ G4 mutation refuses the gate: partial import (one SQL binding deleted) (4.972612ms)
+✔ G4 mutation refuses the gate: unexpected tombstone in the sync plane (3.775516ms)
+✔ consistency: the per-book import identity pins migrationId, freezeDigest, size, format (4.248495ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 539.425639
+
+===== p8-migration-import exit=0 =====
+✔ I2 cold DO: the migration path binds both planes where the snapshot paths cannot see the object (11.485777ms)
+✔ I1 contrast: SyncPush still lands a bindings entity with NO byte verification — only the migration path verifies (3.390568ms)
+✔ missing object: the whole book is rejected and leaves zero residue (4.29808ms)
+✔ I3 negative 1: tampered customMetadata (forged sha label, bytes unchanged) is refused (2.777938ms)
+✔ I3 negative 2: swapped bytes under a stale (manifest-matching) metadata label are refused (2.933413ms)
+✔ honest metadata: a correct recorded sha is accepted alongside the v1 no-sha shape (3.446873ms)
+✔ shared key: two occurrences bound to one object; one index row, two bindings, both planes agree (4.642207ms)
+✔ legacy anchors bind by their own rule; a wrong anchor is refused (3.714814ms)
+✔ the 31: provenance acceptance binds all fingerprinted-distinct rows with an auditable trail (22.071503ms)
+✔ the 31: a missing attestation refuses the whole book as identity_mismatch, zero residue (3.508495ms)
+✔ the 31: attestation field disagreements are attestation_invalid, never a silent pass (4.087454ms)
+✔ the 31: a POSITIVE foreign identity in metadata is never rescued by an attestation (2.509906ms)
+✔ the 31: AdoptAudio (non-migration) keeps strict refusal of the same rows (2.53869ms)
+✔ idempotency: replay returns the stored receipt; a fresh command id converges with no churn (3.508044ms)
+✔ abort, crash, resume: an interrupted import never promotes the book; the gate is durable across crashes (6.493195ms)
+✔ read-back divergence: a deleted SQL row / a tampered sync row blocks the flip gate and shows in the view (5.071461ms)
+✔ flip gate: the anchored certificate replays idempotently; an arbitrary string is refused (G3) (4.442748ms)
+✔ no prime seam wired: the migration path fails closed and writes nothing (2.374073ms)
+✔ content divergence and foreign occurrences are refused (3.028295ms)
+✔ staging namespace fence: a smoke-prefixed prime cannot see production-shaped keys (2.447062ms)
+✔ read facade: GET /v2/migration/book/<id> serves the both-plane view and writes nothing (14.530786ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 357.868155
+
+===== p8-migration-rehearsal exit=0 =====
+✔ scale rehearsal: 1,799 synthetic bindings import cold, certify in three evidence classes, gate — with zero storage writes (1313.110892ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1497.343552
+
+===== p8-option-d-two-phase exit=0 =====
+✔ S3: a submit stores the command verbatim + inert — zero business rows, zero R2 work, hash is server-computed over the canonical command (11.662852ms)
+✔ submit validation failures are durable refusals, never pending (chunk pin match, unpinned book) (4.267734ms)
+✔ chunk-1 content pin at submit: on a carry-pinned book (the production shape — every frozen book carries one), chunk 0 without content, or with content that does not hash to the pin, refuses AT SUBMIT (8.66256ms)
+✔ same-id / changed-payload submit is a conflict: the original record is untouched and the conflict itself stores nothing new (5.959082ms)
+✔ S1: a wrong-hash approval refuses the record PERMANENTLY — a later correct-hash approval is still refused (6.665303ms)
+✔ S2: exactly-once execution — duplicate approval and duplicate submit replay the stored receipt and change nothing (11.312707ms)
+✔ operator reject action: an explicit rejection settles the record refused without executing (2.679491ms)
+✔ S6: approving an unknown id refuses and stores NOTHING (1.937697ms)
+✔ S4: expiry — an approval after the pending TTL materializes expired and refuses; the id never reopens (4.987554ms)
+✔ t2-stale-pending-refusal: T2 rechecks expiry in-transaction even with NO intervening read or materialization (2.700062ms)
+✔ staging short-TTL seam (§3.8): the TTL is deployment configuration, never client input (2.578439ms)
+✔ S5: concurrent approvals claim exactly once — the loser gets the processing view and the store shows one execution (4.963619ms)
+✔ crash matrix — before claim: a coordinator crash between submit and approval loses nothing (4.375196ms)
+✔ crash matrix — after claim / during preparation: the claim survives, the lease lapses, the record projects needs_reconciliation and never auto-redoes (3.465751ms)
+✔ t3-lease-lapse-no-commit: preparation finishing after the lease lapses commits NOTHING — no receipt, no rows, no writes at all (2.669676ms)
+✔ crash matrix — during apply: an exception inside the apply transaction rolls back whole (no commands row, no bindings, claim left to lapse) (3.997509ms)
+✔ crash matrix — submit/approve race: an approval that arrives before its submit is an unknown id and stores nothing; the submit then flows normally (4.167324ms)
+✔ payload integrity (T2 recompute): a stored payload rewritten after submit fails approval closed — permanently refused, never claimed (3.318821ms)
+✔ payload integrity (T2 recompute): a stored TYPE rewritten after submit fails approval closed (34.566815ms)
+✔ payload integrity (T2 recompute): a tampered stored payload_sha256 fails closed even when the approval names the tampered digest (3.568776ms)
+✔ payload integrity (T2 recompute): a tampered stored command_id fails closed — the digest binds the id (6.321086ms)
+✔ payload integrity (T3 recompute is authoritative): a payload mutated DURING preparation fails the apply closed — no effects, no receipt, durable STOP (2.924139ms)
+✔ payload integrity (T3 recompute): a TYPE mutated DURING preparation fails the apply closed (2.69851ms)
+✔ read-purity-overdue-pending: a GET projects expired but the stored row stays byte-identical (through the SELECT-only facade) (9.586847ms)
+✔ read-purity-stale-lease-executing: a GET projects needs_reconciliation but the stored row stays byte-identical (3.423869ms)
+✔ handleCommand replay is fenced to final states: a pending id is never replayed as a receipt by the legacy dispatch (2.250007ms)
+✔ reconciliation security: a FALSE success claim with zero effects fails closed and preserves the record (3.318109ms)
+✔ reconciliation security: a correct zero-effects settlement refuses the record (reconciled_abandoned) and executes nothing (2.406291ms)
+✔ reconciliation security: a FALSE refusal claim with complete effects fails closed and preserves the record (5.605152ms)
+✔ reconciliation security: a correct complete-effects settlement applies with the EXISTING durable receipt — nothing is re-executed or re-invented (4.162557ms)
+✔ reconciliation security: a record with NO recorded claim cannot be settled even with complete effects (the execution is unattributable to the two-phase claim) (3.913834ms)
+✔ reconciliation security: the route cannot bypass T2/T3 — pending, live-executing, and final records are not reconcilable; unknown ids store nothing (4.651991ms)
+✔ reconciliation audit (Blocker B): a chunk slot with a corrupted row digest under the CORRECT migration id earns no completion credit (4.039081ms)
+✔ reconciliation audit (Blocker B): a completed slot belonging to a DIFFERENT command id earns this command no credit (3.888365ms)
+✔ reconciliation audit (Blocker B): a positions carry marker whose ACTUAL stored position was rewritten earns no completion credit (5.195156ms)
+✔ reconciliation audit (Blocker B): a jobs carry marker whose stored job row was rewritten earns no completion credit (39.236001ms)
+✔ reconciliation audit (Blocker B): a gate row naming a wrong certificate earns no completion credit (7.80281ms)
+✔ reconciliation audit (Blocker B): a gate row over a book whose ANCHORED certificate was rewritten earns no completion credit (5.780305ms)
+✔ reconciliation (Blocker B): complete-looking effects with NO trustworthy receipt stay uncertain — no synthetic receipt, no flip, no grant (3.168134ms)
+✔ reconciliation audit (Blocker B): a genuinely complete chunk execution settles applied on its EXISTING receipt (positive control) (3.714204ms)
+✔ reconciliation audit (Blocker B): a genuinely complete positions carry settles applied on its existing receipt (positive control) (4.799012ms)
+✔ reconciliation audit (Blocker B): a genuinely complete gate settles applied on its existing receipt (positive control) (6.090099ms)
+✔ reconciliation audit (Correction 2, B1): a DELETED binding earns no completion credit — the slot's evidence is not the effects (3.949978ms)
+✔ reconciliation audit (Correction 2, B1): an ALTERED binding (cache key rewritten) earns no completion credit (4.131851ms)
+✔ reconciliation audit (Correction 2, B1): an altered cache_index SHA-256 earns no completion credit (3.932582ms)
+✔ reconciliation audit (Correction 2, B1): an altered cache_index identity earns no completion credit (3.591329ms)
+✔ reconciliation audit (Correction 2, B1): a corrupted provenance attestation earns no completion credit (12.210104ms)
+✔ reconciliation audit (Correction 2, B1): genuinely applied rows settle applied on the EXISTING receipt (positive control) (35.275458ms)
+✔ reconciliation audit (Correction 2, B2): a gate record naming a DIFFERENT command earns this command no credit (5.5708ms)
+✔ reconciliation audit (Correction 2, B2): a gate record with NO command attribution earns no credit (5.072933ms)
+✔ reconciliation audit (Correction 2, B2): an UNPARSEABLE gate detail earns no credit (4.938271ms)
+✔ reconciliation audit (Correction 2, B2): a genuinely attributed gate settles applied on its existing receipt (positive control) (5.826474ms)
+✔ API negatives: the approval route refuses a missing admission mark, malformed bodies, and content-carrying bodies — and stores nothing for any of them (11.022021ms)
+✔ API negatives: approval of an unknown id is a 404 storing nothing; approval naming a non-two-phase (legacy) command id is refused the same way (4.213864ms)
+✔ API negatives: malformed submits never pend — missing command_id is a 400 envelope error; a shapeless migration payload stores a durable REFUSAL, not a pending record (4.487064ms)
+✔ flip gate through the protocol fails closed at EXECUTION: a wrong certificate pends at submit (shape is all submit may judge) and refuses at approval, recording no gate (12.763234ms)
+✔ parked_policy carry stays inert through the whole two-phase sequence; quota, settings and grants are untouched by migration (47.580965ms)
+✔ staging legacy retirement: the old dual-header single-request execution path is INACCESSIBLE — it pends like any submit and only the approval route executes (8.734097ms)
+✔ staging entry: an unknown command receipt is a 404 (the throwing .one() empty path), and a pending receipt reads as the state view (4.016247ms)
+ℹ tests 59
+ℹ suites 0
+ℹ pass 59
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 743.051321
+
+===== p8-part1-b7-revision exit=0 =====
+✔ fix1: instance 'account' is denied in staging and the account DO is never instantiated (8.019255ms)
+✔ fix1: a missing instance header is denied in staging, no DO contact (0.876425ms)
+✔ fix1: any other instance value is denied in staging, no DO contact (2.34545ms)
+✔ fix1: explicit instance 'smoke-p8' is allowed; only the smoke instance is ever resolved (7.245183ms)
+✔ fix1+2: through the entry, the staging cache cannot see production keys and can see its smoke namespace (6.218402ms)
+✔ fix2(a): conditional PUT precondition failure with a matching winner — adopted, no second PUT, no overwrite (1.083105ms)
+✔ fix2(b): a winner whose digest mismatches fails closed and is never overwritten (1.068163ms)
+✔ fix2(c): an indeterminate PUT error fails closed — one conditional attempt, no unconditional retry (0.645489ms)
+✔ fix2(d): winner adoption hydrates the snapshot with the winner's bytes (evict-before-hydrate ordering) (0.658648ms)
+✔ fix2: smoke keyPrefix namespaces every key; the default cache keeps production key shapes (0.932299ms)
+✔ fix2: the deploy spec carries the smoke namespace binding (R2_KEY_PREFIX=smoke-p8/) (4.658431ms)
+✔ F-A: gate refusal (bad token → 401) is CORS-readable only from the allowlisted origin (1.690437ms)
+✔ F-A: gate refusal (bad request scope → 403) is CORS-readable only from the allowlisted origin (0.863336ms)
+✔ F-A: gate refusal (bad env scope → 403 (harness-only leg)) is CORS-readable only from the allowlisted origin (0.770186ms)
+✔ F-A: gate refusal (token not configured → 503 (harness-only leg)) is CORS-readable only from the allowlisted origin (0.783035ms)
+✔ F-A: no gate refusal leaks a token value in body or headers (1.378338ms)
+✔ F-A: browser-shaped sequence — preflight, then a denied request whose refusal is readable verbatim (0.746591ms)
+✔ F-A: success and already-readable paths are unchanged (health, route 404, instance 403, DO 200) (3.961405ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 218.558703
+
+===== p8-part1-b7-safety exit=0 =====
+✔ ns: staging scope + missing R2_KEY_PREFIX — named error before any bucket operation (6.391442ms)
+✔ ns: staging scope + wrong prefixes — named error, zero bucket operations, every time (12.061781ms)
+✔ ns: staging scope + exactly 'smoke-p8/' — cache works and every bucket key carries the prefix (3.472821ms)
+✔ ns: non-staging scopes keep the unprefixed-or-configured behavior unchanged (4.69831ms)
+✔ ns: through the entry, a staging DO missing the prefix fails closed — request denied, bucket untouched (10.02237ms)
+✔ ns: through the entry, a correctly bound staging DO serves byte-checks inside the namespace only (5.600515ms)
+✔ preview: no Shelf base input and no user-supplied Shelf origin anywhere in the bundle (9.875571ms)
+✔ preview fixture: a flush delivers the outbox to the fake transport in FIFO order and records the would-be sends (36.57593ms)
+✔ preview fixture: the fake is the bridge's only fetch — a poisoned global fetch is never used; non-session POSTs record nothing (1.535825ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 315.403248
+
+===== p8-part1-integration exit=0 =====
+✔ entry: /health is public and identifies the v2 build (7.524963ms)
+✔ isolation (i): unauthenticated and non-staging requests are rejected (3.770289ms)
+✔ isolation (ii): no route can read or write v1-shaped data (8.691123ms)
+✔ entry + DO + sync contracts round-trip through the real transport and assembled client (65.372285ms)
+✔ byteCheck route answers from the R2 cache namespace (5.693815ms)
+✔ isolation (iii): queue handler and DO execute refuse while halted; spec has no consumer or provider secrets (3.98494ms)
+✔ providers: halt refuses before any network call; removed providers refuse by name (0.683556ms)
+✔ providers: Gemini legacy + OpenAI + Batch kernels behind the executor seam (scripted fetch) (9.498505ms)
+✔ cache adapter: putIfAbsent/probe/flush/hydrate round-trip over a fake R2 bucket (0.79315ms)
+✔ work source resolves occurrence payloads from the coordinator content plane (4.214434ms)
+✔ isolation (iv): preview bundle composes the client + bridge and root served files are byte-identical (19.19772ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 308.313408
+
+===== p8-part2-f1-fix exit=0 =====
+✔ F1 harness contract: SqlFacade .one() throws on 0 and on >1 rows, returns the row on exactly 1 (6.008908ms)
+✔ F1 direct: brand-new coordinator — defaults and intended not-found states, no 500-class throws (26.636323ms)
+✔ F1 direct: first SetSettings applies at revision 1, replay returns the original receipt once, stale baseRevision conflicts (3.532221ms)
+✔ F1 direct: cardinality discipline — _oneOrNull is null/row/throw, and strict _one still throws (2.103717ms)
+✔ F1 entry: brand-new smoke instance — GET /v2/settings returns defaults with no prior write (16.640392ms)
+✔ F1 entry: §5 smoke order — SetSettings round-trip, replay-once, read-back, conflict (worker entry -> DO) (10.451755ms)
+✔ F1 entry: missing meta.frozen is not a 500 — commands flow, and a freeze then rejects new work as designed (7.374958ms)
+✔ F1 entry (revised env): smoke prefix respected — byte-check sees the smoke object, never the production twin (6.432724ms)
+✔ F1 entry (revised env): the namespace guard is LIVE — wrong or absent DO prefix fails closed, zero bucket operations (9.912626ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 258.726081
+
+===== p8-preview-p1-p2 exit=0 =====
+✔ preview P1/P2 source: no editable worker origin and no shared default device ID (5.596368ms)
+✔ preview P1: correct health identity opens the gate before authenticated quota traffic (41.74694ms)
+✔ preview P1: a poisoned arbitrary origin is ignored; requests stay on the pinned staging origin (2.801364ms)
+✔ preview P1: bad health identity (wrong build) stops with zero authenticated requests (7.10297ms)
+✔ preview P1: bad health identity (wrong scope) stops with zero authenticated requests (1.266571ms)
+✔ preview P1: bad health identity (generation active) stops with zero authenticated requests (2.183557ms)
+✔ preview P1: bad health identity (coordinator unbound) stops with zero authenticated requests (1.480031ms)
+✔ preview P1: bad health identity (wrong app) stops with zero authenticated requests (0.816065ms)
+✔ preview P1: bad health identity (malformed JSON) stops with zero authenticated requests (1.168223ms)
+✔ preview P1: bad health identity (HTTP failure) stops with zero authenticated requests (0.88607ms)
+✔ preview P1: bad health identity (fetch failure) stops with zero authenticated requests (0.597106ms)
+✔ preview P2: device identity is generated once per fresh storage and then reused (0.804818ms)
+✔ preview P2: identity mismatch is surfaced before any network or transport creation (0.666009ms)
+✔ preview P2: two fresh-storage clients allocate disjoint command and position IDs with no replay (8.105514ms)
+✔ preview F-B: a blank token is refused before identity, health, transport, or client (0.712289ms)
+✔ preview F-B: a wrong token fails the transport proof with the server's verbatim refusal; no client is composed (1.107021ms)
+✔ preview F-B: an expired token is refused identically — every non-2xx proof fails the same way (0.805549ms)
+✔ preview F-B: a transport/network failure during the proof composes no client (0.721062ms)
+✔ preview F-B: a malformed 200 from quotaView is not proof (1.746821ms)
+✔ preview F-B: a cached quota view in local storage cannot rescue a refused candidate (the stale-cache trap) (0.861633ms)
+✔ preview F-B: a successful re-auth composes the replacement only after its own proof passes (0.964818ms)
+✔ preview F-C: identifier inputs opt out of keyboard correction; all other inputs unchanged (0.78663ms)
+✔ preview F-C: not-found lines name the submitted ID verbatim; the exact-case hint appears only for uppercase (0.783946ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 289.148767
+
+===== p8-preview-ui exit=0 =====
+✔ preview UI: failed health does not clear the token; successful gated connect clears it and shows the device ID (11.010994ms)
+✔ preview F-B UI: a second Connect tap on the cleared field is a visible no-op; the working connection survives (3.453873ms)
+✔ preview F-B UI: a wrong token surfaces the server's refusal verbatim and keeps the prior connection's state (2.686993ms)
+✔ preview F-B UI: a slower successful attempt cannot overwrite a newer connection (6.829449ms)
+✔ preview F-B UI: a slower failing attempt cannot relabel or replace a newer connection (5.860114ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 177.079695
+
+===== p8-upload-envelope exit=1 =====
+node:internal/errors:986
+  const err = new Error(message);
+              ^
+
+Error: Command failed: /usr/bin/node /home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs --out /tmp/opal-envelope-FK28dw/dist
+fatal: not a git repository (or any parent up to mount point /home)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+node:internal/errors:986
+  const err = new Error(message);
+              ^
+
+Error: Command failed: git rev-parse HEAD
+fatal: not a git repository (or any parent up to mount point /home)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+
+    at genericNodeError (node:internal/errors:986:15)
+    at wrappedFn (node:internal/errors:540:14)
+    at checkExecSyncError (node:child_process:943:11)
+    at execFileSync (node:child_process:979:15)
+    at git (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:29:23)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:30:22
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  status: 128,
+  signal: null,
+  output: [
+    null,
+    '',
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n'
+  ],
+  pid: 21328,
+  stdout: '',
+  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n'
+}
+
+Node.js v24.22.1
+
+    at genericNodeError (node:internal/errors:986:15)
+    at wrappedFn (node:internal/errors:540:14)
+    at checkExecSyncError (node:child_process:943:11)
+    at execFileSync (node:child_process:979:15)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/p8-upload-envelope.test.mjs:33:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  status: 1,
+  signal: null,
+  output: [
+    null,
+    '',
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+      'node:internal/errors:986\n' +
+      '  const err = new Error(message);\n' +
+      '              ^\n' +
+      '\n' +
+      'Error: Command failed: git rev-parse HEAD\n' +
+      'fatal: not a git repository (or any parent up to mount point /home)\n' +
+      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+      '\n' +
+      '    at genericNodeError (node:internal/errors:986:15)\n' +
+      '    at wrappedFn (node:internal/errors:540:14)\n' +
+      '    at checkExecSyncError (node:child_process:943:11)\n' +
+      '    at execFileSync (node:child_process:979:15)\n' +
+      '    at git (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:29:23)\n' +
+      '    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:30:22\n' +
+      '    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n' +
+      '    at async node:internal/modules/esm/loader:647:26\n' +
+      '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n' +
+      '  status: 128,\n' +
+      '  signal: null,\n' +
+      '  output: [\n' +
+      '    null,\n' +
+      "    '',\n" +
+      "    'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+      "      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+      '  ],\n' +
+      '  pid: 21328,\n' +
+      "  stdout: '',\n" +
+      "  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+      "    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+      '}\n' +
+      '\n' +
+      'Node.js v24.22.1\n'
+  ],
+  pid: 21320,
+  stdout: '',
+  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+    'node:internal/errors:986\n' +
+    '  const err = new Error(message);\n' +
+    '              ^\n' +
+    '\n' +
+    'Error: Command failed: git rev-parse HEAD\n' +
+    'fatal: not a git repository (or any parent up to mount point /home)\n' +
+    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\n' +
+    '\n' +
+    '    at genericNodeError (node:internal/errors:986:15)\n' +
+    '    at wrappedFn (node:internal/errors:540:14)\n' +
+    '    at checkExecSyncError (node:child_process:943:11)\n' +
+    '    at execFileSync (node:child_process:979:15)\n' +
+    '    at git (file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:29:23)\n' +
+    '    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tools/build-p8-part1.mjs:30:22\n' +
+    '    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\n' +
+    '    at async node:internal/modules/esm/loader:647:26\n' +
+    '    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n' +
+    '  status: 128,\n' +
+    '  signal: null,\n' +
+    '  output: [\n' +
+    '    null,\n' +
+    "    '',\n" +
+    "    'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+    "      'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+    '  ],\n' +
+    '  pid: 21328,\n' +
+    "  stdout: '',\n" +
+    "  stderr: 'fatal: not a git repository (or any parent up to mount point /home)\\n' +\n" +
+    "    'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).\\n'\n" +
+    '}\n' +
+    '\n' +
+    'Node.js v24.22.1\n'
+}
+
+Node.js v24.22.1
+✖ tests/p8-upload-envelope.test.mjs (258.404659ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 269.579419
+
+✖ failing tests:
+
+test at tests/p8-upload-envelope.test.mjs:1:1
+✖ tests/p8-upload-envelope.test.mjs (258.404659ms)
+  'test failed'
+
+===== park-monotonicity exit=0 =====
+✔ competing daily 429s settle on the maximum parked_until; a shorter candidate never shortens it (137.268539ms)
+✔ CAS loser interleaving: a stalled shorter write cannot overwrite a longer park (35.366685ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 322.026176
+
+===== playback-bookmarks exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/playback-bookmarks.test.mjs:7:14
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-227.js'
+}
+
+Node.js v24.22.1
+✖ tests/playback-bookmarks.test.mjs (110.545877ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 122.768289
+
+✖ failing tests:
+
+test at tests/playback-bookmarks.test.mjs:1:1
+✖ tests/playback-bookmarks.test.mjs (110.545877ms)
+  'test failed'
+
+===== poller-review-fixes exit=0 =====
+✔ many historical terminal jobs from discovery are never polled (3.394565ms)
+✔ a stale terminal response cannot disturb an active slot job (2.587053ms)
+✔ ct keeps polling for an evicted generating job that is in neither slot (0.528073ms)
+✔ ct does not schedule for the evicted job once it is gone, nor for Continue-owned jobs (0.610817ms)
+✔ opening a different book discovers its jobs immediately (per-book throttle) (1.428444ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 207.172465
+
+===== poller-watchlist exit=0 =====
+✔ Ye polls registry-discovered jobs (GET only), merges changes, and leaves Continue jobs alone (4.345762ms)
+✔ ct keeps a 60s slow poll alive when the only known jobs are parked (0.976015ms)
+✔ ct schedules nothing when nothing is known and nothing is active (0.531208ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 146.308175
+
+===== post-jobs-park-adoption exit=0 =====
+✔ existing paused_quota job is adopted unchanged during a park; new Gemini job is created parked; neither enqueues (46.496698ms)
+✔ during a park: an all-cached Gemini job still completes as ready; a non-Gemini job stages normally (6.39716ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 191.01007
+
+===== quota-budget exit=0 =====
+✔ ptDayKey agrees with coordinator dayKeyPT across DST boundaries (190.737611ms)
+✔ unarmed store: no quota tables, grants create no reservations, dispatch is legacy (10.616612ms)
+✔ T1 parallel grants: first passes whole; second is cohort-bounded; zero-headroom refusal leaves no partial rows; replay is a no-op (17.435435ms)
+✔ T2 duplicate and out-of-order dispatch transitions consume nothing extra (9.528189ms)
+✔ counter drift: a corrupted slots_consumed refuses dispatch and consumes nothing (9.229071ms)
+✔ closure fence: dispatch-capable and unknown executions block closure; terminal/post-synthesis do not (9.491024ms)
+✔ recovery with a closed reservation fails closed at dispatch (no silent re-reservation) (6.30353ms)
+✔ T3 bootstrap: intra-day and dispatching rows assign exactly; a past-day straddle is a reported exception and does not block (24.439346ms)
+✔ T3 bootstrap: a straddle whose interval includes the CURRENT day refuses grants and dispatches until dispositioned (12.760049ms)
+✔ T7 orphans: void closes exactly once; abort stays visible; crash preserves the reservation (13.455172ms)
+✔ T8 rollback window: floor writes leave ledgers untouched; reconciliation detects a floor dispatch; re-arm reproduces totals (11.359307ms)
+✔ T6 store leg: cross-day re-reservation is atomic, reused, and refuses when the new day is full (16.233872ms)
+✔ labeling: quotaView distinguishes grants from dispatches and labels the cap as app-selected (7.340747ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 516.238402
+
+===== quota-corrections exit=0 =====
+✔ C1 store: cohort shrinks with prior commitments; the job's ordered set and plan identity are untouched (35.761587ms)
+✔ C1 store: a day that cannot fund even one fresh occurrence refuses the grant whole — no partials, no spin (8.975669ms)
+✔ C1 regression: 18 fresh segments complete through three bounded grants of the same job (83.911917ms)
+✔ C1 rollover: the pending remainder survives midnight untouched and continues on the new day (37.005845ms)
+✔ C2: a wrong-day disposition is refused and changes NOTHING; an in-interval day succeeds with its basis recorded (24.559867ms)
+✔ C3: reconcile reports ok:false with empty drift while a current-day exception stands (4.952552ms)
+✔ C3 fixture: disposition over the cap fails the day closed — zero additional provider calls (17.297178ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 416.033123
+
+===== quota-executor exit=0 =====
+✔ T5 success: one dispatch, counted permanently; reservation settles grant_settled (43.332479ms)
+✔ T5 policy_block: a terminal block counts exactly one dispatch (9.638655ms)
+✔ T5 failed_known: an HTTP 500 counts exactly one dispatch (9.419956ms)
+✔ T5 provider 429: counts once; reservation closes quota_park at the park (9.065425ms)
+✔ T5 transport-unknown: counts once; reservation frozen open; no park (8.509961ms)
+✔ T4 exhaustion mid-split across midnight: later leaf refused, earlier outcomes stand, park closes the day-D reservation (16.1859ms)
+✔ T6 cross-day: first delivery after midnight re-reserves atomically onto the dispatch day (10.811154ms)
+✔ crash window: kill after the dispatch commit, before the fetch — zero provider calls, still counted (15.699321ms)
+✔ recovery: a granted execution resumes under its original reservation (9.456512ms)
+✔ recovery: a closed reservation fails the resume closed — no provider call (8.252595ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 290.578142
+
+===== quota-park-concurrency exit=0 =====
+✔ simultaneous cross-route sends + a park landing: in-flight calls finish, nothing new dispatches (78.029349ms)
+✔ the code states the bound honestly (S4): the pace reservation does not claim to serialize dispatch (0.745689ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 205.781648
+
+===== quota-park-governance exit=0 =====
+✔ a daily 429 writes the project park and parks the job, manual-only (45.538109ms)
+✔ while parked, other jobs are gated at the consumer with zero provider calls (8.10235ms)
+✔ cached segments still finish for free during a park (consumer gate sits after cache checks) (10.612937ms)
+✔ Batch submissions are gated during a park; Batch polls are not (18.500334ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 211.889623
+
+===== quota-probe exit=0 =====
+✔ probe success re-parks; probe 429 extends the park; expired park resumes fully (69.282202ms)
+✔ two Resume taps mint only one probe (per-job lease + state check) (8.341518ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 211.337195
+
+===== registry-discovery exit=0 =====
+✔ POST /jobs and Continue staging write registry markers; discovery returns live summaries (24.213437ms)
+✔ legacy backfill: a marker-less parked job (FP Chapter 3 shape) is discovered and the scan runs once (1.929976ms)
+✔ S2: the legacy scan runs even when the book already has a new marker (2.79185ms)
+✔ Rowan review: a failing registry list reports incomplete coverage, never false completeness (2.050357ms)
+✔ healthy discovery reports registry_incomplete: false (3.892001ms)
+✔ S2: a failed marker PUT leaves a durable pending record; discovery reconciles it and never marks the scan done early (10.023141ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 187.849877
+
+===== remediation-cache-refresh exit=0 =====
+✔ (a) single-invocation first-pass commit: prime -> synthesize -> flush -> commit in ONE invocation (46.307514ms)
+✔ (b) genuine preexisting winner with identical bytes is adopted and commits first-pass (9.254379ms)
+✔ (c) different-byte conditional-PUT winner still fails closed with winner_digest_mismatch (7.43658ms)
+✔ (d) fresh-invocation intent recovery commits with ZERO new provider calls (9.489771ms)
+✔ refreshKey: only a memoized miss is invalidated; positive and pending entries cost no read (0.930336ms)
+✔ (e) read-heavy behavior unchanged: hydrateKeys / byteCheck / primeForMigration read counts stay at baseline bounds (2.267383ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 238.145176
+
+===== repair-chain-continuation exit=0 =====
+✔ a finished pass keeps the chain armed while an untouched blocked root remains (2.682045ms)
+✔ the chain still stops when no repairable blocked root remains (0.39312ms)
+✔ an already-exhausted leftover does not re-arm the chain (termination) (0.296696ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 133.314085
+
+===== repair-chain-foreground-gate exit=0 =====
+✔ documented behavior: while Reader is hidden, the next repair plan is NOT submitted (6.742198ms)
+✔ documented behavior: when Reader is visible again, the chain submits the next plan (4.441786ms)
+✔ Worker: two repair jobs for one chapter complete back-to-back with NO client involvement between completions (51.939436ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 236.025304
+
+===== restore-sound-rewind exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-235.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/restore-sound-rewind.test.mjs:6:10
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-235.js'
+}
+
+Node.js v24.22.1
+✖ tests/restore-sound-rewind.test.mjs (96.130033ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 107.003571
+
+✖ failing tests:
+
+test at tests/restore-sound-rewind.test.mjs:1:1
+✖ tests/restore-sound-rewind.test.mjs (96.130033ms)
+  'test failed'
+
+===== shelf-bridge-contract exit=0 =====
+✔ queue stores the golden outbox item shape (4.769948ms)
+✔ merge rule: inside 90s merges durations, outside creates a second item (1.622485ms)
+✔ flush POSTs the golden session payload and removes the item (1.514192ms)
+✔ 409 overlap carve math matches the golden parts exactly (1.157727ms)
+✔ flush carves on 409, then delivers the parts with fresh ids (1.101423ms)
+✔ fully covered overlap drops the item and counts it covered (0.613531ms)
+✔ a failed head item blocks the queue (FIFO, head-of-line) (1.695374ms)
+✔ overlap parser returns null for non-overlap messages (0.527451ms)
+✔ outbox cap keeps the newest 300 items, oldest dropped first (55.232317ms)
+✔ timing: 30s checkpoints queue chunks that merge into one session (1.826852ms)
+✔ timing: pause under 4s resumes; confirmed stop backdates to the pause (12.857706ms)
+✔ timing: a confirmed pause-stop counts listening only up to the pause moment (0.794903ms)
+✔ timing: resume within 90s of a stop cancels the flush and continues the same session (1.60583ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 208.607739
+
+===== shelf-bridge-replay exit=0 =====
+✔ replay: simple queue + flush 2xx — identical bytes, attempts persisted before POST (16.075935ms)
+✔ replay: merge inside 90s merges, exactly 90s does not, 89.999s merges into the newest (3.562526ms)
+✔ replay: 409 partial carve — item replaced by uncovered intervals, parts delivered (5.303339ms)
+✔ replay: 409 fully covered — item dropped, counted covered, nothing resent (1.564688ms)
+✔ replay: 404 read-through not found — relinkNeeded, head blocked, next item untouched (2.327312ms)
+✔ replay: 500 then network throw — head-of-line blocking, attempts persisted, error stamps (2.250217ms)
+✔ replay: restart mid-queue — a fresh bridge over the same storage flushes the durable outbox (2.150968ms)
+✔ replay: session near local midnight — local_date from LOCAL getters (UTC date differs) (1.230677ms)
+✔ replay: outbox cap keeps the newest 300 items, oldest dropped first (189.608997ms)
+✔ replay timing: 30s checkpoints queue chunks that merge into one session (3.587634ms)
+✔ replay timing: pause resumed at 3.9s — session continues, checkpoint counts the pause (3.507294ms)
+✔ replay timing: pause not resumed — session ends BACKDATED to the pause moment (25s, not 29s) (5.601226ms)
+✔ replay timing: resume within 90s of a stop cancels the flush and continues the same session (7.456129ms)
+✔ fixtures: golden outbox item and session payload against the adapter directly (1.164898ms)
+✔ fixtures: merge case against the adapter (inside merges, outside creates a second item) (0.732019ms)
+✔ fixtures: overlap carve against the adapter — exact parts, fresh ids, fully covered (1.15955ms)
+✔ adapter storage: the outbox lives under its own v2 key, nothing else is touched (0.404928ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 374.926625
+
+===== silent-audio-recovery exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-233.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/silent-audio-recovery.test.mjs:6:10
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-233.js'
+}
+
+Node.js v24.22.1
+✖ tests/silent-audio-recovery.test.mjs (96.185816ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 108.388239
+
+✖ failing tests:
+
+test at tests/silent-audio-recovery.test.mjs:1:1
+✖ tests/silent-audio-recovery.test.mjs (96.185816ms)
+  'test failed'
+
+===== split-first-update-stop exit=1 =====
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-244.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/split-first-update-stop.test.mjs:6:14
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-244.js'
+}
+
+Node.js v24.22.1
+✖ tests/split-first-update-stop.test.mjs (101.069496ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 112.965088
+
+✖ failing tests:
+
+test at tests/split-first-update-stop.test.mjs:1:1
+✖ tests/split-first-update-stop.test.mjs (101.069496ms)
+  'test failed'
+
+===== staging-no-reset exit=0 =====
+✔ or() guard: same jobId never decreases completed/total; increases pass through (1.796405ms)
+✔ or() guard: a different jobId may still replace the slot (it is only a display cache) (0.257526ms)
+✔ queueAdaptiveRepair adoption: no staging overwrite, ever (1.447622ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 196.148761
+
+===== sync-diagnostics exit=1 =====
+node:internal/test_runner/harness:124
+      throw err;
+      ^
+
+Error: ENOENT: no such file or directory, open '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-255.js'
+    at readFileSync (node:fs:483:20)
+    at file:///home/hatch/workspace/ch2-program/quota-fix/worker-build/tests/sync-diagnostics.test.mjs:159:13
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/hatch/workspace/ch2-program/quota-fix/worker-build/app-255.js'
+}
+
+Node.js v24.22.1
+✖ tests/sync-diagnostics.test.mjs (109.279546ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 120.913125
+
+✖ failing tests:
+
+test at tests/sync-diagnostics.test.mjs:1:1
+✖ tests/sync-diagnostics.test.mjs (109.279546ms)
+  'test failed'
+
+===== sync-manifest exit=0 =====
+✔ manifest is small and does not read the legacy cover-heavy index or book content (15.737167ms)
+✔ individual book endpoint supplies the complete book, including its cover (16.904058ms)
+✔ saving book progress compacts legacy index once without removing book covers (37.347077ms)
+✔ deleted books stay out of the manifest and are not returned (6.975128ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 212.83944
+
+===== sync-p4 exit=0 =====
+✔ cursor: sinceSeq is exclusive, sinceSeq=0 is a normal first pull (no spurious resync) (6.557261ms)
+✔ cursor: pinned watermark — a concurrent write mid-pagination is NOT in the window, and arrives next pull (4.522067ms)
+✔ cursor: mismatched family / impossible watermarks are rejected; truncation triggers resync + snapshot convergence (2.254153ms)
+✔ sequence authority survives FULL history truncation (review blocker 1): tip persists, no silent misses (5.75677ms)
+✔ receipts: duplicate command delivery returns the SAME receipt and applies once (lost-ACK safe) (3.035375ms)
+✔ abort isolation: a conflicted book mid-batch leaves its siblings applied and itself untouched (3.560503ms)
+✔ position: deterministic fold in receipt order; replay dedupes by eventId; same id + different payload is a conflict (4.19119ms)
+✔ position: validation — base ahead of tip, unknown occurrence, bad offset all rejected, nothing appended (3.008826ms)
+✔ position: fresh backward seek applies; stale backward is superseded (recorded, surfaced); stale forward folds; gaps surface (5.218732ms)
+✔ tombstones: deletion syncs, post-tombstone writes are rejected in EVERY family, resync keeps the tombstone (4.326333ms)
+✔ sweep dry-run (clean): proves references, keeps shared audio, complete manifest, deletes NOTHING (4.47818ms)
+✔ sweep dry-run FAILS CLOSED: incomplete own binding, incomplete cross-book binding, or a live job each withhold the whole manifest (review blocker 2) (10.854099ms)
+✔ book identity is verified: mismatched identifiers rejected — including writes aimed past a tombstone (review follow-up) (4.009226ms)
+✔ group fences: duplicate entity targets and mixed delete+update groups are rejected whole (re-review blocker) (3.374424ms)
+✔ pushes are atomic PER BOOK: one conflict in a book commits NONE of that book, other books succeed (review concern) (2.796146ms)
+✔ money: no client-writable money family; settings CAS conflict is non-silent; money reads are revisioned (25.205737ms)
+✔ two-device convergence: interleaved edits, position events and a conflict converge to the coordinator's read models (4.682016ms)
+✔ large library: 60 books paginate and converge on a second device (15.086881ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 269.363765
+
+===== tts-park-gate exit=0 =====
+✔ during a park, unlabeled direct speech is refused; the labeled override makes exactly one call (52.757684ms)
+✔ an override call that meets a daily 429 re-parks from the new evidence (6.631262ms)
+✔ with no park, direct speech is unaffected (1.899721ms)
+✔ client audit: gt() is the only override setter and has only explicit-tap callers (0.988343ms)
+✔ Continue-to-quota consumes at most one probe: the paused branch resumes one job and handles the probe answer (0.450346ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 207.961639
+
+===== wav-stitch exit=0 =====
+✔ chapter stitch includes only PCM data, never trailing C2PA metadata (3.661746ms)
+✔ mixed WAV formats fail safely instead of creating corrupt narration (1.420863ms)
+✔ invalid RIFF headers are rejected (0.356124ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 134.778373
+
