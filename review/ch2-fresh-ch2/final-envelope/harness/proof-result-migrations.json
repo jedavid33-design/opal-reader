@@ -1,0 +1,155 @@
+{
+  "mutate": "migrations",
+  "pin": "0000000000000000000000000000000000000000",
+  "pinIsPlaceholder": true,
+  "parts": 28,
+  "assembledParts": 28,
+  "checks": 23,
+  "passed": 21,
+  "failed": [
+    "E11",
+    "E18"
+  ],
+  "envelopeBytes": 1339936,
+  "envelopeSha256": "99ffbca8f77da1a71158dd810b15183acc9f1e154e55e281415eaed50793590a",
+  "results": [
+    {
+      "id": "E1",
+      "ok": true,
+      "label": "spec is the pinned D6 successor spec for opalreader-api-v2-prod",
+      "detail": "mutation mode: migrations (mutations applied AFTER spec read; spec itself intact)"
+    },
+    {
+      "id": "E2",
+      "ok": true,
+      "label": "entry module is the D6 production entry, exactly as specced, and is an actual envelope part",
+      "detail": "main_module=\"v2/worker-entry-prod-d6.js\""
+    },
+    {
+      "id": "E3",
+      "ok": true,
+      "label": "every relative import in the D6 closure resolves to an exactly-named part",
+      "detail": "28 modules in closure"
+    },
+    {
+      "id": "E4",
+      "ok": true,
+      "label": "bare specifiers are node:-only (covered by nodejs_compat)",
+      "detail": "node:crypto"
+    },
+    {
+      "id": "E5",
+      "ok": true,
+      "label": "every envelope part hash-compares to the final candidate tree (build-identity: stamped part == tree with ONLY the pin substituted; tree still UNBUILT)",
+      "detail": "28 parts, 1332909 total module bytes (stamped)"
+    },
+    {
+      "id": "E6",
+      "ok": true,
+      "label": "stamped build-identity carries the pin exactly once (PLACEHOLDER pin of real-pin length; D1 re-runs with the real final-package pin)",
+      "detail": "pin=0000000000000000000000000000000000000000 (placeholder)"
+    },
+    {
+      "id": "E7",
+      "ok": true,
+      "label": "exactly SEVEN spec bindings in the assembled metadata",
+      "detail": "count=7: COORDINATOR, OPALREADER_STORAGE, ALLOWED_ORIGIN, OPALREADER_V2_SCOPE, GENERATION_HALT, OPALREADER_PHASE_POLICY, OPALREADER_GENERATION_V2"
+    },
+    {
+      "id": "E8",
+      "ok": true,
+      "label": "each of the seven bindings has the specced name, type, and value-class fields",
+      "detail": "all seven exact"
+    },
+    {
+      "id": "E9",
+      "ok": true,
+      "label": "OPALREADER_PHASE_POLICY present exactly once, plain_text \"enforce\", no extra keys",
+      "detail": "[{\"name\":\"OPALREADER_PHASE_POLICY\",\"text\":\"enforce\",\"type\":\"plain_text\"}]"
+    },
+    {
+      "id": "E10",
+      "ok": true,
+      "label": "three required secrets ride as inherit-by-name only (10 bindings total); zero secret_text, zero secret values in the envelope",
+      "detail": "inherit: GEMINI_API_KEY, OPALREADER_ACCESS_TOKEN, OPALREADER_MIGRATION_OPERATOR_TOKEN"
+    },
+    {
+      "id": "E11",
+      "ok": false,
+      "label": "NO migrations key in the upload metadata; the D6 spec applies NO Durable Object migration (existing v1 migration / existing class only)",
+      "detail": ""
+    },
+    {
+      "id": "E12",
+      "ok": true,
+      "label": "DO topology: binding names the EXISTING production class OpalReaderCoordinatorProd (no script_name, no new class); the D6 entry exports that same class; spec records the existing v1 migration",
+      "detail": ""
+    },
+    {
+      "id": "E13",
+      "ok": true,
+      "label": "queue topology per spec: producer binding OPALREADER_GENERATION_V2 -> opalreader-generation-v2 in the envelope; spec declares exactly one consumer (this script, batch 10 / retries 3) on that queue; the v1 queue is not bound; no R2_KEY_PREFIX",
+      "detail": "consumer attachment itself is queue-side state (upload metadata cannot create it — G4 attempt 1) and is read-back-verified at the deploy gate per the plan"
+    },
+    {
+      "id": "E14",
+      "ok": true,
+      "label": "compatibility preserved: 2026-08-29 + nodejs_compat",
+      "detail": "date=2026-08-29, flags=[\"nodejs_compat\"]"
+    },
+    {
+      "id": "E15",
+      "ok": true,
+      "label": "observability object carried exactly per spec (enabled, head_sampling_rate 1, logs enabled + persist_invocations)",
+      "detail": "{\"enabled\":true,\"head_sampling_rate\":1,\"logs\":{\"enabled\":true,\"persist_invocations\":true}}"
+    },
+    {
+      "id": "E16",
+      "ok": true,
+      "label": "multipart envelope round-trips byte-identically; every module part has filename == part name and Content-Type application/javascript+module; no duplicate parts",
+      "detail": "29 parts total (metadata + 28 modules), envelope 1339936 bytes"
+    },
+    {
+      "id": "E17",
+      "ok": true,
+      "label": "the deploy lands HALTED: GENERATION_HALT \"1\" in the assembled metadata (Step P creates the hold first; D2's code PUT carries the same value)",
+      "detail": ""
+    },
+    {
+      "id": "E18",
+      "ok": false,
+      "label": "metadata top-level keys are exactly the proven D6 upload set (no extra keys, no migrations)",
+      "detail": "main_module, compatibility_date, compatibility_flags, bindings, observability, migrations"
+    },
+    {
+      "id": "E19",
+      "ok": true,
+      "label": "assembled envelope agrees with this package's tree-inventory.json (part set, per-part tree SHA-256 + bytes, totals)",
+      "detail": "28 parts, inventory total 1332876 tree bytes"
+    },
+    {
+      "id": "E20",
+      "ok": true,
+      "label": "operator fence — internal bootstrap handler: admitted-stamp check + halt-only + strict body handling (read-error/malformed/null) + figureless/empty-allowlist refusals, all before the store call",
+      "detail": "all assertions present in the handler segment"
+    },
+    {
+      "id": "E21",
+      "ok": true,
+      "label": "operator fence — internal dispose handler: admitted-stamp check + halt-only + closed allowlist + figure refusals + domain-refusal-only catch (faults surface as faults)",
+      "detail": "all assertions present in the handler segment"
+    },
+    {
+      "id": "E22",
+      "ok": true,
+      "label": "operator fence — internal reconcile handler: admitted-stamp check + strictly validated pagination + censusComplete signal + NO cache.flush (SELECT-only read purity)",
+      "detail": "all assertions present in the handler segment; no cache.flush in segment"
+    },
+    {
+      "id": "E23",
+      "ok": true,
+      "label": "operator fence — public entry: three quota routes in the operator-alone class, admitted stamp stamped server-side exactly once, bootstrap forwarded as raw text with a named read-error refusal, reconcile offsets forwarded",
+      "detail": "all assertions present"
+    }
+  ]
+}
