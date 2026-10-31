@@ -1,3 +1,8 @@
+Traced fresh in the deployed source of build `945875bc…`
+(local final tree `~/workspace/ch2-program/quota-routes-fix2/worker-build/`,
+the tree hashed into the gate-(a) operative envelope; reader
+repo `ui1-review` lineage through `26b5b5ee…`). The
+hypothetical is Gate-7's, unchanged: **queue unpaused AND
 `GENERATION_HALT` flipped to `"0"`** — the full re-armed
 state. "Refuses" means: returns normally with a refusal
 result, zero provider contact, zero ledger/attempt/execution
@@ -290,10 +295,3 @@ the message (§5.0; Gate-7's fence test T9 lineage).
   inventoried (§2) and watched (§6) as *symptoms*, never
   used as a fence.
 - **Not** on queue emptiness, and **not** on outbox
-  emptiness (neither is observable; Paths A + D cover
-  delivery from either).
-- **Not** on the halt or the pause — both are assumed away
-  throughout this section.
-- **Not** on the armed quota guard — it sits behind the
-  fence (§5.0) and would only ever *add* refusals.
-

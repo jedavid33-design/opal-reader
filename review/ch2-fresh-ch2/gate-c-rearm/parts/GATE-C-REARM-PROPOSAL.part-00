@@ -9,8 +9,9 @@ decide, separately, whether to execute it.
 ONLY** — the halt flip + the queue unpause, ending with the
 system live but idle. **Generation — the rest of Forever
 Pucked — is a LATER, distinct gate** (its own fresh quote, its
-own decision). **Chapter 3 generation is a further distinct
-approval still.** Neither is requested, scoped, or priced by
+own decision). **Chapter 3 generation is likewise a distinct
+approval of its own, independent of the generation decision —
+neither requires the other.** Neither is requested, scoped, or priced by
 this proposal beyond stating their separateness (§10).
 
 **Direction:** Rowan's gate-(b) closure ruling (issue #15,
@@ -74,17 +75,22 @@ Before the flip, the executor re-checks everything (the
 pre-state in §2 must match exactly, and a **brand-new full
 reconciliation must read `ok: true` at that moment** — the
 clean result from gate (b) is not reused). After the flip,
-the system is watched through two full check windows to prove
-that none of the leftover historical work (the retired plan's
-stale job, the finished plans, the parked Chapter 3 job) moves
-on its own. If anything at all moves, the gate's standing
-order is to re-park immediately — flipping back is always
-allowed inside this gate, no new permission needed, because
-returning to the parked state is the safe direction.
+the system is watched through two long check windows (at
+least 30 minutes each) so that any of the leftover historical
+work (the retired plan's stale job, the finished plans, the
+parked Chapter 3 job) stirring on its own would be seen. If
+anything at all moves, the gate's standing order is to
+re-park immediately — flipping back is always allowed inside
+this gate, no new permission needed, because returning to the
+parked state is the safe direction.
 
 Generating the rest of Forever Pucked stays a separate later
 decision for you, with a fresh price quote first. Chapter 3
-stays parked and is a separate decision after that.
+stays parked and is a separate decision of its own — the two
+decisions don't depend on each other, and you can take them
+in either order. (You listen in book order, so you'd probably
+choose the rest of the book first — but that's your listening
+preference, not a rule of the system.)
 
 ---
 
@@ -286,8 +292,3 @@ a STOP, archived as INCOMPLETE, closing nothing.
 
 ## 5. Stale-work safety assessment — CURRENT inventory × CURRENT build
 
-Traced fresh in the deployed source of build `945875bc…`
-(local final tree `~/workspace/ch2-program/quota-routes-fix2/worker-build/`,
-the tree hashed into the gate-(a) operative envelope; reader
-repo `ui1-review` lineage through `26b5b5ee…`). The
-hypothetical is Gate-7's, unchanged: **queue unpaused AND

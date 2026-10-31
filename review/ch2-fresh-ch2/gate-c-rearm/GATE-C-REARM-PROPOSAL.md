@@ -9,8 +9,9 @@ decide, separately, whether to execute it.
 ONLY** — the halt flip + the queue unpause, ending with the
 system live but idle. **Generation — the rest of Forever
 Pucked — is a LATER, distinct gate** (its own fresh quote, its
-own decision). **Chapter 3 generation is a further distinct
-approval still.** Neither is requested, scoped, or priced by
+own decision). **Chapter 3 generation is likewise a distinct
+approval of its own, independent of the generation decision —
+neither requires the other.** Neither is requested, scoped, or priced by
 this proposal beyond stating their separateness (§10).
 
 **Direction:** Rowan's gate-(b) closure ruling (issue #15,
@@ -74,17 +75,22 @@ Before the flip, the executor re-checks everything (the
 pre-state in §2 must match exactly, and a **brand-new full
 reconciliation must read `ok: true` at that moment** — the
 clean result from gate (b) is not reused). After the flip,
-the system is watched through two full check windows to prove
-that none of the leftover historical work (the retired plan's
-stale job, the finished plans, the parked Chapter 3 job) moves
-on its own. If anything at all moves, the gate's standing
-order is to re-park immediately — flipping back is always
-allowed inside this gate, no new permission needed, because
-returning to the parked state is the safe direction.
+the system is watched through two long check windows (at
+least 30 minutes each) so that any of the leftover historical
+work (the retired plan's stale job, the finished plans, the
+parked Chapter 3 job) stirring on its own would be seen. If
+anything at all moves, the gate's standing order is to
+re-park immediately — flipping back is always allowed inside
+this gate, no new permission needed, because returning to the
+parked state is the safe direction.
 
 Generating the rest of Forever Pucked stays a separate later
 decision for you, with a fresh price quote first. Chapter 3
-stays parked and is a separate decision after that.
+stays parked and is a separate decision of its own — the two
+decisions don't depend on each other, and you can take them
+in either order. (You listen in book order, so you'd probably
+choose the rest of the book first — but that's your listening
+preference, not a rule of the system.)
 
 ---
 
@@ -595,15 +601,48 @@ the message (§5.0; Gate-7's fence test T9 lineage).
 1. **The `schedule` table cannot be enumerated on any
    live read surface.** Pending-row existence is therefore
    bounded, not listed: creation call sites + fuse lengths
-   (lease 15 min; retry 30–60 s) + two byte-identical
-   inventories across eras (gate-(a) D0, gate-(b) B0) +
-   Path E's per-kind worst cases, **and** §6's armed-idle
-   windows as the operative proof: the windows span more
-   than a full watchdog cycle on both sides of the
-   unpause, so any pending row that exists *will* fire
-   inside a watched window, and any movement it causes is
-   a containment trigger. This is a monitored condition,
-   not an assumed negative.
+   + two byte-identical inventories across eras (gate-(a)
+   D0, gate-(b) B0) + Path E's per-kind worst cases. The
+   fuse lengths, from the deployed source
+   (`worker/coordinator.mjs`): `LEASE_MS` = 15 min
+   (line 133; lease rows are scheduled at `now + LEASE_MS`
+   — issuance line 1757, handoff anchors lines 1919,
+   2673, 2702); the poison-row failure backoff is
+   `min(30000 * 2 ** attempts, 900000)` — a per-retry cap
+   of 15 min (line 2496; `SCHEDULE_MAX_ATTEMPTS` = 8,
+   line 147); `WATCHDOG_PERIOD_MS` = 10 min (line 132);
+   `retry_grant` fuses are 30 s (lines 1800, 2131), 60 s
+   frozen-deferred (line 2613); `handoff_check` starts at
+   30 s (line 2567), defers 60 s frozen (line 2641), and
+   backs off `30000 * 2 ** (tries - 1)` for tries ≤ 5 —
+   at most 8 min (line 2713); the frozen lease deferral
+   tolls at 60 s (line 2550). **The longest single fuse
+   on any stale-work-relevant row kind is therefore
+   15 min.** §6's armed-idle windows are sized against
+   that figure — longest fuse (15 min) + one full
+   watchdog cycle (10 min) + margin = **≥30 min** on both
+   sides of the unpause — and are **bounded observation,
+   not exhaustive schedule proof**: every creation event
+   for stale work lies in October and every fuse is
+   ≤15 min, so any legacy pending row's due time is long
+   past and it fires at the first alarm pass inside a
+   window; a row created during a window with the longest
+   fuse likewise falls due and fires inside it; and any
+   movement either causes is a containment trigger. **One
+   case the windows do not close, stated plainly:** a row
+   that *throws* when processed re-enters the failure
+   backoff — per-retry ≤15 min, up to 8 attempts,
+   a cumulative worst case of ≈60 min before it parks
+   `dead` — so a mid-backoff row can outlive a window.
+   It is covered not by the window but by §5's per-kind
+   source-path fences, which refuse or no-op **whenever**
+   such a row fires, and by the movement triggers: its
+   only reachable visible end states are the fenced
+   handlings above or a new `schedule_dead` conflict row,
+   each a STOP + containment event whenever it occurs,
+   inside or after a window. The windows corroborate;
+   the fences are the load-bearing proof. This is a
+   monitored condition, not an assumed negative.
 2. **Fresh Ch 2 job/grant terminal states** are named R0
    reads (§3 item 9), with the `handoff_uncertain` case
    escalated to an R0 STOP (Path E5). The plan-state proof
@@ -673,18 +712,20 @@ without a fresh Julie go. **A Go covers one attempt.**
   the interval is the alarm, which R4 watches.
 - **R4 — Armed-idle verification, queue still paused.**
   Two parts: (i) an **immediate sweep** of the read set
-  below; (ii) an **observation window of at least 12
-  minutes** — longer than one full watchdog cycle
-  (10 minutes), so at least one complete alarm pass
-  (base alarm incl. outbox drain + `recover()` +
-  `driveOnce()`) is guaranteed to occur inside the window
-  — with the read set repeated at the end and compared
-  value-by-value. (The 12-minute span follows gate (a)
-  D0's three-sample precedent, tightened to a guaranteed
-  alarm cycle; Gate-7's A5 was an immediate sweep only —
-  the window is this gate's strengthening, adopted
-  because §5.9 item 1 makes the watched window the
-  operative proof for the schedule table.)
+  below; (ii) an **observation window of at least 30
+  minutes** — sized as the longest relevant pending fuse
+  (the 15-minute lease fuse, §5.9 item 1) + one full
+  watchdog cycle (10 minutes) + margin, so at least one
+  complete alarm pass (base alarm incl. outbox drain +
+  `recover()` + `driveOnce()`) occurs inside the window
+  and any pending row with a fuse ≤15 min whose due time
+  falls in the window fires inside it — with the read set
+  repeated at the end and compared value-by-value. (The
+  30-minute span lengthens gate (a) D0's three-sample
+  precedent and Gate-7's sweep-only A5; per §5.9 item 1
+  the window is bounded observation and corroboration —
+  the §5 source-path fences, not the window, are the
+  load-bearing proof for the schedule table.)
   **Read set (used identically at R4, R6, and any
   containment check):** `/health`; bindings (10 names +
   halt value); script etag; operator reconcile (`armed`,
@@ -707,8 +748,9 @@ without a fresh Julie go. **A Go covers one attempt.**
   sole consumer + retention (86,400 s) unchanged. A PUT
   response is never trusted without the read-back.
 - **R6 — Post-unpause verification.** The R4 pattern
-  repeated: immediate sweep + a ≥12-minute window (≥1
-  full watchdog cycle with the queue delivering) + closing
+  repeated: immediate sweep + a ≥30-minute window (same
+  basis as R4 — longest fuse + ≥1 full watchdog cycle
+  with the queue delivering, + margin) + closing
   sweep, same read set, same zero-movement expectation.
   This is the window in which any message drained at
   Path D delivers and meets the Path A fence — the
@@ -843,14 +885,20 @@ purpose and its risk, stated without softening:
    preflight condition from the gate-(a) record — a
    separately authorized read-only check, or
    unverified-exposure disclosure + a distinct decision),
-   and Julie's **fresh GO** naming the intent. (Gate-7
+   and Julie's **fresh GO** naming the intent. This
+   decision is independent of the Chapter 3 decision
+   (item 2): neither requires the other, and Julie may
+   take them in either order. (Gate-7
    §3.2's convergence warning applied to re-submitting
    Chapter 2 itself; Chapter 2 is complete — the
    rest-of-book intent is book scope and mints its own
    plan. Any intent-shape question belongs to that gate's
    preflight, not this proposal.)
-2. **Chapter 3 generation** — a further distinct approval
-   after that. Its job is `parked_policy`; **how a parked
+2. **Chapter 3 generation** — a distinct approval of its
+   own, independent of item 1: neither decision depends on
+   the other, and any ordering in practice follows Julie's
+   listening preference (she listens in book order), never
+   a system or gate dependency. Its job is `parked_policy`; **how a parked
    job resumes mechanically must be verified as that
    gate's first step** (this proposal deliberately proves
    nothing about the resume mechanism, only that re-arm
