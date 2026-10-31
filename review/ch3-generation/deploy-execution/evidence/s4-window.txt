@@ -1,0 +1,2 @@
+S4 window start: 2026-10-31T21:13:55Z
+S4 window end: 2026-10-31T21:13:56Z

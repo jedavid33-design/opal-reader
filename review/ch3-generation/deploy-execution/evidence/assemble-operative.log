@@ -1,0 +1,12 @@
+[PASS] C1 spec identity + entry — main_module=v2/worker-entry-prod-d6.js
+[PASS] C2 closure resolves; bare specifiers node:-only — 29 modules
+[PASS] C3 part set == live 28 + park-release.mjs == 29 — 29 parts
+[PASS] C4 class table: 24 identical + 3 changed + 1 new + 1 stamped — identical=24 changed=[v2/generation/content-plane-adapter.mjs, v2/generation/eligible-set.mjs, v2/worker-entry-prod-d6.js] new=[v2/generation/park-release.mjs] stamped=[v2/host/build-identity.mjs]
+[PASS] C5 stamp exactly once; stamped length == live stamped length (411) — stamped 411 B, live stamped 411 B
+[PASS] C6 metadata byte-identical to the gate-(a) operative metadata (GENERATION_HALT "1", 10 bindings, no migrations)
+[PASS] C7 multipart round-trip: 29 module parts, filename == name, module MIME, bytes exact
+[PASS] C8 new table names occur only in park-release.mjs across all candidate worker sources
+[PASS] C9 GEN_SCHEMA byte-identical to live; exactly 8 tables
+
+CH3 ENVELOPE ASSEMBLY: PASS (9/9 checks)
+envelope: 1386657 bytes, sha256 a371621d0d22bcfdf7f7e137966bf2f301bf0970d5898a25e65968ee93bfeaa7 (pin 63d7260ef0c87c45cdcb88c7007643bb90e1631c)

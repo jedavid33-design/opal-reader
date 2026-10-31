@@ -1,0 +1,2 @@
+S1 window start: 2026-10-31T21:12:48Z
+S1 window end: 2026-10-31T21:12:50Z
