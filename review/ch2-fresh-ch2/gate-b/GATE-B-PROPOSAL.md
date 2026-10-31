@@ -472,6 +472,320 @@ All refusals arrive **before any state exists** (handler order,
 ### 5.1 The surface
 
 `GET /v2/d6-quota-reconcile` → `reconcileQuota(coord)`
-(quota-budget.mjs L478–542), via the operator connector (GET;
-the same ad
-...[truncated 33934 chars]
+(quota-budget.mjs L478–542), via the operator connector (GET; the same
+admitted-stamp operator fence as the sibling routes applies; the
+handler is read-only — it performs no mutation of any kind (the
+routes-fix read-purity correction removed its last incidental write
+path).
+
+`reconcileQuota` reports, for the whole recorded history:
+
+- `armed` — whether the durable bootstrap record exists;
+- the per-day dispatch totals derived from `d6_provider_dispatches`;
+- the outstanding-reservation totals derived from
+  `d6_grant_reservations`;
+- `exceptions` — recorded dispatch rows whose day could **not** be
+  assigned with proof at bootstrap (the unassigned residue);
+- `drift` — every way the derived totals disagree with what the
+  records claim, each entry named (including `day_over_limit` for any
+  PT day whose proven total exceeds the app-selected cap of 100);
+- `ok` — defined in §5.2.
+
+### 5.2 What `ok` means
+
+CONFIRMED from source: `reconcileQuota.ok === true` exactly when
+**the drift list is empty AND no current-day block exists** (no
+exception or drift entry touches the current PT day in a way that
+would fence new dispatch). An over-limit historical day is drift —
+it makes `ok` false truthfully; it is never absorbed, averaged, or
+renamed. `ok` is a statement about the accounting records only; it
+grants nothing by itself (see the re-arm law, §10).
+
+### 5.3 The pagination law
+
+The exceptions and drift arrays page at a **fixed size of 100** via
+`exceptionOffset` / `driftOffset` query parameters, forwarded to the
+DO and strictly validated (`/^(0|[1-9]\d*)$/` plus a safe-integer
+check; anything else is refused `quota_reconcile_offset_invalid`
+before any read). Each response carries the per-array **total**, the
+**next offset** (or null at the end), and `censusComplete` — true
+only when every array has been walked to its end under stable
+totals. Exceptions are returned in the store's deterministic
+`created_at, attempt_id` order; drift entries are stably sorted at
+the route. (Suite proof at build time: QROUTE-17 enumerated 107
+all-straddling exceptions as disjoint pages of 100 + 7 whose union
+equals the stored set, with zero disposition calls.)
+
+B2 is **complete** only when all of the following hold: pages are
+pairwise disjoint; their union equals the reported totals for both
+arrays; the totals are identical on the first and last page (no
+movement during the census); and `censusComplete` is true on the
+final page.
+
+### 5.4 STOP-and-archive-INCOMPLETE conditions
+
+B2 stops, and the census is archived explicitly as **INCOMPLETE**,
+if any of the following occurs:
+
+1. a page request faults (HTTP 500-class) or returns a refusal;
+2. totals change between pages (movement during the census);
+3. pages overlap, or their union does not equal the reported totals;
+4. `censusComplete` never becomes true at the reported totals;
+5. any entry cannot be parsed into the documented shape;
+6. the queue-pause read-back (B0 law) fails at any checkpoint.
+
+An INCOMPLETE census closes nothing: gate (b) does not proceed to
+B3, no end state is declared, and the partial census is filed as
+evidence with the gap named. A later census requires Julie's fresh
+word if it would run under a new session.
+
+### 5.5 The three outcomes
+
+| Outcome | Condition | Consequence |
+|---|---|---|
+| **Clean** | Census complete; `ok === true` | Gate (b) may close on the B1+B2 record (subject to the DP-B2 closure rule, §12). No B3 exists. |
+| **Explained hold** | Census complete; `ok === false`; **every** drift/exception entry enumerated and individually explained in the record | Gate (b) may close as a *documented accounting hold* only. Re-arm remains fenced by §10 — an explained hold is never re-arm clearance. B3 may be proposed for provably same-day exceptions only (§7). |
+| **Unexplained — STOP** | Census complete but any entry cannot be explained from the records, or census INCOMPLETE | Gate (b) does not close. Everything stays halted + paused; the discrepancy is filed and the next step is a decision for Julie, not an improvisation. |
+
+---
+
+## 6. Accounting treatment — what the counter counts, and what it never claims
+
+### 6.1 Requests, not billing
+
+CONFIRMED: the quota guard counts **provider dispatch requests**
+(the calls the old counter could not see — up to 12 per grant). It
+does not measure, estimate, or settle money. Google billing remains
+what it has always been in this case: day-level aggregates only;
+per-request cost is unknowable retroactively; nothing in gate (b)
+changes that, and no figure produced by B1–B3 may ever be quoted as
+a provider charge.
+
+### 6.2 Two ledgers, kept separate
+
+Grant-time **estimates** (the old counter's world: 19,652 units per
+grant) and per-dispatch **reality** (the new ledger's world) are
+different instruments. Gate (b) does not restate one in terms of
+the other, does not true-up estimates into actuals, and does not
+touch the phase accounting: settled **579,339**, estimatedUnverified
+**19,018**, reservedUnverified **5,648**, unknownOpen **0**,
+remaining **12,915,013** — all five figures are byte-identical
+before and after gate (b), because the quota ledger and the phase
+ledger are separate books.
+
+### 6.3 The already-adjudicated attempt — flagged, not silently handled
+
+The one mystery attempt from the original Chapter 2 halt,
+`att-37d63768-db4b-447d-8150-580b7c6ee257`, was disposed in the
+separate adjudication case as **`estimated_unverified`**: its
+`cost_micro_cents` stays **NULL**, its estimate (19,018) and
+reservation (5,648) stand as recorded, and its actual Google charge
+remains **UNKNOWN**. Gate (b) does not revisit, re-price, or
+re-label it.
+
+If — hypothetically — that attempt surfaced in the B2 census as a
+bootstrap exception with a provably single-day interval, a B3
+disposition would add only a day-key assignment and its provenance
+block to the *quota* ledger; it would not touch the adjudication
+record. Wren flags this interaction explicitly rather than deciding
+it inside this proposal: **no disposition naming that attempt will
+be presented as a routine B3 item** — if it ever arises, it gets
+its own named callout to Julie and Rowan first. (Expectation: it
+does not arise — its interval is a straddle by construction of the
+split that created it, and multi-day intervals are never
+dispositionable under §7 in any case.)
+
+### 6.4 Over-limit days and unresolved items
+
+- A historical PT day whose proven dispatch total exceeds 100 is
+  recorded as `day_over_limit` drift and named in the record with
+  its total. It is a fact about the past (the old counter could not
+  see per-dispatch calls), not a violation to be repaired.
+- **Winner provenance** (which pre-existing objects won the eight
+  fingerprint collisions in the Gate-8 run) remains **UNRESOLVED**;
+  gate (b) neither needs nor performs the gated R2-HEAD read that
+  could close it.
+- The three `schedule_dead` conflict rows are **not cleared** by
+  gate (b) (Rowan's gate-(a) ruling); the underlying lease SQL error
+  remains a known issue, out of scope here.
+
+---
+
+## 7. B3 — dispositions: a presentation protocol, not a pre-approval
+
+B3 exists only if the B2 census surfaces exceptions. This proposal
+pre-approves **none** of them. Each disposition is its own
+sub-decision, presented to Julie individually with:
+
+1. the attempt's identity (attempt id, plan, occurrence);
+2. its evidence interval `[created_at, updated_at]` and the proof
+   that the interval lies inside exactly one PT day;
+3. the single provable day-key it would be assigned to;
+4. the expected effects (exception removed; that day's total
+   incremented by one; whether the day crosses the cap — named
+   before the call, never discovered after);
+5. the verbatim refusal possibilities (below);
+6. Julie's approval recorded as the call's `authorizationRef`.
+
+**Store law (CONFIRMED from source, applied in order):** a
+multi-day interval is refused `quota_disposition_ambiguous_interval`
+**before** any bounds check — no authorization, Julie's included,
+can make a straddling interval dispositionable; an out-of-interval
+or non-real-calendar day-key is refused; a malformed stored row is
+refused rather than guessed; disposition is exactly-once (a second
+call for the same attempt refuses); a disposition that pushes a day
+over the cap is **recorded with its over-limit consequence named**,
+and `reconcileQuota` thereafter reports that day as drift until the
+clock leaves it — disposition never manufactures `ok: true`.
+Unexpected store faults surface as HTTP 500 faults, never laundered
+into 200-style rejections (the routes-fix hardening).
+
+Before **each** B3 call, the B0 queue-pause read-back is repeated
+(cf-api; the Worker cannot read pause state). Any fault or refusal
+stops B3 at that item; completed dispositions stand as recorded
+(they are additive records, §9), the rest are not attempted.
+
+---
+
+## 8. End state — what "armed" means, and what it does not enable
+
+After a completed gate (b): the durable bootstrap record exists, so
+the quota guard is **armed** in the accounting sense — *if* the
+grant/dispatch path ever ran, its gates would enforce the
+per-dispatch budget from the reconciled ledgers. But:
+
+- GENERATION_HALT remains `"1"`; the queue remains **paused**;
+- no plan, job, or queue message can reach a dispatch path —
+  arming the counter un-halts nothing, un-pauses nothing, and
+  creates no generation;
+- the client-visible quota view gains the armed shape (its figures
+  derived from the new ledgers), which is a display change only.
+
+Re-arm (halt flip + queue unpause) is a **later, separate gate**
+under §10. Generation is later still, under gate (c).
+
+---
+
+## 9. Rollback and containment
+
+- **Floor law (unchanged, restated):** the rollback floor is build
+  `6a73d962…` + etag `a9a4c0c4…` + its data. The floor build does
+  **not** enforce the provider-attempt counter and must never be
+  represented as a safe re-arm fallback. No rollback below the
+  settlement build while any adjudication record exists (gate-(b)
+  changes nothing about that floor).
+- **Bootstrap/dispositions are additive data.** They cannot be
+  un-run. A rollback to the floor build would leave the quota
+  tables in place, unread by that build; returning to the guarded
+  build restores their use. Any rollback execution itself remains
+  a separate Julie-authorized act requiring halted + paused holds
+  held for the whole window, an externally archived copy of the
+  affected records, and proven build compatibility — not commit
+  recency.
+- **Containment during gate (b):** every step runs behind the halt
+  fence with the queue paused; the only writes gate (b) can make
+  are the bootstrap record, the quota ledgers' bootstrap rows, and
+  (under §7) disposition records. A fault at any step leaves the
+  system halted + paused + (at worst) partially bootstrapped in a
+  state the reconcile census can still describe truthfully —
+  there is no step whose failure hides state.
+
+---
+
+## 10. The re-arm law (restated in full; gate (b) does not satisfy it)
+
+A future re-arm requires **all** of the following, at the re-arm
+moment:
+
+1. the guarded build live (not the floor);
+2. a fresh, complete, paginated reconcile census in that session;
+3. `reconcileQuota.ok === true` on that census;
+4. for any current-day hold created by a multi-day exception: the
+   clock has left the exception's interval, and condition 3 is
+   re-read *after* that moment;
+5. Julie's separate, explicit GO for the re-arm itself;
+6. the halt-flip and queue-unpause executed as their own recorded
+   steps, in that order, each read back.
+
+An explained `ok: false` hold — however well documented — satisfies
+none of this. Gate (b) closing as an explained hold leaves the
+system exactly as fenced as it is today.
+
+---
+
+## 11. Disclosures
+
+- The 100/day figure is an **app-selected cap** (`PROVIDER_ATTEMPT_DAILY_LIMIT`),
+  not a provider limit; Google's own quota is a separate, rolling
+  100-requests/day limit that the app counter does not observe.
+- Provider usage **outside** the Reader (other tools, other keys)
+  is invisible to this counter and always will be.
+- Harness green is not a production smoke: B1 remains the first
+  real-DO execution of this code (§4.4), and gate (b) is designed
+  so that this fact can cost a stopped session, never corrupted
+  state.
+- Every figure the quota ledger produces is **application
+  accounting** — derived from the app's own dispatch records —
+  never a provider-verified charge (§6.1).
+- The B1 assigned/exception split **cannot be known in advance**;
+  anyone quoting one before the call is guessing.
+
+---
+
+## 12. Decision points for Rowan
+
+**DP-B1 — B3 timing.** When a complete B2 census surfaces provably
+same-day exceptions, may B3 dispositions be presented to Julie and
+executed in the same session, or must the census first be filed
+and reviewed before any disposition? *Wren's lean: same-session
+permitted, never required* — each disposition still carries its
+own individual Julie approval with the §7 presentation, and the
+census is complete and archived before the first B3 call either
+way. Filing-first remains available whenever the census is large
+or surprising.
+
+**DP-B2 — Hold closure.** If gate (b) ends as an explained hold,
+who declares it closed? *Wren's lean: Wren files the execution
+record; Rowan reviews and closes it* — mirroring the gate-(a)
+pattern (execution record → Rowan record review → closure), so no
+hold is ever closed on Wren's say-so alone.
+
+No other forks are presented: everything else in this proposal is
+fixed by the prior rulings cited in the source index.
+
+---
+
+## 13. Non-authorizations and the approval sequence
+
+This proposal authorizes nothing. The sequence is: Rowan's review
+of this proposal → Julie's gate-(b) decision → execution of exactly
+B0–B3 as approved → execution record → Rowan's record review.
+Not included at any step: re-arm, queue unpause, halt flip,
+generation of any kind, provider calls, spending, dispositions
+beyond the individually approved §7 items, clearing of the
+`schedule_dead` records, the R2-HEAD provenance read, client
+publication, or any settings change.
+
+---
+
+## Source index
+
+- `worker/generation/quota-budget.mjs` (deployed tree) —
+  `bootstrapQuota`, `reconcileQuota` (L478–542), `disposeBootstrapException`,
+  reservation identity, closure fence, derived-totals/drift law.
+- `v2/worker-entry-prod-d6.js` (deployed tree) — the three operator
+  routes, raw-text body forward, pagination validation, read-purity
+  reconcile handler, disposition fault honesty.
+- `worker/generation/gen-constants.mjs` — `PROVIDER_ATTEMPT_DAILY_LIMIT = 100`.
+- `review/ch2-fresh-ch2/remediation/QUOTA-ADDENDUM.md` — bootstrap
+  semantics, interval proof rules, acceptance invariants.
+- `review/ch2-fresh-ch2/final-envelope/DEPLOY-PROPOSAL.md` — §4
+  gate-(b) shape, §5 gate-(c) boundary, §6 rollback/floor law.
+- `review/ch2-fresh-ch2/final-envelope/execution/EXECUTION-RECORD.md`
+  (pin `68776e41…`) — gate-(a) end state: build `945875bc…`,
+  etag `d63b61c3…`, halted + paused + UNARMED, `not_armed` read.
+- Board rulings: quota design pass 6544950778; corrections
+  re-review 6545597263; combined source pass 6545910782; deploy
+  operational review 6546037460 (Amendments 1–4); routes reviews
+  6546277727 / 6546431837; readiness pass 6546757371; gate-(a)
+  record pass + deviation ruling 6547070545.
