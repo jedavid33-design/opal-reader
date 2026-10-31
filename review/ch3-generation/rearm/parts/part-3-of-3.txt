@@ -1,0 +1,423 @@
+   `currentDayBlocked`, day totals, exception count,
+   drift count. (The §3 census is the precondition of
+   record; window samples are summary reads.)
+7. Client quota view — attempts today, provider dispatches
+   today, ledger sequence, spent.
+8. Plan list + the three plan reads (states + revisions).
+9. The four job reads (smoke, stale Ch 2, fresh Ch 2,
+   Chapter 3) + the Chapter 3 fingerprint, recomputed by
+   the G8 recipe at each full sweep.
+10. The three grant reads (states + revisions).
+11. Conflicts — count **and** max id **and** the three
+    rows' raw identity.
+12. Phase figures — settled / estimatedUnverified /
+    reservedUnverified / unknownOpen / remaining.
+13. Settings revision.
+14. Watermarks — content + bindings snapshot heads.
+15. Chapter 3 chapter-scope eligibility read — eligible
+    count + exclusion composition (`bound_already: 3,
+    parked: 24`). (Added vs gate (c)'s read set, because
+    build `63d7260e…` gives this surface new meaning: it
+    is the direct observable of the mechanism tables'
+    untouched state. Reads only; one line, per the DP-C1
+    pattern of keeping the set state-shaped.)
+
+**Sampling:** R2 and R5 each take the full set at window
+start, once mid-window, and at window end; R3 and R6 take
+it once in full. Every sample is archived verbatim in the
+execution evidence with its timestamp.
+
+**Movement = any change** in any watched value versus its
+R0 baseline, other than the intended changes as they occur
+(`GENERATION_HALT "1"→"0"` and `/health` `"halted"→
+"enabled"` at R1; `delivery_paused true→false` at R4).
+Named explicitly, following gate (c): a new attempt; a
+plan, job, or grant state or revision change; a phase
+figure change; a **new conflict row** (count or max id
+moves); a watermark move; a settings revision change; an
+eligibility composition change. **Any movement = STOP +
+containment (§7)**, and the movement is filed as the
+gate's outcome — never explained away inside the gate.
+
+A refusal (Path A) writes nothing and so leaves no trace
+in the watched set: **zero movement is exactly what
+success looks like.**
+
+---
+
+## 7. Containment (pre-authorized inside this gate)
+
+- **Re-halt and re-pause are ALWAYS permitted inside this
+  gate without further approval.** Returning to the
+  pre-state is the safe direction: on any anomaly at any
+  point — a STOP condition, any watched-set movement, any
+  ambiguity that read-back cannot resolve — the executor
+  **re-pauses the queue first** (cf-api PUT,
+  `delivery_paused: true`, read back; it stops new
+  deliveries while the flip lands) and **then re-halts**
+  (metadata flip back to `"1"`, same mechanism as R1, read
+  back), then STOPs and files the record. Neither
+  containment write needs a fresh go; both are recorded as
+  their own read-back steps in the execution record.
+  Containment is available at every step, including before
+  R1 (when it is trivially satisfied), during both
+  windows, and after R4.
+- **Containment is NOT a rollback.** It touches no code
+  and no data: the flip is a one-value binding change on
+  byte-identical parts of the **same build**
+  (`63d7260e…` before, during, and after), and the pause
+  is a queue setting. No build changes hands at any point
+  in this gate, in either direction.
+- **Beyond containment, nothing.** If containment itself
+  fails or read-back cannot establish the contained state,
+  the gate stops with the system in whatever state
+  read-back proves, and the next step is Julie's fresh
+  decision — not a retry, not a fix-forward, not a
+  rollback.
+
+---
+
+## 8. STOP law
+
+- **Ambiguity at any step = stop and only look.** A fault
+  or lost response is never treated as proof that a
+  mutation did or didn't land (Rowan's caution, carried
+  from gate (b) through every gate since). Read-back
+  establishes the state; uncertainty is a STOP, with
+  containment (§7) as the only writes permitted while
+  uncertain — and only because their direction is safe
+  regardless of which way the ambiguous write landed
+  (re-halting an already-halted system and re-pausing an
+  already-paused queue are both no-ops if already there;
+  each is still read back).
+- **One attempt:** if the gate is contained or STOPped, a
+  second attempt requires Julie's fresh authorization.
+  The execution record states exactly where it stopped and
+  the state the system was left in.
+- **No step is skipped, merged, or reordered** to recover
+  time or work around a failure. In particular the unpause
+  stays LAST among mutations under all circumstances: no
+  state in which the queue is unpaused while a precondition
+  or a window is outstanding is reachable inside this
+  gate except transiently after R4, where R5/R6 are the
+  standing watch and §7 the standing remedy.
+
+---
+
+## 9. Explicit NOT-authorized list
+
+This proposal authorizes **nothing**, and its execution —
+if Julie later approves it — authorizes nothing beyond
+§1's two mutations and §7's containment writes.
+Specifically **not** included, at any step:
+
+- any `SubmitJob` or generation intent of any scope;
+- **any call to `POST /v2/d6-release-park`,
+  `POST /v2/d6-revoke-park-release`,
+  `POST /v2/d6-exempt-chapter-occurrence`, or
+  `POST /v2/d6-revoke-chapter-exemption`** — valid,
+  invalid, or probative (the denied probe belonged to the
+  deploy gate and is not repeated here; fence proof for
+  this gate is the deploy's live probe record + the build
+  tests);
+- any release, exemption, or revocation **write**, and
+  therefore any creation of `d6_park_releases`,
+  `d6_chapter_exemptions`, or
+  `d6_chapter_exemption_events` rows or tables;
+- any generation, synthesis, or provider/Google call;
+- any spend, top-up, or billing action;
+- **Batch arming** (Batch stays shown-but-unarmed;
+  Standard-only arming state preserved);
+- any Chapter 3 action beyond the read-only eligibility
+  and job reads in the watched set — the job stays
+  `parked_policy`, fingerprint unchanged;
+- any quarantine release (none is needed; none exists for
+  the current plans);
+- any settings change (R1's conditional PATCH restores
+  observability only, only if the upload regressed it —
+  it changes no setting value);
+- any client publication or change; any code deploy (the
+  R1 upload is byte-identical code with a one-value
+  metadata diff — if the parts ever failed byte-identity
+  against the deploy pin's inventory, that is an R0/R1
+  STOP, not a deploy opportunity);
+- clearing, voiding, or mutating the stale job/grant, the
+  smoke residue, or any of the 3 `schedule_dead` records;
+- any disposition or settlement action on the §2
+  exception; any bootstrap or reconcile **write** (the
+  census is a read);
+- any rollback to an earlier build.
+
+---
+
+## 10. Honest risk statement
+
+Re-arm makes the dispatch paths **reachable**. That is its
+purpose and its risk, stated without softening:
+
+- From the moment R1 lands, the only things standing
+  between a dispatchable intent and a provider call are
+  the live controls: the **armed quota guard** (fresh
+  `ok: true` census at §3, per-dispatch ledger, 100/day
+  app-selected cap), the **phase budget** ($13.50
+  `forever-pucked` ceiling, enforced on the reservation
+  basis), the grant guard, and Julie's AI Studio prepay
+  balance as a hard physical limit (auto-reload OFF).
+  §5 proves no *existing* work can reach those paths; it
+  does not and cannot prove anything about *future*
+  intents — those are Julie's separate gates (§12).
+- Build `63d7260e…` additionally makes the Chapter 3
+  release/exemption routes *callable* in the live state —
+  by the operator credential holder only, behind the
+  operator-alone fence, proven closed to everyone else by
+  the deploy's denied probe. Their first valid use is a
+  deliberate, audited act inside Phase A. Re-arm creates
+  no path by which they fire on their own; there is no
+  scheduler, alarm, or client surface behind them.
+- **The halt remains one metadata write away at all
+  times.** §7's containment is pre-authorized inside the
+  gate precisely so a surprise costs minutes, not a
+  decision round-trip.
+- The live-but-idle state can persist indefinitely at no
+  cost: nothing in the re-armed state spends, expires, or
+  decays — the queue retention clock applies to messages,
+  and this gate queues none.
+- One operational truth for Julie's decision, repeated
+  from §0 because it is the decision's center: after
+  re-arm, **the app itself can generate if she taps
+  Generate in it** — the gate submits nothing, but the
+  UI's buttons become live. That is the intended end
+  state (it precedes her Phase A decision), and it is
+  named here so the decision is made with it in view.
+- The known unfixed lease SQL defect (§5, Path E) rides
+  along: its worst post-re-arm manifestation is a new
+  visible `schedule_dead` row, which §6 treats as a
+  containment trigger. Fixing it is a code change, and a
+  code change is a different gate.
+
+---
+
+## 11. Rollback note (for completeness — this gate performs no code change)
+
+No build rollback is part of this gate, and none would be
+permitted by it: the only reversal this gate knows is §7
+containment, which is same-build by construction. The
+standing rollback floor law is restated briefly because
+every gate record carries it: the floor is build
+**`6a73d9622e1b4eac00c58e289de1c674ed6b3d6b`** (etag
+`a9a4c0c4…`) — no build older than the floor may ever run
+against this data, and the floor build does **NOT**
+enforce the provider-attempt counter, so it must never be
+represented as a safe re-arm fallback. Any actual rollback
+would require its own separate Julie authorization, with
+halted/paused pre-holds held for the whole window, an
+external accounting archive, and the target build's
+**proven** adjudication compatibility (not commit
+recency), followed by post-rollback figure read-backs.
+Nothing in this gate moves toward or away from that
+floor; it is unchanged.
+
+---
+
+## 12. What comes after (informational only — nothing here is requested)
+
+Decision independence, stated once for the whole map:
+**the re-arm decision, the Phase A decision, the Phase B
+decision, the rest-of-Forever-Pucked generation decision,
+and the Batch decision are five separate Julie decisions.
+None implies, requires, or is required by another**, beyond
+the mechanical ordering that a submission needs a live
+system (re-arm first) and Phase B's subject only becomes
+generatable in a world where Phase A's mechanism is
+deployed (it is) — Phase A and Phase B remain separately
+approved even so, and Julie may take the rest-of-book
+decision in either order relative to them (she listens in
+book order; that is her preference, not a system rule).
+
+1. **Phase A GO — Chapter 3, the 23 released segments.**
+   Julie's separate decision, after this gate: exactly one
+   audited operator release (`POST /v2/d6-release-park`,
+   enumerated occurrence set idx 3–25 — the route refuses
+   idx 26 by name) → a **hard eligibility read-back
+   checkpoint** (the chapter quote must read exactly:
+   eligible 23, bound 3, parked 1; anything else = STOP,
+   no submission) → exactly one `SubmitJob`
+   (chapterIndex 2, lane `standard`, phase
+   `forever-pucked`, keepGoing false) → monitoring →
+   close-out + Julie's playback check. Prerequisites
+   already on record: the §9 fingerprint preflight
+   (pin `614ba5fa…`: self-check PASS 3/3; **zero occupied
+   keys** on every enumerated basis) and the proposal-v2
+   quotes ((a) 23 segments / 32,005 chars → expected
+   ≈ $0.451, single-attempt upper ≈ $0.720, ≈46 first-pass
+   calls; inside the $13.50 phase budget with wide room).
+   Phase A execution will still require its **own fresh
+   in-session census** and its own pre-state reads — this
+   gate's census does not carry forward, exactly as gate
+   (b)'s did not carry into gate (c).
+2. **Phase B GO — Chapter 3, the final segment.** Julie's
+   own later decision, only after Phase A completes:
+   exactly one audited exemption for idx 26
+   (`2a85f74f-353d-4c25-a86a-4a4db392868b`, 569 chars) →
+   the E1b read-back checkpoint, which resolves the
+   segment's never-yet-evaluated voice disposition
+   empirically — if it shows `voice_prompt`, Phase B
+   **STOPS** for a separate voice decision → segment-scope
+   submission → verification. Combined finish line for the
+   chapter: post-completion quote bound 27 / parked 0 +
+   Julie's playback check including the chapter's end.
+   Quote on record: expected ≈ $0.008, 1 first-pass call.
+3. **Generation — the rest of Forever Pucked.** Julie's
+   separate decision, independent of items 1–2: a **fresh
+   live quote** (the Oct 31 preflight figures are stale),
+   the fingerprint-key occupancy question for that scope
+   (a separately authorized read-only preflight, or
+   unverified-exposure disclosure + a distinct decision),
+   and Julie's fresh GO naming the intent.
+4. **Batch arming** — Julie's stated next project after
+   Chapter 3 — remains its own gated program, unmade by
+   anything in this chain. This gate leaves the
+   Standard-only stamp exactly as it found it.
+
+---
+
+## Adaptation notes (where gate (c)'s text did not carry cleanly)
+
+Recorded rather than papered over, per drafting law:
+
+1. **Step numbering diverges from gate (c)'s proposal**
+   (see header item 4). Gate (c)'s *execution record* used
+   R3-flip / R4-window / R5-unpause / R6-window; this
+   proposal's R1/R2/R4/R5 scheme was specified for this
+   gate so the mid-state verification (R3) and the
+   closing inventory (R6) carry their own numbers. The
+   operation order is unchanged. A reader diffing the two
+   proposals section-by-section should map by step
+   *content*, not label.
+2. **The flip's parts manifest source differs.** Gate (c)
+   verified flip parts against the gate-(a) operative
+   envelope parts-manifest (28 parts). That manifest
+   describes build `945875bc…` and is **not** a valid
+   reference for build `63d7260e…`. This proposal binds
+   the flip to the **Ch 3 deploy pin's 29-part inventory**
+   (deploy pin `63d7260e…`, envelope manifest in
+   `review/ch3-generation/deploy/`). Any execution tooling
+   reused from gate (c) must be re-pointed at that
+   inventory; the 28-part manifest must not be used even
+   as a cross-check, since 24 identical parts would make a
+   wrong-manifest run *look* mostly right.
+3. **Gate (c) §5 was a fresh line-by-line trace; §5 here
+   is a carried assessment + a fresh delta assessment.**
+   The carry is justified by byte-identity of the relevant
+   parts and is labeled as a carry at §5.0. If Rowan
+   requires a fresh trace of any carried path against the
+   `63d7260e…` tree (identical bytes, new tree), that is a
+   review request this proposal will satisfy by supplement
+   — it is not silently asserted to have been done.
+4. **Gate (c) §2's day totals were live expectations; here
+   they are history.** Gate (c) executed the same PT day
+   as its last census. This gate's execution date is not
+   fixed, so §2 carries the 57/79/0 totals as date-bound
+   record only, and §3's fresh census is the sole source
+   of current-day truth (including the
+   `currentDayBlocked` general rule).
+5. **Gate (c) §10 item 2 left the parked job's resume
+   mechanism explicitly unverified** ("how a parked job
+   resumes mechanically must be verified as that gate's
+   first step"). That verification has since happened —
+   twice over: the Ch 3 prep verdict (no resume mechanism
+   existed in `945875bc…`) and the Ch 3 program itself
+   (the fence-side release/exemption design, built,
+   reviewed, and deployed). §5.5 item 2 and §12 carry the
+   resolved position; nothing remains open on that point
+   for this gate.
+6. **Gate (c)'s DP-C1** (snapshot-digest comparison in the
+   read set) was resolved at gate (c) in favor of the
+   Gate-7 pattern (watermarks in the set; digests not).
+   This proposal follows that ruling: §6 carries both
+   watermark counters and no snapshot digests — with the
+   single addition of the eligibility read (item 15),
+   which is state-shaped, not a digest.
+
+---
+
+## Source index
+
+- **Gate-(c) re-arm proposal** (`~/workspace/ch2-program/gate-c-rearm/GATE-C-REARM-PROPOSAL.md`,
+  corrected pin `73aa1220514007107f7b3a43c19ee27ff6a3d5ec`;
+  initial pin `c7d3d75c…`): §§0–11 + source index — this
+  proposal's template; §4 (census law), §5 (stale-work
+  trace), §5.9 (fuse inventory + bounded-observation
+  correction), §6 (sequence + read set), §7 (containment),
+  §9 (risk) carried or adapted as noted per section.
+- **Gate-(c) execution record** (`~/workspace/ch2-program/gate-c-rearm/execution/EXECUTION-RECORD.md`,
+  pin `5d6fd25a…`): R0–R6 ALL PASS 2026-10-31
+  18:40:51–19:48:11Z; exactly two mutations (halt flip
+  metadata-only, etag unchanged, observability survived,
+  no PATCH; queue unpause last); R4 window 31m47s and R6
+  window 31m39s, zero movement both.
+- **Rowan rulings:** gate-(c) CONDITIONAL PASS 6547455532
+  (the fuse/window correction + Chapter 3 independence);
+  gate-(c) PASS FOR JULIE DECISION 6547501274 (the
+  Generate-control flag); gate-(c) EXECUTION REVIEW PASS
+  6548370742; gate-(b) closure 6547328443 (re-arm law's
+  origin); Ch 3 design PASS 6548728089; Ch 3 source/test
+  PASS 6549034049; Ch 3 operational (deploy) PASS relayed
+  and recorded 6549145550; **Ch 3 deploy EXECUTION REVIEW
+  PASS 6549304593** (this gate's pre-state authority).
+- **Ch 3 halted deploy execution record**
+  (`~/workspace/ch2-program/ch3-deploy/execution/EXECUTION-RECORD.md`):
+  preconditions P1–P6 (census ok:true, drift empty, sole
+  straddler exception, day totals 57/79/0; conflicts
+  exactly 3; Ch 3 job + fingerprint; phase figures;
+  watermarks 18/1818; settings rev 1); halt flip
+  (deployment `06256c4a…`, etag `d63b61c3…` unchanged);
+  queue pause; one code PUT (deployment
+  `d4cbc7f158fc4756ac6a10735609835f`); new etag
+  `82053d4d…`; observability survived, no PATCH; §5 denied
+  probe — all four new routes refused, zero writes; end
+  state halted + paused.
+- **Ch 3 deploy envelope** (pin
+  `63d7260ef0c87c45cdcb88c7007643bb90e1631c`,
+  `review/ch3-generation/deploy/`): 29 parts = 24 identical
+  + 3 changed (entry, `eligible-set.mjs`,
+  `content-plane-adapter.mjs`) + 1 NEW (`park-release.mjs`)
+  + 1 stamped (`build-identity.mjs`); assembler validation
+  9/9; metadata byte-identical to live operative metadata
+  (halt `"1"`, 10 bindings).
+- **Ch 3 mechanisms build** (pins `540f6a06…` +
+  `623e8cd9…`; `~/workspace/ch2-program/ch3-build/BUILD-REPORT.md`
+  incl. §7): the four routes' operator-alone fence; the
+  three lazy tables; the journal's append-only proof;
+  no-release byte-identity (tables absent AND empty);
+  battery 1,136 tests / 1,114 pass / 22 baseline failures.
+- **Ch 3 proposal v2** (pin `8f522593…`): the definition
+  boundary; Phase A/B shapes, checkpoints, and quotes
+  carried into §12.
+- **Ch 3 preflight** (pin `614ba5fa…`): P3 self-check PASS
+  3/3; zero occupied keys on all enumerated bases; the
+  two-text-bases caveat (dispatch keys are text-basis for
+  idx 4, 5, 18) — a Phase A citation discipline note, not
+  a re-arm input.
+- **Gate-(b) proposal** (pin `e324efb0…`): §5.2 (`ok`
+  semantics), §5.3 (pagination law), §5.4 (INCOMPLETE
+  conditions), §10 (re-arm law — an explained `ok: false`
+  never satisfies re-arm).
+- **Standing lessons applied:** cf-api bodies are
+  positional argv JSON (a `--data` flag is silently
+  ignored); the queue pause state is readable only via
+  cf-api; every worker code upload is followed by an
+  observability check with the multipart `/settings`
+  PATCH as the sole contingency; the DO test harness is
+  no evidence for empty-result paths (not relied on here —
+  the mechanism reads' absence-tolerance was proven
+  against the real build's behavior at the deploy's
+  closing reads).
+
+**Turn:** Rowan's — review of this Chapter 3 re-arm
+proposal. Then Julie's re-arm decision, with the §0
+Generate-control disclosure in the decision text. Phase A,
+Phase B, rest-of-book generation, and Batch remain later,
+separate, and unrequested.
+
+— Wren

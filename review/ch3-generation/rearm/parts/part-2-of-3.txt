@@ -1,0 +1,405 @@
+- **R2 — First watched window (armed-idle, queue still
+  paused), ≥30 minutes.** An immediate sweep of the §6
+  watched set at window start, a mid-window sample, and an
+  end sweep, compared value-by-value. The window is sized
+  as the longest relevant pending fuse (the 15-minute
+  lease fuse, §5.4) + one full watchdog cycle (10 minutes)
+  + margin, so at least one complete alarm pass (base
+  alarm incl. outbox drain + `recover()` + `driveOnce()`)
+  occurs inside the window and any pending row with a fuse
+  ≤15 min whose due time falls in the window fires inside
+  it. Per §5.4 the window is **bounded observation, not
+  exhaustive schedule proof** — the §5 source-path fences,
+  not the window, are the load-bearing proof for the
+  schedule table. **Expected: zero movement** on every
+  watched value vs R0, except the two intended ones (halt
+  `"0"`, `/health` `"enabled"`). Any other movement =
+  **STOP + containment (§7)**.
+- **R3 — Mid-state verification.** With the queue still
+  paused and R2 clean: re-verify the full §6 watched set
+  once more, re-read the queue state by cf-api
+  (`delivery_paused == true` still — the unpause has not
+  happened), re-confirm settings rev 1 unmodified (this
+  gate never writes settings except R1's conditional
+  observability PATCH), and re-confirm the Chapter 3
+  eligibility read still returns the parked inventory
+  (eligible 0; `bound_already: 3, parked: 24`) — the
+  mechanism surface is still untouched with the halt now
+  lifted. Any mismatch = STOP + containment.
+- **R4 — R-unpause, LAST.** cf-api PUT the queue with
+  `queue_name` + `settings.delivery_paused: false` (the
+  body is a positional argv JSON string — a `--data` flag
+  is silently ignored by this CLI; standing lesson).
+  **Independent read-back:** `delivery_paused == false`,
+  sole consumer + retention (86,400 s) unchanged. A PUT
+  response is never trusted without the read-back.
+- **R5 — Second watched window (live, queue delivering),
+  ≥30 minutes.** The R2 pattern repeated: start sweep +
+  mid sample + end sweep of the §6 watched set, same
+  sizing basis (longest fuse + ≥1 full watchdog cycle
+  with the queue delivering, + margin), same
+  zero-movement expectation (now also counting
+  `delivery_paused == false` as an intended value). This
+  is the window in which any message drained at §5 Path D
+  delivers and meets the §5 Path A fence — the prediction
+  is refusal-with-ACK and **zero state movement**; a
+  refusal leaves no trace in the watched set (it writes
+  nothing), so zero movement is exactly what success looks
+  like, and any movement at all is the containment
+  trigger.
+- **R6 — Closing inventory + final state.** A closing
+  sweep of the full §6 watched set, filed as the
+  execution record's end-state inventory, plus a fresh
+  reconcile summary read (armed, `ok`, day totals,
+  exception count, drift count — a summary read, not a
+  second census; the §3 census remains the gate's census
+  of record). **End state: LIVE-BUT-IDLE** —
+  `GENERATION_HALT "0"`, queue delivering, guard armed
+  with the fresh `ok: true` census on record, no active
+  plan, nothing generated, nothing spent, Batch unarmed,
+  Chapter 3 parked, mechanism tables still nonexistent.
+
+---
+
+## 5. Stale-work safety assessment — CURRENT inventory × build `63d7260e…`
+
+### 5.0 Basis of this assessment (stated, not buried)
+
+The machinery that decides whether stale work can move —
+the D6 executor's pre-claim fence, the driver's plan
+selection, recovery, the coordinator's schedule machinery,
+the grant guard, the quota guard — lives in parts that are
+**byte-identical between build `945875bc…` and build
+`63d7260e…`** (the Ch 3 deploy envelope's class table: of
+the 28 live parts, 24 are identical in the candidate; the
+4 deltas are the entry — operator routes added —
+`eligible-set.mjs`, `content-plane-adapter.mjs`, and the
+NEW `park-release.mjs`). Gate (c)'s §5 traced those paths
+fresh in `945875bc…`'s source and its conclusions are
+**carried** here for the byte-identical machinery
+(CONFIRMED as to part identity by the deploy envelope;
+the path conclusions are gate (c)'s, cited, not re-derived
+line-by-line — flagged honestly rather than re-performed).
+What this section does fresh is: (i) restate the inventory
+the paths run against (unchanged since gate (c) — §2);
+(ii) assess the **delta surfaces** (the entry's new
+routes, the eligibility fence's new consumption, the lazy
+tables) in §5.5; (iii) carry the fuse inventory and the
+corrected window language (§5.4) verbatim in substance,
+because Rowan's correction at gate (c) is the standing
+law on what the windows do and do not prove.
+
+The hypothetical throughout: **queue unpaused AND
+`GENERATION_HALT` flipped to `"0"`** — the full re-armed
+state. "Refuses" means: returns normally with a refusal
+result, zero provider contact, zero ledger/attempt/
+execution movement, unless a path says otherwise in so
+many words.
+
+### 5.1 The core invariant (carried from gate (c) §5.0, PROVEN there from source)
+
+The only executor the production entry constructs is the
+D6 executor. Its `handleMessage` runs, **before
+`claimGrant` is ever called**, a strict pre-claim fence
+over persisted server records: (1) strict plan resolution
+(plan identity from the `d6_plan_jobs` link cross-checked
+against the job's `data_json` stamp — never from the
+message; multiplicity, blank/corrupt records, disagreement,
+or any read fault all refuse); (2) a strict quarantine
+read against the resolved identity (a hold refuses; a read
+failure refuses); (3) the plan-state fence —
+`PLAN_STATES_REFUSED = {complete, partial, retired,
+halted_unknown}` refuses `plan_not_dispatchable` **before
+claim**; any state outside both the refused and the
+recognized dispatchable sets also refuses. **Every D6 job
+in the current inventory resolves to a plan in the REFUSED
+set** (smoke → complete; stale Ch 2 → retired; fresh Ch 2
+→ complete). The one plan-less job (Chapter 3) holds no
+grant, so there is nothing for `claimGrant` to claim.
+Behind the fence — never reached by stale work — sit the
+grant guard (inside grant issuance) and the armed quota
+guard (written inside the dispatch transaction, reachable
+only after a successful claim). The armed guard is a
+backstop for future legitimate dispatch; §5's conclusions
+do not rest on it.
+
+### 5.2 Paths A–G (carried conclusions, gate (c) §5)
+
+- **A — a queue message naming stale work is delivered.**
+  Stale Ch 2 job → `retired` refusal before claim; smoke
+  job → `complete` refusal; fresh Ch 2 job → `complete`
+  refusal on plan state whatever its residue reads. Each
+  refusal returns HTTP 200, so the queue handler **ACKs —
+  the message is consumed permanently**, never retried
+  into the fence. Chapter 3 job: plan-less, grants [] —
+  nothing to claim; a fabricated grant id gets
+  `unknown_grant`; the per-occurrence loop skips every
+  non-`granted` row regardless (Ch 3's rows are
+  `ready`/`pending`).
+- **B — the coordinator alarm: driver selection.**
+  `driveOnce` selects plans with `state NOT IN
+  ('complete', 'partial', 'retired', 'halted_unknown')`.
+  **All three current plans are in the excluded set** —
+  the driver iterates zero plans on every 10-minute alarm
+  pass. No plan → no re-advance, no new grant, no state
+  transition; `retired` and `complete` are terminal in the
+  driver.
+- **C — the coordinator alarm: recovery.** `recover()`
+  performs only the non-spending `release_and_fail` action;
+  every execution across the three plans is terminal, zero
+  are in a `release_and_fail` class, so recovery is a
+  no-op on this inventory. It has run on every alarm cycle
+  throughout the halted era — including the entire
+  halted + paused period since the Ch 3 deploy — with
+  exactly these inputs and produced zero movement.
+  Recovery never synthesizes.
+- **D — the coordinator alarm: outbox drain (the one
+  wiring change the flip makes).** While halted,
+  `sendGrant` is not wired, so unsent `dispatch` outbox
+  rows can only sit. After the flip, the first alarm
+  drains any unsent rows into the queue (they deliver only
+  after R4's unpause — during R2 they can only accumulate,
+  not execute). The outbox has **no read surface** (OPEN,
+  §5.4 item 1 applies mutatis mutandis): this proposal
+  makes **no claim that the outbox is empty.** It doesn't
+  need one: every grant in the inventory was issued in
+  October runs whose dispatches demonstrably delivered; no
+  grant has been issued since (no plan selected → no grant
+  step → no issuance, at gate (c), at the deploy, or
+  since); and any drained row names a stale/smoke/fresh
+  (jobId, grantId) pair that meets a Path A refusal on
+  delivery. Queue retention (86,400 s) additionally bounds
+  any hypothetical survivor's queue lifetime.
+- **E — the schedule machinery (leases, handoffs,
+  retries).** `watchdog` re-arms the chain + drains the
+  outbox (Path D), nothing else. Lease rows for terminal
+  grants break immediately. Both lease rows that ever
+  existed for this inventory already ran to exhaustion and
+  parked `dead` (conflict ids 2 and 3); `dead` rows are
+  never re-selected; lease rows are created only at grant
+  issuance and at handoff anchors, neither of which can
+  occur (Paths B/F). The fresh grant's counterfactual is
+  the most benign: its occurrences are `ready`, not
+  `granted`, so a hypothetical delivered-branch processing
+  selects zero rows — its only reachable outcomes are a
+  no-op or the known **unfixed** lease SQL fault
+  (`LIKE or GLOB pattern too complex`) backing off toward
+  a **new `schedule_dead` row**: visible, non-dispatching,
+  and — under §6 — a movement/containment trigger. This
+  gate does not fix that defect and does not clear the
+  rows. `handoff_check` rows exist only for grants in
+  `handoff_uncertain` — none is (a contrary R0 read is a
+  STOP, §3 item 9). `retry_grant` rows carry 30–60 s
+  fuses; any October row fired within a minute in eras
+  when the alarm ran continuously; inventories at gate
+  (a), gate (b), gate (c), and the Ch 3 deploy are
+  successively identical, so no such row has an un-fired
+  effect outstanding (INFERRED, gate (c)'s basis, extended
+  by the deploy's identical closing inventory); a
+  counterfactual firing lands in Path F, which refuses on
+  `nothing_pending`, and never calls `requestGrant` for
+  the Chapter 3 job at all (its state is `parked_policy`,
+  not `generating`).
+- **F — could anything issue a NEW grant for stale work?**
+  Grant issuance terminates at **`nothing_pending`** for
+  the stale job (its 18 rows are all `granted` — zero
+  targets), the smoke job (rows `ready`), and the fresh
+  job (rows `ready`): refusal, no grant row, no outbox
+  row, no reservation. Behind that: the stale job's
+  derived grant id at rev 2 already exists (`grant_exists`
+  refusal); the D6 grant guard; the armed quota guard's
+  grant-time reservation block. Chapter 3's job *does*
+  hold `pending` rows — and is the one job with no grant
+  path under re-arm alone: never selected by the driver
+  (plan-less), never the subject of a `retry_grant` call
+  (Path E), and no command surface is exercised by this
+  gate (§9). §5.5 covers its new release surface.
+- **G — grant consumption without a queue message.** There
+  is no other consumer. Queue messages are produced only
+  by the Worker's own `sendGrant` from server-written
+  outbox rows (Path D), and `/internal/execute` is
+  reachable only DO-internally, running the identical
+  fence chain. The legacy v1 executor is not constructed
+  anywhere in the production entry. A message mislabeled
+  with a different plan's id is still refused, because
+  plan identity never comes from the message.
+
+### 5.3 What this assessment does NOT rest on (carried)
+
+- **Not** on the `schedule_dead` rows (Rowan's standing
+  condition since Gate-7): delete all three from the
+  record and every path above is unchanged. They are
+  inventoried (§2) and watched (§6) as *symptoms*, never
+  used as a fence.
+- **Not** on queue emptiness, and **not** on outbox
+  emptiness (neither is observable; Paths A + D cover
+  delivery from either).
+- **Not** on the halt or the pause — both are assumed away
+  throughout this section.
+- **Not** on the armed quota guard — it sits behind the
+  fence (§5.1) and would only ever *add* refusals.
+
+### 5.4 The fuse inventory + the corrected window law (carried verbatim in substance from gate (c) §5.9, as corrected by Rowan 6547455532 and accepted in pin `73aa1220…`)
+
+1. **The `schedule` table cannot be enumerated on any live
+   read surface.** Pending-row existence is therefore
+   bounded, not listed: creation call sites + fuse lengths
+   + successively byte-identical inventories across eras
+   (gate-(a) D0, gate-(b) B0, gate-(c) R0, the Ch 3
+   deploy's pre/closing captures) + Path E's per-kind
+   worst cases. The fuse lengths, from the deployed source
+   (`worker/coordinator.mjs`, unchanged in this build —
+   the part is among the 24 identical): `LEASE_MS` =
+   15 min (lease rows are scheduled at `now + LEASE_MS` —
+   at issuance and at handoff anchors); the poison-row
+   failure backoff is `min(30000 * 2 ** attempts,
+   900000)` — a per-retry cap of 15 min,
+   `SCHEDULE_MAX_ATTEMPTS` = 8; `WATCHDOG_PERIOD_MS` =
+   10 min; `retry_grant` fuses are 30 s / 60 s
+   frozen-deferred; `handoff_check` starts at 30 s, defers
+   60 s frozen, and backs off `30000 * 2 ** (tries - 1)`
+   for tries ≤ 5 — at most 8 min; the frozen lease
+   deferral tolls at 60 s. **The longest single fuse on
+   any stale-work-relevant row kind is therefore 15 min.**
+   §4's windows are sized against that figure — longest
+   fuse (15 min) + one full watchdog cycle (10 min) +
+   margin = **≥30 min** on both sides of the unpause —
+   and are **bounded observation, not exhaustive schedule
+   proof**: every creation event for stale work lies in
+   October and every fuse is ≤15 min, so any legacy
+   pending row's due time is long past and it fires at the
+   first alarm pass inside a window; a row created during
+   a window with the longest fuse likewise falls due and
+   fires inside it; and any movement either causes is a
+   containment trigger. **One case the windows do not
+   close, stated plainly:** a row that *throws* when
+   processed re-enters the failure backoff — per-retry
+   ≤15 min, up to 8 attempts, a cumulative worst case of
+   ≈60 min before it parks `dead` — so a mid-backoff row
+   can outlive a window. It is covered not by the window
+   but by §5's per-kind source-path fences, which refuse
+   or no-op **whenever** such a row fires, and by the
+   movement triggers: its only reachable visible end
+   states are the fenced handlings above or a new
+   `schedule_dead` conflict row, each a STOP + containment
+   event whenever it occurs, inside or after a window.
+   The windows corroborate; the fences are the
+   load-bearing proof. This is a monitored condition, not
+   an assumed negative. *(The superseded gate-(c) first
+   draft's ≥12-minute window claim is NOT carried anywhere
+   in this proposal; Rowan's correction stands.)*
+2. **Fresh Ch 2 job/grant terminal states** are named R0
+   reads (§3 item 9), with the `handoff_uncertain` case
+   escalated to an R0 STOP (Path E). The plan-state proof
+   (Paths A/B) does not depend on the outcome.
+3. **Queue backlog depth is unobservable** (unchanged
+   since Gate-7). Bounded by retention + single-dispatch
+   provenance; covered by Path A on delivery.
+
+### 5.5 The delta surfaces — what build `63d7260e…` adds, assessed fresh
+
+1. **The four operator routes.** They exist in the entry
+   part (one of the 4 changed parts) and in nothing else
+   this gate touches. Three independent reasons re-arm
+   cannot move them:
+   - **They are not lifecycle machinery.** No alarm,
+     schedule, driver, or queue path calls them; they run
+     only when an HTTP request reaches them. The flip and
+     the unpause change halt/queue state only — neither
+     synthesizes a request.
+   - **Their fence is operator-alone.** Entry gate skip +
+     operator admission + the DO class-gate stamp
+     re-check — the same fence class as the quota routes
+     and the adjudicate/retire routes that have been live
+     since before gate (a). At the Ch 3 deploy, the denied
+     probe called all four routes **without** the operator
+     credential: **all four refused, zero writes**,
+     post-probe inventory identical (deploy execution
+     record §5) — CONFIRMED on the live build itself, not
+     only in tests.
+   - **This gate never calls them validly.** No release,
+     no exemption, no revoke — first valid use of the
+     release route is Phase A's audited E1, under Phase
+     A's own GO (§12). If any watched read (§6) showed a
+     release/exemption effect — e.g. the Chapter 3
+     eligibility exclusions changing — that would be
+     movement = STOP + containment, and a security event
+     on top of a gate failure.
+   One nuance carried honestly from the build record: the
+   four routes deliberately carry **no generation-halt
+   fence** (Rowan accepted this at source review,
+   6548945443 decision 3 — they are execution-time fence
+   adjustments to be used after a re-arm). That design is
+   exactly why this gate's law is "never called," enforced
+   by §9 and watched by §6, rather than "cannot be called
+   while halted." After R1 they are callable *by the
+   operator credential holder* — i.e. by Wren under a
+   future gate, or by no one. There is no app-surface or
+   client path to them.
+2. **The parked job's release path, in code.** Build
+   `945875bc…` contained **no** resume mechanism at all:
+   the parked job sat under an empty FSM transition row
+   (`parked_policy: {}`), and every state change funneled
+   through `applyJobEvent` → `illegal_transition`. Build
+   `63d7260e…` does **not** change that FSM row — the
+   builder did not touch the parked FSM (build scope,
+   BUILD-REPORT). What it adds is a *fence-side* mechanism:
+   the eligibility builder's parked fence derives from the
+   parked job's rows, and a recorded **release** (operator
+   route → `d6_park_releases`) subtracts enumerated
+   occurrence ids from that fence, while an **exemption**
+   (`d6_chapter_exemptions`) lets the one
+   outside-definition occurrence fall through the parked
+   dispositions in order. Neither mechanism moves the
+   job's state, creates a plan, issues a grant, or submits
+   anything: eligibility only *describes* what a future
+   `SubmitJob` may select, and no `SubmitJob` exists until
+   a human gate creates one. With zero rows in both tables
+   (their state since the deploy — indeed, the tables do
+   not yet exist), the eligibility output is **byte-
+   identical to the no-mechanism behavior** (proven in the
+   build's tests with tables absent AND empty; observed
+   live at R0 item 12's expected read: eligible 0,
+   `bound_already: 3, parked: 24`). Re-arm writes no rows,
+   so that identity holds through this gate and beyond,
+   until Phase A deliberately changes it.
+3. **The three lazy tables.** `d6_park_releases`,
+   `d6_chapter_exemptions`, and
+   `d6_chapter_exemption_events` bootstrap DDL-only inside
+   `park-release.mjs` on first operator write. They are
+   not in `GEN_SCHEMA` (still exactly 8 tables, the part
+   byte-identical to live). A re-arm performs no write, so
+   no bootstrap runs; cold start of the coordinator under
+   the re-armed state runs the same 8-table schema as it
+   does today. The exemption journal is append-only by
+   construction (single INSERT; no UPDATE/DELETE against
+   it anywhere in the tree — grep-proven at build review);
+   nothing in this gate can append to it.
+4. **`eligible-set.mjs` / `content-plane-adapter.mjs`
+   (the other two changed parts).** Their changes are the
+   fence consumption described in item 2: absence-tolerant,
+   throw-safe reads of the two release/exemption stores
+   (missing table = empty set; genuine DB errors rethrow),
+   with the no-release byte-identity invariant tested
+   across chapter/book/segment scopes. They sit on the
+   eligibility *read* path only. Eligibility is read by
+   quote/diagnostics surfaces and by `SubmitJob`
+   construction; the former change no state, and the
+   latter is not exercised by this gate. No dispatch,
+   claim, or grant path consumes these parts.
+
+---
+
+## 6. The watched set — definition, sampling, and what counts as movement
+
+**The watched set** (used identically at R0, at every R2
+and R5 sample, at R3, at R6, and at any containment check):
+
+1. `/health` — build, generation state, coordinator state.
+2. Bindings read-back — the 10 names + `GENERATION_HALT`
+   value + `OPALREADER_PHASE_POLICY`.
+3. Script etag.
+4. Script-settings observability (enabled + persisted).
+5. Queue state by cf-api — `delivery_paused`, sole
+   consumer, retention.
+6. Operator reconcile **summary** — `armed`, `ok`,
