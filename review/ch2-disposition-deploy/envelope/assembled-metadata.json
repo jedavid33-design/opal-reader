@@ -1,0 +1,64 @@
+{
+  "main_module": "v2/worker-entry-prod-d6.js",
+  "compatibility_date": "2026-08-29",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "bindings": [
+    {
+      "class_name": "OpalReaderCoordinatorProd",
+      "name": "COORDINATOR",
+      "type": "durable_object_namespace"
+    },
+    {
+      "bucket_name": "opalreader-storage",
+      "name": "OPALREADER_STORAGE",
+      "type": "r2_bucket"
+    },
+    {
+      "name": "ALLOWED_ORIGIN",
+      "text": "https://jedavid33-design.github.io",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_V2_SCOPE",
+      "text": "production",
+      "type": "plain_text"
+    },
+    {
+      "name": "GENERATION_HALT",
+      "text": "1",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_PHASE_POLICY",
+      "text": "enforce",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_GENERATION_V2",
+      "queue_name": "opalreader-generation-v2",
+      "type": "queue"
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "type": "inherit"
+    },
+    {
+      "name": "OPALREADER_ACCESS_TOKEN",
+      "type": "inherit"
+    },
+    {
+      "name": "OPALREADER_MIGRATION_OPERATOR_TOKEN",
+      "type": "inherit"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "persist_invocations": true
+    }
+  }
+}
