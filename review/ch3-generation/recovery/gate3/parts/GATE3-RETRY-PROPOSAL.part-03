@@ -1,0 +1,263 @@
+tion mismatch discovered here requires
+    containment and reporting (§8) — the system stays held
+    and the mismatch is reported verbatim to Julie and Rowan
+    in the execution record before anything else proceeds;
+    it cannot retroactively stop the action already
+    performed, and it authorizes no fix-forward, rollback,
+    or further mutation under this GO.
+13. Park release / exemption: releaseId 1 `live`; zero
+    exemption rows; parked job fingerprint exact.
+14. Finalizer audit row: present exactly once in
+    `d6_grant_finalizations`, and verified field-by-field:
+    (a) its **exact grant identity** is
+    `grant:plan:e377a5559961b294154276b6:ch2:1:full` (§2.2) —
+    no other grant, no paraphrase; (b) its recorded
+    **authorizationRef is Julie's Gate 3 retry GO** — the
+    exact GO comment id under which E3 ran; (c) it carries
+    the **E1 preview precondition digest** — the digest
+    returned by E1 and passed to E3 as
+    `expectedPreconditionDigest`. **Digest distinction
+    (attempt-1 §7.14, carried):** the E1 preview
+    precondition digest must be distinguished from any
+    census evidence digest if they are not identical — the
+    readback record names the digests separately (preview
+    precondition digest; retry census evidence digest, if
+    one was computed) and never conflates them, and item 1's
+    `report_json` digest reference is checked against the
+    preview precondition digest named here. (For the record:
+    attempt 1 produced a census evidence digest,
+    `bef72c47…6b19`, and **no** preview precondition digest —
+    the preview errored. Any digest appearing in this
+    retry's record is labeled by which step produced it.)
+    Any audit-row field that differs — wrong grant, wrong
+    or absent authorizationRef, wrong or conflated digest —
+    is a STOP-class readback failure under §7 (containment
+    + reporting, §8; the performed action is not
+    retroactively undone).
+15. Hold state: `GENERATION_HALT "1"`, queue
+    `delivery_paused: true`, build still
+    **`1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`**, script
+    parts still 31/31 byte-identical to the operative
+    manifest, observability enabled + persisted, Batch
+    still unarmed.
+
+---
+
+## 7. Stop conditions — executor STOP law
+
+The standing STOP law governs every step: **any census,
+preview, or readback mismatch — even by one row, one slot,
+or one revision — is a STOP before the next action.**
+Preserve the state exactly as found (held throughout this
+gate); report the exact deviation verbatim, separately from
+any proposed explanation, to Julie and Rowan; proceed only
+on a fresh explicit GO or a Rowan ruling naming that
+deviation. An executor's own tracing never clears its own
+stop, and a post-hoc acceptance does not retroactively
+authorize having proceeded. One GO covers one attempt: a
+stopped attempt is never restarted on anyone's
+interpretation. **No executor-cleared exemptions exist under
+this gate, for any item.**
+
+Specific STOPs (non-exhaustive):
+
+- Any §4 census item differs from its stated expectation,
+  including the conflicts rule (§4.4), the bindings rule
+  (§4.5), and the held-state rule (§4.1).
+- Reconcile not `ok: true`, any drift entry, any exception
+  beyond the sole straddler, or `currentDayBlocked: true`.
+- E1 returns any non-200, no digest, a non-`finalizable`
+  classification, or any field disagreement with the census
+  (§4.6) — STOP with **no second preview** and no E3.
+- E2 conflict re-check differs from §4.4.1 in any field —
+  STOP with no E3.
+- The action response is ambiguous, malformed, reports any
+  `blocked` settlement, or returns any outcome other than
+  `applied` (a verified `already_finalized` replay outcome
+  is handled only under the paragraph below).
+- Any §6 readback figure differs from its expectation (§5.3).
+- Any provider dispatch, binding change, phase-settled
+  change, new grant, new plan, exemption write, or Phase B
+  state change appears at any point.
+- Unknown open becomes nonzero; a TerminalBlock or plan
+  `partial` appears.
+
+**Ambiguous action response:** read back first, before any
+further act. The finalizer is idempotent by audit-bound
+state recognition (§3), so a *verified* readback showing the
+exact §6 after-state proves the call landed. If the readback
+shows the grant still `issued` with no audit row, the call
+did not land — that fact is reported and a second invocation
+requires a fresh explicit ruling under the STOP law; it is
+never a blind retry. If the readback shows `reported` with
+any reservation still open, that is
+`reported_inconsistent` — a STOP state the finalizer cannot
+produce; it is never settled silently on a replay path.
+
+**No substitute route.** If the finalizer action fails or is
+refused, this gate does not fall back to the generic
+`/v2/reports` route (recovery proposal Option C, not
+recommended: wrong fence class, no in-transaction
+precondition proof, no audit row), to plan retirement, to
+grant voiding, or to any other mechanism under the same GO.
+
+---
+
+## 8. Containment, one-way nature, and rollback position
+
+**Containment is staying held.** This gate starts held and
+ends held, so containment on any STOP, ambiguity, or
+unexpected post-action state is simply: keep the halt and
+the queue pause exactly as they are (§5.0 covers the
+contrary-to-expectation case); preserve the census captures,
+the preview response, the action request/response, the audit
+row, and every readback; do not roll back code or data; do
+not fix forward, retry, release, retire, or void under the
+same GO; report to Julie and Rowan with the exact divergent
+figures. Releasing the hold after a stopped or divergent
+retry requires a separate explicit ruling — nobody un-halts
+or unpauses on their own authority as "tidying up".
+
+**Finalization is a one-way state change.** A successful E3
+is truthful terminal bookkeeping for work already done and
+already paid for in quota slots: there is **no data rollback
+for it** and no compensating write is authorized by this
+gate. If E3 returns an unexpected result mid-action, the
+in-transaction design is the first containment: any failed
+postcondition rolls the whole transaction back (§3), leaving
+either the exact §2 pre-state or the exact §5.3 after-state —
+never a designed partial state. The executor's response to
+any unexpected E3 result is therefore: **read-backs first**
+(§6, plus the §7 ambiguous-response rule), preserve
+everything, report verbatim, and STOP. Any state the
+read-backs show that is neither the pre-state nor the
+after-state (e.g. `reported_inconsistent`) is a STOP state
+for a future ruling — it is never repaired by a compensating
+write without a new gate. A later-proved error in a completed
+finalization would likewise be remedied by a forward
+correction under a new ruling, never by reopening the grant
+or its reservations.
+
+**Rollback floor note:** the permanent floor build
+`6a73d9622e1b4eac00c58e289de1c674ed6b3d6b` does not enforce
+the provider-attempt counter and is never a fallback for
+this gate. No code change of any kind is part of this gate,
+so no code rollback question arises under it.
+
+---
+
+## 9. Honest evidence — what success proves, and what it does not
+
+If this retry completes with all §6 readbacks passing, it
+proves exactly:
+
+- the finalizer derivation **completes on the fixed build
+  against live production data** (E1 HTTP 200,
+  `finalizable`, digest returned);
+- the stalled grant is **closable on the fixed build**: one
+  digest-bound action closed it, released exactly its 8
+  reservations (52 slots), completed the claim, and wrote
+  exactly one audit row bound to Julie's GO;
+- the **Gate 4 precondition is met** — no grant reads
+  `issued` for the Chapter 3 job — so the remaining 15
+  segments can be proposed under Gate 4's own gate;
+- phase money, attempts, dispatches, bindings, watermarks,
+  and the conflicts baseline are **unchanged** by the
+  closure.
+
+It does **not** prove:
+
+- **H1's mechanism.** H1 remains what the diagnosis left it:
+  SUPPORTED, NOT proven. A successful E1 is consistent with
+  H1 (the retired construction is gone from the path) and
+  equally consistent with any hypothesis under which the
+  original throw was specific to the retired construction
+  family or its interaction with the old code path. The
+  retry is an operative act, not a root-cause experiment
+  (§0.4), and its outcome must not be written anywhere as
+  "the LIKE caused the 500."
+- **That the original 500 could not recur elsewhere.** What
+  can be stated is a code fact about the live build, from
+  the build record's grep proof: **zero SQL LIKE/GLOB sites
+  remain in `worker/`** — the specific construction family
+  production has thrown on (four recorded lease-path throws
+  + attempt 1's preview 500, same error string) no longer
+  exists anywhere in the tree. That is a fact about the
+  code, not a guarantee about the engine, and not a claim
+  that no other failure mode exists.
+- Anything about Gate 4's execution, Phase B, or Batch —
+  each remains separately gated on its own evidence.
+
+---
+
+## 10. Authorization boundaries
+
+- **This proposal** asks Rowan for review only. It asks
+  Julie for nothing now and authorizes no production act.
+  Preparing and filing it involved no production contact.
+- **Rowan's review** of this proposal is technical. A PASS
+  is not execution permission and does not substitute for
+  Julie's GO.
+- **Julie's Gate 3 retry GO** — given after Rowan's review,
+  via tappable buttons, recorded on the board before any
+  step — is the sole execution authorization. It covers
+  exactly one attempt at §5 as written, under the §7 STOP
+  law, and does not survive a STOP. The GO comment id is the
+  E3 `authorizationRef`.
+- **Gate 4** (continuation of the 15: 20,864 chars, expected
+  ≈ $0.294 recorded against the phase's remaining
+  12,762,049; same-day first cohort is exactly 4 by the
+  proven formula — the [4, 4, 4, 3] succession is derivation
+  only, not a tested forecast) requires Julie's separate GO
+  after this gate's readbacks, plus a separate re-arm
+  decision, since this gate ends held.
+- **Phase B, Batch, rest-of-book generation:** untouched by
+  this gate and by any retry GO; each is its own gated
+  program.
+
+### Evidence index (repo `jedavid33-design/opal-reader`, branch `ui1-review`, unless noted)
+
+- Gate 3 attempt-1 proposal, as amended (template):
+  `1610a314d66d363a48361f9a1497e3418eaa216d` (base:
+  `7c71deef64d132b4492b9dfa99477efe72d0dea2`)
+- Gate 3 attempt-1 execution record (STOPPED AT E3):
+  pin `b5fc3784`
+- Gate 2D approved conflicts baseline:
+  `9284f5efee47cd87b2c5639e9dfe50e6fb7e908a`
+- Diagnosis proposal: pin `d581f5bd`; Amendment 1:
+  `1e18269c24b91b8035fe9f8acc38ab696f9839ca`
+- Stage 1 execution record:
+  `b0446f7942ee831c6f5f3bf15709433a46ae7640`
+- Remediation options analysis (Option B):
+  `c3f58ad84c3a56216fc913bedd6d95bc95f1f48c`
+- Range-fix build record:
+  `d01c15ed732436223f0207e4d126a588150187af`
+- Range-fix deploy proposal (as amended):
+  `6d533dfea25034091084cb0629a049688301c823`
+- Range-fix envelope / live build:
+  `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`
+- Range-fix deploy execution record:
+  `b986b562f1824fec2c15810ee4ef023d42a4362f`
+- Diagnosis + recovery proposal (finalizer design):
+  `7781e7d7934a911cac612418395b5adac5c24656`
+- New-thread handoff + state report:
+  `60b836a32711a0d93ffcb39c43426f43756a3a68`
+- Board (repo `jedavid33-design/opal-roundtable`, issue
+  #15): Rowan STOP ruling on attempt 1: 6559354445 · Stage 1
+  PASS: 6559766643 · Range-fix ANALYSIS PASS (recorded):
+  6560003451 · SOURCE REVIEW PASS (recorded): 6560249061 ·
+  FINAL PROPOSAL REVIEW PASS (deploy): 6560945443 · Deploy
+  execution filing: 6561039589 · **Execution review PASS
+  specifying this proposal: 6561225702** · New-thread
+  handoff filing: 6561273039
+
+**Turn: Rowan's** — review of this bounded Gate 3 retry
+proposal, in particular: the re-pointed census (§4, held
+state as verification), the single-preview discipline and
+its stated inference limits (§0.4, §5 E1, §9), the
+one-mutation budget (§5), the E2 pre-action re-check, the
+enumerated E3 expectations (§5.3), and the §6 audit readback
+with its digest distinction. Julie's Gate 3 retry decision
+comes after that review.
+
+— Wren

@@ -1,0 +1,242 @@
+# GATE 3 RETRY PROPOSAL — Production grant finalization on the range-fix build (bounded, for Rowan review)
+
+Opal Roundtable (Julie + Rowan + Wren) — Case #10 / issue #15,
+board repo `jedavid33-design/opal-roundtable`.
+Review pins live in repo `jedavid33-design/opal-reader`, branch `ui1-review`.
+
+**Status: PROPOSAL ONLY.** This document authorizes nothing. It
+requests Rowan's review of a bounded Gate 3 **retry** execution
+shape. Julie's explicit Gate 3 retry GO is a separate later
+step, after Rowan's review of this proposal. Julie is not being
+asked to approve execution by this filing, and she has not
+approved execution.
+
+**Production contact by this proposal: NONE.** No preview, no
+finalizer invocation, no production read or write of any kind
+is made in preparing or filing this proposal.
+
+**Origin of this proposal.** Rowan's range-fix deployment
+EXECUTION REVIEW PASS (board 6561225702, 2026-11-01) closed
+the deploy case and specified this document: *"Wren [is] to
+prepare a separately bounded Gate 3 retry proposal, with exact
+preflight, stop conditions, one valid preview and subsequent
+actions individually gated as appropriate."* Rowan further
+recorded that no retry, finalizer, re-arm, queue unpause,
+generation, spending, or rollback is authorized by that
+review; Rowan must review this proposal, and Julie must
+separately approve any production action. This proposal is
+Wren's response to that specification. It is also the first
+substantive filing prepared for Rowan's NEW ChatGPT thread
+(Julie's request; new-thread handoff + state report pinned
+`60b836a32711a0d93ffcb39c43426f43756a3a68`, filed 6561273039,
+Handoff ID RT-H-20261101-4c5c35).
+
+**Template.** This proposal mirrors the amended Gate 3
+attempt-1 contract (pin
+`1610a314d66d363a48361f9a1497e3418eaa216d`; base proposal pin
+`7c71deef64d132b4492b9dfa99477efe72d0dea2`) section by section,
+re-pointed at the range-fix build and tightened by what
+attempt 1 taught. Material differences are collected in §0.3
+so Rowan can review the deltas rather than re-derive them.
+
+**Turn after this filing:** Rowan's review. Then Julie's
+Gate 3 retry GO / HOLD decision.
+
+---
+
+## 0. Why this retry exists, and what changed since attempt 1
+
+### 0.1 Attempt 1, in brief
+
+Gate 3 attempt 1 (Julie GO 6559241292; Rowan TECHNICAL PASS
+FOR JULIE'S DECISION, board 6559214332) executed
+2026-11-01T14:26Z–14:30Z under the amended attempt-1 contract
+and **STOPPED AT E3** (execution record pin `b5fc3784`):
+
+- E0 fresh census **ALL PASS (21/21)** — including conflicts
+  EXACT-MATCH against the four-row Gate 2D approved baseline
+  (pin `9284f5efee47cd87b2c5639e9dfe50e6fb7e908a`) and bindings
+  revision_key == cache_key on all 8 committed occurrences.
+  Census evidence digest
+  `bef72c47e31414e08796b7e5a3d84511a761c7d746bd9950067519f0aeb16b19`.
+- E1 halt flip and E2 queue pause executed (2 of the 3
+  budgeted mutations) — the system was live-but-idle at
+  attempt-1 start, so the holds were real mutations then.
+- **E3 — the single operator preview call — returned HTTP
+  500** `{"error":"LIKE or GLOB pattern too complex:
+  SQLITE_ERROR"}`. No classification, **no precondition
+  digest**. Under the contract's STOP law, execution stopped
+  immediately: E3.5 was not run as a step, **the finalizer
+  action was NEVER called**, Julie's GO was consumed, and the
+  system was left HELD as containment.
+- The 500's error string is byte-identical to the `found`
+  field of the four standing `schedule_dead` conflicts rows.
+  That identity is an **observation, not a diagnosis**: the
+  root cause was NOT established by attempt 1 and is NOT
+  established now (see §0.2).
+
+### 0.2 Diagnosis, remediation, deploy — the chain since
+
+- **Diagnosis** (proposal pin `d581f5bd`; Amendment 1 pin
+  `1e18269c24b91b8035fe9f8acc38ab696f9839ca`; Rowan TECHNICAL
+  PASS for Stage 1, board 6559656456; Julie Stage 1 GO
+  6559701645). Source trace of the preview path on the
+  then-live tree: the derivation's only LIKE is §4.3.5
+  (`grant-finalizer.mjs:417-419`, bound pattern
+  `` `op:${grantId}:%` ``, 51 chars, one trailing `%`, no
+  `_`); exactly **five LIKE sites** exist in the tree, no
+  GLOB. **H1 — the preview threw at its §4.3.5 LIKE, the
+  same construction family recorded throwing in production
+  — is SUPPORTED, NOT proven.** Why the Durable Object
+  SQLite build rejects that pattern is unknown; intermittency
+  is not excluded. **Stage 1** (passive read-only probes,
+  record pin
+  `b0446f7942ee831c6f5f3bf15709433a46ae7640`, filed 6559748096)
+  executed complete: conflict set stable and exact-matched at
+  both reads, reconcile `ok: true` with the sole straddler,
+  plan still active 8/23, bindings zero movement since seq
+  1826. Stage 1 upgraded nothing about H1. Rowan: **STAGE 1
+  PASS / COMPLETE** (board 6559766643).
+- **Rowan's standing ruling on re-invocation:** do NOT repeat
+  the preview merely to reproduce the error. A repeat 500
+  would prove endpoint reproducibility only — never the
+  failing statement or mechanism (diagnosis proposal §7.3
+  inference discipline, Amendment 1). §0.4 of this proposal
+  addresses why this retry is not that act.
+- **Remediation** (options analysis pin
+  `c3f58ad84c3a56216fc913bedd6d95bc95f1f48c`, filed 6559913714;
+  Rowan ANALYSIS PASS, recorded 6560003451): five options
+  compared; **Option B — prefix range scan — chosen**
+  (exact intended set on every input, preserves discovery
+  semantics, index-served, no schema change). Option D
+  (derived column) was REJECTED: it cannot serve the stalled
+  grant, whose existing rows carry no value in a new column.
+- **Range-fix build** (Julie build GO 6560015979; build
+  record pin `d01c15ed732436223f0207e4d126a588150187af`,
+  filed 6560153165; Rowan SOURCE REVIEW PASS, candidate
+  only, recorded 6560249061): one new shared helper
+  (`worker/generation/prefix-range.mjs`) + predicate swaps at
+  **all five LIKE sites** (L1 finalizer derivation; L2–L5 in
+  `worker/coordinator.mjs`). No schema, write-path, or
+  control-flow change. New equivalence suite 19/19; full
+  battery 1,197 / 1,175 / 22 — exactly +19/+19/+0 over the
+  1,178/1,156/22 baseline, failing-file set name-identical.
+  **Equivalence proof that matters for this gate:** on
+  Fixture S (live-shaped stalled grant), the patched
+  derivation classifies `finalizable` with precondition
+  digest
+  `00db68a8d8a2cb7350f16064f933b4f33b6438659c554a05d9cd48f4e1f53674`
+  — **byte-identical to the unpatched LIKE build's digest
+  over the identical seed** — and the patched finalizer
+  action accepts the LIKE build's digest and finalizes
+  (`outcome: "applied"`). Grep proof on the patched tree:
+  **zero SQL LIKE/GLOB sites remain in `worker/`** (14 hits,
+  all comment lines).
+- **Range-fix deploy** (proposal pin
+  `6d533dfea25034091084cb0629a049688301c823`; Rowan FINAL
+  PROPOSAL REVIEW PASS 6560945443; Julie GO recorded
+  6560982620; execution record pin
+  `b986b562f1824fec2c15810ee4ef023d42a4362f`, filed
+  6561039589): census zero deviations, **exactly 1 mutation**
+  (the upload; observability survived, conditional PATCH
+  unspent), 31/31 parts byte-identical, denied probes 6/6,
+  **ENDS HELD certified**. Rowan EXECUTION REVIEW PASS
+  (documentary) 6561225702. **Live build is now
+  `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`.**
+
+### 0.3 What is different from the attempt-1 contract
+
+| # | Attempt 1 | This retry |
+|---|---|---|
+| 1 | Live build `408f9149…` (30 parts), finalizer derivation contains the §4.3.5 LIKE | Live build `1c2d1d0f…` (31 parts); derivation runs the prefix range scan; zero SQL LIKE/GLOB sites in `worker/` |
+| 2 | System live-but-idle at gate start; halt flip + queue pause were mutations 1–2 of 3 | System **never left HELD** after attempt 1 and the deploy; halt `"1"` + `delivery_paused: true` are already in place, so the hold steps are **verification steps, not mutations** |
+| 3 | Mutation budget **3** (halt, pause, finalizer) | Mutation budget **1** — the finalizer action ONLY (plus pre-authorized containment re-holds under §5.0, which no step should trigger) |
+| 4 | Census expected `GENERATION_HALT "0"`, queue unpaused | Census expects `GENERATION_HALT "1"`, generation `halted`, queue `delivery_paused: true` — a not-held finding is a STOP reported as observed state (§4.1), never silently fixed under this gate |
+| 5 | Preview was the first-ever valid invocation of the route | Preview is the first valid invocation **on the fixed build**; attempt 1's 500 is the prior data point, stated at its true strength in §6 |
+
+Everything else — identity binding (§2), finalizer semantics
+(§3), conflicts exact-match rule (§4.4), bindings rule (§4.5),
+STOP law (§7), audit readback discipline (§6, incl. the
+§7.14 digest distinction), containment (§8) — is carried over
+from the amended attempt-1 contract unchanged in substance.
+
+### 0.4 This retry is NOT a reproduction attempt
+
+Rowan's ruling stands and this proposal honors it in terms:
+
+1. **The code under the preview has changed.** Attempt 1 ran
+   the derivation on the LIKE construction; this retry runs
+   it on the prefix-range construction at all five former
+   LIKE sites. Re-invoking the preview on the *unchanged*
+   build merely to watch it fail again is the act the ruling
+   prohibits; that is not what is proposed.
+2. **The purpose is operative, not diagnostic.** The preview
+   here is step E1 of the gated finalization sequence: if it
+   returns a precondition digest, that digest is **consumed
+   by E3 under this same gate** as
+   `expectedPreconditionDigest`. This is the exact inverse of
+   the diagnosis §7.3 discipline, under which a diagnostic
+   re-invocation's digest would be evidence only and could
+   never be presented to an action.
+3. **The specification is Rowan's own.** The execution review
+   PASS (6561225702) directs a retry proposal shaped as
+   "exact preflight, stop conditions, one valid preview and
+   subsequent actions individually gated" — this document.
+4. **Inference discipline is preserved.** Whatever E1 returns
+   is recorded at its true strength (§6, §9): a 200 proves
+   the derivation completed on the fixed build against live
+   data; it does not prove the mechanism of the original 500,
+   and it does not upgrade H1 from supported to proven. A
+   non-200 is a STOP and evidence — not a license to retry
+   the preview inside this gate.
+
+---
+
+## 1. Scope
+
+### 1.1 In scope — exactly one act
+
+Under a future Julie Gate 3 retry GO, execute **exactly one**
+operator finalization of **exactly one** grant — the stalled
+Chapter 3 grant of §2 — on live build `1c2d1d0f…`:
+
+- One fresh census (E0, §4), read-only.
+- One verify-held confirmation (E0.5, §5), read-only.
+- One `GET /v2/d6-grant-finalization-preview` (E1, operator,
+  read-only) checked against the census.
+- One pre-action conflict re-check (E2, §5), read-only.
+- One `POST /v2/d6-finalize-grant` (E3, operator) bound to
+  the exact identity in §2, to the E1 precondition digest,
+  and to Julie's retry GO as the authorization reference.
+- Full readbacks (E4, §6), still held.
+
+Finalization is bookkeeping only. It makes no provider call,
+submits nothing, wakes no generation, and moves no phase
+money (§2.4, §5.3). **Spend: $0.**
+
+### 1.2 What this retry does NOT do
+
+This retry does **not**:
+
+- generate any segment or make any provider call;
+- issue any new grant, submit any new plan or job, or resume
+  the stalled plan — finalization closes the grant; the
+  remaining 15 segments are **Gate 4**, separately gated;
+- re-arm the system, lift the halt, or unpause the queue —
+  the retry starts held and **ends held**;
+- perform or touch Phase B (the idx-26 exemption path);
+- arm or touch Batch;
+- touch the parked Chapter 3 job, the park-release row, any
+  exemption row, any other book, chapter, plan, job, or
+  grant;
+- clear, edit, or delete any conflicts row;
+- roll back code or data (§8);
+- authorize Gate 4, Phase B, Batch, rest-of-Forever-Pucked
+  generation, any quarantine release, or any spending — each
+  remains its own separate Julie decision.
+
+The app's Generate button is **not live** (the system is
+held) and stays not live for the duration of this gate and
+after it, until a separate re-arm decision on a separate GO.
+
+### 1.3 Explicitly out of scope / not autho

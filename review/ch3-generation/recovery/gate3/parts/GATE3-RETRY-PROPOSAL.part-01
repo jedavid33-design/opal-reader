@@ -1,0 +1,278 @@
+rized by this proposal
+
+For the avoidance of doubt, none of the following is
+requested, implied, or authorized by this proposal or by any
+review of it: a Gate 4 resumption; Phase B; Batch arming or
+Batch work; **any second preview call or second finalizer
+call** (the §7 ambiguous-response rule governs the single
+action's aftermath — it grants no in-gate retry); any
+rollback; clearing, editing, or deleting any conflicts row;
+any baseline change (a replacement conflicts baseline exists
+only via a pinned census + Rowan ruling); any preview or
+finalizer invocation outside the single E1/E3 pair defined
+in §5.
+
+---
+
+## 2. Identity binding — the exact subject
+
+Every census read, the preview, and the single action call
+are bound to these identities and no others. Any read that
+returns a different identity is a STOP (§7).
+
+### 2.1 Book / phase / chapter
+
+| Field | Value |
+|---|---|
+| Book | Forever Pucked |
+| bookId | `5c589095-f812-48a2-8ab2-03ba2791f2b2` |
+| Phase | `forever-pucked` |
+| chapterIndex | 2 (Chapter 3) |
+| Lane | `standard` (Batch unarmed, `batch_not_armed`) |
+
+### 2.2 Plan / job / grant
+
+| Field | Value |
+|---|---|
+| Plan | `plan:e377a5559961b294154276b6` |
+| Plan state / totals | `active`; eligible 23 / done 8 / failed 0 / blocked 0 / prompts 0 |
+| Job | `plan:e377a5559961b294154276b6:ch2` |
+| Job state / revision | `generating` / 2 |
+| Job occurrences | 8 `ready` / 15 `pending` / 0 `granted` |
+| Grant | `grant:plan:e377a5559961b294154276b6:ch2:1:full` |
+| Grant state / revision | `issued` / 2 |
+
+### 2.3 The 8 committed occurrences and their reservations
+
+The grant's target set is exactly these 8 occurrences, in
+chapter order. Attempts are all `confirmed` (30 `success` +
+14 `policy_block`, 0 failed, 0 unknown). Each occurrence
+holds exactly one open reservation,
+`qres:<grantId>:<occurrenceId>:2026-10-31`, `slots_total` 12.
+
+| Ch idx | Occurrence ID | Attempts | Residual (12 − attempts) |
+|---:|---|---:|---:|
+| 7 | `05941584-5669-4ea9-91e7-59a5397f46c4` | 4 | 8 |
+| 9 | `5f6ca428-524d-448a-8fbf-a773dfc132e6` | 6 | 6 |
+| 11 | `4e163ba6-87d6-467f-a8a7-52a0062ca69e` | 6 | 6 |
+| 12 | `4746f9a6-9f05-4a65-a175-83b24f8d539a` | 6 | 6 |
+| 16 | `338676cd-63fa-409d-8e42-e13c28636de3` | 6 | 6 |
+| 20 | `203af7f9-d88a-4f2a-a0fd-3f70d0a11f07` | 6 | 6 |
+| 23 | `0c83bc51-7fc9-4ac7-b0ca-f81f1729a38e` | 4 | 8 |
+| 25 | `35ab06fd-8459-41ff-a8b7-ae4bf25be731` | 6 | 6 |
+| **Total** | **8 reservations** | **44** | **52** |
+
+Closing these 8 reservations as `grant_settled` is
+settlement of spent work, not a quota bypass: the 44 dispatch
+rows remain counted on PT 2026-10-31 forever, no
+`slots_consumed` value changes, and no new slots are granted
+retroactively. Only the 52 unused worst-case slots stop being
+held open for a grant that can no longer dispatch (recovery
+proposal §2.3, carried from attempt 1).
+
+### 2.4 Money — must NOT change
+
+Phase `forever-pucked` accounting, before and after
+finalization, identically (this is a design-derived
+expectation from the finalizer's specification — attempt-1
+contract §2.4/§3 — to be **verified** at E4, not assumed; any
+movement is a STOP-class readback failure under §7):
+
+| Figure | Before | After (expected) |
+|---|---:|---:|
+| Budget | 13,500,000 | 13,500,000 |
+| Settled | **732,303** | **732,303** |
+| Estimated unverified | 19,018 | 19,018 |
+| Reserved unverified | 5,648 | **5,648** |
+| Unknown open | 0 | 0 |
+| Remaining | 12,762,049 | 12,762,049 |
+
+Why finalization moves no phase money: the finalizer settles
+**quota reservations** — the 52 provider-attempt *slots* of
+§2.3 — via `settleReservationsForGrant`. It writes no phase
+ledger figure. The phase ledger's `reservedUnverified`
+5,648 is the adjudicated straddler's accounting (Gate 5,
+attempt `att-37d63768-db4b-447d-8150-580b7c6ee257`), not this
+grant's slots, and is untouched by design. The movement
+finalization *does* produce is in the **quota** ledger's
+derived totals (§5.3): PT 2026-10-31 reserved 52 → 0.
+
+Settings revision **1** (monthlyCap 50, lane `standard`).
+Sync watermarks: bindings **1826** / content **18**.
+Eligibility for the remaining work (context, not a retry
+mutation): 15 eligible / 11 bound_already / 1 parked; 20,864
+chars; expected 294,137; digest
+`9453ab5dc7ee6ade7c650d14066054b965875f2ef1b65eb24bc633588d778e67`.
+
+### 2.5 Parked job — untouched by design
+
+Parked job
+`1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a`:
+state `parked_policy`, revision 1, fingerprint
+`b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`.
+Park-release row: releaseId 1, `live` (the 23 ids, idx 3–25).
+Chapter exemptions: zero rows, zero writes, ever, in this
+gate.
+
+### 2.6 Live build and held state at proposal time
+
+Worker `opalreader-api-v2-prod`, build
+**`1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`** (the range-fix
+envelope pin; script 1,435,756 B, **31 parts**, etag
+`f15fb1ae40f870fc4493f3499db0b096c4d801b9fff8d20fe5538d84c69c82ed`
+as read back at deploy D4). `GENERATION_HALT "1"` —
+generation **halted**; coordinator `armed`;
+`OPALREADER_PHASE_POLICY "enforce"`; queue
+`opalreader-generation-v2`
+(`93b6a35fb8cf4788a91a2c90b748ae66`) delivery **paused**,
+sole consumer `f260f2188d80426bb0588685e9d084eb`, retention
+86,400 s; observability enabled + persisted; 10 bindings.
+This state was certified at the deploy's D7 read-backs
+(DEPLOY-RECORD, pin `b986b562…`) and is the state attempt 1's
+containment left in place. The retry census (§4) re-reads
+all of it fresh; this section is context, not a substitute
+for the census.
+
+---
+
+## 3. The finalizer on the fixed build — what the calls do
+
+The finalizer surfaces are unchanged in shape from attempt 1
+(operator-fenced at both the public entry and the Durable
+Object class gate; credential-less calls refuse 403
+`migration_operator_required` — re-probe-proven 6/6 at the
+range-fix deploy, including both finalizer routes):
+
+- Preview: `GET /v2/d6-grant-finalization-preview` —
+  read-only; does not bootstrap its audit table.
+- Action: `POST /v2/d6-finalize-grant` — closed body
+  allowlist `{ grantId, planId, jobId, authorizationRef,
+  expectedPreconditionDigest }`. No `results` array exists
+  in the shape: the caller can never supply outcomes.
+
+**What the range fix changed inside them:** the derivation's
+precondition re-derivation — used by the preview AND by the
+action's in-transaction re-derivation — previously selected
+the grant's attempt rows with the §4.3.5 LIKE
+(`` `op:${grantId}:%` ``). On the live build that selection
+is a **prefix range scan** (`op_key >= ? AND op_key < ?`,
+successor bound) via the shared helper
+`worker/generation/prefix-range.mjs`; the same swap was
+applied at the four coordinator LIKE sites (L2 `_voidDispatch`,
+L3 `handleReport` sweep, L4 lease delivered branch, L5
+repair-chain COUNT). Semantics, per the build record: exact
+intended set on every input; L1 keeps `ORDER BY op_key`; the
+one declared delta vs LIKE is case-sensitivity (LIKE is
+ASCII case-insensitive absent a pragma; the BINARY range
+scan is case-sensitive — production keys are machine-generated
+lowercase, and the equivalence suite asserts the tighter set
+openly on case-variant and metacharacter adversaries).
+
+Inside **one** coordinator transaction, the action re-derives
+every precondition from durable records (the §4.3 set, as
+built and source-passed): identity and state; the exact
+8-target ledger/outbox set; every target `ready` with its
+execution `committed`; exactly 44 confirmed attempts in the
+4/6/6/6/6/6/4/6 pattern; exactly 44 dispatch rows on PT
+2026-10-31; claim exactly `claimed`; exactly the 8 expected
+open reservations with stored `slots_consumed` equal to
+attempt counts and residuals summing to exactly 52; derived
+PT 2026-10-31 totals exactly 44 / 52 / 96; phase money and
+watermarks exactly as §2.4; binding proof on `cache_key`
+(§4.5); park-release live and no exemption row. Absence-safe
+reads throughout.
+
+If every precondition passes, the same transaction: inserts
+exactly one audit row into `d6_grant_finalizations` carrying
+the `authorizationRef` and precondition digest; marks the
+grant `reported` with a labeled operator-finalization
+`report_json` (never an impersonated executor report);
+completes the claim (`claimed` → `completed`, verified);
+settles the reservations via `settleReservationsForGrant`
+and **requires** exactly the 8 expected ids in `closed` with
+an empty `blocked` list; derives job completion and verifies
+the job remains `generating` at the same revision; then
+re-derives the state as exactly `already_finalized` with
+money and attempt/dispatch counts unchanged, else the whole
+transaction rolls back. Replay is audit-bound:
+`already_finalized` with zero writes; `reported` without an
+audit row is `already_reported_not_finalizer` and its
+reservations are NOT silently settled; a partially closed
+set STOPs as `reported_inconsistent`.
+
+**Digest expectations, stated precisely.** The Fixture S
+digest `00db68a8…f53674` (§0.2) is **test evidence only**: it
+proves the patched and unpatched derivations agree on
+identical seeded data. It is NOT a prediction of the live
+preview's digest. The live digest is whatever E1 returns
+against live data; it is recorded verbatim, bound into E3,
+and verified at E4 (§6 item 14). No digest value is asserted
+in advance for production.
+
+---
+
+## 4. Census specification — E0, fresh, complete, hard precondition
+
+Retry execution begins with a fresh complete census, taken
+in one window with no other authorized generation work
+intervening, **before any action**. Every item below must
+pass exactly. The census is the gate's evidence package: raw
+captures are preserved under the execution record, as in
+every prior gate in this chain. The census surfaces are the
+attempt-1 §4 surfaces **plus** the deploy-gate census
+surfaces (live-part byte verification against the operative
+manifest; cf-api queue read-back).
+
+### 4.1 Production identity, build, and HELD state
+
+1. `/health`: build exactly
+   **`1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`**; generation
+   **`halted`** (already held — not `enabled`); coordinator
+   `armed`; scope `production`; ok `true`.
+2. Live script parts byte-verified against the range-fix
+   operative manifest (deploy envelope pin `1c2d1d0f…`,
+   DEPLOY-RECORD pin `b986b562…`): **31/31 byte-identical,
+   no extras**; etag recorded.
+3. Bindings: exactly **10**; `GENERATION_HALT "1"`;
+   `OPALREADER_PHASE_POLICY "enforce"`.
+4. Observability enabled + persisted on both the `/settings`
+   and `/script-settings` reads.
+5. Settings revision **1**; capabilities: standard admitted,
+   Batch `batch_not_armed`.
+6. Queue (cf-api read-back — the only proof of pause state):
+   `delivery_paused: true` **already**; sole consumer
+   `f260f2188d80426bb0588685e9d084eb`; retention 86,400 s.
+
+**Not-held rule (tightening vs attempt 1).** Items 1, 3, and
+6 verify a held state that must already exist. If any of
+them shows the system NOT held, that finding is reported
+**as the observed state** and the gate **STOPs before any
+action** — the executor does not flip the halt or pause the
+queue under this gate to "restore" the expected starting
+point, and does not certify anything about held state the
+read-backs did not establish (the deploy Amendment 1 rule).
+Remedy, if ever needed, is a separate ruling.
+
+### 4.2 Plan / grant / job identity checks
+
+7. Plan list exhaustive (`nextCursor: null`): exactly the 4
+   known plans — Ch 3 `active`; fresh Ch 2 `complete`; old
+   Ch 2 `retired`; smoke `complete`. No new plan.
+8. Ch 3 plan exactly §2.2: `active`, totals 23 / 8 / 0 / 0 / 0.
+9. Job exactly §2.2: `generating` rev 2; 8 `ready` / 15
+   `pending`; exactly one grant for the job.
+10. Grant exactly §2.2: `issued` rev 2.
+11. Parked job exactly §2.5: `parked_policy` rev 1,
+    fingerprint recomputed and exact; park-release row 1
+    `live`; zero exemption rows.
+12. Eligibility exactly §2.4: 15 / 11 / 1, digest exact,
+    20,864 chars, expected 294,137.
+13. Phase accounting exactly §2.4 on both read surfaces
+    (capabilities + operator diagnostics), incl. unknownOpen 0.
+14. Sync watermarks exactly 1826 / 18.
+
+### 4.3 Quota checks
+
+15. Fresh quota reconcile (operator, complete paginated
+    census — the authenticated read-only census call the
+    deploy Amendmen

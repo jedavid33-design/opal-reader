@@ -1,0 +1,254 @@
+t 1 expressly permits): `ok: true`, drift
+    **empty**, `censusComplete: true`, guard **armed**,
+    `currentDayBlocked: false`.
+16. **Sole exception:** the known adjudicated straddler
+    `att-37d63768-db4b-447d-8150-580b7c6ee257`
+    (`estimated_unverified`, spanning PT 2026-10-29 /
+    2026-10-30) — permanent, never dispositionable. Any
+    second exception is a STOP.
+17. Historical PT days fixed: 2026-10-29 = dispatched 57 /
+    reserved 0 / consumed 57; 2026-10-30 = 79 / 0 / 79;
+    **2026-10-31 = dispatched 44 / reserved 52 / consumed 96**
+    — including the 52 reserved slots, which stay attributed
+    to 2026-10-31 permanently.
+18. The census day's own PT totals are read fresh and stated
+    as observed (new facts, not expectations). A PT-day
+    rollover does **not** clear the issued grant or its
+    reservations. Fresh headroom on a new day is never
+    evidence the stall cleared.
+
+### 4.4 Conflicts rule — exact match against the Gate 2D approved baseline
+
+Carried from the amended attempt-1 contract (§4.4, per
+Rowan's ruling, board 6559124784) **unchanged**: a signature
+match alone NEVER clears a changed conflict set under this
+gate.
+
+> At census time, fetch the **complete** conflict set from
+> `GET /v2/conflicts` and compare it **row-by-row** against
+> the four individually enumerated rows of the Gate 2D
+> approved baseline (pin
+> `9284f5efee47cd87b2c5639e9dfe50e6fb7e908a`, `BASELINE.md`),
+> reproduced verbatim in §4.4.1 below. The census passes
+> **only** on an exact match: same four rows, same ids, same
+> timestamps, same occurrence ids, same field values. **ANY
+> addition, deletion, or field change — in count, id,
+> timestamp, occurrence, or any field — is a STOP before
+> any action.** On such a STOP, the complete new census is
+> pinned and returned to Rowan for a specific baseline
+> ruling; **only a separately reviewed replacement baseline
+> may be used** for a later attempt. No executor judgment
+> call, and no "matching signature" exemption for a fifth or
+> changed row, can clear a changed set.
+
+#### 4.4.1 The approved baseline — the four rows, verbatim
+
+Verified firsthand against `BASELINE.md` (pin `9284f5ef`)
+and re-verified at the attempt-1 census, at Stage 1 (D2 and
+D6), and at the range-fix deploy census (D0 item 4) — exact
+match at every read. All four rows carry `cache_key`
+`lease`, `expected` `7`, `found` "LIKE or GLOB pattern too
+complex: SQLITE_ERROR", `reason` `schedule_dead`:
+
+| id | at (ISO, UTC) | occurrence_id |
+|---:|---|---|
+| 1 | 2026-10-29T23:54:14.808Z | `grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full` |
+| 2 | 2026-10-30T00:24:14.632Z | `grant:plan:603ab416bd67ab1b25de97be:ch1:1:full` |
+| 3 | 2026-10-31T05:14:24.089Z | `grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full` |
+| 4 | 2026-11-01T01:04:30.364Z | `grant:plan:e377a5559961b294154276b6:ch2:1:full` |
+
+Row 4 is the stalled grant's own lease row. Note, stated
+plainly because the fix is now live: rows 1–4 record throws
+of the retired LIKE construction in the coordinator's lease
+path (L4). On the current build that path runs the range
+scan; the rows remain as historical records — this gate does
+not clear, edit, or reinterpret them, and their continued
+exact presence is the census expectation. The set is
+additionally re-fetched at E2 (§5, immediately before the
+action) and in the E4 readbacks (§6) — each time compared
+against this same baseline, under §5/§7.
+
+### 4.5 Bindings check
+
+19. For each of the 8 committed occurrences in §2.3, read its
+    production binding via the sync/bindings surfaces
+    (structural metadata only — IDs, keys, digests; **never
+    segment text**) and confirm **revision_key == cache_key**
+    on all 8. Any of the 8 missing, or with revision_key ≠
+    cache_key, is a STOP.
+
+### 4.6 Preview expectations (checked at E1, §5)
+
+20. The preview must return HTTP 200, classify the grant
+    `finalizable`, and return a precondition digest; every
+    preview field is checked against the census expectations
+    (§2, §4.2–§4.5): identity, states, revisions, claim
+    `claimed`, outbox acked, the exact 8 targets with
+    committed executions and the 4/6/6/6/6/6/4/6 attempt
+    pattern, the exact 8 open reservations with residuals
+    summing to 52, derived totals 44 / 52 / 96 for PT
+    2026-10-31, phase money §2.4, watermarks 1826 / 18,
+    park-release live, no exemption. Any mismatch is a STOP
+    before the action call.
+
+---
+
+## 5. Execution sequence (proposed — NOT executed by this filing)
+
+Executed in order, exactly once each, only under Julie's
+Gate 3 retry GO recorded on the board **before** any step.
+The GO comment id becomes the finalizer's
+`authorizationRef`.
+
+- **E0 — Fresh census.** §4 in full, read-only. Any failure:
+  STOP before any action (§7). Zero mutations so far.
+- **E0.5 — Verify-held confirmation (read-only).** Re-confirm
+  from the E0 read-backs themselves: `GENERATION_HALT "1"`,
+  /health generation `halted`, queue `delivery_paused:
+  true`. This step performs **no mutation** — it replaces
+  attempt 1's E1/E2 hold mutations, which are unnecessary
+  because the system has been continuously held since
+  attempt 1's containment and the deploy's ENDS HELD
+  certification. A not-held finding here is governed by
+  §4.1's not-held rule: STOP, report the observed state.
+- **E1 — ONE valid preview.** One operator
+  `GET /v2/d6-grant-finalization-preview` for the exact grant
+  of §2.2 (the same parameterized call attempt 1 made:
+  grantId / planId / jobId of §2.2, scope/instance headers,
+  operator connector). Checked per §4.6. The preview is
+  read-only; it writes nothing. **Exactly one preview call
+  exists in this gate.** Outcomes:
+  - **HTTP 200 + classification `finalizable` + digest
+    present + every field matches the census** → proceed to
+    E2. What this proves, and only this: the finalizer
+    derivation **completed on the fixed build against live
+    production data** and found every precondition satisfied.
+    It does not prove the mechanism of attempt 1's 500 (§9).
+  - **Any non-200 response (including any 500), a missing
+    digest, a non-`finalizable` classification, or any field
+    mismatch** → **STOP.** Stay held, record the response
+    verbatim, no E2, no E3, **no second preview**. The GO is
+    consumed; any further attempt requires a fresh ruling /
+    GO under §7.
+- **E2 — Pre-action conflict re-check (read-only; the
+  attempt-1 E3.5 equivalent).** Immediately before E3, and
+  after the E1 preview: re-fetch the **entire** conflict set
+  (`GET /v2/conflicts`) and compare it against the approved
+  baseline (§4.4.1). **Any difference — addition, deletion,
+  or field change — means STOP without calling the
+  finalizer.** Preserve the held state and report under §7;
+  the only remedy is a pinned new census + Rowan baseline
+  ruling, per §4.4.
+- **E3 — ONE finalizer action (mutation 1 of 1).** One
+  operator `POST /v2/d6-finalize-grant` with the closed body:
+  the exact `grantId` / `planId` / `jobId` of §2.2,
+  `authorizationRef` = Julie's Gate 3 retry GO comment id,
+  and `expectedPreconditionDigest` = the E1 preview digest.
+  No second call under this GO for any reason except the
+  readback-first replay rule in §7. **Expected outcomes,
+  enumerated in advance** (§5.3) — expectations derived from
+  the finalizer design, to be verified at E4, not assumed.
+- **E4 — Full readbacks.** §6 in full, still held. A
+  post-action conflict mismatch discovered in E4 requires
+  **containment and reporting** (§8): the system stays held
+  and the mismatch is reported verbatim to Julie and Rowan —
+  it **cannot retroactively stop the action already
+  performed** in E3, and it authorizes no fix-forward,
+  rollback, or further mutation under this GO.
+- **End state: STAY HELD.** Generation halted, queue paused,
+  finalizer audit row present exactly once, grant `reported`.
+  This gate does not re-arm, does not unpause, and does not
+  resume anything. Re-arm and Gate 4 are separate later
+  decisions on separate GOs.
+
+**Mutation budget: exactly 1** (the E3 finalizer action).
+The census, verify-held, preview, E2 re-check, and all
+readback reads are not mutations. No halt flip and no queue
+pause are budgeted, because both protections are already in
+place and are verified, not applied (§4.1, E0.5). **Spend:
+$0.**
+
+### 5.0 Containment re-holds (pre-authorized, narrow)
+
+The single exception to the budget: if — contrary to every
+expectation, since no step in §5 un-holds anything — a step
+of this gate were observed to have un-held the system (halt
+no longer `"1"`, or queue no longer paused), the executor is
+pre-authorized to restore **exactly** the two protections
+(halt flip via the settings-only multipart PATCH to
+`/settings`; queue pause via the queue PUT) as containment,
+and to STOP and report. This is containment only: it
+authorizes no other act, it is not a license to proceed past
+a not-held census finding (§4.1), and any use of it is
+reported as a deviation-class event in the execution record.
+
+### 5.3 E3 expected outcomes — enumerated in advance
+
+Flagged once, for the whole list: these are **design-derived
+expectations** (attempt-1 contract §3/§7; finalizer
+specification as built and source-passed; build record §2.1
+Part D, where the patched action on Fixture S returned
+`outcome: "applied"` and the post-state classified
+`already_finalized`). They are the E4 verification targets,
+not facts about production.
+
+1. Action response outcome: **`applied`** — any other
+   outcome is handled under §7 (including the
+   readback-first ambiguous-response rule).
+2. Grant: `issued` → **`reported`**, with `report_json` the
+   labeled operator-finalization record carrying the retry
+   GO `authorizationRef` and the E1 precondition digest.
+3. Claim: `claimed` → **`completed`**.
+4. Reservations: exactly the 8 §2.3 rows **closed**,
+   `close_reason` `grant_settled`, `blocked` list empty;
+   stored `slots_consumed` unchanged (4/6/6/6/6/6/4/6).
+5. Derived PT totals for 2026-10-31: dispatched **44** /
+   reserved **0** / consumed **44** (from 44 / 52 / 96).
+   The 44 dispatches remain counted permanently.
+6. Phase accounting: **no movement** — settled 732,303;
+   estimatedUnverified 19,018; **reservedUnverified 5,648 →
+   5,648**; unknownOpen 0; remaining 12,762,049 (§2.4).
+7. Plan: remains **`active`**, totals 23 / 8 / 0 / 0 / 0.
+   Finalization closes the grant; it does **not** generate,
+   grant, or otherwise advance the remaining 15 occurrences
+   — Gate 4's precondition (no grant reading `issued`) is
+   what changes, nothing else.
+8. Job: remains `generating` rev 2; occurrences 8 `ready` /
+   15 `pending`.
+9. Audit: exactly one row in `d6_grant_finalizations` for
+   this grant (§6 item 14).
+10. Attempts / dispatches: exactly 44 / 44, untouched; no
+    new attempt, dispatch, or provider contact of any kind.
+11. Watermarks 1826 / 18 unchanged; conflicts exactly the
+    §4.4.1 baseline; park release live; zero exemptions.
+
+---
+
+## 6. Readback checklist (E4 — all required, still held)
+
+1. Grant: `reported`; `report_json` is the labeled
+   operator-finalization record carrying the Gate 3 retry
+   `authorizationRef` and the E1 precondition digest.
+2. Claim: `completed`.
+3. Reservations: read back **each of the 8 rows
+   individually** — all `closed`, `close_reason`
+   `grant_settled`, `day_key` 2026-10-31, stored
+   `slots_consumed` unchanged (4/6/6/6/6/6/4/6).
+4. Derived PT totals: 2026-10-31 = dispatched 44 / reserved
+   0 / consumed 44; the census day's totals recorded
+   explicitly as observed.
+5. Quota reconcile: complete, `ok: true`, drift empty, sole
+   straddler exception only.
+6. Attempts / dispatches: exactly 44 confirmed attempts and
+   44 dispatch rows, untouched; no new attempt or dispatch.
+7. Plan: `active`, done 8 / failed 0 / blocked 0 / prompts 0.
+8. Job: `generating` rev 2; occurrences 8 `ready` / 15
+   `pending`.
+9. Eligibility: unchanged 15 / 11 / 1, digest
+   `9453ab5dc7ee…` exact.
+10. Phase: settled 732,303; estimatedUnverified 19,018;
+    reservedUnverified 5,648; unknownOpen 0; remaining
+    12,762,049 — all unchanged.
+11. Sync watermarks: bindings 1826 / content 18, unchanged.
+12. Conflicts: exactly the approved-baseline set (§4.4.1).
+    Any post-ac
