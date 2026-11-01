@@ -9,12 +9,17 @@ it: every fact below comes from the pinned source of the live build
 and from the saved Gate 3 execution evidence.
 
 **Decision chain this proposal belongs to:** Rowan reviews this
-proposal → Julie gives a separate decision on live diagnostic access
-→ the diagnosis, if approved, executes as its own gated step → any
-code change, deploy, baseline change, or new Gate 3 attempt needs its
-own further proposal and approval. Julie's Gate 3 GO (board
-**6559241292**) is **consumed**: it does not authorize a second
-preview, a second action, or any part of the diagnosis proposed here.
+proposal → Julie gives a separate decision authorizing **Stage 1
+only** (the passive read-only diagnosis, §7.2) → Stage 1, if
+approved, executes as its own gated step and its results return to
+Rowan for review → any **Stage 2** (a repeat of the failed preview,
+§7.3) requires its own later proposal, Rowan's review of the
+Stage 1 results, **and** Julie's distinct approval — this proposal
+does not request it → any code change, deploy, baseline change, or
+new Gate 3 attempt needs its own further proposal and approval.
+Julie's Gate 3 GO (board **6559241292**) is **consumed**: it does
+not authorize a second preview, a second action, or any part of
+the diagnosis proposed here.
 
 **Subject system (unchanged since the STOP):** worker
 `opalreader-api-v2-prod`, live build
@@ -24,6 +29,54 @@ stalled grant `grant:plan:e377a5559961b294154276b6:ch2:1:full`
 remains `issued` rev 2; the Chapter 3 plan remains `active` at 8/23;
 the finalizer has never been validly invoked (the one preview call
 errored; the action was never called).
+
+**Revision history — Amendment 1 (2026-11-01).** This amendment
+answers Rowan's REVISE review (board comment **6559530709**) of
+the original proposal (pin `d581f5bd…`). Four changes, and only
+these:
+
+1. **Conflict-change = probe STOP (§7.1, §7.5).** Any added,
+   removed, or modified conflict row relative to the approved
+   four-row baseline (Gate 2D baseline, pin `9284f5ef…`, the four
+   rows enumerated verbatim in the Gate 3 proposal §4.4.1)
+   immediately STOPs all further probes in the stage. A new
+   `schedule_dead` row is evidence — captured verbatim and filed —
+   never an exemption, and it never permits the stage to continue
+   past the read that found it. Continuation requires a Rowan
+   ruling on the changed set or a separately reviewed replacement
+   baseline. The original framing (a purely additive new row is
+   "evidence, not a stop") is superseded and void.
+2. **Stage separation (§7.2, §7.3).** The live-diagnosis plan is
+   split into separately authorized stages. **Stage 1** is passive
+   read-only diagnosis only — probes D1–D5 plus a final conflict
+   read (D6) — and contains no preview invocation of any kind.
+   The preview re-invocation (formerly probe D6) is removed from
+   Stage 1 entirely and deferred to a possible **Stage 2**, which
+   this proposal does not request or pre-authorize: Stage 2 could
+   only be proposed after Rowan reviews the Stage 1 results, and
+   would require Rowan's later review plus Julie's distinct
+   approval as its own decision. The former final conflict read
+   (D7) is renumbered D6 inside Stage 1.
+3. **Strict ceilings per stage (§7.2, §7.5).** Stage 1 carries a
+   hard total request ceiling of **9 requests** (expected 7),
+   stated per probe, with the quota reconcile's pagination
+   explicitly capped (page size 100 entries per array; the D4
+   probe hard-capped at 4 requests — needing a fifth is a STOP,
+   not a continuation), per-probe stop conditions, and stage-level
+   stop conditions. Every number is a binding ceiling on the
+   executor, not an estimate.
+4. **Inference discipline (§6, §7.3, §7.4).** A repeat HTTP 500 at
+   the preview — in any future Stage 2 — would establish at most
+   that the failure reproduces at the preview endpoint under those
+   conditions; it is not proof of which SQL statement failed, nor
+   of the SQLite engine mechanism, absent statement-level
+   evidence. H1 remains a supported hypothesis, not a proven
+   cause, throughout.
+
+The traced path (§3), the pattern inventory (§4), the lease trace
+(§5), the candidate table (§6 — with H0's discriminator reference
+updated to §7.3), and the E3 evidence analysis (§§1–2) are
+unchanged except where change 4 required wording discipline.
 
 ---
 
@@ -271,10 +324,12 @@ replicate (for example the production `ledger_ops` table's full
 history across all plans, versus the fixture's small table), or
 the throwing statement is not this one (§6, H0). The proposal
 deliberately does not pick among these: distinguishing them is
-what the diagnosis in §7 is for, and §7 is bounded so that it can
-answer "does it reproduce, and does the lease path still produce
-the same error" without ever depending on engine internals Wren
-cannot inspect.
+what the diagnosis in §7 is for. §7 is staged so that Stage 1 can
+answer "does the lease path still produce the same error, and has
+any state drifted" without ever depending on engine internals
+Wren cannot inspect; the separate question "does the preview
+failure reproduce" is reserved to a possible Stage 2 (§7.3),
+which this proposal does not request.
 
 ---
 
@@ -371,7 +426,7 @@ mechanical field mapping.
 | H1 | **The §4.3.5 LIKE (L1, `grant-finalizer.mjs:417-419`) threw at E3.** The derivation's only pattern query; the identical construction (L2/L4) provably threw this exact message in production lease processing (§5). | Only LIKE/GLOB in the entire preview path (grep-complete, §4); error text is specifically a pattern-complexity error; the same construction family's production failures are independently recorded four times; all derivation steps before §4.3.5 are equality/IN reads of the same kind the E0 census exercised successfully. | No progress logging exists, so reaching §4.3.5 is inferred, not observed — steps 1–5 (§3.1) precede it and any of them throwing a *differently-caused* error with this message is not formally excluded (though none contains a pattern); the same query passes under the harness SQLite, including on production-shaped fixture data. | **Supported** as the leading candidate for the specific call site; the *reason* the engine rejected the pattern remains unproven (§4). |
 | H2 | The L5 pattern (`coordinator.mjs:2185`, `job_id + ":follow:%"`) is implicated. | Same error family in the abstract. | Unreachable from the preview path and from lease processing; it runs only inside `handleReport`'s repair-chain branch. The preview never calls `handleReport`. | **Unlikely** (considered and excluded by reachability). |
 | H3 | A non-LIKE derivation statement (e.g. the `IN`-subquery phase aggregates, the `spend_intents` IN-list, `derivedDayTotals`) threw, and the DO SQLite layer reported it with this message. | The 500 body alone cannot formally exclude it. | Every such statement is an equality/IN/aggregate shape with no pattern semantics; nothing in the source suggests message normalization of that kind; the identical message is independently tied to a LIKE construction in §5. | **Unlikely**. |
-| H0 | **Null hypothesis: the throw occurred outside the derivation** — e.g. in the class gate's cache load/flush (`worker-entry-prod-d6.js:1340`/`:1348`) or elsewhere in the same request's handling. | The response body carries no stack or statement identity (§2); the request does execute code before and after the derivation. | No LIKE/GLOB exists in the cache code or the gate (grep-complete); the error is specifically a query-pattern error; the gate's own validation failures return named 400/403 responses, not 500s of this shape. | **Unlikely, but not excludable from the E3 evidence alone** — retained deliberately; probe D6 (§7) is what discriminates it (a deterministic re-throw on an identical isolated call, with all surrounding state verified unchanged, narrows the field to the derivation-or-gate segment of that one request). |
+| H0 | **Null hypothesis: the throw occurred outside the derivation** — e.g. in the class gate's cache load/flush (`worker-entry-prod-d6.js:1340`/`:1348`) or elsewhere in the same request's handling. | The response body carries no stack or statement identity (§2); the request does execute code before and after the derivation. | No LIKE/GLOB exists in the cache code or the gate (grep-complete); the error is specifically a query-pattern error; the gate's own validation failures return named 400/403 responses, not 500s of this shape. | **Unlikely, but not excludable from the E3 evidence alone** — retained deliberately; the Stage 2 preview re-invocation (§7.3 — not part of Stage 1 and not requested by this proposal) is what would discriminate it: a deterministic re-throw on an identical isolated call, with all surrounding state verified unchanged, would narrow the field to the derivation-or-gate segment of that one request — without proving which statement inside that segment threw (§7.3). |
 | H4 | The conflicts read itself (`conflictsView`, `coordinator.mjs:2792-2793`) is the failing pattern query. | It is the surface whose data carries the same error string (as stored data). | It is a plain `SELECT * FROM binding_conflicts ORDER BY id DESC LIMIT 100` — no pattern matching; it is not called by the preview; and it succeeded at E0, post-E1, and post-STOP in the same window. The error string appears there as *stored data* (§5), not as that query's own failure. | **Unlikely** (excluded). |
 
 **Leading hypothesis, at its true strength:** the preview most
@@ -386,29 +441,56 @@ excluded (§5 caution).
 
 ---
 
-## 7. Bounded live-diagnosis plan — FOR LATER APPROVAL (not executed here)
+## 7. Staged live-diagnosis plan — FOR LATER APPROVAL (not executed here)
 
-Everything in this section is a **proposal for a future gated
-step**. It executes only after Rowan's review of this proposal
-**and** Julie's separate decision authorizing live diagnostic
-access. It uses only already-existing read surfaces; it proposes
-no code change, no deploy, and no new route.
+Everything in this section is a **proposal for future gated
+steps**, split under Amendment 1 into **separately authorized
+stages**. This proposal requests authorization for **Stage 1
+only** (passive read-only diagnosis, §7.2). **Stage 2** (a repeat
+of the failed preview, §7.3) is **not requested and not
+pre-authorized**: it could only be proposed after Rowan has
+reviewed the Stage 1 results, and it would require Rowan's later
+review **plus** Julie's distinct approval as its own decision.
+Stage 1 uses only already-existing read surfaces; it proposes no
+code change, no deploy, and no new route.
 
-### 7.1 Preconditions (all must hold before the first probe)
+### 7.1 Preconditions, and the global conflict rule (Amendment 1)
+
+All of the following must hold before the first Stage 1 probe:
 
 - Rowan has reviewed this proposal; Julie has given a recorded
-  decision for the diagnosis (her consumed Gate 3 GO does not
-  cover it).
+  decision for **Stage 1** (her consumed Gate 3 GO does not cover
+  it, and no decision for Stage 1 covers Stage 2).
 - The system is still HELD (`GENERATION_HALT "1"`, queue paused) —
   verified by probe D1; the diagnosis never un-halts or unpauses.
-- Exactly one diagnosis attempt; no probe is retried within it
+- Exactly one Stage 1 attempt; no probe is retried within it
   (a failed probe is a result, recorded, and the STOP rules in
-  §7.4 decide what happens next).
+  §7.5 decide what happens next).
 
-### 7.2 Probes, in order
+**Global conflict rule — binds every conflict read in the
+stage.** The comparison set is the approved four-row baseline
+(Gate 2D baseline, pin `9284f5ef…`, the four rows enumerated
+verbatim in the Gate 3 proposal §4.4.1). At **any** point Stage 1
+reads the conflict set (probes D2 and D6), **any added, removed,
+or modified row relative to that baseline — in count, id,
+timestamp, occurrence, or any field — immediately STOPs all
+further probes in the stage.** The changed set is captured
+verbatim and filed as evidence; it is not argued with, filtered,
+or read past. A new `schedule_dead` row **is** evidence (that
+lease processing threw, and what its message was) — but it is
+**not an exemption**, and it never permits the stage to continue
+past the read that found it. Any continuation after such a STOP
+requires a Rowan ruling on the changed set or a separately
+reviewed replacement baseline. (This rule supersedes the original
+proposal's framing, under which a purely additive new row was
+"evidence, not a stop": that framing is void.)
 
-All probes are GETs. "Exposure" states what production data the
-response surfaces and how it is minimized; every response is
+### 7.2 Stage 1 — passive read-only probes, in order
+
+All Stage 1 probes are GETs against already-existing read
+surfaces. **No Stage 1 probe invokes the preview, the finalizer,
+or any generation path.** "Exposure" states what production data
+the response surfaces and how it is minimized; every response is
 stored verbatim under §8 and handled under the standing rule:
 structural metadata only, never segment text (none of these
 surfaces carries segment text in any case).
@@ -416,75 +498,127 @@ surfaces carries segment text in any case).
 | ID | Probe (exact) | What it reads / answers | Data exposure & minimization | Requests |
 |----|---------------|--------------------------|------------------------------|----------|
 | D1 | `GET /health` (client surface) | Build id, halt state, coordinator state — confirms the held baseline before anything else. | Build/flag metadata only; no user data. | 1 |
-| D2 | `GET /v2/conflicts` (client surface) | The complete current conflict set. **Key diagnostic:** any *new* `schedule_dead` row since the Gate 3 census — especially one for the stalled grant — is fresh, independent evidence that lease processing is still throwing (and what its message is). | The conflict rows themselves (grant ids, timestamps, error strings) — the same data class already captured at E0; stored verbatim, nothing further derived from it. | 1 |
+| D2 | `GET /v2/conflicts` (client surface) | The complete current conflict set, compared row-by-row against the approved four-row baseline (§7.1). Answers whether the conflict set has moved at all since the Gate 3 census — and, if a new `schedule_dead` row exists, captures it verbatim as evidence that lease processing threw again (and what its message was). **Per the global rule (§7.1), any change at all — including a purely additive new row — STOPs the stage at this probe:** the changed set is evidence to file, never a reason to continue. | The conflict rows themselves (grant ids, timestamps, error strings) — the same data class already captured at E0; stored verbatim, nothing further derived from it. | 1 |
 | D3 | `GET /v2/d6-plans/plan:e377a5559961b294154276b6` (client surface) | Grant still `issued` rev 2, plan `active` 8/23, job/partition unchanged — the state the E3 call faced. | Plan/grant/job structural metadata (ids, states, counts) — same class as E0 captures. | 1 |
-| D4 | `GET /v2/d6-quota-reconcile` (operator surface, paginated, SELECT-only) | Reconcile still `ok: true`, drift empty, sole straddler exception; reservations/attempts census unchanged (44/52/96 on PT 2026-10-31). Rules out quota-state drift as a confounder before D6. | Quota ledger aggregates and per-attempt day assignments (ids + day keys + counts); no text, no audio data. Pagination follows the standing completeness rule (fixed page size; disjoint pages; union = totals; totals stable) and stops the moment completeness is proven. | expected 4, **worst case 6** |
-| D5 | `GET /v2/sync/changes?family=bindings&sinceSeq=1826` (client surface) | Zero binding movement since the Gate 3 census watermark — confirms nothing has written bindings in the held interval. | Binding change records since seq 1826 (expected: none). If any exist, that is itself a STOP result (§7.4). | 1 |
-| D6 | **Named probe — the preview re-invocation.** `GET /v2/d6-grant-finalization-preview` with the *exact* E3 identity parameters (same grantId/planId/jobId), via the operator connector. | **Reproducibility, and only that.** Does the identical call, against state D1–D5 have just verified is unchanged, throw the identical 500? A deterministic re-throw localizes the fault to this request's derivation-or-gate segment (discriminating H1 vs H0, §6); a success or a named refusal is equally decisive evidence that the E3 failure is not a deterministic property of the derivation on this state. | On success the response is the full precondition view: ids, states, counts, reservation ids, day totals, phase figures, and the precondition digest — the same structural class as the E0 census captures; it contains no segment text and no credentials. The digest, if one is returned, is **evidence only**: it authorizes nothing and must never be presented to the action (any future action needs its own gate, its own preview, and its own digest). | **exactly 1, never retried** |
-| D7 | `GET /v2/conflicts` (client surface) — post-D6 re-read | Detects whether anything in the diagnosis window (including the D6 request's own DO wake) added a conflict row. | Same class as D2. | 1 |
+| D4 | `GET /v2/d6-quota-reconcile` (operator surface, paginated, SELECT-only) | Reconcile still `ok: true`, drift empty, sole straddler exception; reservations/attempts census unchanged (44/52/96 on PT 2026-10-31). Rules out quota-state drift as a confounder. | Quota ledger aggregates and per-attempt day assignments (ids + day keys + counts); no text, no audio data. **Pagination is hard-bounded:** the route's page size is fixed at 100 entries per array (`QUOTA_ROUTE_DETAIL_LIMIT = 100`, `worker-entry-prod-d6.js:372`), paged independently per array via `exceptionOffset` / `driftOffset`. The D4 request sequence is: the offset-(0,0) page; continuation pages **only** as the returned totals/nextOffsets require; then one totals-stability confirmation re-read at offset (0,0). Completeness must be proven under the standing rule (disjoint pages; union = totals; totals stable across the re-read). **D4 is hard-capped at 4 requests: if completeness is not proven within 4 requests, that is a STOP (§7.5), not a continuation.** | expected 2, **hard cap 4** |
+| D5 | `GET /v2/sync/changes?family=bindings&sinceSeq=1826` (client surface) | Zero binding movement since the Gate 3 census watermark — confirms nothing has written bindings in the held interval. | Binding change records since seq 1826 (expected: none). If any exist, that is itself a STOP result (§7.5). | 1 |
+| D6 | `GET /v2/conflicts` (client surface) — **final conflict read** (Stage 1's last probe; this is the original proposal's D7, renumbered by Amendment 1) | Re-reads the complete conflict set at the end of the Stage 1 window and compares it against the approved baseline (§7.1): detects whether anything during the diagnosis window — including the Durable Object wakes the Stage 1 requests themselves cause — added, removed, or modified a row. Subject to the same global rule: any change is captured verbatim, ends the stage in STOP disposition, and goes to Rowan for a ruling; it is never read past and never treated as an exemption. | Same class as D2. | 1 |
 
-**Total request count: expected 10, worst case 12** (the D4
-pagination bound is the only variable). No other requests are in
-scope; anything beyond this list is a new proposal.
+**Stage 1 request ceiling (Amendment 1) — binding, not an
+estimate.** D1 1 + D2 1 + D3 1 + D4 ≤ 4 + D5 1 + D6 1 =
+**hard ceiling 9 requests for the whole of Stage 1; expected 7**
+(D4 expected 2). The executor may not exceed 9 Stage 1 requests
+for any reason; reaching the ceiling without completing the probe
+list is a STOP (§7.5). No other requests are in scope for
+Stage 1; anything beyond this list is a new proposal.
 
-**Why D6 is not a casual step.** Re-invoking the preview is the
-one probe that re-executes the failing code path. It is included
-only because reproducibility is the single most discriminating
-fact the read-only surfaces cannot otherwise provide, and it is
-bounded accordingly: exactly one call, last among the probes,
-only after D1–D5 verify the faced state is unchanged, and its
-outcome — success, named refusal, identical 500, or different
-500 — ends the diagnosis (§7.4). If Rowan or Julie prefers, D6
-can be struck from the diagnosis and the remaining probes still
-stand as a coherent (if less decisive) package; the proposal
-flags D6 as the one element needing explicit, separate
-justification in the diagnosis GO.
+**Honest caveat on "read-only".** Every Stage 1 probe is a read
+at the API level and none of them writes application data. As
+with any request to this system, a request wakes the Durable
+Object and its own alarm machinery may run (that is production's
+normal behavior, and D6 exists precisely to observe any visible
+effect of it on the conflict set). The Gate 3 census and
+post-STOP read-backs already exercised the same surfaces in the
+same held state without incident.
 
-**Honest caveat on "read-only".** Every probe is a read at the
-API level and none of them writes application data. As with any
-request to this system, a request wakes the Durable Object and
-its own alarm machinery may run (that is production's normal
-behavior, and D7 exists precisely to observe any visible effect
-of it). The Gate 3 census and post-STOP read-backs already
-exercised the same surfaces in the same held state without
-incident.
+### 7.3 Stage 2 — a repeat of the failed preview (NOT requested)
 
-### 7.3 What the diagnosis can and cannot conclude
+The original proposal's probe D6 — one re-invocation of
+`GET /v2/d6-grant-finalization-preview` with the exact E3 identity
+parameters (same grantId/planId/jobId), via the operator
+connector — is **removed from the diagnosis stage plan**. This
+proposal does **not** request it, does not pre-authorize it, and
+does not ask Julie to approve it. At most, this: if Stage 1
+executes and its results are filed, a **separate Stage 2 proposal
+could follow**, seeking Rowan's review of the Stage 1 results and
+Julie's **distinct approval** for a preview re-invocation as its
+own decision. Any such proposal would have to justify the
+re-invocation on the Stage 1 evidence and state its own strict
+ceilings (the re-invocation itself, as contemplated in the
+original proposal, is exactly one request, never retried, with
+its outcome ending that stage in every case).
 
-- It **can** establish: determinism (or not) of the preview
-  failure on verified-unchanged state; whether the lease path is
-  still producing `schedule_dead` rows and with what message;
-  whether any state drift confounds the E3 observation.
-- It **cannot** establish the engine-level reason SQLite rejected
-  the pattern (no log or statement-level telemetry is available,
-  §2), and it does not propose a fix. A fix is a separate
-  code-change proposal informed by whatever this diagnosis finds.
+Reproducibility is the reason a Stage 2 might ever be proposed:
+it is the single most discriminating fact the passive surfaces
+cannot provide (it is what would discriminate H1 from H0, §6).
+It is kept out of Stage 1 precisely because re-invoking the
+preview re-executes the failing code path — it is not a casual
+diagnostic step, and it is never bundled into a passive-read
+authorization.
 
-### 7.4 STOP boundaries and escalation
+**Inference discipline for any future Stage 2 (Amendment 1).**
+If a Stage 2 preview re-invocation ever returns another HTTP 500
+with the identical message, that result would establish **at
+most** that the failure reproduces at the preview endpoint, on
+that request, under the verified state conditions at the time.
+It would **not** prove which SQL statement inside the request
+threw, and it would **not** prove the SQLite engine mechanism
+behind the message — neither conclusion is available without
+statement-level evidence (for example, statement-tagged logging
+or an equivalent direct observation of the failing statement),
+which no current surface provides (§2). The same discipline
+applies in reverse: a Stage 2 success or named refusal would
+establish non-reproduction under those conditions, not that H1
+is false. And if a Stage 2 call ever returned a precondition
+digest, the digest would be **evidence only**: it would authorize
+nothing and could never be presented to the action (any future
+action needs its own gate, its own preview, and its own digest).
 
-- Any probe other than D6 returning a non-200 status → **STOP**;
+### 7.4 What Stage 1 can and cannot conclude
+
+- It **can** establish: whether the lease path is still producing
+  `schedule_dead` rows and with what message (any such row is
+  captured verbatim at D2 or D6 — and stops the stage at that
+  read, §7.1); whether any state drift since the Gate 3 census
+  confounds the E3 observation (D3–D5); and the exact current
+  conflict set, filed as evidence for whatever Rowan rules next.
+- It **cannot** establish: whether the preview failure reproduces
+  (that is Stage 2's question, §7.3); which statement threw at
+  E3; or the engine-level reason SQLite rejected the pattern (no
+  log or statement-level telemetry is available, §2). Stage 1
+  does not propose a fix. A fix is a separate code-change
+  proposal informed by whatever the diagnosis stages find.
+- **Inference discipline (Amendment 1).** Nothing Stage 1 can
+  return upgrades H1 (§6) from a supported hypothesis to a proven
+  cause. A fresh `schedule_dead` row bearing the identical message
+  would strengthen the evidence that the lease path's construction
+  family still throws in production; it says nothing new about
+  which statement threw inside the E3 preview request.
+
+### 7.5 Stage 1 STOP boundaries and escalation
+
+- **Conflict rule (global, §7.1):** at D2 or D6, any added,
+  removed, or modified conflict row relative to the approved
+  four-row baseline → **STOP**: no further probes in the stage,
+  whatever remains of the request ceiling stays unspent, the
+  changed set is captured verbatim and filed as evidence, and
+  any continuation requires a Rowan ruling on the changed set or
+  a separately reviewed replacement baseline. A new
+  `schedule_dead` row is evidence, **not** an exemption — there
+  is no "record it and continue" outcome for a changed conflict
+  set.
+- Any Stage 1 probe returning a non-200 status → **STOP**;
   capture and report; no further probes.
-- D2/D7: the four baseline rows changed or missing in any field
-  → **STOP**. A purely *additive* new `schedule_dead` row is
-  evidence, not a stop — record it verbatim and continue.
-- D4: reconcile not `ok: true`, drift non-empty, or any exception
-  beyond the known straddler → **STOP**.
+- Any probe response with an unexpected payload shape — a field
+  the comparison depends on is missing, the body is unparseable,
+  or totals cannot be reconciled to the comparison → **STOP**.
+- D4: reconcile not `ok: true`, drift non-empty, any exception
+  beyond the known straddler, totals unstable across the
+  confirmation re-read, or completeness not proven within the
+  4-request cap → **STOP**.
 - D3/D5: grant/plan state different from the Gate 3 census, or
   any binding movement since seq 1826 → **STOP**.
-- D6 outcomes: identical 500 → diagnosis complete (deterministic
-  reproduction); a 200 with a digest → diagnosis complete (not
-  reproduced — the digest is filed as evidence and **not** used);
-  a named refusal or a different error → **STOP** and report.
-  In every D6 outcome the diagnosis ends: there is no second
-  preview call and no action call, ever, inside this diagnosis.
-- **Escalation:** a deterministic reproduction (D6 identical 500),
-  with or without fresh lease rows at D2/D7, is the result that
-  supports a *separate* code-change proposal (for example,
-  replacing the LIKE prefix scan in the derivation — and, for
-  Rowan's consideration, its coordinator twins — with a
-  non-pattern read). This proposal deliberately does not design
-  that change. A non-reproduction escalates differently: back to
-  Rowan with the full evidence before anyone proposes anything.
+- Request ceiling: the 9th Stage 1 request is the last one any
+  Stage 1 approval authorizes; needing a 10th is itself a
+  **STOP** and a report, never a continuation.
+- **Escalation:** Stage 1 results — stopped or complete — are
+  filed under §8 and returned to Rowan. What they support next
+  is Rowan's call: a Stage 2 proposal (§7.3), a code-change
+  proposal (for example, replacing the LIKE prefix scan in the
+  derivation — and, for Rowan's consideration, its coordinator
+  twins — with a non-pattern read), a replacement-baseline
+  ruling after a conflict STOP, or nothing further. This
+  proposal deliberately designs none of those.
 
 ---
 
@@ -499,12 +633,14 @@ incident.
   status, and start/end timestamps (the Gate 3 evidence pattern:
   `preview-e3.json` + window files).
 - **Derived artifacts:** a compare sheet mechanically checking
-  D1–D5/D7 values against the Gate 3 E0 census values and the
-  four-row conflict baseline; a SHA-256 census-evidence digest
-  over the sorted capture listing (the established pattern),
-  kept distinct from any preview precondition digest D6 might
-  return — the two digests are named separately in the record
-  and never conflated (Gate 3 proposal §7.14 discipline).
+  D1–D6 values against the Gate 3 E0 census values and the
+  four-row conflict baseline (any conflict mismatch is a STOP
+  under §7.5, with the changed set itself preserved verbatim as
+  a capture); a SHA-256 census-evidence digest over the sorted
+  capture listing (the established pattern), kept distinct from
+  any preview precondition digest a future Stage 2 might return
+  — the two digests are named separately in the record and never
+  conflated (Gate 3 proposal §7.14 discipline).
 - **Record and filing:** a `diagnosis/execution/EXECUTION-RECORD.md`
   stating each probe's outcome, the STOP/escalation disposition,
   and the hypothesis table (§6) re-rated against the new evidence
@@ -524,9 +660,12 @@ incident.
 (halt `"1"`, queue paused) — this proposal does not propose
 releasing the hold; the finalizer is not retried under the
 consumed GO 6559241292; no generation, no submission, no
-exemption, no re-arm; $0 spend. Any code change or deploy, any
-baseline change, and any new Gate 3 attempt each require their
-own proposal and their own approval, in that order.
+exemption, no re-arm; $0 spend. The preview is not re-invoked
+under anything this proposal authorizes: Stage 1 contains no
+preview call, and Stage 2 is not requested (§7.3). Any code
+change or deploy, any baseline change, any Stage 2, and any new
+Gate 3 attempt each require their own proposal and their own
+approval, in that order.
 
 **Traced source files** (live build `408f9149` tree,
 `finalizer-build/worker-build/worker/`):

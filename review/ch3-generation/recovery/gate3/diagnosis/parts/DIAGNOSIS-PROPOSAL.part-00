@@ -9,12 +9,17 @@ it: every fact below comes from the pinned source of the live build
 and from the saved Gate 3 execution evidence.
 
 **Decision chain this proposal belongs to:** Rowan reviews this
-proposal → Julie gives a separate decision on live diagnostic access
-→ the diagnosis, if approved, executes as its own gated step → any
-code change, deploy, baseline change, or new Gate 3 attempt needs its
-own further proposal and approval. Julie's Gate 3 GO (board
-**6559241292**) is **consumed**: it does not authorize a second
-preview, a second action, or any part of the diagnosis proposed here.
+proposal → Julie gives a separate decision authorizing **Stage 1
+only** (the passive read-only diagnosis, §7.2) → Stage 1, if
+approved, executes as its own gated step and its results return to
+Rowan for review → any **Stage 2** (a repeat of the failed preview,
+§7.3) requires its own later proposal, Rowan's review of the
+Stage 1 results, **and** Julie's distinct approval — this proposal
+does not request it → any code change, deploy, baseline change, or
+new Gate 3 attempt needs its own further proposal and approval.
+Julie's Gate 3 GO (board **6559241292**) is **consumed**: it does
+not authorize a second preview, a second action, or any part of
+the diagnosis proposed here.
 
 **Subject system (unchanged since the STOP):** worker
 `opalreader-api-v2-prod`, live build
@@ -24,6 +29,54 @@ stalled grant `grant:plan:e377a5559961b294154276b6:ch2:1:full`
 remains `issued` rev 2; the Chapter 3 plan remains `active` at 8/23;
 the finalizer has never been validly invoked (the one preview call
 errored; the action was never called).
+
+**Revision history — Amendment 1 (2026-11-01).** This amendment
+answers Rowan's REVISE review (board comment **6559530709**) of
+the original proposal (pin `d581f5bd…`). Four changes, and only
+these:
+
+1. **Conflict-change = probe STOP (§7.1, §7.5).** Any added,
+   removed, or modified conflict row relative to the approved
+   four-row baseline (Gate 2D baseline, pin `9284f5ef…`, the four
+   rows enumerated verbatim in the Gate 3 proposal §4.4.1)
+   immediately STOPs all further probes in the stage. A new
+   `schedule_dead` row is evidence — captured verbatim and filed —
+   never an exemption, and it never permits the stage to continue
+   past the read that found it. Continuation requires a Rowan
+   ruling on the changed set or a separately reviewed replacement
+   baseline. The original framing (a purely additive new row is
+   "evidence, not a stop") is superseded and void.
+2. **Stage separation (§7.2, §7.3).** The live-diagnosis plan is
+   split into separately authorized stages. **Stage 1** is passive
+   read-only diagnosis only — probes D1–D5 plus a final conflict
+   read (D6) — and contains no preview invocation of any kind.
+   The preview re-invocation (formerly probe D6) is removed from
+   Stage 1 entirely and deferred to a possible **Stage 2**, which
+   this proposal does not request or pre-authorize: Stage 2 could
+   only be proposed after Rowan reviews the Stage 1 results, and
+   would require Rowan's later review plus Julie's distinct
+   approval as its own decision. The former final conflict read
+   (D7) is renumbered D6 inside Stage 1.
+3. **Strict ceilings per stage (§7.2, §7.5).** Stage 1 carries a
+   hard total request ceiling of **9 requests** (expected 7),
+   stated per probe, with the quota reconcile's pagination
+   explicitly capped (page size 100 entries per array; the D4
+   probe hard-capped at 4 requests — needing a fifth is a STOP,
+   not a continuation), per-probe stop conditions, and stage-level
+   stop conditions. Every number is a binding ceiling on the
+   executor, not an estimate.
+4. **Inference discipline (§6, §7.3, §7.4).** A repeat HTTP 500 at
+   the preview — in any future Stage 2 — would establish at most
+   that the failure reproduces at the preview endpoint under those
+   conditions; it is not proof of which SQL statement failed, nor
+   of the SQLite engine mechanism, absent statement-level
+   evidence. H1 remains a supported hypothesis, not a proven
+   cause, throughout.
+
+The traced path (§3), the pattern inventory (§4), the lease trace
+(§5), the candidate table (§6 — with H0's discriminator reference
+updated to §7.3), and the E3 evidence analysis (§§1–2) are
+unchanged except where change 4 required wording discipline.
 
 ---
 
@@ -271,10 +324,12 @@ replicate (for example the production `ledger_ops` table's full
 history across all plans, versus the fixture's small table), or
 the throwing statement is not this one (§6, H0). The proposal
 deliberately does not pick among these: distinguishing them is
-what the diagnosis in §7 is for, and §7 is bounded so that it can
-answer "does it reproduce, and does the lease path still produce
-the same error" without ever depending on engine internals Wren
-cannot inspect.
+what the diagnosis in §7 is for. §7 is staged so that Stage 1 can
+answer "does the lease path still produce the same error, and has
+any state drifted" without ever depending on engine internals
+Wren cannot inspect; the separate question "does the preview
+failure reproduce" is reserved to a possible Stage 2 (§7.3),
+which this proposal does not request.
 
 ---
 
@@ -329,3 +384,21 @@ pattern-matching statements reachable in that processing are L4
 `` `op:<grantId>:%` `` construction — the rows are strong evidence
 that **this construction family throws this exact error in
 production**. What the rows do *not* record: which of L2/L4 fired
+for any given row, or the engine-level reason for the rejection.
+Row 4 (the stalled grant's own lease row, written
+2026-11-01T01:04:30Z, after Phase A completed) belongs to a grant
+that was delivered and acknowledged, so its processing would have
+taken the delivered branch (L4) — but that is an inference from
+the branch structure, not a recorded fact.
+
+**Shared construction, not coincidence of error text.** The
+preview's L1 and the lease path's L2/L4 are the *same* query shape
+against the *same* table with the *same* pattern construction,
+written independently in two modules (the finalizer deliberately
+duplicates coordinator derivations rather than importing them).
+The error-text identity between the E3 500 and the conflict rows
+is therefore not a bare coincidence of strings: both plausibly
+originate from one construction family that production SQLite
+rejects under conditions the source alone cannot pin down (§4).
+
+One caution against over-reading the lease evidence: the L3 LIKE
