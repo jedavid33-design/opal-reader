@@ -1,0 +1,9 @@
+STAGE 1 COMPARE SHEET (mechanical)
+D1 /health contains build 408f91497131a151a199b3f9ec4cbb283a8febd5: True | generation halted: True | HTTP 200
+D2 conflicts: EXACT-MATCH vs 9284f5ef baseline (4 rows, all fields incl. ms timestamps) — verified programmatically
+D3 plan: plan:e377a5559961b294154276b6 state active totals {'eligible': 23, 'done': 8, 'failed': 0, 'blocked': 0, 'prompts': 0}
+D4 reconcile: ok True | armed True | driftCount 0 | exceptionCount 1 | sole exception id att-37d63768-db4b-447d-8150-580b7c6ee257 estimated_unverified | censusComplete True | currentDayBlocked False
+D4 dayTotals: {"2026-10-29": {"dayKey": "2026-10-29", "dispatched": 57, "reserved": 0, "consumed": 57}, "2026-10-30": {"dayKey": "2026-10-30", "dispatched": 79, "reserved": 0, "consumed": 79}, "2026-10-31": {"dayKey": "2026-10-31", "dispatched": 44, "reserved": 52, "consumed": 96}} | current totals: {"dayKey": "2026-11-01", "dispatched": 0, "reserved": 0, "consumed": 0}
+D4 stability re-read: totals/dayTotals/drift/exceptions identical: True | pagination: driftNextOffset None exceptionsNextOffset None truncated False False
+D5 bindings sinceSeq=1826: changes 0 | nextSeq 1826 | highWatermark 1826 | hasMore False
+D6 conflicts: EXACT-MATCH vs baseline; D6 set == D2 set: True
