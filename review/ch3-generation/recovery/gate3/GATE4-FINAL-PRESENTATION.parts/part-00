@@ -1,0 +1,184 @@
+# GATE 4 — FINAL PRESENTATION: corrected consolidated execution instructions — resume and complete Forever Pucked Chapter 3 (the plan's 15 remaining segments), Approach 2 (detection-only threshold) adopted, ends HELD
+
+**Status of this document.** This is the single consolidated execution
+instruction set for Gate 4 — the document an executor runs from. It
+consolidates the operative instructions of four source documents into
+one coherent sequence (§§4–10), applies Rowan's four final corrections
+(§§1–3 and §5), and carries the detection-only spending disclosure
+exactly as it will be put to Julie (§11). **It authorizes nothing.**
+Execution requires Julie's separate GO for exactly this gate — one
+GO, one execution attempt — recorded before the census (§4 of this
+presentation), and nothing in any review in this chain is a substitute
+for it. No step in this document has been executed.
+
+**Sources consolidated** (repo `jedavid33-design/opal-reader`, branch
+`ui1-review`, path `review/ch3-generation/recovery/gate3/`):
+
+| Source | Pin | SHA-256 |
+|---|---|---|
+| Gate 4 proposal (`GATE4-PROPOSAL.md`) | `806cc53a` | `b524bb187d72c4c7881bf1d4470e6524b14a72678168ae23292245efc5abfabc` |
+| Amendment 1 (`GATE4-AMENDMENT-1.md`) | `451f71ad5526879f6849f4f1607bb80024e439d0` | `af3ec5d397fb427b4f53e05f69ee6cfc82328bba9d95913dbc4002723baa7ef1` |
+| Amendment 2 (`GATE4-AMENDMENT-2.md`) | `34fceb04332c73dc85e71c39b1df53ccd933c331` | `4f92ced7eaa67ba074f05f5992d4b7a18de66dde0d9e1c03785db9083f3b0c09` |
+| R1 Resolution (`GATE4-R1-RESOLUTION.md`) | `6c1e503d538bcaf86b77f1ea29d4640f4ba06725` | `5149bbbeb9b3a02a40acf4da1fd263c153bf4669c00cf3bd2806897d027c8839` |
+
+**Reading rule.** Where the sources' wording conflicts, the latest
+document governs: R1 Resolution > Amendment 2 > Amendment 1 >
+proposal, and this presentation says so at each point of conflict.
+No operative term is silently altered: every change of substance is
+one of Rowan's four corrections or a supersession a source document
+itself declares, and §12 itemizes them.
+
+**The review this presentation answers.** Rowan's R1 Resolution
+review (relayed verbatim by Julie, Nov 1, 2026, direct mode):
+**PASS WITH CONDITIONS — APPROACH 2 ADOPTED.** Her R1 ruling, in
+substance: the 600,000 figure *"is a detection threshold, NOT a hard
+cap"*; $0.29 is the expected modeled cost; $0.47 is the modeled
+upper scenario at m = 1, not an unconditional maximum;
+higher-duration scenarios must remain visible in Julie's approval
+presentation (§11 carries them); Approach 1 remains available for
+future, larger generation scopes and is **not** adopted here. Her
+four final corrections are applied at §§1–3 and §5.3 of this
+presentation. **Preserved, per her review:** the 15-segment scope;
+the R1/R2 sub-gates; the four executor mutations; the
+foreign-generation STOP; the sliding stall detection; the rollover
+accounting; the end state HELD; one GO, one execution attempt.
+
+---
+
+## 1. Correction 1 — every 600,000 reference is a detection-threshold reference
+
+**The relabeling rule (governing all Gate 4 paperwork).** Every
+reference in the four source documents to the figure **600,000
+units (≈ $0.60)** — under whatever wording a source used — is to be
+read, cited, and executed as a **detection threshold**, in the R1
+Resolution §8.1's words (quoted): *"detection threshold (600,000
+units): an executor stop-trigger on observation; not a cap, not a
+guarantee that settled spend stays at or under it."* No document in
+this chain asserts, and no executor may represent, that settled
+spend is guaranteed to stay at or under 600,000. Amendment 2 §5.1's
+sentence claiming the figure *"binds by arithmetic"* is superseded
+by R1 Resolution §§4 and 8: **469,519 units stands as the m = 1
+forecast** — the modeled upper scenario at the cost model's slowest
+admitted rate — labeled as a forecast wherever it appears, never as
+a bound. The Amendment 1 §5.2 cover check is retained as a
+**detection computation** (R1 Resolution §8.1): a poll whose
+projected settled crosses the detection threshold stops the gate
+the same way an observed crossing does; it is never described as
+enforcement.
+
+**Grep inventory (verifiable).** Method: `grep -n -E '\$0\.60|600,000|600000|ceiling|Ceiling'`
+over the four source files as pinned above. **71 lines match**:
+proposal 10, Amendment 1 13, Amendment 2 18, R1 Resolution 30.
+Locations (document — section — lines; source wording quoted
+minimally):
+
+- **Proposal** — §1.1 (line 44: *"cost ceiling"* in the sequence
+  summary); §3.5 (lines 172, 180: the *"Cost ceiling (proposed,
+  §5.5)"* bullet — 600,000 units (≈ $0.60), 2.04× the quote, 4.7%
+  of remaining headroom); §5.5 (line 270: the operative *"Cost
+  ceiling"* bullet); §5.6 (line 276: completion *"within the §5.5
+  ceiling"*); §6 (line 298: read-back item 7, *"≤ 600,000 per
+  §5.5"*); §7 (line 320: the *"Cost ceiling"* STOP); §8 (line 328:
+  *"the cost ceiling"* among the forward fences); §9 (line 334: *"at
+  or under the ceiling"*); §10 (line 350: open question Q5,
+  *"600,000 units"*).
+- **Amendment 1** — title (line 1: *"cumulative ceiling"*); §0
+  summary (line 8: the two-readings flag — the 12× form's cohort-1
+  worst case 3,095,568 against *"the entire 600,000 ceiling"*); §5
+  heading and preamble (lines 120, 122: A4, quoting Rowan's *"The
+  600,000-unit ceiling must apply cumulatively"*; Q5 PASS on the
+  figure); §5.1 (line 126: *"The ceiling binds settledDelta … ≤
+  600,000"*); §5.2 (lines 133, 136, 140, 142: the cover formula ≤
+  600,000, the worked figures 257,964 and 469,444, the 12× reading
+  at 3,095,568); §6 (line 155: rollover is not *"a ceiling event"*);
+  §8 (line 181: the two-readings residual); §9 (line 190: *"the
+  ceiling figure: 600,000 units stands"*); §10 (line 202: mechanics).
+- **Amendment 2** — §0 summary and verdict table (lines 33, 51:
+  *"the standing 600,000 ceiling"*, *"Proven scope bound 469,519 ≤
+  600,000"*); §2 preamble (line 98); §4.3 (line 297: the premise-P
+  ruling request); §5.1 (lines 303–334: the *"binds by arithmetic"*
+  construction — **superseded**, see above); §5.3 (lines 370–376:
+  the declined-premise fork, including option (a), *"restate
+  600,000 as a detection-and-stop bound"* — the fork Rowan's review
+  in fact closed by adopting Approach 2); §9 (lines 560, 563).
+- **R1 Resolution** — title and framing (lines 1, 28, 32: the
+  document is the rejection of the guaranteed-cap reading); §0
+  tables (lines 43, 59, 64–66); §4 (line 226: *"Solving the bound =
+  600,000"* — the m ≈ 1.28 crossing); §7 (lines 368, 376, 392, 413,
+  414, 421, 422: the Approach 1 design's internal references —
+  Approach 1 is not adopted; these lines are design record only);
+  §8 (lines 467, 470, 473, 485, 499–524: the relabeling rule, the
+  detection procedure, and the verbatim exposure paragraph carried
+  at §11 of this presentation); §9 (lines 532, 538); §10 (line
+  576). The resolution's own post-ruling language already conforms
+  to the relabeling rule; it is inventoried for completeness.
+
+**This presentation's own usage.** The figure is named only as the
+**detection threshold (600,000 units)**. The superseded word appears
+in this document only inside quoted source or ruling text, in this
+inventory, and in sentences that negate it.
+
+---
+
+## 2. Correction 2 — the cash estimate, with its full qualification
+
+The ledger figures Gate 4 watches (§§7, 10) are the Reader's own
+accounting (225 units per audio second). **Google's actual billing
+for TTS is per input character** (R1 Resolution §5). The two views
+are never mixed. Restated with its qualification, from R1
+Resolution §5 — every figure below is reproduced from it:
+
+- **Rate basis.** The introductory rate $0.81 per audio hour at the
+  pinned realized rate of 15.96 chars/sec converts to 225 / 15.96 ≈
+  **14.10 micro-cents per submitted character ≈ $14.10 per 1M
+  characters**. At the doubled post-introductory rate (Jan 1,
+  2027), ≈ **$28.20 per 1M characters**.
+- **Character bound.** Submitted characters are bounded
+  **assumption-free at 216,000** (total attempts ≤ 180, and every
+  attempt's text ≤ the 1,200-char pre-split cap,
+  `PRE_SPLIT_MAX_CHARS`, `policy-split.mjs:222` ⇒ 180 × 1,200), and
+  at **158,320** under the structural tightening (≤ 5 partition
+  levels per pre-split chunk plus ≤ 3 repair retries per chain:
+  5 × 20,864 + 15 × 3,600; the tightening's assumptions are stated
+  in R1 Resolution §5 — the assumption-free bound stands without
+  them).
+- **The ≈ $3.04 figure, qualified.** "≈ $3.04" is 216,000 chars at
+  the **introductory** rate under the **assumption-free** bound.
+  The same bounds at the post-introductory rate convert to
+  **≈ $6.09** (216,000) and **≈ $4.46** (158,320); at the
+  introductory rate the tightened bound converts to **≈ $2.23**.
+  Expected cash: a clean pass submits 20,864 chars ≈ **$0.29**; at
+  Phase A's realized attempt profile scaled to this scope,
+  ≈ 30,000 chars ≈ **$0.43** (an estimate, labeled as such in the
+  source).
+- Google's own billing detail is day × product only (Gate 5
+  record), so all cash figures here are **rate conversions, not
+  invoice reads**. The $50 monthly settings cap plays no role in
+  the cash view (R1 Resolution §3.3: it gates legacy-ledger
+  estimates at issuance — not settled, not cash — and is not cited
+  as a safeguard anywhere in this presentation).
+
+---
+
+## 3. Correction 3 — the prepay balance is a historical figure
+
+Everywhere the AI Studio prepay balance appears in this
+presentation, it reads as follows, and the executor uses it in no
+other form: **$17.83 as of Julie's Oct 29, 2026 screenshot —
+historical, not freshly verified; the physical-backstop argument
+holds for whatever balance ≥ the stated exposures actually stands
+at execution; the executor does not read Google billing and the
+census does not depend on this figure.** (Auto-reload is off, per
+the same Oct 29 record.) The backstop's role in this gate is
+exactly that sentence and nothing more: context for Julie's
+decision (§11), never a census item, never a bound the executor
+relies on.
+
+---
+
+## 4. Scope, identity, and authorization boundary
+
+### 4.1 In scope — exactly this (proposal §1.1, unchanged)
+
+Under the one GO, the executor performs, in order: **E0** census
+(§5) → **R1** re-arm sub-gate (§6.1) → **step-0** delivery-safety

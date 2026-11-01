@@ -1,0 +1,189 @@
+**Any census item not matching exactly, any sub-gate read-back
+differing, any §7–§8 trigger firing, or any surface contradicting
+this presentation = STOP.** Under the standing executor STOP law
+(Gate (a), Oct 31, 2026): if any pre-flight census count, binding,
+plan state, or other hard-stop item differs from the paperwork
+expectation — even by one item, even if it looks like harmless
+known bookkeeping — the executor stops **before any further
+mutation**, preserves the state, reports the exact deviation and
+the proposed explanation, and proceeds only on a fresh explicit
+GO or a Rowan ruling for that deviation. An executor's own tracing
+never clears its own stop; a post-hoc technical acceptance does
+not retroactively authorize having proceeded; and no unlimited
+exemption exists for future matching conflicts — the remedy for a
+changed conflict set is a new baseline plus Rowan review, never
+an executor judgment call.
+
+**Named STOPs** (proposal §7, as amended by §§1, 5.3, 7, 8 of this
+presentation): census mismatch of any item, including the §5.3
+proof failing in any leg, an unexplained reservation, an
+inconsistent grant generation, or a failed reconciliation; R1
+precondition reconcile not `ok: true`; halt-flip read-back
+differing; observability unexpectedly null and not restorable by
+the §6.1 conditional repair; script etag changed at any settings
+step; step-0 any leg failing; detection threshold crossed
+(§7.2) or forecast crossed (§7.2); a cohort the §7.2 cover
+computation cannot cover; the sliding-window stall signature
+completing (§8.2); foreign generation, any trigger (§8.3); the
+plan parking (`parked_quota` / `parked_cap` / `parked_budget` /
+`parked_storage`) or any new `blocked` segment or `failed` count
+above 0; any `unknown_billing` outcome appearing (it also halts
+the phase by code — the executor mirrors with the closing
+holds); any grant of the target job failing to reach `reported`
+after its executions complete (the Phase A failure shape —
+detection is §8.2; the response is a STOP, never a finalizer call
+under this gate); any reconcile verdict other than `ok: true`
+outside the §5.1 item 11 exception; Julie instructing a stop at
+any point.
+
+### 10.3 What a STOP does with an in-flight gate
+
+A STOP is terminal for the attempt. The executor: **(1)** makes no
+further opening move; **(2)** applies the containment holds the
+stage requires — before R1: none (state untouched); between R1
+and R2: re-halt; after R2: re-pause, then re-halt (§9.1 order) —
+each with read-backs; **(3)** leaves all machinery state exactly
+as it stands (grants, reservations, and the plan are the
+machinery's to void, settle, or hold — the executor repairs
+nothing); **(4)** records the full evidence set (§12) and reports
+the deviation, the figures, and the end state. **The GO is
+consumed.** Any resumption, repair, finalizer use, or retry is a
+new decision for Julie, on new paperwork — never an executor
+continuation, and a stopped run is never restarted on the
+executor's own interpretation.
+
+---
+
+## 11. The detection-only disclosure — as it will be put to Julie at GO
+
+Rowan's R1 ruling requires the explicit detection-only spending
+disclosure in Julie's approval presentation, with the
+higher-duration scenarios visible. The text below is the R1
+Resolution §8.3's verbatim exposure paragraph, updated **only**
+for correction 2 (the $3.04 rate qualification) and correction 3
+(the prepay figure marked historical), as her review directs. The
+two edited spans are marked **[Correction 2]** / **[Correction 3]**
+immediately after the paragraph, with the resolution's original
+wording quoted for comparison. Nothing else in the paragraph is
+changed — wording, figures, order, and emphasis are the
+resolution's.
+
+> Before you decide: the $0.60 figure in this gate is a **detection
+> threshold, not a guaranteed cap**. Software watches the running
+> total and stops the gate if it passes $0.60 — but batches run on
+> their own cycle between checks, so spending can pass $0.60 before
+> the stop lands. Here is the honest range. The job is expected to
+> cost about **$0.29**. On the cost model's own slowest-rate
+> assumption, the worst case is **$0.47** — already under the
+> threshold. The threshold can only be crossed at all if the audio
+> comes back at least ~28% slower than that slowest assumed rate
+> across the whole chapter; in Chapter 3's first batch the audio
+> actually ran about 39% *faster* than that bound (realized factor
+> 0.61). If durations ran 1.5× the bound, the total would be about
+> **$0.70**; 2×, about **$0.94**; 3×, about **$1.41**; even 5× —
+> speech at 2 characters per second, far outside anything observed
+> — about **$2.35**. Two independent backstops sit behind all of
+> this: the system's own **$13.50 phase budget** for Forever
+> Pucked, which the code refuses new batches against, and your
+> Google **prepay balance** ($17.83 as of your Oct 29, 2026
+> screenshot — historical, not freshly verified — auto-reload off),
+> which physically caps all Google spending while the standing
+> balance covers the exposures above. Separately, Google charges
+> per character sent rather than per second of audio; the absolute
+> worst case for characters sent (every possible split and retry)
+> converts to about **$3.04** at today's introductory rate — about
+> $14.10 per million characters, converted from the verified $0.81
+> per audio hour; the figure rests on the assumption-free bound of
+> 216,000 characters sent (180 possible attempts × the
+> 1,200-character pre-split cap), and at the doubled
+> post-introductory rate from Jan 1, 2027 the same bound converts
+> to about **$6.09**. Approving this gate means accepting that
+> $0.60 is monitored-and-stopped — with the realistic worst case
+> under $0.50 and the extreme tail bounded as above — **not** a
+> hard guarantee of $0.60.
+
+**Marked changes from the resolution's §8.3 text:**
+
+- **[Correction 3]** The prepay parenthetical. Resolution's
+  original: *"…your Google **prepay balance** ($17.83 on Oct 29,
+  auto-reload off), which physically caps all Google spending."*
+  Changed to mark the figure historical per correction 3 (§3 of
+  this presentation) and to state the backstop's condition
+  explicitly ("while the standing balance covers the exposures
+  above"). No figure changed.
+- **[Correction 2]** The cash sentence. Resolution's original:
+  *"…the absolute worst case for characters sent (every possible
+  split and retry) converts to about **$3.04** at today's
+  introductory rate."* Extended — same sentence, same $3.04 — with
+  the rate's basis (≈ $14.10/1M chars, converted from the verified
+  $0.81/audio-hour), the character bound it rests on (216,000 =
+  180 × 1,200), and the post-introductory conversion (≈ $6.09),
+  per correction 2 (§2 of this presentation).
+
+**The scenario table behind the paragraph** (R1 Resolution §4,
+reproduced; m = realized duration multiplier against the cost
+model's slowest admitted rate; Phase A's realized m ≈ 0.61):
+
+| m | Meaning (speech rate) | Bound (units) | Bound ($) |
+|---|---|---|---|
+| 1.0 | 10 chars/s — the model's slowest admitted rate | 469,519 | $0.47 |
+| 1.5 | 6.7 chars/s | 704,245 | $0.70 |
+| 2.0 | 5 chars/s | 938,971 | $0.94 |
+| 3.0 | 3.3 chars/s | 1,408,422 | $1.41 |
+| 5.0 | 2 chars/s — pathological, far outside observation | 2,347,325 | $2.35 |
+
+The detection threshold (600,000) can be crossed at all only if
+the scope-average multiplier reaches m ≈ 1.28 (R1 Resolution §4).
+
+---
+
+## 12. Consolidation mechanics, evidence, and boundaries
+
+**What this presentation changes, and what stands.** Changes —
+each traceable to Rowan's review: the §1 relabeling of every
+600,000 reference across the four sources (correction 1; R1
+Resolution §8.1's rule, now executed mechanically against the §1
+inventory); the §2 cash qualification (correction 2); the §3
+prepay wording (correction 3); the §5.3 R3 census condition
+(correction 4 — Amendment 2 §7's protocol, restated as a hard
+census precondition, per Rowan's explicit condition); the §8.2
+sliding window governing over Amendment 1 §4.3's poll-pair form
+(Amendment 2 §6, already the governing source); the §7.2 detection
+mechanics governing over Amendment 2 §5.1's superseded
+enforcement framing (R1 Resolution §§4, 8). **Stands unchanged:**
+the proposal's scope, identity binding, census items, sub-gate
+sequence, completion criteria, read-backs, and STOP law;
+Amendment 1 in full (A1 grant-identity protocol, A2 as repaired,
+A3 definitions, A5 rollover, A6 foreign generation); Amendment
+2's R2/R3/R4 constructions; the four-mutation budget; the end
+state HELD. Approach 1 (R1 Resolution §7) is **not** incorporated:
+it is shelved for this gate by Rowan's ruling and remains a design
+record for future, larger scopes; adopting it later would require
+its own build, review, and deploy gates and would change this
+gate's mutation budget to 6 — none of which is requested here.
+
+**Satisfiability.** Every condition in Rowan's PASS WITH
+CONDITIONS is discharged by this document or was already
+discharged by a source it consolidates: R1 by Approach 2 as
+specified in R1 Resolution §8 and relabeled per §1; R2 by
+Amendment 2 §6 (PASS); R3 by Amendment 2 §7 plus the §5.3 census
+repetition her review made explicit (CONDITIONAL PASS, condition
+now on record and carried); R4 by Amendment 2 §8 (PASS); A5/A6
+PASS outright in the Amendment 1 review and preserved. The one
+point no document satisfies — because no mechanism in this
+architecture can — is a literally unconditional hard cap on
+settled spend; §11 states that to Julie in plain words rather
+than papering over it.
+
+**Evidence the executor will produce.** The GO record; the E0
+census read set with timestamps and the §5.3 proof's five legs;
+the §5.2 lease classifications relied on; the R1/R2 read-backs
+(etag comparisons, queue reads); the complete timestamped G poll
+log (§7.1 contents per poll), including the §7.4 snapshot pair if
+a rollover occurs; the step-0 verification record; the closing
+read-backs (§9.2); the request ledger for the whole gate
+(method/path/status per call); and the execution record filed on
+the board after execution, win or lose. This presentation itself
+is pinned in the code repo (`jedavid33-design/opal-reader`,
+branch `ui1-review`, path
+`review/ch3-generation/recovery/gate3/GATE4-FINAL-PRESENTATION.md`)

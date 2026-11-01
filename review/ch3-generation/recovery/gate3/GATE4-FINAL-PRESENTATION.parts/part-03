@@ -1,0 +1,208 @@
+is derived (12 slots per occurrence ⇒ 8), and later cohorts are
+cut by attempts-used (Phase A's profile implies [8, then ~4…] —
+arithmetic, not a promise). A **mid-plan rollover** resumes after
+07:00Z with fresh headroom — the designed path, **not** a STOP
+(§7.4). Phase-A-era counters, if encountered, are informational
+only.
+
+### 7.4 Rollover protocol (Amendment 1 §6 / A5 — PASS outright)
+
+If G spans a PT midnight (07:00Z): **(1)** the executor takes a
+snapshot pair — full §7.1 poll contents as the last poll before
+the boundary and the first poll after it — recorded as the
+rollover evidence; **(2)** the §7.2 ledger does **not** reset:
+the threshold and the forecast are evaluated on cumulative gate
+figures across the boundary; **(3)** the day-scoped figures (S3/S4
+day totals, the 100/day fence) legitimately roll to the new day
+and are read as the new day's figures, with the snapshot pair
+establishing continuity; **(4)** a rollover is not a stall event
+(§8.2 exclusion), not foreign work (§8), and not a restart of
+anything. Julie's GO covers the rollover; no fresh decision is
+needed at the boundary.
+
+### 7.5 The phase fence (context, code-enforced; unchanged)
+
+The phase guard refuses any new grant whose projection (settled +
+reservedUnverified + in-flight uppers + this grant's pending
+12× uppers) would exceed the phase budget 13,500,000; plans park
+(`parked_budget`) rather than overspend. Tier-1 check on census
+figures: 732,303 + 5,648 + 0 + 5,633,328 = 6,371,279 ≤ 13,500,000
+— the fence is not approached by this gate under any tier. A plan
+found `parked_budget` / `parked_quota` / `parked_cap` /
+`parked_storage` at any poll is a STOP (§10), never an executor
+action.
+
+### 7.6 Successor-grant verification (Amendment 2 §8 / R4 — PASS)
+
+Every newly observed grant id — at census, at §6.2, and at every G
+poll — passes the full verification **before any reliance**: it is
+the unique live grant of the target job; its granted set ⊆ the
+approved 15 and equal to the guard-selected cohort for the current
+derived headroom; the §5.3 ownership proof re-runs for it on the
+same pass; S3 returns `ok: true` on that pass. Any leg failing =
+STOP + containment (§9.1), no reliance. Lease class is recorded
+per §5.2 and **never inferred from appearance**: a same-looking
+grant id across polls earns nothing by itself; the timed
+classification and the delivery fence carry the safety argument.
+
+---
+
+## 8. Stall detection and foreign generation
+
+### 8.1 The Phase A signature (Amendment 1 §4.2, unchanged)
+
+The failure this gate watches for, generalized from Phase A: a
+grant was **delivered**, its executions ran (or partly ran), and
+thereafter **nothing changes** — no new attempts on any surface,
+no plan-progress movement, no phase-settlement movement — while
+the same grant remains the live grant, and the window spans at
+least one full lease cycle, so "the grant is merely slow" is
+excluded by construction.
+
+### 8.2 The sliding window (Amendment 2 §6, governing; Amendment 1 §§4.3–4.4 definitions preserved)
+
+- **Anchor.** t0 = the timestamp of the first G poll at which a
+  grant of the target job is observed **delivered** (any
+  dispatched attempt attributable to the plan, or any grant
+  transition into execution). Before any delivery, no window runs
+  — a pre-delivery gate is governed by §6.2 and ordinary
+  monitoring.
+- **Evaluation.** At every poll P with **P − t0 ≥ 35 minutes**,
+  the signature is evaluated over the **whole window [t0, P]**,
+  not the last two polls: the executor checks every intervening
+  poll record in the window (each was taken under §7.1 and
+  checked when taken) plus the cumulative figures at P.
+- **Signature (all five required at P):** (i) a grant was
+  delivered (t0 exists); (ii) the **same grant id** is the live
+  grant at every poll in the window, including P; (iii) P − t0 ≥
+  35 min; (iv) **zero** new attempts attributable to the plan
+  (S5) after the window's first movement; (v) **zero** plan-progress
+  movement (S2 totals) and **zero** phase-settlement movement (S5)
+  across the window.
+- **Resets and negations.** Any new attempt, any progress or
+  settlement movement, any grant-id change, or any grant leaving
+  `issued` **resets the anchor** (a new anchor forms at the next
+  delivered observation) and negates the signature. A signature
+  that completes = **STOP** (§10).
+- **Exclusions (never a stall):** a grant merely `issued` and
+  never delivered (pre-delivery churn; §6.2's province); lease
+  churn with no delivery; a PT rollover inside the window
+  (day-scoped figures roll by design, §7.4 — the signature is
+  evaluated on grant identity, attempts, progress, and settlement,
+  none of which a rollover resets); ordinary slow progress (any
+  movement negates).
+
+### 8.3 Foreign generation (Amendment 1 §7 / A6 — PASS outright; proposal §7 STOP preserved)
+
+Any of the following, observed on its named surface, is foreign
+work: **(a)** attempts or a plan-progress change attributable to
+any plan other than the target plan (S5 / S2 / S6); **(b)** a phase
+`settled` increase not explained by the target plan's own
+confirmed attempts (S5 cross-check) — including a §7.2 forecast
+crossing attributed to no gate attempt; **(c)** movement of
+`estimatedUnverified`, `reservedUnverified` (beyond the target
+plan's own live reservations), or `unknownOpen` (S5); **(d)** the
+target plan moving in a way inconsistent with its own grants —
+progress with no live or reported grant covering it (S1 vs S2);
+**(e)** any segment of the parked set (position 91) or any other
+book/chapter showing new generation (S2 / S6 / quote surfaces).
+On any trigger: **STOP immediately**, apply the closing holds in
+containment order (§9.1) with read-backs, report the trigger and
+the figures, and take **no repair action of any kind**. Foreign
+generation never enlarges this gate, and no executor judgment
+converts it into gate work.
+
+---
+
+## 9. Closing, read-backs, and acceptance
+
+### 9.1 Sub-gate C — closing holds (proposal §5.6; containment order per R1 Resolution §8.2)
+
+Executor mutations 3 and 4 of 4 — in this order, whether the gate
+ends in completion or in a STOP after R2:
+
+1. **Re-pause the queue** (cf-api PUT, `delivery_paused: true`;
+   read back paused).
+2. **Re-halt generation** (GENERATION_HALT → `"1"`, settings-only;
+   read back `"1"`; script etag unchanged).
+
+**Completion criteria (all required for a completion verdict):**
+plan `complete` at **23/23** (done 23, failed 0); every grant the
+gate relied on reads `reported` (no grant of the target job reads
+`issued` at close); reconcile `ok: true`; zero new conflicts; the
+parked job untouched. **Any criterion failing = the gate closes
+as a STOP**, reported as such — closing holds are applied either
+way.
+
+### 9.2 E4 — closing read-backs (proposal §6, items extended by Amendments 1–2)
+
+1. `/health` build still `1c2d1d0f…`; GENERATION_HALT `"1"`
+   (settings-only flips; etag unchanged).
+2. Queue delivery_paused `true` (cf-api read).
+3. Capabilities: coordinator `armed`; Batch still unarmed.
+4. Target plan `complete`, totals 23 / 23 / 0 / 0 / 0 — or, on a
+   STOP close, its exact state at close, reported as-is.
+5. All grants of the target job `reported`; none live. (On a STOP
+   close: the live-grant picture exactly as left, reported.)
+6. Phase accounting closing set: settled (opening 732,303 +
+   settledDelta), estimatedUnverified 19,018 (unchanged),
+   unknownOpen 0, remaining vs 13,500,000.
+7. The gate's settled delta, evaluated against the **detection
+   threshold (600,000)** per §7.2 and reported as an observation,
+   with the realized multiplier context where computable.
+8. PT day totals for every PT day the gate spanned, from S3/S4
+   derived figures, with the §7.4 snapshot pair attached if a
+   rollover occurred.
+9. Conflicts still exactly the four-row baseline (§5.1 item 14).
+10. Parked job fingerprint unchanged; position 91 still
+    `excluded_parked`; the final segment untouched.
+11. Settings still revision 1; phase registry unchanged.
+12. Sync watermarks: bindings advanced by exactly the gate's
+    newly bound segments (expected +15 on a completion close);
+    content 18.
+13. The complete request ledger (§12) attached to the execution
+    record.
+
+### 9.3 Julie's playback check — the acceptance step
+
+After E4, Julie opens Forever Pucked Chapter 3 on her device: the
+header should read **Partial 26/27** (26 of the chapter's 27
+segments bound — the 11 already bound plus this gate's 15; the
+chapter's final segment is Phase B, separately gated and not part
+of this gate), play buttons present on the newly bound positions,
+and sampled segments play normally. **This check is the acceptance step and sits
+outside the executor's verdict**: the executor reports the gate's
+outcome; Julie's playback result accepts or does not accept it.
+(Phase A's precedent: her "Partial 11/27" check and tap-to-play
+confirmation closed acceptance for the cohort that had run.)
+
+---
+
+## 10. The STOP law and the executor instruction block
+
+### 10.1 Executor instruction block (complete)
+
+- **Authorization:** Julie's GO for exactly this gate, recorded
+  before E0. One GO, one execution attempt.
+- **Mutation budget — exactly 4 executor mutations:** (1) the R1
+  halt flip (§6.1); (2) the R2 queue unpause (§6.3); (3) the
+  closing re-pause (§9.1); (4) the closing re-halt (§9.1).
+  Containment after a post-R2 STOP uses mutations 3–4 in that
+  order (re-pause, then re-halt); a STOP before R1 uses none; a
+  STOP between R1 and R2 uses the re-halt only (settings-only,
+  etag-identical). The one conditional exception is the
+  observability-only repair (§6.1 step 3), inside the GO, not
+  budget-counted, code bytes provably unchanged. Machinery writes
+  (grants, reservations, settlements, bindings) are the plan's
+  own operation, not executor mutations.
+- **No other executor action exists in this gate:** no commands,
+  no SubmitJob, no operator-route calls, no finalizer preview or
+  invocation, no park/exemption route, no deploy, no settings
+  change beyond the two halt flips, no conflicts-row touch, no
+  rollback.
+- **One-way doors:** none beyond the family's standing law — no
+  rollback is authorized by this gate; the closing holds are
+  state flips on the same build, not a rollback.
+
+### 10.2 STOP law (proposal §7 preamble, verbatim in substance; standing executor law)
+

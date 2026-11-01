@@ -1,0 +1,196 @@
+verification (§6.2) → **R2** queue-unpause sub-gate (§6.3) → **G**
+monitored generation (§7) → **C** closing sub-gate, ends HELD
+(§9) → **E4** read-backs (§9.2) → **Julie's playback check** (§9.3,
+the acceptance step). The sub-gates R1 and R2 are separately named
+decision points inside the single GO: a deviation at R1's
+read-backs stops the gate *between* the sub-gates, and R2 is never
+executed to "see if it helps" (proposal §5.2, preserved).
+
+### 4.2 Explicitly out of scope (proposal §1.2, unchanged)
+
+- **Phase B** — the chapter's final segment, occurrence
+  `2a85f74f-353d-4c25-a86a-4a4db392868b` (position 91, 569 chars),
+  `excluded_parked` on the plan; the parked job
+  `1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a`
+  and every park-release/exemption route are never touched.
+- **Batch** in any form — standard lane only, as stamped
+  (`d6StandardOnly`).
+- **Any other book, chapter, or plan**, including the rest of
+  Forever Pucked. Foreign generation is a STOP (§8).
+- **Any code change, deploy, or client publication** — build
+  `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867` throughout.
+- **Any finalizer invocation** — a grant that fails to close is a
+  STOP (§10), never a repair under this gate.
+- **Any SubmitJob, command, or intent** — the resume needs none
+  (§4.4); submitting one is outside the GO.
+- **Clearing or editing any conflicts row; any rollback; any
+  second attempt.** One GO covers one attempt (§10).
+
+### 4.3 Identity binding (proposal §2, unchanged)
+
+| Field | Value |
+|---|---|
+| Book | Forever Pucked |
+| bookId | `5c589095-f812-48a2-8ab2-03ba2791f2b2` |
+| chapterId | `2060f9df-f017-4793-a5e1-9d131789d973` |
+| chapterIndex | 2 (Chapter 3) |
+| Phase | `forever-pucked` (registry-bound to this bookId) |
+| Lane | `standard` (Batch not armed) |
+| planId | `plan:e377a5559961b294154276b6` |
+| jobId | `plan:e377a5559961b294154276b6:ch2` |
+| Plan state at drafting | `active`, totals eligible 23 / done 8 / failed 0 / blocked 0 / prompts 0 |
+| Fresh quote (2026-11-01 ~17:47Z) | eligible 15 / 20,864 chars / expected 294,137 units (≈ $0.294) / digest `9453ab5dc7ee6ade7c650d14066054b965875f2ef1b65eb24bc633588d778e67` |
+| Phase accounting at drafting | settled 732,303 / estimatedUnverified 19,018 / reservedUnverified 5,648 / inFlightUpper 0 / unknownOpen 0 / remaining 12,762,049 of 13,500,000 |
+
+The **15 remaining occurrences** (proposal §2.3; positions,
+occurrenceIds, chars — the set is invariant; which are `granted`
+vs `pending` rotates with the machinery's cycle):
+
+| Pos | occurrenceId | Chars |
+|---|---|---|
+| 68 | `81881ab7-fe99-4feb-98f6-bcbf7fc7e2a4` | 1,430 |
+| 69 | `72672ef5-8481-403b-ba97-f5c1dc0e4a77` | 1,321 |
+| 70 | `c731c8e7-4d18-4f59-bd73-f3c42a093063` | 1,343 |
+| 71 | `e651189e-9085-4590-ba4a-f0af18d24287` | 1,256 |
+| 73 | `94f6f847-7ded-470e-9a1d-577951c3a496` | 1,456 |
+| 75 | `962bc05c-666e-4967-aee2-d2bdd4283084` | 1,397 |
+| 78 | `e98450a5-2ee3-4ac7-bdcf-9226749b8000` | 1,371 |
+| 79 | `e51a7f03-eb79-4500-965f-f3f77efad254` | 1,215 |
+| 80 | `7fa865b8-ed32-4b8c-ae37-fd2d71cba0f6` | 1,471 |
+| 82 | `9150d43c-a37a-4bbf-af88-ec88d1669614` | 1,489 |
+| 83 | `635505ae-e0ff-4d38-8015-eb66357d3908` | 1,448 |
+| 84 | `b522918a-5973-4061-adaa-462460670e6a` | 1,493 |
+| 86 | `b8e75022-23a0-41f2-9297-47e71f255394` | 1,291 |
+| 87 | `f1aba4cc-ca84-42db-9b38-1104e01fd4e0` | 1,430 |
+| 89 | `712f42d8-5460-475a-a41a-fd3e6b57d00e` | 1,453 |
+
+Total: **15 occurrences, 20,864 chars**, matching the quote.
+Ledger units behave as micro-dollars despite the `MicroCents`
+name ($1 ≈ 1,000,000 units). **Money truth rule (family law):**
+ledger figures are Reader-recorded costs, not provider-confirmed
+spend; the gate reports ledger deltas as ledger deltas.
+
+### 4.4 Why no submission is needed (proposal §§0.2, 3, unchanged)
+
+The plan is already self-driving: the coordinator's watchdog calls
+`driveOnce` (`service.mjs:888`), which selects this `active` plan
+every cycle and issues the next cohort grant whenever pending
+occurrences exist and no grant reads `issued` (`service.mjs:977-1010`
+→ `coordinator.mjs:1805`), sized by `boundGrantTargets` as the
+longest pending prefix fitting the day's derived headroom at
+12 − attempts-used slots per occurrence against the 100/day cap
+(`quota-budget.mjs:622-645`). Since Gate 3 finalized the stuck
+grant, this cycle has been issuing grants that are never delivered
+while halted (the sender is wired only when GENERATION_HALT is
+`"0"`), voided at the 15-minute lease expiry
+(`lease_expired_undelivered`), and re-granted — zero dispatches,
+zero spend. After R1 + R2 (§6), the drain delivers the live grant
+under its delivery fence (`coordinator.mjs:1861-1876`), the
+executor executes, `handleReport` settles the grant at the end of
+its message (`d6-executor.mjs:859`), and `driveOnce` issues the
+next cohort, until `finishPlan` sets the plan `complete` at 23/23
+(`service.mjs:870-887`). Policy-blocked text splits recursively
+without voice substitution, ≤ 12 attempts per segment across the
+split tree (`policy-split.mjs`) — the normal path, as Phase A's
+cohort (44 attempts, 30 success / 14 policy_block, settled delta
++152,964) demonstrated. A PT-day rollover mid-plan is a normal
+continuation, not a failure (§7.4).
+
+**Read surfaces (Amendment 1 §1, as used throughout):** S1 job
+view `GET /v2/jobs/<jobId>`; S2 plan read `GET /v2/d6-plans/<planId>`;
+S3 quota reconcile `GET /v2/d6-quota-reconcile` (operator, full
+pagination); S4 quota view `GET /v2/quota`; S5 operator diagnostics
+(per-plan execution/attempt attribution and the phase view); S6
+plan list `GET /v2/d6-plans`; S7 conflicts `GET /v2/conflicts`;
+plus the capabilities read, `/health`, the Cloudflare script
+`/settings` and queue reads. Every `/v2/*` call carries the
+production scope headers. No finalizer preview call is made at any
+point in this gate.
+
+---
+
+## 5. E0 — execution census (proposal §4, as amended; runs first)
+
+**Read order and stability (Amendment 2 §7.3, mandatory):** one
+pass reads, in this order — **S1 → S2 → S5 → S3 (full pagination)
+→ S4 → S7** — as close together as the reads permit; each result
+records its timestamp; the timed pair (item 13 / §5.3) is part of
+the protocol. Conclusions that must agree across reads: **grant id
++ granted set** (S1 vs §5.3's computation) and **day totals +
+phase settled** (S3 vs S4 vs S5). Any contradiction aborts the
+census and restarts it fresh; a census that cannot stabilize is
+itself a STOP. A pass's figures carry their timestamps; legs from
+different passes never mix.
+
+### 5.1 Exact-match items (proposal §§4.1–4.3)
+
+1. `/health` build = `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`.
+2. GENERATION_HALT reads `"1"`.
+3. Queue `opalreader-generation-v2` delivery paused, read via
+   cf-api; the Worker cannot read queue state.
+4. Capabilities: coordinator `armed`; lane `standard` live, Batch
+   unarmed (`d6StandardOnly` stamped).
+5. Plan id set on S6 exactly: smoke `complete`; old Ch 2 plan
+   `retired`; **target plan `active` at 8 done / 0 failed**.
+6. S2 target plan: `bookId` / `chapterId` / `chapterIndex` exactly
+   as §4.3; totals eligible 23 / done 8 / failed 0.
+7. Fresh S-quote exactly: eligible 15, expected 294,137, digest
+   `9453ab5dc7ee6ade7c650d14066054b965875f2ef1b65eb24bc633588d778e67`,
+   exclusions bound_already 11 + parked 1 (position 91); also
+   `boundaryBlocked: false`, `poolSize: 27`.
+8. Parked job record unchanged: state `parked_policy`, revision 1,
+   fingerprint
+   `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`.
+9. Phase accounting exactly as §4.3 (settled 732,303;
+   estimatedUnverified 19,018; reservedUnverified 5,648;
+   inFlightUpper 0; unknownOpen 0; remaining 12,762,049 of
+   13,500,000; `unverifiedStatus: provider_unverified`).
+10. S4 current PT day, from its own components: dispatched = 0;
+    reserved ∈ {0, 96}; consumed = reserved. (The {0, 96} figure is
+    the conclusion of the §5.3 proof, not a bare expectation —
+    any other value fails item 10 *and* §5.3 together.)
+11. S3 reconcile `ok: true` — drift empty, current-day block
+    empty; the one historical exception is the adjudicated
+    straddler `att-37d63768-db4b-447d-8150-580b7c6ee257`
+    (`estimated_unverified`, never dispositionable), the sole
+    exempted entry.
+12. The derived day totals for the prior PT days stand at the Gate
+    3 close: 2026-10-29: 57; 2026-10-30: 79; 2026-10-31:
+    dispatched 44 / reserved 0 / consumed 44.
+13. **Live-grant identification (Amendment 1 §2.1, replacing the
+    proposal's item 13):** from S1, exactly one grant of the
+    target job reads `issued`, or none does at the instant read;
+    its `grant_id` and its `granted` set are enumerated; every
+    other grant reads `reported`; the granted set ⊆ the approved
+    15 of §4.3 (at drafting: positions 68, 69, 73, 75, 80, 82,
+    83, 89 — composition may legitimately rotate).
+14. Conflicts = **exactly the four-row Gate 2D baseline,
+    exact-matched:** id 1 @ 2026-10-29T23:54:14.808Z,
+    `grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full`; id 2 @
+    2026-10-30T00:24:14.632Z,
+    `grant:plan:603ab416bd67ab1b25de97be:ch1:1:full`; id 3 @
+    2026-10-31T05:14:24.089Z,
+    `grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full`; id 4 @
+    2026-11-01T01:04:30.364Z,
+    `grant:plan:e377a5559961b294154276b6:ch2:1:full` — all
+    cache_key `lease`, expected `7`, found the recorded
+    `LIKE or GLOB pattern too complex: SQLITE_ERROR`, reason
+    `schedule_dead`. Count ≠ 4, or any field differing = STOP
+    (executor STOP law, §10.2).
+15. Settings revision **1**: phase policy `enforce`; lane
+    `standard`; settings monthly cap $50 (a read value; per §2 it
+    is not a safeguard for settled or cash); phase registry =
+    `forever-pucked` ↔ §4.3 bookId, complete (unbound books fail
+    closed).
+16. **Zero new occurrences of every failure class since the Gate 3
+    close:** no unknown-billing execution, no `blocked` segment,
+    no new conflict, no new plan, no movement of phase accounting
+    beyond the grant churn reserved-then-released (item 9 figures
+    hold exactly).
+
+### 5.2 Grant-identity classification (Amendment 1 §2.1)
+
+For any live grant relied on anywhere in this gate, the executor
+additionally records its **lease class** by timed pair: two reads
+of S1 at least 16 minutes apart (lease 15 min, `LEASE_MS`,
+`coordinator.mjs:134`): **active** (same id, both reads),

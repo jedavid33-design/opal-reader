@@ -1,0 +1,204 @@
+**replaced** (different live id / none, second read), or
+**stale-live** (same id across ≥ 16 min with no second live grant —
+reachable only through churn, never relied on as deliverable). No
+operator or wire surface projects `lease_expires_at`; lease class
+is **evidence, never a relied-upon fact** — the delivery fence
+(§6.2) is what makes delivery safe. Whether the delivery-safety
+guarantee would survive a *proven* stale-live grant is a
+pre-existing, separately-gated code question (Amendment 1 §8
+item 2), **not** part of this gate.
+
+### 5.3 Correction 4 — the R3 condition: the reservation-ownership proof, repeated at census
+
+Rowan's R3 condition, stated explicitly in her R1 Resolution
+review and carried here as a census requirement (Amendment 2 §7
+already specifies the protocol; this section makes its repetition
+at execution census a hard precondition): **at execution census,
+the executor repeats the complete reservation-ownership proof
+using fresh, consistent reads, including the zero-remaining-
+reservation case; any unexplained reservation, inconsistent grant
+generation, or failed reconciliation is a STOP before any
+mutation.**
+
+The proof (Amendment 1 §3 as corrected and extended by Amendment 2
+§7.2 — five legs):
+
+- **Leg 1 — cohort membership.** S1 enumerates the live grant
+  and its `granted` set; all members are in the approved 15
+  (§4.3) and §5.1 item 13 holds.
+- **Leg 2 — attempts-used = 0.** S5 shows no execution referencing
+  any of the 15 (they have never been attempted); consequently the
+  code-derived reservation for the live grant is exactly 8 × 12 =
+  **96** whenever a grant is live, and the next cohort's
+  size-after-settlement is independently derivable the same way.
+- **Leg 3 — the possibility-shaped rows, excluded.** Zero-remaining
+  open reservation rows **are possible** in the machinery, in
+  exactly two shapes, both by consumption and never by creation
+  (Amendment 2 §7.1): **(T) transient** — a row reaches
+  consumed = total on the last permitted dispatch
+  (`quota-budget.mjs:803`/`:814`) and stays open until the
+  settlement sweep (`closeReservationsForGrant`, :714);
+  `derivedDayTotals` counts it 0 either way. **(P) persistent** —
+  the close fence (`:662-672`) blocks closes behind an unresolved
+  `unknown_billing` execution. Zero-*total* creation is impossible
+  (`boundGrantTargets` breaks the prefix at slots ≤ 0, :624-645;
+  re-reservation refuses slots ≤ 0, :782-785). Both shapes are
+  excluded here by Leg 2 (no occurrence of the 15 has ever been
+  dispatched, so no row for them can have been consumed into
+  either shape) plus Leg 3b.
+- **Leg 3b — per-row reconciliation.** `reconcileQuota` iterates
+  **every** reservation row (SELECT *, no state filter,
+  `quota-budget.mjs:478` ff.) and re-derives day totals
+  row-by-row; `ok: true` therefore certifies every open row's
+  attribution, not just the totals. Item 11's `ok: true` is this
+  leg's evidence.
+- **Leg 4 — day-sum closure.** The unfiltered day sum
+  (`derivedDayTotals`) for the live day closes at exactly the
+  live grant's derived 96 (item 10), leaving no room for any
+  second open reservation: any other open row with positive
+  remaining would raise the sum above it.
+- **Leg 5 — per-row drift.** `reconcileQuota`'s per-row drift /
+  classification comparisons pass for every row in the complete
+  pagination (item 11); a row owned by anything else would
+  classify or drift.
+
+**Zero-case protocol.** A `{reserved: 0}` read in isolation proves
+nothing (inter-void instant, between cycles, or a churn failure
+are indistinguishable on one read). It is acceptable at census
+**only** when the §5.3 timed pair brackets it (different live
+grant, or live grant → none, with no contradiction) **and** the
+second pass's proof yields the live grant's 96 (or the pair shows
+two live-grant passes ≥ 16 min apart). **Two consecutive zero-case
+passes ≥ 16 min apart with no live grant observed = STOP** — the
+machinery's normal state always has either a live grant or a
+fresh void behind it.
+
+### 5.4 What the census never does
+
+No mutation of any kind. Julie's GO is recorded before E0; the
+census itself writes nothing. There is no census-repair move: any
+deviation is reported, and the gate does not proceed (§10.2).
+
+---
+
+## 6. The opening sub-gates (proposal §5, as amended)
+
+### 6.1 Sub-gate R1 — re-arm (halt lift first)
+
+Executor mutations so far after this step: **1 of 4.**
+
+1. **Hard precondition:** a fresh S3 reconcile read returns
+   `ok: true` immediately before the flip. If it does not, STOP —
+   no flip (Gate 7 / gate-(c) lesson, preserved).
+2. Lift **GENERATION_HALT "1" → "0"** — settings-class write only;
+   no code upload; the script etag must be unchanged afterward.
+3. Read back: halt now `"0"`; script etag unchanged (§10.2);
+   observability still enabled + persisted (the family's
+   conditional rule: only if a settings flip unexpectedly nulled
+   observability may the executor reapply the observability-only
+   multipart PATCH to `/settings` — that conditional repair is
+   inside the GO and does not consume the mutation budget; code
+   bytes provably unchanged by etag comparison afterward).
+4. **Disclosure, stated to Julie in the execution report at this
+   point:** from this flip until sub-gate C completes, **the app's
+   Generate button is live** and Batch is presented-but-not-armed.
+   Any generation outside this gate during that window is foreign
+   (§8) — including Julie's own tap. Hands off the button until
+   the gate closes.
+5. **Step 0 runs next (§6.2). R2 is not executed on R1's
+   momentum.**
+
+### 6.2 Step 0 — delivery-safety verification (Amendment 1 §2.2; runs after R1, before R2)
+
+Zero executor mutations. The delivery **fence**, not the executor,
+decides delivery: a message naming a grant that is not `issued`
+at its delivery instant, or whose revision has moved, dead-letters
+and the grant voids and re-grants (`coordinator.mjs:1861-1876`) —
+a designed branch of this step, **not** a STOP. Checks, re-read in
+order (S1 → S4 → S3):
+
+1. The plan is the only `active` plan; no job other than the
+   target job has a grant reading `issued`.
+2. The live grant's granted set ⊆ the approved 15 (§4.3), equal
+   to the guard-selected cohort for the current derived headroom
+   (Leg 2 arithmetic, §5.3).
+3. Reservation ownership re-verified: the §5.3 proof re-run for
+   the currently live grant; day totals close on it alone;
+   `reconcileQuota.ok: true` on this pass.
+4. The live grant's lease class (§5.2) is recorded; no class is
+   treated as proof of deliverability.
+
+Any leg failing → **STOP between the sub-gates**, containment
+re-halt (settings-only, etag-identical) applied, report. No
+drain-and-see.
+
+### 6.3 Sub-gate R2 — queue unpause (last opening move)
+
+Executor mutations after this step: **2 of 4.**
+
+1. `PUT` the queue with `queue_name` + `settings.delivery_paused:
+   false` (cf-api; the body is the positional argv JSON — a
+   `--data` flag is silently ignored by this connector).
+2. Read back `delivery_paused === false`.
+3. **G begins (§7).** The executor then polls; it issues nothing,
+   submits nothing, and calls no operator route.
+
+---
+
+## 7. G — monitored generation (proposal §5.4–5.5, as amended)
+
+### 7.1 Poll contents (Amendment 1 §4.1)
+
+Every poll records, with its timestamp: **(1)** the poll timestamp;
+**(2)** the plan's totals from S2 (eligible / done / failed /
+blocked); **(3)** the live-grant picture from S1 — every grant's
+id, state, revision, and granted set; **(4)** the day totals from
+S4 (dispatched / reserved / consumed, from the view's own
+components); **(5)** `reconcileQuota`'s verdict and derived day
+totals from S3; **(6)** the phase settled figure from S5. Bounds
+are always evaluated on the cumulative gate figures of §7.2 —
+never per-day, never per-grant (Amendment 1 §4.4).
+
+### 7.2 The detection threshold — mechanics (R1 Resolution §§8.1–8.2, governing)
+
+- **The ledger.** `settledDelta = (phase settled, live) − 732,303`
+  (the §5 census opening figure). Evaluated at census and at every
+  G poll, plus the §7.3 cover computation. The ledger never resets
+  — not at a PT rollover, not at a cohort boundary (§7.4).
+- **Observation STOPs.** On any observation of **settledDelta >
+  600,000** (the detection threshold crossed), the executor STOPs
+  and applies the closing holds in containment order (§9.1) with
+  read-backs, and reports the figures. On any observation of
+  **settledDelta > 469,519** — the m = 1 forecast crossed — the
+  executor likewise STOPs: crossing the forecast refutes the
+  operating picture and is treated as foreign work under §8 (R1
+  Resolution §8.2; Amendment 2 §5.1). Neither figure is a bound on
+  what the machinery can settle between polls; §11 says so to
+  Julie in plain words, and §2 states the cash view separately.
+- **The cover computation (detection form).**
+  `settledDelta + Σ upperBoundAttemptMicro(next cohort) ≤ 600,000`,
+  evaluated at census and at each new live grant's first
+  observation, in Amendment 1 §5.2's derived one-upper form (the
+  code-derived upper-sum of the cohort's not-yet-settled
+  occurrences). At drafting: cohort 1 = 257,964 ✓; all 15 =
+  469,444 ✓. A cohort the threshold cannot cover in this
+  computation is a STOP **before** its dispatch — this is the
+  gate's only pre-dispatch check on the threshold, and it is a
+  detection computation, never enforcement (R1 Resolution §8.1).
+  Tier distinction (Amendment 1 §5.2): the model's one-upper form
+  governs this gate's threshold; the code's 12× worst-attempt form
+  (all-15: 5,633,328) governs only the phase fence (§7.5) and the
+  reservation/cohort arithmetic. The two tiers are never mixed.
+- **In-flight.** Between polls, settling cannot exceed one
+  cohort's worth (structural form: ≤ m × 258,004 for the cohort-8
+  shape, R1 Resolution §6); operationally at most one gate attempt
+  is dispatched-but-unconfirmed at any instant (sequential
+  executor + grant exclusivity). No poll cadence changes the
+  exposure table (§11).
+
+### 7.3 The 100/day attempts fence (code-enforced; proposal §5.5, unchanged)
+
+Attempts per PT day ≤ 100 is enforced by the machinery, not by
+monitoring: derived counters only, cohort bounding at issuance,
+dispatch refused past the derived total. Census opening for the
+execution day is read fresh (§5.1 items 10–12); the first cohort
