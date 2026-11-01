@@ -1,0 +1,176 @@
+diff -ruN finalizer-build/worker-build/worker/coordinator.mjs range-fix-build/worker-build/worker/coordinator.mjs
+--- finalizer-build/worker-build/worker/coordinator.mjs	2026-10-31 17:01:11.239318027 +0000
++++ range-fix-build/worker-build/worker/coordinator.mjs	2026-11-01 15:34:23.853943545 +0000
+@@ -28,6 +28,7 @@
+   reserveForGrant, boundGrantTargets, settleReservationsForGrant, closeReservationsForGrant,
+   closeReservationsForVoidedGrant, quotaBudgetView,
+ } from "./generation/quota-budget.mjs";
++import { prefixRangeClause } from "./generation/prefix-range.mjs";
+ 
+ export const JOB_STATES = [
+   "queued", "generating", "paused_quota", "paused_user", "outcome_unknown",
+@@ -1975,9 +1976,13 @@
+         return false;
+       }
+     }
++    // RANGE-FIX (Option B): half-open PK range, not a LIKE pattern
++    // (see generation/prefix-range.mjs). Consumption is per-op and
++    // order-independent; the range returns the same PK index order.
++    const opsPred = prefixRangeClause("op_key", `op:${grantId}:`);
+     const ops = this._all(
+-      `SELECT * FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
+-      `op:${grantId}:%`);
++      `SELECT * FROM ledger_ops WHERE kind = 'attempt' AND ${opsPred.clause}`,
++      ...opsPred.params);
+     for (const op of ops) {
+       // Release this attempt's reservation exactly once: the provider
+       // was never contacted for it, so it must not consume quota or cap.
+@@ -2141,9 +2146,14 @@
+       // attempted, or the daily-limit ended the run). The lease path is
+       // reserved for reports that never arrive at all.
+       const reportedIds = new Set((report.results || []).map(r => r.occurrenceId));
++      // RANGE-FIX (Option B): half-open PK range, not a LIKE pattern
++      // (see generation/prefix-range.mjs). The sweep below is
++      // set-membership + per-occurrence independent events, so it is
++      // order-independent; the range returns PK index order.
++      const grantOpsPred = prefixRangeClause("op_key", `op:${grant.grant_id}:`);
+       const grantOps = this._all(
+-        `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
+-        `op:${grant.grant_id}:%`);
++        `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND ${grantOpsPred.clause}`,
++        ...grantOpsPred.params);
+       for (const op of grantOps) {
+         const oid = JSON.parse(op.detail_json || "{}").occurrenceId;
+         if (!oid || reportedIds.has(oid)) continue;
+@@ -2181,8 +2191,13 @@
+       if (jobRow && jobRow.kind === "repair" &&
+           (jobRow.state === "complete" || jobRow.state === "partial") &&
+           followOn && Array.isArray(followOn.occurrences) && followOn.occurrences.length > 0) {
++        // RANGE-FIX (Option B): the follow-on count is a half-open
++        // PK range, not a LIKE pattern (see
++        // generation/prefix-range.mjs). A COUNT has no order
++        // semantics; the range counts exactly the byte-prefix set.
++        const followPred = prefixRangeClause("job_id", grant.job_id + ":follow:");
+         const prior = this._one(
+-          `SELECT COUNT(*) AS n FROM jobs WHERE job_id LIKE ?`, grant.job_id + ":follow:%").n;
++          `SELECT COUNT(*) AS n FROM jobs WHERE ${followPred.clause}`, ...followPred.params).n;
+         const followId = `${grant.job_id}:follow:${prior + 1}`;
+         const sub = this._submitJob({
+           jobId: followId, bookId: jobRow.book_id, chapterIndex: jobRow.chapter_index,
+@@ -2587,9 +2602,13 @@
+         }
+         const occs = this._all(
+           `SELECT * FROM occurrences WHERE job_id = ? AND state = 'granted'`, grant.job_id);
++        // RANGE-FIX (Option B): half-open PK range, not a LIKE
++        // pattern (see generation/prefix-range.mjs). The result is
++        // consumed as a Set, so it is order-independent.
++        const leaseOpsPred = prefixRangeClause("op_key", `op:${grant.grant_id}:`);
+         const grantOps = this._all(
+-          `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?`,
+-          `op:${grant.grant_id}:%`);
++          `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND ${leaseOpsPred.clause}`,
++          ...leaseOpsPred.params);
+         const grantedIds = new Set(grantOps.map(r => JSON.parse(r.detail_json || "{}").occurrenceId));
+         const newlyUnknown = [];
+         for (const o of occs) {
+diff -ruN finalizer-build/worker-build/worker/generation/grant-finalizer.mjs range-fix-build/worker-build/worker/generation/grant-finalizer.mjs
+--- finalizer-build/worker-build/worker/generation/grant-finalizer.mjs	2026-11-01 01:15:27.712315560 +0000
++++ range-fix-build/worker-build/worker/generation/grant-finalizer.mjs	2026-11-01 15:34:12.007943548 +0000
+@@ -85,6 +85,7 @@
+ import {
+   settleReservationsForGrant, derivedDayTotals, quotaArmed,
+ } from "./quota-budget.mjs";
++import { prefixRangeClause } from "./prefix-range.mjs";
+ 
+ export const GRANT_FINALIZATION_SCHEMA = [
+   // Append-only finalization audit: one row per finalized grant,
+@@ -413,9 +414,13 @@
+   void otherEntries;
+ 
+   // §4.3.5 — the grant's target set: its ledger attempt ops.
++  // RANGE-FIX (Option B): the prefix scan is a half-open PK range,
++  // not a LIKE pattern (see prefix-range.mjs). The ORDER BY is
++  // unchanged; the range is served in the same PK index order.
++  const ledgerPred = prefixRangeClause("op_key", `op:${grantId}:`);
+   const ledgerOps = coord._all(
+-    `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND op_key LIKE ?
+-      ORDER BY op_key`, `op:${grantId}:%`);
++    `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND ${ledgerPred.clause}
++      ORDER BY op_key`, ...ledgerPred.params);
+   const ledgerIds = [];
+   for (const op of ledgerOps) {
+     let oid = null;
+diff -ruN finalizer-build/worker-build/worker/generation/prefix-range.mjs range-fix-build/worker-build/worker/generation/prefix-range.mjs
+--- finalizer-build/worker-build/worker/generation/prefix-range.mjs	1970-01-01 00:00:00.000000000 +0000
++++ range-fix-build/worker-build/worker/generation/prefix-range.mjs	2026-11-01 15:34:07.170943549 +0000
+@@ -0,0 +1,70 @@
++// Prefix RANGE scans — the Option B replacement for SQL LIKE prefix
++// patterns (REMEDIATION-OPTIONS.md, Rowan ANALYSIS PASS 6560003451).
++//
++// Why this module exists: production rejected the LIKE prefix
++// construction `op_key LIKE 'op:<grantId>:%'` five times with the
++// byte-identical message "LIKE or GLOB pattern too complex:
++// SQLITE_ERROR" (four recorded schedule_dead conflict rows + the
++// Gate 3 E3 finalizer-preview HTTP 500). The engine-level cause is
++// UNPROVEN (hypothesis H1); this module removes the construction
++// family from every query path, replacing each pattern predicate
++// with a half-open range on the indexed key column:
++//
++//     key >= lo AND key < hi        lo = prefix, hi = successor(prefix)
++//
++// SQLite compares TEXT under the default BINARY collation bytewise
++// (memcmp over the UTF-8 encoding), and UTF-8 byte order preserves
++// code-point order, so the set { k : lo <= k < hi } is EXACTLY the
++// set of strings having `prefix` as a prefix — for every suffix:
++// the empty suffix (a key exactly equal to the prefix is included,
++// exactly as LIKE's trailing % matches empty), ASCII suffixes, and
++// non-ASCII suffixes. On every key the shipped writers can produce
++// (lowercase hex / UUID / ASCII namespaces) the returned row set is
++// byte-identical to the LIKE row set, in the same PK index order.
++//
++// The one semantic delta, named openly (proposal §3): SQLite LIKE
++// without PRAGMA case_sensitive_like is case-insensitive for ASCII,
++// so the old predicate could also match case-VARIANT keys (and keys
++// reached through % / _ metacharacters inside an interpolated id).
++// A range scan is case-sensitive byte equality on the prefix. The
++// key namespaces in this system are machine-generated lowercase;
++// the intended set at every call site is the byte-prefix set, and
++// the range scan returns exactly that set on every input — never
++// more, never fewer. Where LIKE and the range differ, LIKE is the
++// one over-matching.
++//
++// successor(prefix): the least string strictly greater than every
++// string having `prefix` as a prefix, computed over Unicode code
++// points: increment the last code point, first dropping any
++// trailing U+10FFFF code points (the code-point form of the general
++// byte-successor rule "drop trailing 0xFF, increment the last
++// byte"; for the ASCII prefixes used here the two rules coincide
++// exactly — ':' 0x3A -> ';' 0x3B). Returns null when no finite
++// successor exists (empty prefix, or a prefix consisting solely of
++// U+10FFFF); callers then use the unbounded-above predicate
++// `key >= lo`. No production prefix reaches that branch: every
++// prefix here is a non-empty ASCII namespace ending in ':'.
++
++export function prefixSuccessor(prefix) {
++  const chars = Array.from(String(prefix));
++  while (chars.length > 0) {
++    const last = chars[chars.length - 1];
++    const cp = last.codePointAt(0);
++    if (cp === 0x10FFFF) { chars.pop(); continue; }
++    chars[chars.length - 1] = String.fromCodePoint(cp + 1);
++    return chars.join("");
++  }
++  return null;
++}
++
++// The shared range predicate for a key column. `column` is always
++// an internal constant at the call site (a table's primary-key
++// column name), never caller input; the prefix and bounds are
++// always bound parameters. Returns { clause, params } to splice
++// into the caller's query in place of `<column> LIKE ?`.
++export function prefixRangeClause(column, prefix) {
++  const lo = String(prefix);
++  const hi = prefixSuccessor(lo);
++  if (hi === null) return { clause: `${column} >= ?`, params: [lo] };
++  return { clause: `${column} >= ? AND ${column} < ?`, params: [lo, hi] };
++}

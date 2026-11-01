@@ -1,0 +1,7 @@
+RANGE-FIX BUILD — battery summary (full logs stay local in range-fix-build/logs/)
+Command (build tree root): node --test --test-timeout=120000 tests/*.test.mjs
+Patched tree:  tests 1197 / pass 1175 / fail 22 / runner exit 1 (baseline file failures drive exit 1, as in every baseline run)
+Baseline (Amendment-1 final tree): tests 1178 / pass 1156 / fail 22 / runner exit 1
+Delta: +19 tests / +19 pass / +0 fail — exactly the new suite tests/range-fix-equivalence.test.mjs (19/19, standalone exit 0).
+Failing-file sets machine-diffed from both complete logs: IDENTICAL (22 = 22; see failing-set-diff.txt).
+Grep proof: recursive LIKE/GLOB grep over worker/ on the patched tree = 14 hits, all comment lines; zero SQL LIKE/GLOB sites.
