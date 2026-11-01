@@ -1,0 +1,182 @@
+`worker/generation/eligible-set.mjs` (fence consumption), and
+`worker/worker-entry-prod-d6.js` (route registration:
+`/v2/d6-revoke-chapter-exemption`, entry line 1580, forwarding to
+the internal handler at line 1279).
+
+**What the revoke call is.** `revokeChapterExemption`
+(park-release.mjs:646), operator fence, body allowlist
+`{jobId, occurrenceId, authorizationRef, source, note}`. In one
+transaction it: (i) reads the singleton exemption row for the
+occurrence; (ii) appends ONE immutable event to
+`d6_chapter_exemption_events` — action `revoked`, resulting_state
+`tombstoned` — *before* the projection write; (iii) sets the
+projection row's `tombstoned = 1` with `tombstoned_at` and the
+tombstone authorization/source/note fields. Success returns
+`{outcome: "applied", alreadyRevoked: false, exemption: {…,
+tombstoned: true}}`.
+
+**Its complete fence set (exhaustive — from the code):**
+
+- Nonblank `jobId` / `occurrenceId`, else
+  `chapter_exemption_job_required` / `chapter_exemption_occurrence_required`.
+- No exemption row for the occurrence, **or** a row whose `job_id`
+  differs from the caller's → `{outcome: "rejected",
+  reason: "chapter_exemption_not_found"}`, writing nothing.
+- Row already tombstoned → idempotent no-op success
+  `{outcome: "applied", alreadyRevoked: true}` — no state change,
+  **no journal event**.
+
+That is all. Unlike the grant (`exemptChapterOccurrence`,
+park-release.mjs:551), the revoke does **not** invoke
+`parkedJobAndDefinition`: it never re-derives the definition,
+never verifies the job is still `parked_policy`, and never checks
+whether the occurrence is bound, planned, granted, attempted, or
+generated. **The shipped code permits this call in every one of
+those states.** The conditions below are therefore this gate's
+paperwork discipline, stated against exactly what the code would
+do — not code fences, and never described as code fences.
+
+**What revocation does, mechanically.** The exemption's only
+effect channel is `liveParkFenceRecords` (park-release.mjs:262),
+which selects exemption rows `WHERE tombstoned = 0` (:277) into
+the plane's `exemptIds`. Tombstoning removes idx 26 from
+`exemptIds`; on the next plane build its disposition is recomputed
+without the exemption. That flag flip, plus the journal event, is
+the revoke's **entire** effect. It issues no write against the
+occurrences table, bindings, plans, grants, attempts, quota
+ledgers, phase accounting, or R2.
+
+**The verified safe window (the only states in which revocation
+restores the pre-exemption state exactly):** the occurrence is
+still **unbound** AND **no plan has been created from the
+exemption** — in this gate's sequence: after E1 and before E2,
+which is exactly where its two contemplated uses sit (§6.2's
+`voice_prompt` STOP; a §10 STOP after E1 and before submission).
+In that window the exemption's sole effect was the plane
+disposition flip, so tombstoning restores the fenced dispositions
+exactly, spends nothing, and un-does nothing else because there is
+nothing else. A post-E2 state in which the submission was refused
+pre-write and verifiably created no plan stands in the same
+window; the executor must verify "no plan exists" from the plans
+surface before treating it as such.
+
+**What revocation does NOT do — in any state, and specifically
+after generation:**
+
+- **It never unbinds.** `buildEligibleSet` evaluates `bound_already`
+  BEFORE both parked fences (eligible-set.mjs disposition order:
+  bound → parked → ch3 → voice/eligible). Once a bindings row
+  exists for idx 26, its disposition is `bound_already` with or
+  without the exemption — tombstoning changes the segment's
+  disposition **not at all**. The bindings row, the R2 audio object,
+  and the segment's playability are untouched.
+- **It never cancels a plan.** The module contains no plan, grant,
+  or attempt interaction; a created plan is a durable record whose
+  life the revoke does not reach. After E2, containment is the
+  closing holds (§9.1), never the revoke.
+- **It never refunds or un-settles.** No write touches phase
+  accounting, quota ledgers, or attempt records; settled cost and
+  consumed dispatches stand.
+- **It never erases history.** The journal is append-only: the
+  `exempted` event remains; the revoke *adds* a `revoked` event.
+  Nor is the tombstone itself final — a later grant call against
+  the tombstoned row reactivates it (journaling `reactivated`),
+  which is precisely why no act in this gate may treat the revoke
+  as an undo of record.
+
+**Standing wording rule for this gate:** the revocation is a
+**fence restoration within the §8.1 window**, nothing more. It is
+never a "rollback", never a reversal of generation or binding, and
+it is never used after a binding exists for idx 26 — not because
+the code would refuse (it would not; it would return `applied`
+and flip a flag that no longer governs anything), but because in
+that state it restores nothing and describing it as containment
+would be false.
+
+## 9. Closing, read-backs, acceptance
+
+### 9.1 Closing holds
+
+On plan completion (or on any §7 STOP after R2): **re-pause the
+queue FIRST** (mutation 4; cf-api read-back `delivery_paused:
+true`), **then restore the halt** (mutation 5; read-back
+GENERATION_HALT "1", `/health` `halted`, etag unchanged,
+observability intact).
+
+### 9.2 E4 — closing read-backs (all required), with the exemption evidence classes (Correction 3)
+
+1. Phase B plan `complete`, totals eligible 1 / done 1 / failed 0 /
+   blocked 0; its grant(s) all `reported`.
+2. **Chapter quote: bound_already 27 / parked 0 / eligible 0 /
+   voice_prompt 0** — every segment of the chapter as it exists
+   live has audio (design §10C.1). A bindings row for idx 26
+   exists; the chapter delta from census is exactly that one
+   occurrence moving parked → bound (design §10B.2).
+3. Bindings watermark **1842** (= 1841 + exactly 1); content
+   watermark **18** unchanged.
+4. Phase accounting: settled increased by this plan's recorded
+   settlement only (expected ≈ +8,022); estimatedUnverified /
+   reservedUnverified unchanged; unknownOpen **0**; reconcile
+   `ok: true`, no new exceptions.
+5. PT day totals consistent with §§1.4/7.4 (expected: +1 dispatch;
+   bound: ≤ +12).
+6. Conflicts exact-match to the pinned four-row baseline; settings
+   revision 1; parked job byte-identical to census (still
+   `parked_policy` rev 1 — by design it keeps its 24 pending rows;
+   the release record unchanged). **The exemption's closing state
+   is evidenced exactly as §9.2A prescribes — and in no stronger
+   terms.**
+7. End state HELD certified: queue paused + halt "1" + build
+   `1c2d1d0f…` + etag `f15fb1ae…` + observability on + Batch
+   unarmed + nothing in flight.
+
+### 9.2A Exemption evidence — three classes, never blended (Correction 3)
+
+No read surface projects `d6_chapter_exemptions` or
+`d6_chapter_exemption_events` (§1.5, source-audited). The execution
+record therefore reports the exemption's state from exactly two
+evidence classes and names the third as unavailable:
+
+- **(a) Operator-response evidence** — the exemption call's own
+  response at E1 (`outcome: "applied"`, `alreadyExempted: false`,
+  the returned exemption view naming idx 26 with
+  `tombstoned: false`), and, only if the contingency revoke is
+  used, the revoke call's own response (`applied`,
+  `alreadyRevoked: false`, the view with `tombstoned: true`).
+  This evidences what the operator routes returned at the moments
+  they were called — nothing about later reads.
+- **(b) Eligibility-projection inference** — the plane's observable
+  effects: the §6.2 post-exemption quote (eligible 1 / parked 0,
+  the single disposition flip), and at E4 the chapter quote of
+  item 2 (idx 26 `bound_already`, parked 0). This evidences the
+  exemption's *effects* on eligibility, from which its live state
+  during the gate is inferred — it is inference about effects,
+  not a read of the exemption record.
+- **(c) Independently verified journal state — UNAVAILABLE.**
+  There is no GET route, view, or other read surface for the
+  singleton row or the append-only events journal; the store's
+  `chapterExemptionEvents` reader has no route consumer. The
+  record must state this absence plainly. It must **not** claim —
+  as the proposal §9.2 item 6's earlier wording ("the exemption
+  record reads `live` … with exactly one `exempted` event in its
+  journal") implied — that the journal or the row was read back,
+  counted, or independently verified. That wording is superseded
+  by this section, which governs.
+
+### 9.3 Julie's playback check — the acceptance step (hers, outside the executor's verdict)
+
+Julie opens Chapter 3 in the app. Expected header: **"Complete
+27/27"** — the shipped client projection's full-completion form
+(`projection.js`: label `Complete` renders `Complete ${total}/${total}`;
+the `Partial n/27` form appears only while segments are missing).
+Caveat: the label is computed from device-verified audio, so an
+"Uncertain" reading on a device that has not yet verified the new
+segment's bytes is a device-verification state, not a generation
+failure (Gate 4 precedent). Acceptance = the chapter plays **in
+sequence through its end**: idx 26's audio present and audible as
+the chapter's final segment (design §10C.3). Only with §§9.2 +
+9.3 both holding is Chapter 3 called **finished**.
+
+### 9.4 Record
+
+The executor writes the execution record (every census line —

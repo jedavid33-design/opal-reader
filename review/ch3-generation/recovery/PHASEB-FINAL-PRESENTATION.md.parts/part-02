@@ -1,0 +1,174 @@
+   surface evaluates idx 26's voice before the fences lift (§1.1).
+   This presentation keeps the design's order. The §1.1 preflight
+   derivation (shipped-code resolution over the unchanged live
+   entity) is evidence the checkpoint will pass — it does not
+   replace the checkpoint. The exemption is the cheapest mutation
+   to hold under a STOP: it creates no work, spends nothing, and is
+   tombstone-reversible **within §8.1's verified conditions**.
+7. **The revoke's fence set is materially thinner than the grant's
+   (shipped, load-bearing for §8.1).** `revokeChapterExemption`
+   (park-release.mjs:646) does **not** call the definition
+   derivation, does **not** verify the job is still `parked_policy`,
+   and does **not** check the occurrence's binding, plan, or
+   generation state. Its only fences are: an exemption row exists
+   for the occurrence **and** its `job_id` matches the caller's
+   (else `chapter_exemption_not_found`), and the row is not already
+   tombstoned (an already-tombstoned row is an idempotent no-op
+   success, `alreadyRevoked: true`, writing nothing and journaling
+   nothing). The code therefore *permits* a revocation after
+   generation has occurred; §8.1 states exactly what it would and
+   would not do in that state, and this gate's paperwork — not the
+   code — is what confines its use to the verified window.
+
+## 4. Figures
+
+| figure | value |
+|---|---|
+| chars (live-plane basis) | 569 |
+| expected cost `round(chars/15.96 × 225)` | **8,022 ≈ $0.008** |
+| single-attempt upper `round(chars/10 × 225)` | 12,803 ≈ $0.013 |
+| per-occurrence guard ceiling (12 × upper) | 153,636 ≈ $0.154 |
+| phase fence at submission: settled 1,029,420 + reservedUnverified 5,648 + inFlightUpper 0 + pendingUpper 153,636 | **1,188,704 ≤ 13,500,000** ✓ |
+| phase settled after, expected | ≈ 1,037,442 of 13,500,000 (7.7%) |
+| first-pass dispatches expected / worst case | 1 / 12 |
+| day headroom today (PT 2026-11-01) | 24 (≥ 12 ✓) |
+
+**Settled cost as a function of the realized duration multiplier m**
+(Gate 4 R1 method; settled ≤ m × 12,803 + (0.5m + 4.5), the
+per-occurrence rounding allowance): m = 0.63 (Chapter 3's realized
+ratio across both prior runs) → ≈ **8,071**; m = 1 → **12,808**;
+m = 1.5 → ≈ 19,210; m = 2 → ≈ 25,612; m = 3 → ≈ 38,415; m = 5 →
+≈ 64,022 (≈ $0.064 — still inside the phase fence by two orders of
+magnitude).
+
+**Cash view (qualified, per the R1 ruling):** Google bills per
+input character. Submitted chars are bounded by 12 calls × 569 =
+**6,828** (each call submits ≤ the whole segment; split leaves
+partition it), converting to ≈ **$0.096** at the introductory rate
+(≈ $14.10 per million chars, converted from Julie's verified
+$0.81/audio-hour at the pinned 15.96 chars/sec) and ≈ $0.19 at the
+doubled post-intro rate. The ledger figures above are duration-model
+units (micro-dollars despite the `MicroCents` naming), not
+provider-confirmed prices. Julie's prepay balance was **$17.83 as of
+her Oct 29, 2026 screenshot — historical, not freshly verified**;
+auto-reload is off. The $50 monthly cap gates only legacy-ledger
+estimates at issuance and is not cited as a safeguard.
+
+## 5. E0 — execution census (runs first; every item a hard expectation)
+
+### 5.0 Read-availability precondition (Correction 1 — binding, read first)
+
+**Every read this census requires must actually be performable at
+execution time. Any unavailable required read = STOP before any
+mutation.** "Unavailable" means: the read faults, returns an error
+(including the §1.0-class HTTP 500 / `1101` fault), times out, or
+returns a shape from which the item cannot be determined. The cause
+of the §1.0 drafting-context fault is **not** claimed to be
+understood or fixed; this precondition, not an explanation, is what
+the gate runs on. The required reads, named explicitly, are:
+
+1. `GET /health` (public) — build, coordinator, generation state.
+2. The Cloudflare script-settings read — worker etag and
+   observability state.
+3. The cf-api queue read — `delivery_paused`.
+4. The capabilities/settings surfaces — Batch arming state, admitted
+   lane, phase policy, phase registry binding, settings revision.
+5. The phase-accounting surface — the four opening figures + remaining.
+6. `GET /v2/quota` and the quota reconcile surface (full pagination)
+   — PT day totals, reservations, drift/exceptions.
+7. The plans surface — the completed Gate 4 plan's state and grants,
+   and the absence of any live grant or non-terminal plan.
+8. The eligibility quotes — chapter scope and segment scope
+   (idx 26), including the eligibility digest.
+9. The sync surfaces — content and bindings watermarks; the bindings
+   inventory for the absence of an idx 26 row.
+10. `GET /v2/conflicts` — the four-row baseline comparison.
+11. The job view for the parked job — byte-comparison against the
+    Gate 3 closing capture, and its live park release record.
+12. The R2 LIST on idx 26's storage key (§1.3) — occupancy.
+
+If any one of these cannot be completed, the census has not run,
+no mutation has been made, the GO is consumed, and the executor
+reports which read was unavailable, with its raw error, before
+anything else is claimed about the gate.
+
+### 5.1 Census items
+
+Read-only, in-session, before any mutation. Expectations are Gate
+4's closing figures (§1.6); the executor verifies each live:
+
+1. `/health`: build `1c2d1d0f…`, coordinator `armed`, generation
+   `halted`. Worker etag `f15fb1ae…`; observability enabled +
+   persisted (script-settings read).
+2. Queue `delivery_paused: true` (cf-api read-back).
+3. Capabilities: Batch unarmed; standard lane admitted; phase
+   policy `enforce`; phase registry binds `forever-pucked` ↔ FP
+   bookId (above).
+4. Settings revision **1**.
+5. Phase accounting opening set: settled **1,029,420**;
+   estimatedUnverified **19,018**; reservedUnverified **5,648**;
+   unknownOpen **0**; remaining **12,464,932**.
+6. Quota: PT day dispatched **76** / reserved **0** / consumed **76**
+   (or, on a later PT day, that day's own totals with **≥ 12 slots
+   of headroom** — the census applies the §1.4 test to the live
+   day); reconcile **`ok: true`** on full pagination, sole exception
+   the known adjudicated straddler
+   (`att-37d63768-db4b-447d-8150-580b7c6ee257`,
+   `estimated_unverified`, never dispositionable). Prior PT days
+   stand: 57 (Oct 29), 79 (Oct 30), 44/0/44 (Oct 31).
+7. **No live grant; no active plan.** Plan `plan:e377a5559961b294154276b6`
+   `complete` 23/23, failed 0, its grants all `reported`. Any live
+   grant or non-terminal plan = deviation.
+8. Chapter quote (chapterIndex 2): bound **26** / parked **1** /
+   eligible **0** / voice_prompt **0**; digest **`9453ab5d…`**.
+   Segment quote (idx 26): eligible **0**, exclusions parked **1**,
+   same digest. (A live exemption from any prior act breaks item
+   8's figures — §1.5 substitute (a).)
+9. Content watermark **18** (the §1.1 voice derivation's input —
+   any other value STOPS the gate until the derivation is re-run);
+   bindings watermark **1841**; no bindings row for idx 26.
+10. Conflicts: **exact match** to the pinned four-row
+    `schedule_dead` baseline (ids 1–4 with their recorded
+    occurrence ids and timestamps). No row cleared, none added.
+11. Parked job: `parked_policy` rev 1, job-view body byte-identical
+    to the Gate 3 closing capture (fingerprint basis `b991f18a…`);
+    its live park release still names exactly the 23 ids of
+    idx 3–25, state `live`.
+12. R2: idx 26's storage key (§1.3) still FREE (re-LIST).
+
+**STOP law (standing, verbatim in effect):** if any census item,
+binding, plan state, grant state, or hard-stop figure differs from
+the paperwork expectation — even by one item, even if it looks like
+harmless known bookkeeping — STOP before any further mutation,
+preserve the current state (apply containment holds if the gate has
+already moved: re-pause first, then re-halt), and report the exact
+deviation + proposed explanation to Julie and Rowan. The executor's
+own tracing never clears its own stop. **The GO is consumed by a
+STOP; no retry.** One GO = one execution attempt.
+
+## 6. Execution sequence
+
+### 6.1 E1 — Exemption (mutation 1)
+
+Exactly ONE `POST /v2/d6-exempt-chapter-occurrence` (operator
+fence) with body `{jobId: 1832c21f…, occurrenceId: 2a85f74f…,
+authorizationRef: <Julie's recorded Phase B GO>, source, note}`.
+No halt fence applies; the system is still HELD and paused, and
+the call creates no work. Required response: `outcome: "applied"`,
+**`alreadyExempted: false`**, and the returned exemption view
+naming exactly idx 26 / the parked job / FP / chapterIndex 2,
+`tombstoned: false`. **Any `rejected` outcome, any refusal reason,
+or `alreadyExempted: true` = STOP** (§§1.5, 10) — refusals write
+nothing, so a STOP here leaves the system byte-identical to census.
+
+### 6.2 Voice checkpoint — HARD GATE (design §6 E1b read-back)
+
+Immediately after E1, re-read the segment eligibility quote
+(`scope=segment&occurrenceId=2a85f74f…`). Required: **eligible 1 /
+569 chars / expected 8,022**, exclusions all zero, and the chapter
+quote now bound 26 / parked **0** / eligible **1**. This read-back
+is the binding quote for the gate.
+
+- If the segment instead reads **`voice_prompt`** = **STOP**: no
+  submission, no re-arm. A voice-mapping choice is Julie's separate
+  decision and is not part of this gate. Under the same GO the
