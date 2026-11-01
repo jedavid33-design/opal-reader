@@ -20,6 +20,68 @@ unpause, no preview, no finalizer call, no generation, no
 spend. The finalizer stays dormant on the new build exactly as
 it is on the old.
 
+**Revision history — Amendment 1 (2026-11-01).** This amendment
+answers Rowan's HOLD (board comment **6560361683**), which
+refines the conditional PASS she posted seconds earlier (board
+comment **6560360563**): the PASS stands, but the clarification
+below must be corrected **before any deploy GO is requested**.
+This is a **wording-only** revision of the proposal at pin
+`c08951818594115062cd1b4c8bdf3d2eedb1487b`, which it supersedes
+as the operative proposal text. Four changes, and only these:
+
+1. **Operator-call prohibition narrowed to the six protected
+   routes (§5 D6).** §4 item 6 requires an authenticated
+   operator quota-reconcile read, yet §5 D6 as filed said "no
+   valid operator call of any kind is made in this gate" —
+   a contradiction. D6 now narrows the prohibition explicitly
+   to the six listed protected routes (the four Chapter 3
+   routes and the two finalizer routes): no valid operator
+   call is made to any of those six; on them, only the
+   credential-less refusal probes occur. The enumerated
+   authenticated read-only census (§4) and read-back (§5 D7)
+   calls are expressly permitted — in particular the operator
+   quota-reconcile read of §4 item 6 — and no other
+   authenticated call is permitted. The sentence "no valid
+   operator call of any kind is made in this gate" is
+   superseded and void.
+2. **"No preview call" clarified (§6).** §6 now distinguishes
+   the credential-less refusal probe of the preview route (the
+   §5 D6 denied probe, which must refuse HTTP 403 and is part
+   of the gate) from a valid preview invocation (an
+   authenticated preview call, which remains forbidden in
+   this gate). The original §6 sentence, which did not draw
+   the distinction, is superseded by the clarified clause.
+3. **Not-held finding; ends-held certification (§4.3, §5
+   closing, §8).** A not-held census finding is now expressly
+   a report of the observed state: the executor stops without
+   silently changing it (no halt flip, no queue pause, no
+   corrective step inside this gate). And "ends held" may be
+   certified only when the post-flight read-backs (D7)
+   actually establish **both** protections — halt `"1"` in
+   place **and** queue `delivery_paused: true`. The former
+   unqualified ends-held wording in §5's closing and §8 is
+   superseded by this certification rule; where the
+   read-backs do not establish both protections, the record
+   reports the observed state and certifies nothing.
+4. **Post-upload mismatch (§5 D4, §7).** On any post-upload
+   mismatch, the deployed identity and the held status remain
+   **UNVERIFIED until evidenced** by read-backs; no automatic
+   repair, retry, or rollback follows from a mismatch. D4's
+   former "STOP, stay held, file the mismatch" is superseded:
+   on a mismatch the held state cannot be asserted, only
+   reported as unverified pending evidence.
+
+Nothing else changes. The candidate build
+(`1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`), the operative
+envelope (1,438,980 bytes, SHA-256
+`3508d1bf722a426f7332afbdadcc2012cbd8271d35e5b8a4e1758b5eb850ac8c`,
+31 parts), the mutation budget (exactly 1 upload, plus at
+most 1 conditional observability-only settings PATCH), and
+every boundary in §§1–10 are identical to the superseded pin.
+Neither clarification adds an action or a mutation: the
+quota-reconcile read was already §4 item 6 of the census as
+filed, and the preview refusal probe was already §5 D6.
+
 ---
 
 ## 1. Candidate identity (immutable)
@@ -247,8 +309,20 @@ Any census item failing its expectation — including the queue
 found unpaused or the halt found lifted (the system is
 supposed to already be held; "fixing" either silently is
 forbidden — a not-held finding is a deviation to report, not a
-step to take) — ends the gate before mutation, held, with the
+step to take) — ends the gate before mutation, with the
 deviation filed for Julie and Rowan.
+
+A not-held census finding is reported **as the observed
+state**: the record states what was actually found (halt
+lifted, queue unpaused, or both), and the executor stops
+without silently changing it — no halt flip, no queue pause,
+and no other corrective step is taken inside this gate.
+Symmetrically, at the end of the gate, **"ends held" may be
+certified only when the post-flight read-backs (§5 D7)
+actually establish both protections** — `GENERATION_HALT`
+`"1"` in place **and** queue `delivery_paused: true`. Where
+the read-backs do not establish both, the record reports the
+observed state and does not certify ends-held.
 
 ## 5. Bounded action sequence (mutation budget: 1, plus at most 1 conditional)
 
@@ -278,7 +352,12 @@ deviation filed for Julie and Rowan.
   script via cf-api and verify **every one of the 31 parts**
   byte-for-byte against §1.2 (SHA-256 per part), and the
   deployed metadata against the assembled metadata. Any
-  mismatch: STOP, stay held, file the mismatch (§7).
+  mismatch: STOP and file the mismatch (§7). Until read-backs
+  evidence otherwise, the deployed identity **and** the held
+  status are both **UNVERIFIED**; no automatic repair, retry,
+  or rollback follows from a mismatch — the only in-gate
+  response is the filed report, and any further step needs
+  its own authorization (§7).
 - **D5 — Observability check (+ conditional repair).** GET
   script-settings: if observability survived (expected, per
   every deploy in this chain), no action. **Only if** the
@@ -296,9 +375,19 @@ deviation filed for Julie and Rowan.
   `/v2/d6-exempt-chapter-occurrence`,
   `/v2/d6-revoke-chapter-exemption`,
   `GET /v2/d6-grant-finalization-preview`,
-  `POST /v2/d6-finalize-grant`. Probes only — **no valid
-  operator call of any kind is made in this gate.** Any route
-  not refusing: STOP-report (no remediation inside this GO).
+  `POST /v2/d6-finalize-grant`. Probes only. **The
+  prohibition on valid operator calls in this gate applies to
+  exactly these six routes**: no valid (authenticated)
+  operator call is made to any of them — on these routes, the
+  only calls are the credential-less refusal probes above.
+  Elsewhere, the only authenticated calls permitted in this
+  gate are the enumerated read-only census reads (§4) and
+  read-back reads (§5 D7) — in particular the authenticated
+  operator quota-reconcile read of §4 item 6, which the
+  census and its pagination completeness rule require. **No
+  other authenticated call of any kind is permitted.** Any
+  route not refusing: STOP-report (no remediation inside this
+  GO).
 - **D7 — Read-back set.** `/health` shows build
   `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867` and generation
   still halted; queue still `delivery_paused: true`;
@@ -310,14 +399,27 @@ deviation filed for Julie and Rowan.
   exact mutation count actually spent (expected: 1; at most 2
   with the conditional D5 PATCH) and $0 spent.
 
-**The gate ENDS HELD**: halt still `"1"`, queue still paused,
-Generate button NOT live. There is no re-arm step in this
-proposal, and none may be improvised.
+**The gate ENDS HELD** — certified only as §4.3 states:
+where the D7 read-backs establish halt still `"1"` **and**
+queue still `delivery_paused: true`, the record certifies
+ends-held, with the Generate button NOT live. Where they do
+not, the record reports the observed state and certifies
+nothing. There is no re-arm step in this proposal, and none
+may be improvised.
 
 ## 6. Explicit non-actions
 
-No preview call (the finalization preview is not invoked, even
-read-only). No finalizer action call. No park release, no
+No **valid** preview call: the finalization preview is never
+invoked with operator credentials in this gate, not even
+read-only. This expressly does **not** prohibit the §5 D6
+denied probe of the preview route — a credential-less
+`GET /v2/d6-grant-finalization-preview` call that must refuse
+HTTP 403 `migration_operator_required`. That probe is part of
+the gate: it checks that the route rejects the unauthenticated,
+it is not a preview invocation, and no preview output is
+obtained in this gate. No finalizer action call (the §5 D6
+probe of `POST /v2/d6-finalize-grant` is likewise
+credential-less and refusal-only). No park release, no
 exemption write, no quarantine release. No halt lift, no queue
 unpause, no settings change beyond the conditional D5
 observability repair. No job submission, no generation, no
@@ -329,8 +431,13 @@ approached (§7).
 
 - **Containment is not rollback.** Ending this gate held on
   the new build — the designed outcome — needs no rollback at
-  all. A failed step likewise ends held; the response is a
-  report, not a compensating action inside the same GO.
+  all. A failed step likewise produces a report, not a
+  compensating action inside the same GO: on any post-upload
+  mismatch the deployed identity and the held status remain
+  **unverified until evidenced** (§5 D4), and no automatic
+  repair, retry, or rollback follows from the mismatch —
+  rollback exists only as the separately authorized act
+  below.
 - **Rollback (separate Julie authorization only):** redeploy
   the Gate 2D operative envelope — build
   `408f91497131a151a199b3f9ec4cbb283a8febd5`, 30 parts,
@@ -367,7 +474,9 @@ rather than being held by the gate, and **every** failed check
 — census deviation, re-assembly mismatch, upload failure,
 byte-verification mismatch, observability surprise, a probe
 that does not refuse, a read-back that differs — ends the gate
-held with a filed report. Nothing is retried inside the GO;
+with a filed report and no further action (ends-held is
+certified only per the §4.3/§5 rule, on read-backs that
+establish both protections). Nothing is retried inside the GO;
 a retry is a new proposal or a new GO, decided by Julie with
 Rowan's ruling where the STOP law requires one.
 
