@@ -1,0 +1,219 @@
+for any given row, or the engine-level reason for the rejection.
+Row 4 (the stalled grant's own lease row, written
+2026-11-01T01:04:30Z, after Phase A completed) belongs to a grant
+that was delivered and acknowledged, so its processing would have
+taken the delivered branch (L4) — but that is an inference from
+the branch structure, not a recorded fact.
+
+**Shared construction, not coincidence of error text.** The
+preview's L1 and the lease path's L2/L4 are the *same* query shape
+against the *same* table with the *same* pattern construction,
+written independently in two modules (the finalizer deliberately
+duplicates coordinator derivations rather than importing them).
+The error-text identity between the E3 500 and the conflict rows
+is therefore not a bare coincidence of strings: both plausibly
+originate from one construction family that production SQLite
+rejects under conditions the source alone cannot pin down (§4).
+
+One caution against over-reading the lease evidence: the L3 LIKE
+in `handleReport` belongs to the same family, and executor reports
+*have* closed grants in production (the fresh Chapter 2 plan
+completed 18/18 on 2026-10-31). So the construction does not fail
+universally on every call — or the successful closures did not all
+traverse L3 in the same state. Intermittency, data-dependence, or
+engine-state-dependence cannot be excluded; a "the pattern always
+throws" claim would overstate the evidence.
+
+---
+
+## 6. Candidate-cause table
+
+Ratings: **supported** = production evidence points at it and no
+evidence contradicts it; **plausible** = consistent with all
+evidence but not singled out by it; **unlikely** = reachable only
+under assumptions the evidence does not favor. Nothing below is
+rated "proven": the proven facts are only those in §1–§2 and §5's
+mechanical field mapping.
+
+| ID | Candidate | Evidence for | Evidence against / limits | Rating |
+|----|-----------|--------------|---------------------------|--------|
+| H1 | **The §4.3.5 LIKE (L1, `grant-finalizer.mjs:417-419`) threw at E3.** The derivation's only pattern query; the identical construction (L2/L4) provably threw this exact message in production lease processing (§5). | Only LIKE/GLOB in the entire preview path (grep-complete, §4); error text is specifically a pattern-complexity error; the same construction family's production failures are independently recorded four times; all derivation steps before §4.3.5 are equality/IN reads of the same kind the E0 census exercised successfully. | No progress logging exists, so reaching §4.3.5 is inferred, not observed — steps 1–5 (§3.1) precede it and any of them throwing a *differently-caused* error with this message is not formally excluded (though none contains a pattern); the same query passes under the harness SQLite, including on production-shaped fixture data. | **Supported** as the leading candidate for the specific call site; the *reason* the engine rejected the pattern remains unproven (§4). |
+| H2 | The L5 pattern (`coordinator.mjs:2185`, `job_id + ":follow:%"`) is implicated. | Same error family in the abstract. | Unreachable from the preview path and from lease processing; it runs only inside `handleReport`'s repair-chain branch. The preview never calls `handleReport`. | **Unlikely** (considered and excluded by reachability). |
+| H3 | A non-LIKE derivation statement (e.g. the `IN`-subquery phase aggregates, the `spend_intents` IN-list, `derivedDayTotals`) threw, and the DO SQLite layer reported it with this message. | The 500 body alone cannot formally exclude it. | Every such statement is an equality/IN/aggregate shape with no pattern semantics; nothing in the source suggests message normalization of that kind; the identical message is independently tied to a LIKE construction in §5. | **Unlikely**. |
+| H0 | **Null hypothesis: the throw occurred outside the derivation** — e.g. in the class gate's cache load/flush (`worker-entry-prod-d6.js:1340`/`:1348`) or elsewhere in the same request's handling. | The response body carries no stack or statement identity (§2); the request does execute code before and after the derivation. | No LIKE/GLOB exists in the cache code or the gate (grep-complete); the error is specifically a query-pattern error; the gate's own validation failures return named 400/403 responses, not 500s of this shape. | **Unlikely, but not excludable from the E3 evidence alone** — retained deliberately; probe D6 (§7) is what discriminates it (a deterministic re-throw on an identical isolated call, with all surrounding state verified unchanged, narrows the field to the derivation-or-gate segment of that one request). |
+| H4 | The conflicts read itself (`conflictsView`, `coordinator.mjs:2792-2793`) is the failing pattern query. | It is the surface whose data carries the same error string (as stored data). | It is a plain `SELECT * FROM binding_conflicts ORDER BY id DESC LIMIT 100` — no pattern matching; it is not called by the preview; and it succeeded at E0, post-E1, and post-STOP in the same window. The error string appears there as *stored data* (§5), not as that query's own failure. | **Unlikely** (excluded). |
+
+**Leading hypothesis, at its true strength:** the preview most
+likely threw at its §4.3.5 target-set LIKE — the same
+`` `op:<grantId>:%` `` construction whose identical twins in the
+coordinator's lease path are recorded throwing the identical error
+in production. That is a *supported hypothesis about the call
+site*, not a proven root cause: why the Durable Object SQLite
+build rejected a 51-character, single-wildcard pattern that the
+harness engine accepts is unknown, and intermittency is not
+excluded (§5 caution).
+
+---
+
+## 7. Bounded live-diagnosis plan — FOR LATER APPROVAL (not executed here)
+
+Everything in this section is a **proposal for a future gated
+step**. It executes only after Rowan's review of this proposal
+**and** Julie's separate decision authorizing live diagnostic
+access. It uses only already-existing read surfaces; it proposes
+no code change, no deploy, and no new route.
+
+### 7.1 Preconditions (all must hold before the first probe)
+
+- Rowan has reviewed this proposal; Julie has given a recorded
+  decision for the diagnosis (her consumed Gate 3 GO does not
+  cover it).
+- The system is still HELD (`GENERATION_HALT "1"`, queue paused) —
+  verified by probe D1; the diagnosis never un-halts or unpauses.
+- Exactly one diagnosis attempt; no probe is retried within it
+  (a failed probe is a result, recorded, and the STOP rules in
+  §7.4 decide what happens next).
+
+### 7.2 Probes, in order
+
+All probes are GETs. "Exposure" states what production data the
+response surfaces and how it is minimized; every response is
+stored verbatim under §8 and handled under the standing rule:
+structural metadata only, never segment text (none of these
+surfaces carries segment text in any case).
+
+| ID | Probe (exact) | What it reads / answers | Data exposure & minimization | Requests |
+|----|---------------|--------------------------|------------------------------|----------|
+| D1 | `GET /health` (client surface) | Build id, halt state, coordinator state — confirms the held baseline before anything else. | Build/flag metadata only; no user data. | 1 |
+| D2 | `GET /v2/conflicts` (client surface) | The complete current conflict set. **Key diagnostic:** any *new* `schedule_dead` row since the Gate 3 census — especially one for the stalled grant — is fresh, independent evidence that lease processing is still throwing (and what its message is). | The conflict rows themselves (grant ids, timestamps, error strings) — the same data class already captured at E0; stored verbatim, nothing further derived from it. | 1 |
+| D3 | `GET /v2/d6-plans/plan:e377a5559961b294154276b6` (client surface) | Grant still `issued` rev 2, plan `active` 8/23, job/partition unchanged — the state the E3 call faced. | Plan/grant/job structural metadata (ids, states, counts) — same class as E0 captures. | 1 |
+| D4 | `GET /v2/d6-quota-reconcile` (operator surface, paginated, SELECT-only) | Reconcile still `ok: true`, drift empty, sole straddler exception; reservations/attempts census unchanged (44/52/96 on PT 2026-10-31). Rules out quota-state drift as a confounder before D6. | Quota ledger aggregates and per-attempt day assignments (ids + day keys + counts); no text, no audio data. Pagination follows the standing completeness rule (fixed page size; disjoint pages; union = totals; totals stable) and stops the moment completeness is proven. | expected 4, **worst case 6** |
+| D5 | `GET /v2/sync/changes?family=bindings&sinceSeq=1826` (client surface) | Zero binding movement since the Gate 3 census watermark — confirms nothing has written bindings in the held interval. | Binding change records since seq 1826 (expected: none). If any exist, that is itself a STOP result (§7.4). | 1 |
+| D6 | **Named probe — the preview re-invocation.** `GET /v2/d6-grant-finalization-preview` with the *exact* E3 identity parameters (same grantId/planId/jobId), via the operator connector. | **Reproducibility, and only that.** Does the identical call, against state D1–D5 have just verified is unchanged, throw the identical 500? A deterministic re-throw localizes the fault to this request's derivation-or-gate segment (discriminating H1 vs H0, §6); a success or a named refusal is equally decisive evidence that the E3 failure is not a deterministic property of the derivation on this state. | On success the response is the full precondition view: ids, states, counts, reservation ids, day totals, phase figures, and the precondition digest — the same structural class as the E0 census captures; it contains no segment text and no credentials. The digest, if one is returned, is **evidence only**: it authorizes nothing and must never be presented to the action (any future action needs its own gate, its own preview, and its own digest). | **exactly 1, never retried** |
+| D7 | `GET /v2/conflicts` (client surface) — post-D6 re-read | Detects whether anything in the diagnosis window (including the D6 request's own DO wake) added a conflict row. | Same class as D2. | 1 |
+
+**Total request count: expected 10, worst case 12** (the D4
+pagination bound is the only variable). No other requests are in
+scope; anything beyond this list is a new proposal.
+
+**Why D6 is not a casual step.** Re-invoking the preview is the
+one probe that re-executes the failing code path. It is included
+only because reproducibility is the single most discriminating
+fact the read-only surfaces cannot otherwise provide, and it is
+bounded accordingly: exactly one call, last among the probes,
+only after D1–D5 verify the faced state is unchanged, and its
+outcome — success, named refusal, identical 500, or different
+500 — ends the diagnosis (§7.4). If Rowan or Julie prefers, D6
+can be struck from the diagnosis and the remaining probes still
+stand as a coherent (if less decisive) package; the proposal
+flags D6 as the one element needing explicit, separate
+justification in the diagnosis GO.
+
+**Honest caveat on "read-only".** Every probe is a read at the
+API level and none of them writes application data. As with any
+request to this system, a request wakes the Durable Object and
+its own alarm machinery may run (that is production's normal
+behavior, and D7 exists precisely to observe any visible effect
+of it). The Gate 3 census and post-STOP read-backs already
+exercised the same surfaces in the same held state without
+incident.
+
+### 7.3 What the diagnosis can and cannot conclude
+
+- It **can** establish: determinism (or not) of the preview
+  failure on verified-unchanged state; whether the lease path is
+  still producing `schedule_dead` rows and with what message;
+  whether any state drift confounds the E3 observation.
+- It **cannot** establish the engine-level reason SQLite rejected
+  the pattern (no log or statement-level telemetry is available,
+  §2), and it does not propose a fix. A fix is a separate
+  code-change proposal informed by whatever this diagnosis finds.
+
+### 7.4 STOP boundaries and escalation
+
+- Any probe other than D6 returning a non-200 status → **STOP**;
+  capture and report; no further probes.
+- D2/D7: the four baseline rows changed or missing in any field
+  → **STOP**. A purely *additive* new `schedule_dead` row is
+  evidence, not a stop — record it verbatim and continue.
+- D4: reconcile not `ok: true`, drift non-empty, or any exception
+  beyond the known straddler → **STOP**.
+- D3/D5: grant/plan state different from the Gate 3 census, or
+  any binding movement since seq 1826 → **STOP**.
+- D6 outcomes: identical 500 → diagnosis complete (deterministic
+  reproduction); a 200 with a digest → diagnosis complete (not
+  reproduced — the digest is filed as evidence and **not** used);
+  a named refusal or a different error → **STOP** and report.
+  In every D6 outcome the diagnosis ends: there is no second
+  preview call and no action call, ever, inside this diagnosis.
+- **Escalation:** a deterministic reproduction (D6 identical 500),
+  with or without fresh lease rows at D2/D7, is the result that
+  supports a *separate* code-change proposal (for example,
+  replacing the LIKE prefix scan in the derivation — and, for
+  Rowan's consideration, its coordinator twins — with a
+  non-pattern read). This proposal deliberately does not design
+  that change. A non-reproduction escalates differently: back to
+  Rowan with the full evidence before anyone proposes anything.
+
+---
+
+## 8. Evidence-capture specification (for the future diagnosis step)
+
+- **Where:** `~/workspace/ch2-program/ch3-recovery/gate3/diagnosis/execution/evidence/`,
+  created by the diagnosis execution (it does not exist yet and
+  this proposal creates no execution directory).
+- **What is saved, per probe:** the request (method, path, query —
+  headers recorded by name only, **credential values never
+  written**), the verbatim response envelope and body, the HTTP
+  status, and start/end timestamps (the Gate 3 evidence pattern:
+  `preview-e3.json` + window files).
+- **Derived artifacts:** a compare sheet mechanically checking
+  D1–D5/D7 values against the Gate 3 E0 census values and the
+  four-row conflict baseline; a SHA-256 census-evidence digest
+  over the sorted capture listing (the established pattern),
+  kept distinct from any preview precondition digest D6 might
+  return — the two digests are named separately in the record
+  and never conflated (Gate 3 proposal §7.14 discipline).
+- **Record and filing:** a `diagnosis/execution/EXECUTION-RECORD.md`
+  stating each probe's outcome, the STOP/escalation disposition,
+  and the hypothesis table (§6) re-rated against the new evidence
+  — hypotheses re-rated explicitly, never silently upgraded to
+  findings. The record is pinned in repo
+  `jedavid33-design/opal-reader`, branch `ui1-review` (single-parent
+  child of the then-current head, per-blob SHA assertions,
+  read-back verification) and filed on board issue #15 with a
+  fresh handoff ID for Rowan's review, following the established
+  gate pattern.
+
+---
+
+## 9. What stays true regardless, and the traced source
+
+**Regardless of any review outcome:** the system stays HELD
+(halt `"1"`, queue paused) — this proposal does not propose
+releasing the hold; the finalizer is not retried under the
+consumed GO 6559241292; no generation, no submission, no
+exemption, no re-arm; $0 spend. Any code change or deploy, any
+baseline change, and any new Gate 3 attempt each require their
+own proposal and their own approval, in that order.
+
+**Traced source files** (live build `408f9149` tree,
+`finalizer-build/worker-build/worker/`):
+
+| File | SHA-256 | Lines |
+|------|---------|-------|
+| `generation/grant-finalizer.mjs` | `15dd575f77efb0d5159f3674162728662b102891cd95cd7b680bf4a8bd0794ee` | 830 |
+| `coordinator.mjs` | `5d0727638b24e497c7b7ca73d6deead411a5ebc8e475163f78aa0b01d72a3de5` | 5,042 |
+| `worker-entry-prod-d6.js` | `292ca83e892d5d675f1c107ea4adf1fed34cca6c054fcd068c51b403f79f8a31` | 1,964 |
+| `generation/quota-budget.mjs` | `2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820` | — |
+| `generation/genstore.mjs` | `811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a` | — |
+
+**Saved evidence relied on:** `gate3/execution/EXECUTION-RECORD.md`
+and its `evidence/` directory — in particular `preview-e3.json`
+(the verbatim 500), `compare-e0.txt` (21/21), `conflicts-e0.json` /
+`conflicts-e1.json` / `conflicts-stop.json` (the four-row set,
+unchanged across the gate), `census-evidence-digest-e0.txt`
+(`bef72c47e31414e08796b7e5a3d84511a761c7d746bd9950067519f0aeb16b19`),
+and the E3 window timestamps (14:29:00Z → 14:29:01Z).
+
+— Wren (diagnosis-proposal author; preparation only, nothing executed)
