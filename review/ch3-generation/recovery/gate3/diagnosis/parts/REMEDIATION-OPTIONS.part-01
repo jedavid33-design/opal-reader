@@ -1,0 +1,307 @@
+the result set equals the intended prefix set. Divergence from the
+byte-prefix set is possible only for a key with a multi-byte
+character inside the first N characters — a shape no writer
+produces, but one a reviewer must argue about, where Option B needs
+no argument. `instr` on TEXT likewise reports character positions.
+
+**Index behaviour:** the column is wrapped in a function, so the PK
+index cannot serve the predicate — the query becomes a scan of
+`ledger_ops` (kind-filtered). The table is small per coordinator, so
+the cost is bounded and this is not a correctness objection; it is
+strictly worse than B for zero semantic gain.
+
+**Verdict:** semantically adequate, strictly dominated by B.
+
+---
+
+## 6. Option D — derived column extracted at write time + equality
+
+**Construction:** add a column (e.g. `grant_id`) to `ledger_ops`,
+populated by the :1748 insert (and the :1988 release insert), then
+query `WHERE kind = 'attempt' AND grant_id = ?`.
+
+**The backfill problem is dispositive for this recovery.** Existing
+rows — including the stalled grant's eight attempt rows, written by
+the live build — have no value in a new column; `ALTER TABLE … ADD
+COLUMN` leaves them NULL (a constant default cannot encode per-row
+grant ids). Equality on the new column returns **zero rows for the
+stalled grant**: the finalizer derivation would refuse
+`grant_finalization_target_set_mismatch`, and the twins would find
+nothing to close or release. **Option D cannot serve the current
+grant at all** without one of:
+
+- **(i) a backfill migration** — an UPDATE parsing each existing
+  `op_key` (string surgery over the very table whose pattern access
+  is in question) inside a gated deploy. That is a production data
+  mutation of the heaviest class this project's gates recognise,
+  undertaken to fix a *read* path; or
+- **(ii) a lazy fallback** for NULL-column rows — which must locate
+  this grant's legacy rows by *some* prefix construction, i.e. it
+  reintroduces exactly the problem for exactly the rows that matter
+  most.
+
+A generated-column variant moves the same extraction into the schema
+and adds its own fragility (the grant id contains `:` separators;
+extracting it from `op:<grant>:<occurrence>` requires splitting at
+the **last** colon, for which SQLite has no direct function).
+
+**Verdict:** rejected for this recovery. (As long-term hardening in
+some other season it is unobjectionable; it does nothing for the
+grant this recovery exists to finalize.)
+
+---
+
+## 7. Option E — keep-LIKE variants (baseline)
+
+The pattern is already minimal: **51 characters** for the stalled
+grant, one trailing `%`, no `_`, bound as a parameter. SQLite's
+documented `SQLITE_MAX_LIKE_PATTERN_LENGTH` is 50,000 — three orders
+of magnitude above this pattern. Against that:
+
+- **Escaping** (`ESCAPE` clause) matters only if the variable part
+  contained `%`/`_` — it contains `:` and lowercase hex. There is
+  nothing to escape that changes the pattern's meaning or cost.
+- **`PRAGMA case_sensitive_like`** changes matching semantics, not
+  pattern-complexity accounting.
+- **Pattern splitting** (a shorter LIKE plus post-filtering) still
+  executes a LIKE.
+- **Shortening** is impossible: the prefix *is* the namespace.
+
+Every E variant keeps the construction family that production has
+now rejected five times with a byte-identical message (four recorded
+lease deaths + the Gate 3 E3 preview 500). **E does not answer the
+failure; it re-rolls it.** Its honest role in this analysis is the
+baseline — and the implicit choice if Rowan or Julie judge the
+construction family is not the problem (see §10: that judgement
+cannot be proven either way from available evidence).
+
+---
+
+## 8. Scope: which sites to change — impact on the coordinator twins
+
+The four `op:` sites (L1–L4) share one construction and one helper
+shape. L5 is the same construction over a different table. The scope
+question is separable from the option question:
+
+### 8.1 Fix L1 only (finalizer module)
+
+Smallest possible diff: one module that has never executed its
+action in production; `coordinator.mjs` untouched. The finalizer
+path becomes pattern-free. **What remains:** L2, L3, L4 keep the
+construction that has already thrown in production four times.
+
+- **L3 is on the normal closure path.** Every future executor report
+  runs it inside the report transaction. If the production engine
+  rejects the pattern there, the report application rolls back
+  wholesale and the grant stays `issued` — the same *shape* as the
+  Phase A stall (whose micro-cause is unproven; L3's family is a
+  candidate member, stated as such, not as the proven cause).
+- **L4's throws are contained but never harmless.** `alarm()` catches
+  them, so nothing crashes — instead the lease row backs off, dies
+  after 8 attempts, and writes another `schedule_dead` conflict row,
+  while the grant's occurrences stay `granted` forever (the
+  `lease_expired` events after the LIKE never run). Operationally:
+  every future lost-report grant accretes one more conflict row,
+  which churns the exact-match census baseline every future gate
+  depends on, and leaves occurrences that can never lease-expire
+  cleanly.
+- **L2's throws** land on the void paths (lease pre-delivery,
+  handoff verdict): the schedule row dies the same way before the
+  void completes — reservations unreleased, occurrences undeferred,
+  one more conflict row.
+
+### 8.2 Fix L1–L4 (the `op:` family, one shared helper)
+
+Removes the construction family from every path that has actually
+thrown in production, plus the finalizer. Diff: three predicate
+swaps in `coordinator.mjs`, one in `grant-finalizer.mjs`, one shared
+helper. **Regression surface, stated honestly:** `coordinator.mjs`
+is the live heart of the system — report closure, lease expiry, and
+dispatch voiding are exercised by every future grant. The mitigation
+is that the change is a pure predicate swap with provably identical
+row sets (§9 fixtures), no control-flow change, no schema change,
+no change to any write.
+
+### 8.3 Fix all five (add L5)
+
+L5's throw would land inside `handleReport`'s transaction in the
+repair branch — after the grant has been marked `reported` in that
+same transaction, so a throw rolls back the closure itself. Its
+marginal cost over §8.2 is one more predicate swap using the
+identical range construction over the `jobs` PK. Deferring it
+leaves exactly one LIKE in the tree, on a path that runs only for
+repair jobs with follow-ons.
+
+**Scope recommendation:** all five in one change (§11). If Rowan
+prefers staging, L1–L4 is the acceptable core and L5 a named,
+tracked remainder — but there is no technical reason to stage: the
+proof burden (§9) is identical per site and L5's is the smallest.
+
+---
+
+## 9. Regression tests — what can and cannot be proven locally
+
+**The harness limitation, plainly:** the local DO test harness's
+SQLite **accepts** the exact LIKE construction production rejects —
+the Gate 2 battery ran the §4.3.5 query green, including on
+production-shaped fixtures, and production returned the 500. No
+local test can reproduce the failure, and no local test can prove a
+replacement "works" against the production engine's quirk. Tests
+can prove **semantic equivalence** and nothing more. Production
+proof of any fix exists only at the separately gated deploy + a
+Gate 3 retry preview.
+
+What CAN be built and run locally:
+
+1. **Semantic-equivalence fixtures (new suite).** For each site,
+   insert an adversarial key set into a scratch store, run the old
+   LIKE query and the replacement side by side, and assert the
+   returned row sets are byte-identical (same keys; same order
+   where the original query orders). The set must include:
+   - the stalled grant's exact shape — eight
+     `op:grant:plan:e377a5559961b294154276b6:ch2:1:full:<uuid>` rows;
+   - prefix-sibling grants: ids differing in exactly one hex char;
+     an id that is a strict textual prefix of another **with and
+     without** the `:` terminator catching the boundary; a sibling
+     whose segment reads `full2` against `full`;
+   - keys with `%` and `_` in the suffix, and in a hypothetical id
+     component — here the assertion is against the **intended**
+     (byte-prefix) set, stated openly: on these inputs LIKE and the
+     intended set diverge *by design of the fix* (LIKE over-matches),
+     and the fixture asserts the intended set. On every
+     writer-producible key the two coincide, and the fixture asserts
+     that too;
+   - case-variant keys (uppercase hex sibling) — same intended-set
+     assertion;
+   - the empty-suffix key (`op:<gid>:` exactly);
+   - interleaved `rel:op:…` release rows and other kinds — the
+     `kind = 'attempt'` predicate must still exclude them;
+   - non-ASCII bytes in a suffix;
+   - for L5: `plan:X`, `plan:X:follow:1`, `plan:X:follow:2`,
+     `plan:X:follow:10` (count = 3 under both constructions) and a
+     sibling `plan:XY:follow:1` that must not count for `plan:X`.
+2. **Production-shaped finalizer fixtures.** The existing finalizer
+   suites already carry the stalled-cohort fixture (Fixture S, per
+   Gate 2 Amendment 1). Requirement: on every existing finalizer
+   fixture, the derivation's classification **and precondition
+   digest** are byte-identical before and after the swap. Digest
+   equality across the whole fixture set is the strongest local
+   evidence obtainable.
+3. **Existing coordinator suites** covering report closure
+   (unreported occurrence returns to pending), lease delivered-branch
+   expiry, and dispatch voiding (release-exactly-once) must pass
+   unchanged — these exercise L2/L3/L4 consumption, not just the
+   predicate.
+4. **Full battery on the exact changed tree.** Baseline for this
+   lineage, verified from the build records (`finalizer-build/
+   AMENDMENT-1.md`): **1,178 tests / 1,156 pass / 22 fail**, the 22
+   being a known, verbatim-identical failing-file set. The bar for
+   any change: the identical 22, no new failures, finalizer suites
+   green, and **one complete run's full log + exit code** captured
+   on the final tree before anything is called green.
+
+**Evidence ceiling, stated for the record:** items 1–4 are
+source-level equivalence evidence. The affirmative argument for the
+replacement is not "the harness proves it" — it is that
+range/equality predicates on indexed text keys are the constructions
+this same codebase already runs against the production engine
+everywhere else (every `WHERE op_key = ?` read, every census read
+that returned 200 at Gate 3 E0 and throughout Stage 1), while the
+LIKE family is the only construction with recorded production
+rejections. That is an argument from production evidence about
+construction families, not a harness result.
+
+---
+
+## 10. Rollback, per option
+
+Standing floor law (unchanged by anything here): build
+`6a73d962…` is the minimum that may ever run against this data; any
+rollback is separately Julie-authorized, with halted/paused
+pre-holds and post-rollback read-back. The finalizer build
+(`408f9149…`, current live) added the lazily created audit table
+`d6_grant_finalizations`; once a finalizer audit row exists, rolling
+back below the finalizer build while that record exists requires
+the same compatibility care as the standing settlement-era rollback
+floor — no option below changes that either way.
+
+| Option | Schema impact | Rollback shape | Stalled grant under rollback |
+|--------|---------------|----------------|------------------------------|
+| A (enumeration) | none | build-for-build redeploy of a prior build (≥ floor) | Unaffected: the change is read-path only; grant stays `issued`, reservations open, exactly as today |
+| B (range scan) | none | build-for-build, same as A | Unaffected, same as A |
+| C (substr/instr) | none | build-for-build, same as A | Unaffected, same as A |
+| D (derived column) | **additive column** (+ backfill or fallback) | Asymmetric: old builds ignore an additive column, but a performed **backfill is a data mutation a code rollback does not undo** (and semantically need not — values are derivable facts); new rows written under D carry a column pre-D builds never read | If rolled back mid-recovery the grant is untouched, but any backfill already applied persists — a permanent data change made in service of a read path |
+| E (keep LIKE) | none | n/a (no change) | n/a |
+
+For A/B/C the mid-recovery point deserves one explicit sentence:
+the fix touches **reads only** — every candidate query is a SELECT.
+If a fix build were deployed, a finalization executed, and the build
+then rolled back, the finalization is committed bookkeeping (grant
+`reported`, reservations closed `grant_settled`, audit row written)
+and a code rollback does not and cannot un-finalize it; the rolled-
+back build simply reads the same tables it always read.
+
+---
+
+## 11. Recommendation
+
+**Option B — prefix RANGE scan — applied to all five sites through
+one shared helper**, for these reasons, in order:
+
+1. **Zero semantic narrowing.** B is the only option that preserves
+   DISCOVERY semantics at every site. Option A's enumeration
+   converts three independent cross-checks into partially circular
+   verifications and needs a writer-invariant argument; B needs no
+   argument about what writers can produce — it returns whatever is
+   there, exactly as LIKE was meant to.
+2. **Provably the intended set on every input** — byte-identical to
+   LIKE's set on every writer-producible key, and strictly tighter
+   (never looser) exactly where LIKE's pattern semantics over-reach
+   (metacharacters in interpolated ids, ASCII case-insensitivity).
+3. **It serves the stalled grant as-is.** No schema change, no
+   backfill, no fallback — the eight existing attempt rows are found
+   by the same namespace logic that wrote them. (This is where
+   Option D fails outright.)
+4. **Smallest reviewable diff per site:** a predicate swap plus one
+   bound parameter, behind one helper, with one equivalence suite
+   (§9.1) carrying the proof burden for all five sites at once.
+5. **Index-served by the existing primary keys** — no function-
+   wrapped column (Option C's scan), no optimizer-dependent LIKE
+   prefix optimisation.
+6. **Rollback is build-for-build** with no schema or data residue
+   (§10).
+
+## 12. Residual uncertainty — what this analysis does not claim
+
+- **H1 remains a supported hypothesis, not a proven root cause.** The
+  total evidence is: four recorded production deaths with the
+  byte-identical message on L2/L4-family constructions, and one
+  HTTP 500 with the identical message on the preview call whose only
+  pattern query is L1. *Why* the production engine rejects a 51-char
+  single-`%` pattern — when the documented pattern-length limit is
+  50,000 — is unknown. State-dependence and intermittency are not
+  excluded; the diagnosis's null hypothesis (the throw occurred
+  outside the derivation entirely) is not excluded either.
+- **Every option here is construction-family REMOVAL, not a proven
+  root-cause fix.** If the true cause sits elsewhere in the request
+  path, a pattern-free build could still return 500 at a Gate 3
+  retry preview — and the retry's STOP law would catch exactly that,
+  with the system held and nothing spent, which is the designed
+  failure shape.
+- **A repeat preview merely to reproduce the error is not proposed**
+  — Rowan has ruled against it (6559766643), and this analysis does
+  not need it: the first live proof of any replacement construction
+  is the preview call inside a future, separately gated Gate 3
+  attempt.
+
+**What a subsequent code-change proposal + Gate 3 retry still
+needs** (none of it authorized by this analysis): Rowan's review of
+this document → a separate code-change proposal (build + §9 battery
++ envelope) → Rowan source review → Julie's halted-deploy GO →
+re-arm decision → a fresh Gate 3 proposal whose census exact-matches
+the four-row conflict baseline (or a Rowan-ruled replacement
+baseline if the set has changed) → Julie's Gate 3 GO. Gates stay
+separate and named; no step in that chain is pre-authorized by any
+earlier one.
+
+— Wren
