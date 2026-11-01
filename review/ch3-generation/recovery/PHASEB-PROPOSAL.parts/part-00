@@ -1,0 +1,196 @@
+# PHASE B — PROPOSAL: exemption + generation of the final Chapter 3 segment (idx 26), ends HELD
+
+**Status: PROPOSAL — preparation only. Nothing in this document is an
+execution authorization.** Julie's "Let's do phase b" (chat, Nov 1,
+2026) starts the proposal pipeline: this proposal → Rowan review →
+Julie's separate execution GO. No exemption has been granted, nothing
+has been re-armed, unpaused, submitted, or generated in preparing it.
+Read-only production reads were used for §1's preflight, with the one
+disclosed exception in §1.0.
+
+**Design basis:** CH3-GENERATION-PROPOSAL-v2 (pin `8f522593`,
+ui1-review, opal-reader), Rowan DESIGN PASS 6548728089 — §5B (the
+exemption mechanism), §6 Phase B (execution sequence E1b–E4b),
+§10B/§10C (completion criteria). The mechanisms are already built,
+Rowan source-PASSed, and live on the current build — this gate needs
+**no build and no deploy**. Gate 4's final presentation (pin
+`308518f4`) and execution record (pin `97a32aed`) supply the
+execution shape this proposal mirrors at single-segment scale and
+the closing state this proposal opens from.
+
+---
+
+## 0. Bottom line
+
+- **The voice checkpoint resolves CLEAN (preflight §1.1).** Idx 26's
+  POV is **Alex**, resolving to the cast voice **Charon — provider
+  gemini, model gemini-3.8-flash-tts** — a live provider. No
+  `voice_prompt`, no voice decision needed from Julie. (The binding
+  execution-time checkpoint is still the post-exemption quote, §6.2,
+  exactly as the design specifies.)
+- **Fresh-modeled cost: 8,022 units ≈ $0.008** expected; the m = 1
+  modeled bound is 12,808 (≈ $0.013). Proposed gate detection
+  threshold: **25,000 units (≈ $0.025), detection-only** (§7.1).
+- **The segment fits today's remaining quota headroom in full**
+  (24 slots left of the 100/day fence; the occurrence's entire
+  worst case is 12) — or on a fresh PT day after the 07:00Z rollover
+  (§1.4). The choice of day is scheduling, not safety.
+- **Its storage key is FREE** on both text bases — one identical key,
+  re-verified today after Gate 4 (§1.3).
+- **Executor mutation budget: exactly 5** (exemption, halt flip,
+  unpause, re-pause, re-halt), plus exactly ONE SubmitJob command
+  (the generation submission itself, counted separately as in
+  Phase A), plus a contingency-only exemption revoke that is not
+  counted unless used (§8). **End state: HELD.**
+
+---
+
+## 1. Preflight results (read-only; performed Nov 1, 2026, post-Gate 4)
+
+### 1.0 Provenance disclosure — read this first
+
+The drafting context's calls to the production Worker's gated `/v2/*`
+read routes returned HTTP 500 (`error code: 1101`) on every attempt,
+through both the client and operator connector helpers, while
+`/health` (public) answered normally and the GitHub and Cloudflare
+API surfaces — which use the same credential machinery — worked
+throughout. The staging Worker showed the identical pattern from the
+same context (gated route 1101, `/health` 200), which localizes the
+fault to this drafting context's request path, **not** to the
+production system; the parent agent read the production plan state
+successfully through the same client helper minutes before this
+preflight began, and Gate 4's executor read every surface cleanly
+through 19:43Z. Per connector discipline the reads were not retried
+in a loop. Consequences, stated per item below: items verifiable
+through surfaces that answered **were verified fresh in this run**
+(§§1.3, 1.6, and the §5 opening state where cited); items that only
+the gated `/v2/*` surfaces expose rest on **Gate 4's closing census
+(19:40Z today, ~25 minutes before drafting)** and are written into
+§5's E0 census as binding execution-time expectations — the executor
+re-reads every one live, and any mismatch is a STOP before any
+mutation. No figure in this proposal that matters to safety rests
+solely on the drafter's word.
+
+### 1.1 Voice read-back — CLEAN: Alex → Charon (gemini)
+
+**Outcome: the segment's voice assignment is clean. It is not a
+`voice_prompt` case, and no voice decision is required from Julie.**
+
+- The builder never voice-evaluates idx 26 today: both parked fences
+  precede the voice check in disposition precedence
+  (`eligible-set.mjs` rules 2–3 before rule 4), so no live quote can
+  show its voice disposition pre-exemption. The determination is
+  therefore made the way the shipped code itself resolves it, over
+  the live content data:
+  - **Work-source resolution** (`d6-work-source.mjs` — the
+    executor's own resolution path): the Oct 31, 2026 collision
+    preflight (pin `614ba5fa`; report
+    `ch3-generation/preflight/PREFLIGHT-REPORT.md`) drove the shipped
+    `createD6WorkSource` against the live Forever Pucked entity and
+    recorded: **all 27 Chapter 3 segments resolve `ok`, every segment
+    pov Alex → cast voice Charon / gemini / gemini-3.8-flash-tts**
+    (style direction 289 chars, SHA-256 `947c6ac6…`). Idx 26 is one
+    of the 27; its work-source status was `ok` — not
+    `removed_provider`, not `unmapped_pov`.
+  - **Plane resolution** (`content-plane-adapter.mjs`
+    `resolvePovKey` + `eligible-set.mjs` rule 4): segment pov "Alex"
+    resolves by unique cast-name match to the Alex cast entry;
+    provider gemini is not in `REMOVED_PROVIDERS`
+    (azure | fish | speechify | elevenlabs), so with the fences
+    lifted by a live exemption the builder's disposition for idx 26
+    is **`eligible`**, not `voice_prompt`.
+  - **Corroboration from bound audio:** the chapter's already-bound
+    segments were produced in this same voice — R2 object metadata
+    for idx 0's audio reads `provider: gemini, voiceId: Charon`
+    (re-read in this run, §1.3).
+- **Currency of the evidence:** the resolution inputs are the book's
+  content entity and cast. The content sync watermark stood at **18**
+  at the Oct 31 preflight and at **18** in Gate 4's closing census
+  today — the entity has not changed between the derivation and now.
+  Bindings changed (1818 → 1841) but bindings do not enter voice
+  resolution. §5's census re-reads the content watermark: **if it is
+  not 18, this derivation must be re-run before the exemption, and
+  the executor STOPS until it has been.**
+- The design's binding checkpoint is unchanged and still applies at
+  execution (§6.2): the post-exemption segment quote must show
+  `eligible`; a `voice_prompt` there STOPS the gate for Julie's
+  voice decision regardless of this preflight.
+
+### 1.2 Fresh quote — modeled 8,022 (≈ $0.008); live quote is the E1b read-back
+
+- **Modeled quote (design §7 basis, recomputed):** 569 chars →
+  expected `round(569 / 15.96 × 225)` = **8,022 units ≈ $0.008**;
+  single-attempt upper `round(569 / 10 × 225)` = **12,803**;
+  per-occurrence guard ceiling `12 × 12,803` = **153,636**.
+- **Live quote today (expectation, from Gate 4's closing census —
+  see §1.0):** with no exemption in force, the segment-scope quote
+  (`scope=segment&occurrenceId=2a85f74f…`) reads eligible **0**,
+  exclusions **parked 1**; the chapter-scope quote reads bound **26**
+  / parked **1** / eligible **0**, eligibility digest **`9453ab5d…`**
+  (the value Gate 4's census recorded). These are §5 census
+  expectations, verified live by the executor before any mutation.
+- **The binding quote is the post-exemption read-back (§6.2):**
+  segment quote must show **eligible 1 / 569 chars / expected 8,022**
+  — any char or cost mismatch = STOP (design §6 E1b).
+
+### 1.3 Storage-key occupancy — FREE (verified fresh in this run)
+
+- Idx 26's first-pass fingerprint is **identical on both text
+  bases**: its `text` and `speechText` are the same string (the
+  Oct 31 preflight's Set A whole-26 and Set B flush-26 rows carry
+  the same fingerprint), so the standing two-text-bases caveat
+  collapses to a single key for this segment:
+  `audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590`
+  (the executor's flush key; format `.wav`).
+- **Fresh check (this run, via the Cloudflare API, post-Gate 4):**
+  R2 LIST on prefix `audio/07d145f7…` in `opalreader-storage`
+  returned **zero objects — the key is FREE.** Mechanism validated
+  in the same run against a known-occupied key: idx 0's prefix
+  returned its object at 2,171,878 bytes, byte-equal to its binding
+  record's size (and carrying the Charon/gemini metadata cited in
+  §1.1).
+- What this proves and does not: no pre-existing object sits at the
+  one key this generation will write, so the Chapter 2
+  adoption/collision shape has no foothold here. A key free at
+  check time is free *then*; nothing else writes `audio/` keys
+  absent an authorized generation run (§9 of the Oct 31 preflight,
+  carried forward).
+
+### 1.4 Day-headroom arithmetic — fits today in full; rollover also available
+
+- PT 2026-11-01 dispatches stand at **76** (Gate 4's closing census:
+  dispatched 76 / reserved 0 / consumed 76) of the 100/day fence →
+  **24 slots of headroom remain today**. The system has been HELD
+  with the queue paused since (re-verified §1.6), so no further
+  dispatch has occurred.
+- This segment's demand: **1** first-pass dispatch expected (569
+  chars is under the 1,200-char pre-split ceiling — no pre-split);
+  the per-occurrence worst case is **12** dispatches total (split
+  tree + repair chain combined, the shipped attempt budget). Cohort
+  bounding reserves against the same 12-slot figure at grant
+  issuance.
+- **Verdict: 24 ≥ 12 — Phase B fits today with its entire worst
+  case inside the day's remaining headroom**, leaving 12 slots
+  unspent even at the bound. Executing after the next PT rollover
+  (07:00Z) starts from a fresh 100. Both are arithmetically sound;
+  the proposal takes no position beyond the arithmetic — the GO
+  names the attempt, and §5's census re-reads the day totals live
+  and applies the same ≥ 12 test to whatever day execution lands
+  on (a day with < 12 headroom = STOP, never a partial fit).
+
+### 1.5 Exemption journal state — no exemption exists; no read surface (named substitutes)
+
+- **No read surface exposes the exemption records.** Source audit of
+  the live build's entry: the only routes touching
+  `d6_chapter_exemptions` / `d6_chapter_exemption_events` are the
+  two POST operator routes (grant / revoke). No GET route projects
+  the singleton row or the journal. The records' only read-side
+  consumer is `liveParkFenceRecords` → the plane's `exemptIds`,
+  which surfaces only as eligibility dispositions/digest.
+- **Evidence that no exemption is live for idx 26 today:** (i) the
+  chapter quote at Gate 4's census (today, 19:01Z) showed idx 26
+  still fenced (parked 1, digest `9453ab5d…`) — a live exemption
+  flips it to `eligible` and changes the digest; (ii) the exemption
+  route has never been called in production except the
+  credential-less probes at the Ch 3 deploy, which the operator
+  fence refused (403 `migration_operator_required`) and which write

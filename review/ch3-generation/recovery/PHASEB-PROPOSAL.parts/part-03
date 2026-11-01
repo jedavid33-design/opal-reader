@@ -1,0 +1,83 @@
+### 9.2 E4 — closing read-backs (all required)
+
+1. Phase B plan `complete`, totals eligible 1 / done 1 / failed 0 /
+   blocked 0; its grant(s) all `reported`.
+2. **Chapter quote: bound_already 27 / parked 0 / eligible 0 /
+   voice_prompt 0** — every segment of the chapter as it exists
+   live has audio (design §10C.1). A bindings row for idx 26
+   exists; the chapter delta from census is exactly that one
+   occurrence moving parked → bound (design §10B.2).
+3. Bindings watermark **1842** (= 1841 + exactly 1); content
+   watermark **18** unchanged.
+4. Phase accounting: settled increased by this plan's recorded
+   settlement only (expected ≈ +8,022); estimatedUnverified /
+   reservedUnverified unchanged; unknownOpen **0**; reconcile
+   `ok: true`, no new exceptions.
+5. PT day totals consistent with §§1.4/7.4 (expected: +1 dispatch;
+   bound: ≤ +12).
+6. Conflicts exact-match to the pinned four-row baseline; settings
+   revision 1; parked job byte-identical to census (still
+   `parked_policy` rev 1 — by design it keeps its 24 pending rows;
+   the release record unchanged; the exemption record reads `live`
+   naming exactly idx 26, with exactly one `exempted` event in its
+   journal).
+7. End state HELD certified: queue paused + halt "1" + build
+   `1c2d1d0f…` + etag `f15fb1ae…` + observability on + Batch
+   unarmed + nothing in flight.
+
+### 9.3 Julie's playback check — the acceptance step (hers, outside the executor's verdict)
+
+Julie opens Chapter 3 in the app. Expected header: **"Complete
+27/27"** — the shipped client projection's full-completion form
+(`projection.js`: label `Complete` renders `Complete ${total}/${total}`;
+the `Partial n/27` form appears only while segments are missing).
+Caveat: the label is computed from device-verified audio, so an
+"Uncertain" reading on a device that has not yet verified the new
+segment's bytes is a device-verification state, not a generation
+failure (Gate 4 precedent). Acceptance = the chapter plays **in
+sequence through its end**: idx 26's audio present and audible as
+the chapter's final segment (design §10C.3). Only with §§9.2 +
+9.3 both holding is Chapter 3 called **finished**.
+
+### 9.4 Record
+
+The executor writes the execution record (every census line, the
+exemption response, the checkpoint quote, each mutation with
+timestamps and read-backs, the generation timeline, closing
+figures, ends-HELD certification), pins it as a child of this
+proposal's pin, and files the summary on the board (issue #15)
+with a fresh RT-H ID. Julie's playback result is recorded when she
+gives it, as at Gate 4.
+
+## 10. STOP law and GO semantics
+
+The §5 STOP law governs every stage. Stage-specific containment:
+before E1 — nothing to contain (system untouched); after E1, before
+R1 — the §8 contingency revoke is available under the same GO to
+restore the pre-state, and is reported first; after R1, before R2 —
+re-halt; after R2 — re-pause, then re-halt. **One GO = one
+execution attempt.** A STOP consumes the GO at every stage,
+including the §6.2 voice checkpoint. No stage is retried, re-run,
+or repaired under the same GO.
+
+## 11. NOT authorized by this gate
+
+Phase B execution itself (until Julie's separate GO after Rowan's
+review); any use of the exemption for any other occurrence or job;
+any release-route call; the rest of Forever Pucked; Batch; any
+deploy, merge, or code change; Issue #16; legacy snapshot
+retirement; clearing any conflicts row; the winner-provenance read.
+
+## 12. Decision points
+
+- **Rowan:** review of this proposal — in particular the §7.1
+  PROPOSED detection threshold (25,000), the §6 order (exemption →
+  checkpoint → R1 → submission → step 0 → R2, per the §3.5
+  birth-mark constraint), and the §1.5 no-read-surface substitutes.
+- **Julie (after Rowan):** the execution GO — naming idx 26, its
+  quote (569 chars; expected 8,022 ≈ $0.008), and the detection-only
+  character of the §7.1 figures. Scheduling note (arithmetic only,
+  §1.4): the gate fits today's remaining headroom in full, or a
+  fresh PT day after 07:00Z.
+
+— Wren (preparation; no production state touched)
