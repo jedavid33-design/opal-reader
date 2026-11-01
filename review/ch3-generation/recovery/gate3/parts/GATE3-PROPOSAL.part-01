@@ -1,0 +1,289 @@
+    to 2026-10-31 permanently.
+18. The census day's own PT totals are read fresh and stated
+    as observed (new facts, not expectations). A PT-day
+    rollover does **not** clear the issued grant or its
+    reservations — it only excludes the old reservations from
+    a later day's derived total. Fresh headroom on a new day
+    is never evidence the stall cleared.
+
+### 4.4 Conflicts rule — the chosen rule, stated plainly
+
+**This rule is flagged for Rowan's review. It was the one
+paperwork point left open after the Gate 2D retry, and this
+proposal chooses the conservative form:**
+
+> At census time, fetch the **complete** conflict set from
+> `GET /v2/conflicts`. That fresh complete enumeration
+> **becomes Gate 3's baseline** for this gate. Every row in
+> it must carry the known signature exactly: `cache_key`
+> `lease`, `expected` `7`, `found` "LIKE or GLOB pattern too
+> complex: SQLITE_ERROR", `reason` `schedule_dead`. Any row
+> with any other field value is a **STOP before mutation**.
+> The set is re-fetched after the hold is applied and again
+> in the post-action readbacks (§7); **any additional,
+> missing, or changed row — in count, id, timestamp, or any
+> field — between the census baseline and either later read
+> is a STOP before the next mutation.** The only remedy for
+> a changed conflict set is a new baseline + Rowan review —
+> never an executor judgment call, never a "matching
+> signature" exemption for a row that was not in the census
+> baseline.
+
+Context for the choice: the Gate 2D retry baseline (pin
+`9284f5ef`) enumerated exactly 4 `schedule_dead` lease rows —
+id 1 @ 2026-10-29T23:54:14.808Z
+(`grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full`); id 2 @
+2026-10-30T00:24:14.632Z
+(`grant:plan:603ab416bd67ab1b25de97be:ch1:1:full`); id 3 @
+2026-10-31T05:14:24.089Z
+(`grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full`); id 4 @
+2026-11-01T01:04:30.364Z
+(`grant:plan:e377a5559961b294154276b6:ch2:1:full`, the
+stalled grant's own lease row). The retry census exact-matched
+that set and the retry's D8 + watched windows held it at
+exactly 4. But the underlying lease SQL quirk is **not
+fixed**, and the grant remains `issued`, so accretion since
+that baseline is genuinely possible. Gate 3 therefore does
+**not** hard-code "exactly 4" as its expectation — a fresh
+5th row appearing *before* the census would be absorbed into
+the census baseline only if it carries the exact known
+signature, and any movement *after* the census baseline is
+frozen is a STOP. Rowan is asked to confirm or amend this
+rule explicitly.
+
+### 4.5 Bindings check (Gate 2 build-review addition)
+
+19. For each of the 8 committed occurrences in §2.3, read its
+    production binding via the sync/bindings surfaces
+    (structural metadata only — IDs, keys, digests; **never
+    segment text**) and confirm **revision_key == cache_key**
+    on all 8. Rationale (Gate 2 build record §2, Amendment 1
+    §5c): D6 commits bind under the payload fingerprint as
+    revision key, which is the cache key; the finalizer's own
+    proof matches on `cache_key` for the same reason. Any of
+    the 8 bindings missing, or with revision_key ≠ cache_key,
+    is a STOP.
+
+### 4.6 Preview check (after the hold, §5 step E3)
+
+20. The preview must classify the grant `finalizable` and
+    return a precondition digest; every preview field is
+    checked against the census expectations (§2, §4.2–§4.5):
+    identity, states, revisions, claim `claimed`, outbox
+    acked, the exact 8 targets with committed executions and
+    the 4/6/6/6/6/6/4/6 attempt pattern, the exact 8 open
+    reservations with residuals summing to 52, derived totals
+    44 / 52 / 96 for PT 2026-10-31, phase money §2.4,
+    watermarks 1826 / 18, park-release live, no exemption.
+    Any mismatch is a STOP before the action call.
+
+---
+
+## 5. Execution sequence (proposed — NOT executed by this filing)
+
+Executed in order, exactly once each, only under Julie's
+Gate 3 GO recorded on the board **before** any step. The GO
+comment id becomes the finalizer's `authorizationRef`.
+
+- **E0 — Fresh census.** §4 in full, read-only. Any failure:
+  STOP before any mutation (§6). Zero mutations so far.
+- **E1 — Halt flip (mutation 1 of 3).** Set `GENERATION_HALT`
+  to `"1"` via the settings-only multipart PATCH to
+  `/workers/scripts/opalreader-api-v2-prod/settings` (single
+  `settings` part). Verify: halt `"1"` read back; script etag
+  **unchanged** (the flip must not touch code);
+  observability still enabled + persisted. Re-fetch conflicts
+  (§4.4 rule) — any change vs the census baseline: STOP,
+  stay halted.
+- **E2 — Queue pause (mutation 2 of 3).** PUT queue
+  `93b6a35fb8cf4788a91a2c90b748ae66` with `delivery_paused:
+  true`. Read back `delivery_paused: true` before proceeding
+  (only the read-back proves the pause).
+- **E3 — Preview.** One operator
+  `GET /v2/d6-grant-finalization-preview` for the exact grant.
+  Checked per §4.6. The preview is read-only; it writes
+  nothing. Any mismatch: STOP, stay held, no action call.
+- **E4 — ONE finalizer action (mutation 3 of 3).** One
+  operator `POST /v2/d6-finalize-grant` with the closed body:
+  the exact `grantId` / `planId` / `jobId` of §2.2,
+  `authorizationRef` = Julie's Gate 3 GO comment id, and
+  `expectedPreconditionDigest` = the E3 preview digest. No
+  second call under this GO for any reason except the
+  readback-first replay rule in §6.
+- **E5 — Full readbacks.** §7 in full, still held.
+- **End state: STAY HELD.** Generation halted, queue paused,
+  finalizer audit row present exactly once, grant `reported`.
+  Gate 3 does not re-arm, does not unpause, and does not
+  resume anything. Re-arm and Gate 4 are separate later
+  decisions on separate GOs.
+
+**Mutation budget: exactly 3** (halt flip, queue pause, one
+finalizer action). The preview and all census/readback reads
+are not mutations. No other production mutation of any kind
+is authorized by Gate 3. **Spend: $0.**
+
+---
+
+## 6. Stop conditions — executor STOP law
+
+The standing STOP law governs every step: **any census,
+preview, or readback mismatch — even by one row, one slot, or
+one revision — is a STOP before the next mutation.** Preserve
+the state exactly as found (halted + paused if already
+reached); report the exact deviation verbatim, separately
+from any proposed explanation, to Julie and Rowan; proceed
+only on a fresh explicit GO or a Rowan ruling naming that
+deviation. An executor's own tracing never clears its own
+stop, and a post-hoc acceptance does not retroactively
+authorize having proceeded. One GO covers one attempt: a
+stopped attempt is never restarted on anyone's interpretation.
+
+Specific STOPs (non-exhaustive):
+
+- Any §4 census item differs from its stated expectation,
+  including the conflicts rule (§4.4) and the bindings rule
+  (§4.5).
+- Reconcile not `ok: true`, any drift entry, any exception
+  beyond the sole straddler, or `currentDayBlocked: true`.
+- The preview does not classify `finalizable`, its digest is
+  absent, or any preview field disagrees with the census.
+- The action response is ambiguous, malformed, reports any
+  `blocked` settlement, or returns any outcome other than
+  `applied` (a verified `already_finalized` replay outcome is
+  handled only under the paragraph below).
+- Any §7 readback figure differs from its expectation.
+- Any provider dispatch, binding change, phase-settled
+  change, new grant, new plan, exemption write, or Phase B
+  state change appears at any point.
+- Unknown open becomes nonzero; a TerminalBlock or plan
+  `partial` appears.
+
+**Ambiguous action response:** read back first, before any
+further act. The finalizer is idempotent by audit-bound state
+recognition (§3), so a *verified* readback showing the exact
+§7 after-state proves the call landed. If the readback shows
+the grant still `issued` with no audit row, the call did not
+land — that fact is reported and a second invocation requires
+a fresh explicit ruling under the STOP law; it is never a
+blind retry. If the readback shows `reported` with any
+reservation still open, that is `reported_inconsistent` — a
+STOP state the finalizer cannot produce; it is never settled
+silently on a replay path.
+
+**No substitute route.** If the finalizer action fails or is
+refused, Gate 3 does not fall back to the generic
+`/v2/reports` route (recovery proposal Option C, not
+recommended: wrong fence class, no in-transaction precondition
+proof, no audit row), to plan retirement, to grant voiding, or
+to any other mechanism under the same GO.
+
+---
+
+## 7. Readback checklist (E5 — all required, still held)
+
+1. Grant: `reported`; `report_json` is the labeled
+   operator-finalization record carrying the Gate 3
+   `authorizationRef` and the E3 precondition digest.
+2. Claim: `completed`.
+3. Reservations: read back **each of the 8 rows individually**
+   — all `closed`, `close_reason` `grant_settled`, `day_key`
+   2026-10-31, stored `slots_consumed` unchanged
+   (4/6/6/6/6/6/4/6).
+4. Derived PT totals: 2026-10-31 = dispatched 44 / reserved 0
+   / consumed 44; the census day's totals recorded explicitly
+   as observed.
+5. Quota reconcile: complete, `ok: true`, drift empty, sole
+   straddler exception only.
+6. Attempts / dispatches: exactly 44 confirmed attempts and
+   44 dispatch rows, untouched; no new attempt or dispatch.
+7. Plan: `active`, done 8 / failed 0 / blocked 0 / prompts 0.
+8. Job: `generating` rev 2; occurrences 8 `ready` / 15
+   `pending`.
+9. Eligibility: unchanged 15 / 11 / 1, digest
+   `9453ab5dc7ee…` exact.
+10. Phase: settled 732,303; estimatedUnverified 19,018;
+    reservedUnverified 5,648; unknownOpen 0; remaining
+    12,762,049 — all unchanged.
+11. Sync watermarks: bindings 1826 / content 18, unchanged.
+12. Conflicts: exactly the census-baseline set (§4.4) — any
+    change is reported verbatim to Julie and Rowan in the
+    execution record before anything else proceeds.
+13. Park release / exemption: releaseId 1 `live`; zero
+    exemption rows; parked job fingerprint exact.
+14. Finalizer audit row: present exactly once in
+    `d6_grant_finalizations`, with the census precondition
+    digest and Julie's Gate 3 GO as `authorizationRef`.
+15. Hold state: `GENERATION_HALT "1"`, queue
+    `delivery_paused: true`, build still
+    `408f91497131a151a199b3f9ec4cbb283a8febd5`, observability
+    enabled + persisted, Batch still unarmed.
+
+---
+
+## 8. Containment
+
+Containment is pre-authorized inside Gate 3 only in this
+form: Gate 3 already ends held, so containment is simply
+**staying held**. On any STOP, ambiguity, or unexpected
+post-action state: keep the halt and the queue pause exactly
+as they are; preserve the census captures, the preview
+response, the action request/response, the audit row, and
+every readback; do not roll back code or data; do not fix
+forward, retry, release, retire, or void under the same GO;
+report to Julie and Rowan with the exact divergent figures.
+Releasing the hold after a stopped or divergent Gate 3
+requires a separate explicit ruling — nobody un-halts or
+unpauses on their own authority as "tidying up".
+
+Rollback floor note: the permanent floor build
+`6a73d9622e1b4eac00c58e289de1c674ed6b3d6b` does not enforce the
+provider-attempt counter and is never a Gate 3 fallback. A
+successful finalization is truthful terminal bookkeeping;
+there is no data rollback for it — a later-proved error would
+be remedied by a forward correction under a new ruling,
+never by reopening the grant or its reservations.
+
+---
+
+## 9. Authorization boundaries
+
+- **This proposal** asks Rowan for review only. It asks Julie
+  for nothing now and authorizes no production act.
+- **Rowan's review** of this proposal is technical. A PASS is
+  not execution permission and does not substitute for
+  Julie's GO.
+- **Julie's Gate 3 GO** — given after Rowan's review, via
+  tappable buttons, recorded on the board before any step —
+  is the sole execution authorization. It covers exactly one
+  attempt at §5 as written, under the §6 STOP law, and does
+  not survive a STOP.
+- **Gate 4** (continuation of the 15: 20,864 chars, expected
+  ≈ $0.294 recorded against the phase's remaining
+  12,762,049; same-day first cohort is exactly 4 by the proven
+  formula — the [4, 4, 4, 3] succession is derivation only,
+  not a tested forecast) requires Julie's separate GO after
+  Gate 3's readbacks, plus a separate re-arm decision, since
+  Gate 3 ends held.
+- **Phase B, Batch, rest-of-book generation:** untouched by
+  Gate 3 and by any Gate 3 GO; each is its own gated program.
+
+### Evidence index (all pinned, repo `jedavid33-design/opal-reader`, branch `ui1-review`)
+
+- Diagnosis + recovery proposal: `7781e7d7934a911cac612418395b5adac5c24656`
+- Phase A execution record: `f865a002f2740bb499716acf4a2c4d342187c3cd`
+- Gate 2 build record: `c24bd4716d2ae386fcefd31a97b4a202968671a0`
+- Gate 2 Amendment 1: `4b1d2bd8b06bc7030166ff1eb7d025ff8a9fba61`
+- Gate 2D retry baseline + plan: `9284f5efee47cd87b2c5639e9dfe50e6fb7e908a`
+- Gate 2D retry envelope (live build): `408f91497131a151a199b3f9ec4cbb283a8febd5`
+- Gate 2D retry execution record: `b1d2cedcc41349f2921557c1693d229e277d794e`
+- Rowan stall review: board 6551290568 · Diagnosis/design
+  review: board 6551435961 · Gate 2D retry documentary review
+  / Gate 3 HOLD: board 6558972153
+
+**Turn: Rowan's** — review of this bounded Gate 3 proposal,
+in particular the §4.4 conflicts rule, the §4 census
+completeness against the finalizer's precondition set, and
+the §5–§7 sequence, stop law, and readbacks. Julie's Gate 3
+decision comes after that review.
+
+— Wren
