@@ -1,0 +1,687 @@
+{
+  "all_read_statuses": {
+    "bindings": 200,
+    "capabilities": 200,
+    "census-page-000": 200,
+    "census-page-001": 200,
+    "census-page-002": 200,
+    "census-page-003": 200,
+    "conflicts": 200,
+    "diag-ch3": 200,
+    "elig-book": 200,
+    "elig-ch3": 200,
+    "health": 200,
+    "job-ch3": 200,
+    "job-ch3plan": 200,
+    "plan-ch3": 200,
+    "plan-list": 200,
+    "queue": 200,
+    "quota": 200,
+    "script-settings": 200,
+    "settings": 200,
+    "snap-bindings": 200,
+    "snap-content": 200
+  },
+  "baseline": "gate2d-retry-readonly-baseline",
+  "bindings": [
+    {
+      "name": "ALLOWED_ORIGIN",
+      "text": "https://jedavid33-design.github.io",
+      "type": "plain_text"
+    },
+    {
+      "name": "COORDINATOR",
+      "type": "durable_object_namespace"
+    },
+    {
+      "name": "GEMINI_API_KEY",
+      "type": "secret_text"
+    },
+    {
+      "name": "GENERATION_HALT",
+      "text": "0",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_ACCESS_TOKEN",
+      "type": "secret_text"
+    },
+    {
+      "name": "OPALREADER_GENERATION_V2",
+      "type": "queue"
+    },
+    {
+      "name": "OPALREADER_MIGRATION_OPERATOR_TOKEN",
+      "type": "secret_text"
+    },
+    {
+      "name": "OPALREADER_PHASE_POLICY",
+      "text": "enforce",
+      "type": "plain_text"
+    },
+    {
+      "name": "OPALREADER_STORAGE",
+      "type": "r2_bucket"
+    },
+    {
+      "name": "OPALREADER_V2_SCOPE",
+      "text": "production",
+      "type": "plain_text"
+    }
+  ],
+  "bindings_count": 10,
+  "capabilities": {
+    "asOf": 1793499718138,
+    "configuredLane": null,
+    "generationState": "enabled",
+    "lanes": {
+      "batch": {
+        "admitted": false,
+        "reason": "batch_not_armed"
+      },
+      "standard": {
+        "admitted": true
+      }
+    },
+    "phases": [
+      {
+        "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+        "budgetMicroCents": 13500000,
+        "estimatedUnverifiedMicroCents": 19018,
+        "inFlightUpperMicroCents": 0,
+        "phase": "forever-pucked",
+        "remainingMicroCents": 12762049,
+        "reservedUnverifiedMicroCents": 5648,
+        "settledMicroCents": 732303
+      }
+    ]
+  },
+  "capture_window_utc": {
+    "end": "2026-11-01T02:22:12Z",
+    "quota_census_at": "2026-11-01T02:22:10Z",
+    "start": "2026-11-01T02:21:52Z"
+  },
+  "case": "Opal Roundtable Case #10 / issue #15, repo jedavid33-design/opal-roundtable",
+  "conflicts": [
+    {
+      "at": 1793495070364,
+      "cache_key": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "id": 4,
+      "occurrence_id": "grant:plan:e377a5559961b294154276b6:ch2:1:full",
+      "reason": "schedule_dead"
+    },
+    {
+      "at": 1793423664089,
+      "cache_key": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "id": 3,
+      "occurrence_id": "grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full",
+      "reason": "schedule_dead"
+    },
+    {
+      "at": 1793319854632,
+      "cache_key": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "id": 2,
+      "occurrence_id": "grant:plan:603ab416bd67ab1b25de97be:ch1:1:full",
+      "reason": "schedule_dead"
+    },
+    {
+      "at": 1793318054808,
+      "cache_key": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "id": 1,
+      "occurrence_id": "grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full",
+      "reason": "schedule_dead"
+    }
+  ],
+  "conflicts_count": 4,
+  "conflicts_with_iso": [
+    {
+      "at": 1793495070364,
+      "at_iso": "2026-11-01T01:04:30.364Z",
+      "cache_key": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "id": 4,
+      "occurrence_id": "grant:plan:e377a5559961b294154276b6:ch2:1:full",
+      "reason": "schedule_dead"
+    },
+    {
+      "at": 1793423664089,
+      "at_iso": "2026-10-31T05:14:24.089Z",
+      "cache_key": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "id": 3,
+      "occurrence_id": "grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full",
+      "reason": "schedule_dead"
+    },
+    {
+      "at": 1793319854632,
+      "at_iso": "2026-10-30T00:24:14.632Z",
+      "cache_key": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "id": 2,
+      "occurrence_id": "grant:plan:603ab416bd67ab1b25de97be:ch1:1:full",
+      "reason": "schedule_dead"
+    },
+    {
+      "at": 1793318054808,
+      "at_iso": "2026-10-29T23:54:14.808Z",
+      "cache_key": "lease",
+      "expected": "7",
+      "found": "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+      "id": 1,
+      "occurrence_id": "grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full",
+      "reason": "schedule_dead"
+    }
+  ],
+  "eligibility_book": {
+    "advisory": true,
+    "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+    "chapterIndex": null,
+    "digest": "9453ab5dc7ee6ade7c650d14066054b965875f2ef1b65eb24bc633588d778e67",
+    "eligibleCount": 329,
+    "exclusions": {
+      "bound_already": 77,
+      "other": 0,
+      "parked": 1,
+      "voice_prompt": 0
+    },
+    "expectedCostMicroCents": 6131305,
+    "occurrenceId": null,
+    "quotedAt": 1793499730288,
+    "scope": "book",
+    "totalChars": 434914
+  },
+  "eligibility_chapter2": {
+    "advisory": true,
+    "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+    "chapterIndex": 2,
+    "digest": "9453ab5dc7ee6ade7c650d14066054b965875f2ef1b65eb24bc633588d778e67",
+    "eligibleCount": 15,
+    "exclusions": {
+      "bound_already": 11,
+      "other": 0,
+      "parked": 1,
+      "voice_prompt": 0
+    },
+    "expectedCostMicroCents": 294137,
+    "occurrenceId": null,
+    "quotedAt": 1793499729801,
+    "scope": "chapter",
+    "totalChars": 20864
+  },
+  "grant_job_ch3": {
+    "grants": [
+      {
+        "grant_id": "grant:plan:e377a5559961b294154276b6:ch2:1:full",
+        "revision": 2,
+        "state": "issued"
+      }
+    ],
+    "jobId": "plan:e377a5559961b294154276b6:ch2",
+    "revision": 2,
+    "row_states": {
+      "pending": 15,
+      "ready": 8
+    },
+    "rows_n": 23,
+    "state": "generating"
+  },
+  "health": {
+    "app": "OpalReader API v2",
+    "build": "63d7260ef0c87c45cdcb88c7007643bb90e1631c",
+    "coordinator": "armed",
+    "generation": "enabled",
+    "ok": true,
+    "scope": "production",
+    "version": "2.0.0"
+  },
+  "health_curl_public": {
+    "app": "OpalReader API v2",
+    "build": "63d7260ef0c87c45cdcb88c7007643bb90e1631c",
+    "coordinator": "armed",
+    "generation": "enabled",
+    "ok": true,
+    "scope": "production",
+    "version": "2.0.0"
+  },
+  "observability_script_settings": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "redact_query_string": false,
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
+  "observability_settings": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "redact_query_string": false,
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
+  "parked_job": {
+    "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+    "chapterIndex": 2,
+    "fingerprint": "b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282",
+    "grants": [],
+    "jobId": "1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a",
+    "lane": "standard",
+    "revision": 1,
+    "row_states": {
+      "pending": 24,
+      "ready": 3
+    },
+    "rows_n": 27,
+    "state": "parked_policy"
+  },
+  "parts_verification": {
+    "all_identical": true,
+    "compared": 29,
+    "extra_parts": [],
+    "manifest": "~/workspace/ch2-program/ch3-deploy/execution/operative/parts-manifest.json",
+    "manifest_pin": "63d7260ef0c87c45cdcb88c7007643bb90e1631c"
+  },
+  "phase_accounting_capabilities": {
+    "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+    "budgetMicroCents": 13500000,
+    "estimatedUnverifiedMicroCents": 19018,
+    "inFlightUpperMicroCents": 0,
+    "phase": "forever-pucked",
+    "remainingMicroCents": 12762049,
+    "reservedUnverifiedMicroCents": 5648,
+    "settledMicroCents": 732303
+  },
+  "phase_accounting_diagnostics_ch3": {
+    "budgetMicroCents": 13500000,
+    "estimatedUnverifiedMicroCents": 19018,
+    "inFlightUpperMicroCents": 0,
+    "phase": "forever-pucked",
+    "remainingMicroCents": 12762049,
+    "reservedUnverifiedMicroCents": 5648,
+    "settledBasis": "recorded_known_existing_ledger",
+    "settledMicroCents": 732303,
+    "unknownOpen": 0,
+    "unverifiedStatus": "provider_unverified"
+  },
+  "plan_ch3": {
+    "entries_n": 27,
+    "entry_dispositions": {
+      "bound_already": 3,
+      "eligible": 23,
+      "excluded_parked": 1
+    },
+    "entry_exec_states": {
+      "None": 19,
+      "committed": 8
+    },
+    "planId": "plan:e377a5559961b294154276b6",
+    "state": "active",
+    "stopReason": null,
+    "totals": {
+      "blocked": 0,
+      "done": 8,
+      "eligible": 23,
+      "failed": 0,
+      "prompts": 0
+    }
+  },
+  "plan_list": {
+    "nextCursor": null,
+    "plans": [
+      {
+        "approvalRequired": false,
+        "bindingsPending": 0,
+        "bindingsPublished": 8,
+        "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+        "chapterIndex": 2,
+        "createdAt": 1793490516278,
+        "estimatedUnverifiedMicroCents": 0,
+        "keepGoing": false,
+        "lane": "standard",
+        "phase": "forever-pucked",
+        "planId": "plan:e377a5559961b294154276b6",
+        "scope": "chapter",
+        "settledMicroCents": 152964,
+        "state": "active",
+        "stopReason": null,
+        "totals": {
+          "blocked": 0,
+          "done": 8,
+          "eligible": 23,
+          "failed": 0,
+          "prompts": 0
+        },
+        "updatedAt": 1793490569646
+      },
+      {
+        "approvalRequired": false,
+        "bindingsPending": 0,
+        "bindingsPublished": 18,
+        "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+        "chapterIndex": 1,
+        "createdAt": 1793418812948,
+        "estimatedUnverifiedMicroCents": 0,
+        "keepGoing": false,
+        "lane": "standard",
+        "phase": "forever-pucked",
+        "planId": "plan:b2dc2a3d1cd367a0245b9102",
+        "scope": "chapter",
+        "settledMicroCents": 379674,
+        "state": "complete",
+        "stopReason": null,
+        "totals": {
+          "blocked": 0,
+          "done": 18,
+          "eligible": 18,
+          "failed": 0,
+          "prompts": 0
+        },
+        "updatedAt": 1793420063929
+      },
+      {
+        "approvalRequired": false,
+        "bindingsPending": 0,
+        "bindingsPublished": 0,
+        "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+        "chapterIndex": 1,
+        "createdAt": 1793315143846,
+        "estimatedUnverifiedMicroCents": 19018,
+        "estimatedUnverifiedStatus": "provider_unverified",
+        "keepGoing": false,
+        "lane": "standard",
+        "phase": "forever-pucked",
+        "planId": "plan:603ab416bd67ab1b25de97be",
+        "scope": "chapter",
+        "settledMicroCents": 179991,
+        "state": "retired",
+        "stopReason": "retired_unknown_billing",
+        "totals": {
+          "blocked": 0,
+          "done": 0,
+          "eligible": 18,
+          "failed": 8,
+          "prompts": 0
+        },
+        "updatedAt": 1793411345449
+      },
+      {
+        "approvalRequired": false,
+        "bindingsPending": 0,
+        "bindingsPublished": 1,
+        "bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2",
+        "chapterIndex": null,
+        "createdAt": 1793313159146,
+        "estimatedUnverifiedMicroCents": 0,
+        "keepGoing": false,
+        "lane": "standard",
+        "phase": "forever-pucked",
+        "planId": "plan:3183ecbf2ac4bf50bbc6166e",
+        "scope": "segment",
+        "settledMicroCents": 19674,
+        "state": "complete",
+        "stopReason": null,
+        "totals": {
+          "blocked": 0,
+          "done": 1,
+          "eligible": 1,
+          "failed": 0,
+          "prompts": 0
+        },
+        "updatedAt": 1793314154027
+      }
+    ]
+  },
+  "production_mutations": 0,
+  "queue": {
+    "consumers": [
+      {
+        "consumer_id": "f260f2188d80426bb0588685e9d084eb",
+        "script": "opalreader-api-v2-prod",
+        "settings": {
+          "batch_size": 10,
+          "max_retries": 3,
+          "max_wait_time_ms": 5000,
+          "retry_delay": 0
+        },
+        "type": "worker"
+      }
+    ],
+    "delivery_paused": false,
+    "modified_on": "2026-10-31T23:05:33.696938Z",
+    "producers": [
+      {
+        "script": "opalreader-api-v2-prod",
+        "type": "worker"
+      }
+    ],
+    "queue_name": "opalreader-generation-v2"
+  },
+  "quota_client": {
+    "attemptsToday": 8,
+    "basis": "Reader estimate (server attempt ledger)",
+    "dailyLimit": 100,
+    "dayKey": "2026-10-31",
+    "ledgerSeq": 45,
+    "monthKey": "2026-10",
+    "monthlyCap": 50,
+    "parked": null,
+    "providerAttemptDailyLimit": 100,
+    "providerBasis": "Reader D6 provider requests today, app-counted",
+    "providerDispatchesToday": 44,
+    "providerLimitProvenance": "app-selected Reader policy cap (not a verified provider limit)",
+    "providerReservedToday": 52,
+    "settingsRevision": 1,
+    "spentMicroCents": 882165
+  },
+  "quota_reconcile": {
+    "armed": true,
+    "censusComplete": true,
+    "currentDayBlocked": false,
+    "dayTotals": {
+      "2026-10-29": {
+        "consumed": 57,
+        "dayKey": "2026-10-29",
+        "dispatched": 57,
+        "reserved": 0
+      },
+      "2026-10-30": {
+        "consumed": 79,
+        "dayKey": "2026-10-30",
+        "dispatched": 79,
+        "reserved": 0
+      },
+      "2026-10-31": {
+        "consumed": 96,
+        "dayKey": "2026-10-31",
+        "dispatched": 44,
+        "reserved": 52
+      }
+    },
+    "drift": [],
+    "driftCount": 0,
+    "exceptionCount": 1,
+    "exceptions": [
+      {
+        "attemptId": "att-37d63768-db4b-447d-8150-580b7c6ee257",
+        "createdAt": 1793315781213,
+        "executionId": "exec-6a9c4e14-2223-4806-9694-90cd140cbd8e",
+        "intervalDays": [
+          "2026-10-29",
+          "2026-10-30"
+        ],
+        "occurrenceId": "59acff00-d6a4-4e2b-9734-34d50f4f59f0",
+        "outcome": "estimated_unverified",
+        "phase": "confirmed",
+        "planId": "plan:603ab416bd67ab1b25de97be",
+        "updatedAt": 1793409518606
+      }
+    ],
+    "ok": true,
+    "totals": {
+      "consumed": 96,
+      "dayKey": "2026-10-31",
+      "dispatched": 44,
+      "reserved": 52
+    }
+  },
+  "quota_reconcile_current_pt_day": "2026-10-31",
+  "raw_envelope_compare_vs_stopped": {
+    "bindings": {
+      "byte_identical_to_stopped": true,
+      "new_len": 2152,
+      "old_len": 2152
+    },
+    "capabilities": {
+      "byte_identical_to_stopped": false,
+      "new_len": 995,
+      "old_len": 995
+    },
+    "census-page-000": {
+      "byte_identical_to_stopped": true,
+      "new_len": 2158,
+      "old_len": 2158
+    },
+    "census-page-001": {
+      "byte_identical_to_stopped": true,
+      "new_len": 2158,
+      "old_len": 2158
+    },
+    "census-page-002": {
+      "byte_identical_to_stopped": true,
+      "new_len": 1394,
+      "old_len": 1394
+    },
+    "census-page-003": {
+      "byte_identical_to_stopped": true,
+      "new_len": 2158,
+      "old_len": 2158
+    },
+    "conflicts": {
+      "byte_identical_to_stopped": true,
+      "new_len": 1906,
+      "old_len": 1906
+    },
+    "diag-ch3": {
+      "byte_identical_to_stopped": true,
+      "new_len": 34126,
+      "old_len": 34126
+    },
+    "elig-book": {
+      "byte_identical_to_stopped": false,
+      "new_len": 838,
+      "old_len": 838
+    },
+    "elig-ch3": {
+      "byte_identical_to_stopped": false,
+      "new_len": 832,
+      "old_len": 832
+    },
+    "health": {
+      "byte_identical_to_stopped": true,
+      "new_len": 425,
+      "old_len": 425
+    },
+    "job-ch3": {
+      "byte_identical_to_stopped": true,
+      "new_len": 7802,
+      "old_len": 7802
+    },
+    "job-ch3plan": {
+      "byte_identical_to_stopped": true,
+      "new_len": 9025,
+      "old_len": 9025
+    },
+    "plan-ch3": {
+      "byte_identical_to_stopped": true,
+      "new_len": 21922,
+      "old_len": 21922
+    },
+    "plan-list": {
+      "byte_identical_to_stopped": true,
+      "new_len": 4444,
+      "old_len": 4444
+    },
+    "queue": {
+      "byte_identical_to_stopped": true,
+      "new_len": 995,
+      "old_len": 995
+    },
+    "quota": {
+      "byte_identical_to_stopped": true,
+      "new_len": 1039,
+      "old_len": 1039
+    },
+    "script-settings": {
+      "byte_identical_to_stopped": true,
+      "new_len": 592,
+      "old_len": 592
+    },
+    "settings": {
+      "byte_identical_to_stopped": true,
+      "new_len": 163,
+      "old_len": 163
+    },
+    "snap-bindings": {
+      "byte_identical_to_stopped": true,
+      "new_len": 1822858,
+      "old_len": 1822858
+    },
+    "snap-content": {
+      "byte_identical_to_stopped": true,
+      "new_len": 15636362,
+      "old_len": 15636362
+    }
+  },
+  "settings": {
+    "geminiLane": "standard",
+    "monthlyCap": 50,
+    "revision": 1
+  },
+  "spend": 0,
+  "stopped_census_reference": {
+    "captured_at": "2026-11-01T02:09:32Z",
+    "pin": "cf2b4e6f1e9eff80feacfe9571de1944ef88bf20"
+  },
+  "sync_watermarks": {
+    "bindings": {
+      "entities_n": 1826,
+      "watermark": 1826
+    },
+    "content": {
+      "entities_n": 7,
+      "watermark": 18
+    }
+  },
+  "worker_script": {
+    "bytes": 1383556,
+    "etag": "82053d4d75533056753c5ee6225e0de56e29ecb1de980aa543cdba613a59d6be",
+    "status": 200
+  }
+}
