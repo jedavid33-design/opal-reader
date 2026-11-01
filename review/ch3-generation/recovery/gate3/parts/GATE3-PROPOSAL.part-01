@@ -1,55 +1,47 @@
-    to 2026-10-31 permanently.
-18. The census day's own PT totals are read fresh and stated
-    as observed (new facts, not expectations). A PT-day
-    rollover does **not** clear the issued grant or its
-    reservations — it only excludes the old reservations from
-    a later day's derived total. Fresh headroom on a new day
-    is never evidence the stall cleared.
+ET /v2/conflicts` and compare it **row-by-row** against
+> the four individually enumerated rows of the Gate 2D
+> approved baseline (pin
+> `9284f5efee47cd87b2c5639e9dfe50e6fb7e908a`, `BASELINE.md` §
+> "Complete conflict set"), reproduced verbatim in §4.4.1
+> below. The census passes **only** on an exact match: same
+> four rows, same ids, same timestamps, same occurrence ids,
+> same field values. **ANY addition, deletion, or field
+> change — in count, id, timestamp, occurrence, or any
+> field — is a STOP before any mutation.** On such a STOP,
+> the complete new census is pinned and returned to Rowan
+> for a specific baseline ruling; **only a separately
+> reviewed replacement baseline may be used** for a later
+> attempt. No executor judgment call, and no "matching
+> signature" exemption for a fifth or changed row, can clear
+> a changed set.
 
-### 4.4 Conflicts rule — the chosen rule, stated plainly
+#### 4.4.1 The approved baseline — the four rows, verbatim
 
-**This rule is flagged for Rowan's review. It was the one
-paperwork point left open after the Gate 2D retry, and this
-proposal chooses the conservative form:**
+Verified firsthand against `BASELINE.md` (pin `9284f5ef`).
+All four rows carry `cache_key` `lease`, `expected` `7`,
+`found` "LIKE or GLOB pattern too complex: SQLITE_ERROR",
+`reason` `schedule_dead`:
 
-> At census time, fetch the **complete** conflict set from
-> `GET /v2/conflicts`. That fresh complete enumeration
-> **becomes Gate 3's baseline** for this gate. Every row in
-> it must carry the known signature exactly: `cache_key`
-> `lease`, `expected` `7`, `found` "LIKE or GLOB pattern too
-> complex: SQLITE_ERROR", `reason` `schedule_dead`. Any row
-> with any other field value is a **STOP before mutation**.
-> The set is re-fetched after the hold is applied and again
-> in the post-action readbacks (§7); **any additional,
-> missing, or changed row — in count, id, timestamp, or any
-> field — between the census baseline and either later read
-> is a STOP before the next mutation.** The only remedy for
-> a changed conflict set is a new baseline + Rowan review —
-> never an executor judgment call, never a "matching
-> signature" exemption for a row that was not in the census
-> baseline.
+| id | at (ISO, UTC) | occurrence_id |
+|---:|---|---|
+| 1 | 2026-10-29T23:54:14.808Z | `grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full` |
+| 2 | 2026-10-30T00:24:14.632Z | `grant:plan:603ab416bd67ab1b25de97be:ch1:1:full` |
+| 3 | 2026-10-31T05:14:24.089Z | `grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full` |
+| 4 | 2026-11-01T01:04:30.364Z | `grant:plan:e377a5559961b294154276b6:ch2:1:full` |
 
-Context for the choice: the Gate 2D retry baseline (pin
-`9284f5ef`) enumerated exactly 4 `schedule_dead` lease rows —
-id 1 @ 2026-10-29T23:54:14.808Z
-(`grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full`); id 2 @
-2026-10-30T00:24:14.632Z
-(`grant:plan:603ab416bd67ab1b25de97be:ch1:1:full`); id 3 @
-2026-10-31T05:14:24.089Z
-(`grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full`); id 4 @
-2026-11-01T01:04:30.364Z
-(`grant:plan:e377a5559961b294154276b6:ch2:1:full`, the
-stalled grant's own lease row). The retry census exact-matched
-that set and the retry's D8 + watched windows held it at
-exactly 4. But the underlying lease SQL quirk is **not
-fixed**, and the grant remains `issued`, so accretion since
-that baseline is genuinely possible. Gate 3 therefore does
-**not** hard-code "exactly 4" as its expectation — a fresh
-5th row appearing *before* the census would be absorbed into
-the census baseline only if it carries the exact known
-signature, and any movement *after* the census baseline is
-frozen is a STOP. Rowan is asked to confirm or amend this
-rule explicitly.
+Row 4 is the stalled grant's own lease row. The Gate 2D retry
+census exact-matched this set, and the retry's D8 + watched
+windows held it at exactly 4. The underlying lease SQL quirk
+is **not fixed**, and the grant remains `issued`, so accretion
+since that baseline is genuinely possible — but under
+Rowan's ruling, possible accretion changes nothing about the
+rule: if the census set is not exactly these four rows, Gate 3
+stops before mutation and the new set goes back to Rowan for
+a specific baseline ruling. The set is additionally re-fetched
+after the hold is applied (§5, E1), **immediately before the
+finalizer action** (§5, new step E3.5), and in the post-action
+readbacks (§7) — each time compared against this same baseline,
+under §5/§6.
 
 ### 4.5 Bindings check (Gate 2 build-review addition)
 
@@ -93,8 +85,8 @@ comment id becomes the finalizer's `authorizationRef`.
   `settings` part). Verify: halt `"1"` read back; script etag
   **unchanged** (the flip must not touch code);
   observability still enabled + persisted. Re-fetch conflicts
-  (§4.4 rule) — any change vs the census baseline: STOP,
-  stay halted.
+  (§4.4 rule) — any difference vs the approved baseline
+  (§4.4.1): STOP, stay halted.
 - **E2 — Queue pause (mutation 2 of 3).** PUT queue
   `93b6a35fb8cf4788a91a2c90b748ae66` with `delivery_paused:
   true`. Read back `delivery_paused: true` before proceeding
@@ -103,6 +95,15 @@ comment id becomes the finalizer's `authorizationRef`.
   `GET /v2/d6-grant-finalization-preview` for the exact grant.
   Checked per §4.6. The preview is read-only; it writes
   nothing. Any mismatch: STOP, stay held, no action call.
+- **E3.5 — Pre-action conflict re-check (read-only, added by
+  Amendment 1).** Immediately before E4, and after the E3
+  preview: re-fetch the **entire** conflict set
+  (`GET /v2/conflicts`) and compare it against the approved
+  baseline (§4.4.1). **Any difference — addition, deletion,
+  or field change — means STOP without calling the
+  finalizer.** Preserve the held state and report under §6;
+  the only remedy is a pinned new census + Rowan baseline
+  ruling, per §4.4.
 - **E4 — ONE finalizer action (mutation 3 of 3).** One
   operator `POST /v2/d6-finalize-grant` with the closed body:
   the exact `grantId` / `planId` / `jobId` of §2.2,
@@ -110,7 +111,13 @@ comment id becomes the finalizer's `authorizationRef`.
   `expectedPreconditionDigest` = the E3 preview digest. No
   second call under this GO for any reason except the
   readback-first replay rule in §6.
-- **E5 — Full readbacks.** §7 in full, still held.
+- **E5 — Full readbacks.** §7 in full, still held. A
+  post-action conflict mismatch discovered in E5 requires
+  **containment and reporting** (§8): the system stays held
+  and the mismatch is reported verbatim to Julie and Rowan —
+  it **cannot retroactively stop the action already
+  performed** in E4, and it authorizes no fix-forward,
+  rollback, or further mutation under this GO.
 - **End state: STAY HELD.** Generation halted, queue paused,
   finalizer audit row present exactly once, grant `reported`.
   Gate 3 does not re-arm, does not unpause, and does not
@@ -205,14 +212,38 @@ to any other mechanism under the same GO.
     reservedUnverified 5,648; unknownOpen 0; remaining
     12,762,049 — all unchanged.
 11. Sync watermarks: bindings 1826 / content 18, unchanged.
-12. Conflicts: exactly the census-baseline set (§4.4) — any
-    change is reported verbatim to Julie and Rowan in the
-    execution record before anything else proceeds.
+12. Conflicts: exactly the approved-baseline set (§4.4.1).
+    Any post-action mismatch discovered here requires
+    containment and reporting (§8) — the system stays held
+    and the mismatch is reported verbatim to Julie and Rowan
+    in the execution record before anything else proceeds;
+    it cannot retroactively stop the action already
+    performed, and it authorizes no fix-forward, rollback, or
+    further mutation under this GO.
 13. Park release / exemption: releaseId 1 `live`; zero
     exemption rows; parked job fingerprint exact.
 14. Finalizer audit row: present exactly once in
-    `d6_grant_finalizations`, with the census precondition
-    digest and Julie's Gate 3 GO as `authorizationRef`.
+    `d6_grant_finalizations`, and verified field-by-field:
+    (a) its **exact grant identity** is
+    `grant:plan:e377a5559961b294154276b6:ch2:1:full` (§2.2) —
+    no other grant, no paraphrase; (b) its recorded
+    **authorizationRef is Julie's Gate 3 GO** — the exact GO
+    comment id under which E4 ran; (c) it carries the **E3
+    preview precondition digest** — the digest returned by
+    the preview and passed to E4 as
+    `expectedPreconditionDigest`. **Digest distinction
+    (Amendment 1):** the E3 preview precondition digest must
+    be distinguished from any census evidence digest if they
+    are not identical — the readback record names the two
+    digests separately (preview precondition digest; census
+    evidence digest, if one was computed) and never conflates
+    them, and item 1's `report_json` digest reference is
+    checked against the preview precondition digest named
+    here. Any audit-row field that differs — wrong grant,
+    wrong or absent authorizationRef, wrong or conflated
+    digest — is a STOP-class readback failure under §6
+    (containment + reporting, §8; the performed action is
+    not retroactively undone).
 15. Hold state: `GENERATION_HALT "1"`, queue
     `delivery_paused: true`, build still
     `408f91497131a151a199b3f9ec4cbb283a8febd5`, observability
@@ -278,12 +309,14 @@ never by reopening the grant or its reservations.
 - Gate 2D retry execution record: `b1d2cedcc41349f2921557c1693d229e277d794e`
 - Rowan stall review: board 6551290568 · Diagnosis/design
   review: board 6551435961 · Gate 2D retry documentary review
-  / Gate 3 HOLD: board 6558972153
+  / Gate 3 HOLD: board 6558972153 · Gate 3 proposal review
+  REVISE / HOLD (answered by Amendment 1): board 6559124784
 
-**Turn: Rowan's** — review of this bounded Gate 3 proposal,
-in particular the §4.4 conflicts rule, the §4 census
-completeness against the finalizer's precondition set, and
-the §5–§7 sequence, stop law, and readbacks. Julie's Gate 3
-decision comes after that review.
+**Turn: Rowan's** — re-review of this amended bounded Gate 3
+proposal, in particular the replaced §4.4 conflicts rule
+(exact match against the §4.4.1 approved baseline), the new
+§5 step E3.5 pre-action re-check, and the expanded §7 item 14
+audit readback. Julie's Gate 3 decision comes after that
+re-review.
 
 — Wren

@@ -18,6 +18,26 @@ no queue pause, no generation, no spend.
 **Turn after this filing:** Rowan's review. Then Julie's Gate 3
 GO / HOLD decision.
 
+**Revision history — Amendment 1 (2026-11-01).** The original
+filing (pin `7c71deef64d132b4492b9dfa99477efe72d0dea2`, board
+6559032627) was reviewed by Rowan: **REVISE / GATE 3 HOLD**
+(board 6559124784, 2026-11-01T14:14:33Z), with three required
+revisions. This amended document makes exactly those three:
+(1) §4.4's conflicts rule is REPLACED — the original
+execution-time-baseline rule (a fresh census becomes the
+baseline; signature-matching accretion absorbed) is superseded
+by Rowan's ruling: the census must exact-match the four
+individually enumerated rows of the Gate 2D approved baseline
+(pin `9284f5ef`); (2) §5 gains an explicit pre-action conflict
+re-check immediately before E4, after the E3 preview, and the
+E5 language now treats a post-action mismatch as containment +
+reporting; (3) §7 item 14 now requires verifying the audit
+row's exact grant identity, Julie GO authorizationRef, and
+E3 preview precondition digest, distinguished from any census
+evidence digest. Everything else is unchanged.
+**Turn after this amended filing:** Rowan's re-review. Julie
+is still not being asked for an execution GO.
+
 ---
 
 ## 0. Why this gate exists
@@ -325,3 +345,22 @@ every prior gate in this chain.
     reserved 0 / consumed 57; 2026-10-30 = 79 / 0 / 79;
     **2026-10-31 = dispatched 44 / reserved 52 / consumed 96**
     — including the 52 reserved slots, which stay attributed
+    to 2026-10-31 permanently.
+18. The census day's own PT totals are read fresh and stated
+    as observed (new facts, not expectations). A PT-day
+    rollover does **not** clear the issued grant or its
+    reservations — it only excludes the old reservations from
+    a later day's derived total. Fresh headroom on a new day
+    is never evidence the stall cleared.
+
+### 4.4 Conflicts rule — exact match against the Gate 2D approved baseline
+
+**Amendment 1 note (2026-11-01):** this section REPLACES the
+original §4.4 under Rowan's ruling (board 6559124784). The
+original execution-time-baseline rule — a fresh census becomes
+Gate 3's baseline, with signature-matching accretion absorbed
+into it — is **superseded and void**. A signature match alone
+NEVER clears a changed conflict set under this gate.
+
+> At census time, fetch the **complete** conflict set from
+> `G
