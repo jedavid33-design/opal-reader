@@ -1,0 +1,57 @@
+R2's existing verifications (proposal §5.3.1) are retained; between them and the PUT, the executor repeats a **single** S1 read plus the §3 sum check, and verifies all four of:
+
+- **(i) Plan exclusivity:** the unique live grant (if any) is a grant **of this job** (S1 is per-job by construction) and the plan read (S2) still binds the 15's entries to this same `jobId` — the grant to be delivered therefore belongs to plan `plan:e377a5559961b294154276b6` and to no other plan. (A grant of any *other* job is a different job's view and cannot be this queue's next delivery for this plan; account-level foreign movement is A6's watch, §7.)
+- **(ii) Cohort exclusivity:** every occurrence in the granted set G is within the approved 15 (the §2.3 set, by id), and G equals the cohort the §3 ownership proof covers at this instant.
+- **(iii) Reservation match:** the §3 sum closes at this instant (reserved ∈ {0, 96} with its case split; dispatched for the current PT day still exactly 0 — nothing has been delivered yet by definition of the gate's position).
+- **(iv) Lease state known:** the live grant's lease classification under §2.1 step 4 is **active** or **stale-live** (both deliverable-or-voidable only through the fence, §2.3) — and specifically **not** `handoff_uncertain` (STOP), not absent-with-nonempty-G (STOP), and not a grant id never seen at census or in G monitoring whose granted set differs from the last verified G without an intervening void observation (STOP — an unobserved replacement means the executor's picture is stale, and it re-runs G-ID's timed pair before R2 may proceed).
+
+If any of (i)–(iv) fails: the gate STOPs **between the sub-gates** — R2 is not executed, containment (§5.7 of the proposal) returns the system to HELD, and the deviation is reported. This is the proposal's existing between-sub-gates STOP, now with its checklist made explicit.
+
+### 2.3 The timing caveat — a lease expiring between the check and the drain is a designed branch, not a deviation
+
+The check in §2.2 is instantaneous; the drain runs after it. A lease may expire in between. The code — not the executor's timing — decides what is delivered, at the delivery fence inside `drainOutbox` (`coordinator.mjs:1863-1876`): a dispatch leaves **only** while its grant is `issued`, at the job's **current** revision, and with `now ≤ lease_expires_at`. An expired or revision-stale dispatch is voided in-transaction — reservations released through `closeReservationsForVoidedGrant` (`coordinator.mjs:2015`, inside `_voidDispatch`, :1952), occurrences returned to `pending`, and the job re-advanced (`_scheduleReAdvance`, :1874) — after which `driveOnce` re-grants a fresh cohort of the same plan (§3.2 of the proposal). The same void path serves a grant that expires while still merely queued behind the halt (`lease_expired_undelivered`, `_processScheduleRow` lease branch, `coordinator.mjs:2589-2592`). Consequently: **the grant actually delivered after R2 is either the grant §2.2 verified, or a fresh cohort of the same plan issued after the verified grant's designed void** — never a grant of another plan (the outbox row names this job's grant and the fence binds grant ↔ job revision), never an occurrence outside the plan's pending prefix (cohort bounding, `quota-budget.mjs:622-645`), and never a grant past its delivery window. The executor's first G poll (§4) re-runs the S1 identification and the §3 proof, so the execution record names the grant that was in fact delivered, and any outcome outside the two branches above is a §7 STOP. On this basis the amendment classifies a between-check lease expiry as **expected machinery**, requiring no fresh GO and no deviation report beyond the record's factual naming of which branch occurred.
+
+---
+
+## 3. A2 — reservation-ownership evidence (replaces the evidentiary basis of proposal §4.3 items 10–12)
+
+Rowan A2: *"Preserve Wren's proposed churn-tolerant accounting, but require evidence that all live reservations belong to the expected grant, with no duplicate active ownership or unexplained dispatches."*
+
+### 3.1 What ownership means in the store
+
+A reservation row is written per (grant, occurrence, day) at grant issuance, in the grant's own transaction: `reservation_id = qres:${grantId}:${occurrenceId}:${dayKey}`, with columns `grant_id, occurrence_id, plan_id, job_id, day_key, slots_total, slots_consumed, state, close_reason` (`quota-budget.mjs:124` DDL; `reserveForGrant` at :544, id construction and INSERT at :571-582). `slots_total = 12 − attempts already used` for that (plan, occurrence) (:552-556, with `segmentAttemptsUsed` at :186-192). Ownership is therefore recorded exactly — the gap is only that no route enumerates the rows (§8). The amended census proves ownership by a four-legged argument whose every leg is a routed read, and whose conclusion is exact, not sampled:
+
+### 3.2 The four-leg ownership proof (census form; all four legs required)
+
+- **Leg 1 — the granted set (S1).** G = occurrences in state `granted`; record |G| and the ids. Grounding read: |G| = 8, G = positions {68, 69, 73, 75, 80, 82, 83, 89} (§11).
+- **Leg 2 — attempts used are zero for all 15 (S2 + S5).** Every one of the 15 reads `executionState: null` on S2, and S5 for the plan returns **exactly the 8 Phase A execution records** (attempts 4/6/6/6/6/6/4/6) with no record for any of the 15 → `attemptsUsed = 0` for each of the 15 → any reservation written for any of them today has `slots_total = 12`.
+- **Leg 3 — the sum closes on G alone (S3/S4).** `reserved` for the current PT day is defined as `Σ (slots_total − slots_consumed)` over **all** open reservations carrying that `day_key`, with no grant filter (`derivedDayTotals`, `quota-budget.mjs:193-202`). Read value: **96**. The live grant's own reservations — written in the same transaction as the grant and its occurrence transitions (`coordinator.mjs:1743-1758`) — contribute exactly |G| × 12 = 96 (Leg 2). Every open reservation contributes ≥ 1 to the sum (slots_total ≥ 1 by construction; slots_consumed ≤ slots_total, itself reconcile-verified). Therefore **no open reservation exists outside the live grant's eight**: no leaked reservation from the voided predecessor grant, no reservation of any other grant, plan, or job, and no duplicate ownership of any occurrence (a duplicate would add ≥ 1 and break the sum).
+- **Leg 4 — no unexplained dispatches (S3).** Reconcile reads `ok: true`, drift empty, `censusComplete: true` over full pagination. Reconcile verifies **every** reservation row's stored `slots_consumed` against its dispatch-derived count (dispatch rows attributed by the reservation's own (grant, occurrence, day) coordinates — `reconcileQuota`, `quota-budget.mjs:481-490`; `derivedSlotsConsumed`, :207-214), and flags any dispatch row unmatched to an attempt or vice versa as drift. The day's `dispatched = 0` then proves every derived count is 0: **no dispatch has occurred against any open reservation, and no dispatch exists anywhere today that the ledger cannot attribute.**
+
+**Zero case (the void instant).** If the census read lands between a void and the re-grant: no live grant, G = ∅, reserved must read **0** — Leg 3's sum then proves no open reservation exists at all. Reserved = 0 with G ≠ ∅, reserved ∉ {0, 96}, or |G| × 12 ≠ reserved (at dispatched = 0) are each a STOP. The proposal's invariant form ({0, 96}; dispatched exactly 0) is preserved — it is now the *conclusion* of the proof at each read, not a substitute for it.
+
+**During G.** The proof re-runs in census form at the completion read-backs (proposal §6 item 8, as amended in §10). At ordinary G polls the executor verifies the moving form: exactly one live grant at a time (S1); every dispatch step attributable, via S5 execution records, to the delivered grant's occurrence set; and reserved equal to the open reservations of the unique live grant plus any not-yet-swept reservations of the just-reported grant (the settlement sweep is the only closer, `quota-budget.mjs:655-672` — a poll that catches a transient verifies it closed by the next poll; a transient that does not close is a §7 STOP under the stall rule as amended in §4, not a shrug).
+
+---
+
+## 4. A3 — the stall signature, precisely defined (replaces proposal §7's stall bullet)
+
+Rowan A3: *"Retain the 35-minute threshold, but define the two polls precisely. An ordinary pending grant or PT-day rollover must not be mistaken for the known Phase A stall."* Q4 verdict: conditional on this definition.
+
+### 4.1 Poll contents (each G poll, all recorded verbatim in the execution record)
+
+Timestamp (UTC); **S2** plan totals (done/failed/blocked) — and, at any poll where totals moved, the per-entry states; **S1** job view (live grant id + state, granted set); **S4** quota view (`attemptsToday`, `providerDispatchesToday`, `providerReservedToday`); **S3** reconcile totals for the current PT day plus `dayTotals` for every day the gate has touched; **S5** phase settled figure (the diagnostics phase view) — or the capabilities phase read, one surface used consistently. Cadence unchanged (~15 minutes, proposal §5.4).
+
+### 4.2 Definitions
+
+- **Delivered grant:** a grant for which a dispatch step has been *observed*: the cumulative dispatched figure (§4.3) rose in a step that S5 attributes to that grant's occurrences (execution records created/attempt rows added for them), or its occurrences' `executionState` left `null`. A grant that is merely `issued` is **pending**, however long it waits.
+- **Cumulative gate figures (the only stall metrics):** *gate-dispatched* = Σ over all PT days the gate has touched of reconcile `dayTotals[day].dispatched`; *gate-settled-delta* = current phase settled − the E0 census settled figure. Neither resets at a PT rollover; day counters are evidence, never the metric.
+
+### 4.3 The signature — ALL five required, evaluated on a poll pair (P1, P2)
+
+1. A specific grant was **delivered** (§4.2) at or before P1, and P2 is **≥ 35 minutes after that grant's first observed dispatch**.
+2. At both P1 and P2 the grant is still in a live state (`issued`/`delivered`) — not `reported`, `voided`, or `superseded` — and it is the same grant id at both polls.
+3. **No new attempts** for that grant between P1 and P2: gate-dispatched unchanged, and S5 shows no new attempt rows for its executions.
+4. **No plan progress** between P1 and P2: plan totals (done/failed/blocked) identical.
+5. **No settlement movement** between P1 and P2: gate-settled-delta identical.
+

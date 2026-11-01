@@ -1,0 +1,51 @@
+**Response (no discretion).** STOP immediately. The closing holds are **still applied, in containment order — re-pause the queue, then re-halt** (proposal §5.7) — and both are read back before anything else is reported; "safely" means exactly that order and those read-backs, even though the gate is aborting. The execution record then reports the incident with the observed figures and the surfaces that showed them, names it foreign generation, and stops: **no repair, no attempt to identify or undo the foreign work, no finalizer, no compensating act, no exception.** The GO is consumed. (What the foreign work *was* — Julie's own tap, an app retry, anything else — is not the executor's to determine; the gate's contract is that the window was supposed to contain only this plan's generation, and it didn't.)
+
+---
+
+## 8. What could not be fully grounded — stated plainly, with the substitutes and their limits
+
+1. **A grant's lease timestamps are not readable.** The `grants` row carries `created_at` and `lease_expires_at` (`coordinator.mjs:1743-1744`), but `jobView` — the only routed grant surface — projects `grant_id, state, revision` only (:2766-2768), and no other route projects them. **Substitute (§2.1 step 4):** the timed two-read classification (active / replaced / stale-live), which is sufficient for every decision the gate must make, because delivery itself re-checks expiry at the fence (`coordinator.mjs:1872-1874`). **Limit:** the classification cannot give the exact expiry instant, and a grant first observed already stale-live cannot be aged precisely. If Rowan requires the timestamp itself, that is a code change (project two more columns on `jobView`) — a different, separately-gated piece of work, named here as the only A1 sub-point a document cannot close.
+2. **Open reservation rows are not enumerable over the wire.** Ownership is recorded per row (§3.1) and an internal enumerator exists (`openReservations`, `quota-budget.mjs:217`), but no route calls it; reconcile (S3) projects aggregates, drift, and exceptions only. **Substitute (§3.2):** the four-leg arithmetic proof — granted set, zero attempts-used, the unfiltered day sum closing on the live grant alone, and reconcile's per-row stored-vs-derived verification. **Limit:** the proof establishes the open pool's composition exactly, but does not display individual `reservation_id`s. If Rowan wants row-level display, that is likewise a code change (route the existing enumerator), separately gated.
+3. **A4's cover form has two readings** (§5.2): the derived form (satisfiable; adopted) and the 12× form (unsatisfiable against the 600,000 ceiling; cohort-1 figure 3,095,568). The amendment does not pretend the derived form is the only possible intent — it asks Rowan to confirm the form at final verification, with the STOP instruction if she rules otherwise.
+
+Nothing else in A1–A6 required a substitute: A2's ownership, A3's polls, A5's snapshots, and A6's detection all read directly off S1–S7.
+
+---
+
+## 9. Accepted without change (Rowan's PASS items and standing terms)
+
+- **Q3 — end HELD:** the closing sequence (re-pause, then re-halt, with read-backs) stands exactly as proposed (§5.6 of the proposal).
+- **Q5 — the ceiling figure:** 600,000 units stands; §5 of this amendment changes only its measurement (cumulative, rollover-proof) and enforcement (cover check + polls).
+- **Sub-gates R1 / R2** as separately named decision points inside the single GO; **the 4-mutation executor budget** (halt flip, unpause, re-pause, re-halt). This amendment adds **no** mutation of any kind: every protocol above is reads, arithmetic, and — on deviation — the proposal's existing containment.
+- **The executor STOP law and the one-GO-one-attempt law remain in effect verbatim** (proposal §7 preamble and §8): any mismatch — one row, one slot, one revision — stops the gate; the executor's own explanation never clears its own stop; a stopped gate is never restarted on anyone's interpretation; Julie's GO is recorded before E0 and is consumed by the attempt.
+
+---
+
+## 10. Amendment mechanics — exactly what changes in the proposal
+
+- Proposal **§4.3 item 13** is **replaced** by §2.1 of this amendment (G-ID).
+- Proposal **§4.3 items 10–12** stand as invariants; their **evidentiary basis is replaced** by §3.2 of this amendment (the four-leg proof; the zero case included).
+- Proposal **§5.3** gains **step 0** (§2.2 of this amendment) immediately before the unpause PUT; §5.3's existing verifications are retained ahead of it.
+- Proposal **§5.4** gains the **A5 snapshot protocol** (§6 of this amendment) and its poll contents are **specified** by §4.1 of this amendment.
+- Proposal **§5.5**'s cost-ceiling bullet is **replaced** by §5 of this amendment (cumulative ledger; cover check; tier-1 phase cover).
+- Proposal **§7**'s stall bullet is **replaced** by §4 of this amendment; its foreign-generation bullet is **replaced** by §7 of this amendment. All other §7 STOPs stand.
+- Proposal **§6 item 8** is extended: for every PT day the gate touched, the A5 snapshot pair (§6) is filed in the record.
+- Proposal **§10's open questions** are disposed as follows: **Q1** — answered by S1 (the job view); the preview is not used; the residual gap is §8.1. **Q2** — the invariant form is retained and now proven per-read (§3); Rowan's alternative (two reads a lease cycle apart) is adopted in substance for the grant item via §2.1 step 4. **Q3** — Rowan PASSed end-HELD. **Q4** — the 35-minute threshold retained, the polls now precisely defined (§4). **Q5** — Rowan PASSed the figure; enforcement per §5. **Q6** — answered by §6 (the snapshot pair is the additional read-back Rowan's A5 required).
+- Everything in the proposal not named above is **unchanged**.
+
+---
+
+## 11. Grounding evidence (read-only, 2026-11-01, Wren)
+
+Live reads taken for this amendment (no mutation of any kind; the finalizer preview was **not** called):
+
+- **S1** `GET /v2/jobs/plan:e377a5559961b294154276b6:ch2` at ~17:59Z: job `state: generating`, `revision: 4`; grants — `grant:plan:e377a5559961b294154276b6:ch2:1:full` `reported` (rev 2), `…:ch2:2:full` `voided` (rev 3), `…:ch2:3:full` **`issued`** (rev 4, the live churn grant); occurrences 8 `ready` / 8 `granted` / 7 `pending`, granted = positions {68, 69, 73, 75, 80, 82, 83, 89}, pending = {70, 71, 78, 79, 84, 86, 87}.
+- **S2** plan read, same window: `active`, totals 23/8/0/0/0; the 15 all `executionState: null`; position 91 `excluded_parked`.
+- **S3** reconcile, same window: `ok: true`, drift empty, `censusComplete: true`, sole exception the known straddler `att-37d63768-db4b-447d-8150-580b7c6ee257`; dayTotals 2026-10-29 = 57/0/57, 2026-10-30 = 79/0/79, 2026-10-31 = 44/0/44, **2026-11-01 = dispatched 0 / reserved 96 / consumed 96** — the §3 sum closing on the live grant alone.
+- **S4** quota, same window: `providerDispatchesToday: 0`, `providerReservedToday: 96`, `attemptsToday: 8` (the estimate-ledger grant count), `settingsRevision: 1`.
+- **S5** diagnostics for the plan, same window: exactly the 8 Phase A executions (attempts 4/6/6/6/6/6/4/6 = 44); phase view settled 732,303 / estimatedUnverified 19,018 / reservedUnverified 5,648 / unknownOpen 0 / remaining 12,762,049 — all exact against the proposal §2.4.
+- **S1 (timed pair, second read)** at ~18:16Z, ≥ 16 minutes after the first S1 read — the §2.1 step-4 protocol exercised live: job `revision: 6`; the first read's live grant `…:ch2:3:full` now reads **`voided`**, and a successor `grant:plan:e377a5559961b294154276b6:ch2:4:full` (grant revision 6) is the unique live grant, `issued`. Its granted set is positions {68, 73, 75, 79, 80, 82, 83, 89} — seven of the first read's eight, with position 79 rotated in and 69 returned to `pending` (the pending-prefix order is the coordinator's own; both sets are prefixes of the same 15 under the day's identical headroom). Classification under §2.1 step 4: **Replaced** — the cycle is proven live by direct observation, and the successor is the grant any pre-unpause check would now have to verify. An intermediate S1 read at ~18:05Z (inside one lease window) showed the first grant still `issued` with its set unchanged, as the protocol expects.
+
+**No live read contradicted the proposal's stated state.** One observation beyond the proposal's snapshot, already carried in the proposal §0.2: the churn continues — two full cycles (grants `…:ch2:2:full` and `…:ch2:3:full` voided) are now visible on S1 since Gate 3 closed, with zero dispatches and zero spend throughout.
+
+**Turn: Rowan's** — final verification of Amendment 1 (direct mode; nothing is filed on the board for this round). Julie's GO remains separately required before any execution, and is not requested by this amendment.

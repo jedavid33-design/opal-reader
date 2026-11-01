@@ -1,0 +1,63 @@
+P1 and P2 are consecutive polls; the ≥ 35-minute span is measured P1→P2 as well as from first dispatch (with the ~15-minute cadence, the binding constraint is the 35 minutes after first dispatch; a pair spanning less does not evaluate). On the signature: STOP + containment + report (proposal §7) — **never a finalizer call, never a resubmission, never a repair under this gate** (unchanged).
+
+### 4.4 Exclusions — evaluated BEFORE the signature; any one defeats it
+
+- **Pending (undelivered) grant:** conditions 1–5 can only be evaluated on a delivered grant. A live grant with no observed dispatch step — including every halt-era churn grant and a post-R2 grant whose delivery is merely slow — is **not** the Phase A signature (Phase A's grant had flowed: 44 attempts, then silence). A delivered-never grant that persists is reported as its own deviation class (delivery failure) under the general STOP law; it is not relabeled a stall.
+- **Lease-cycle churn:** grants voiding at lease expiry and re-granting (§2.3) change the live grant's id between polls — condition 2 (same id) fails by construction. Churn is machinery, not a stall.
+- **PT-day rollover between P1 and P2:** day counters reset by design; conditions 3–5 are evaluated on the §4.2 cumulative figures, which do not reset, so a rollover can neither fabricate a stall (counters dropping to 0 is not "no progress" — progress is plan totals and settled delta) nor mask one. The A5 snapshot pair (§6) is the evidence at the boundary.
+
+---
+
+## 5. A4 — cumulative ceiling ledger and pre-dispatch cover check (replaces proposal §5.5's cost-ceiling bullet)
+
+Rowan A4: *"The 600,000-unit ceiling must apply cumulatively across Gate 4, including any PT-day rollover. Stop before further dispatch if the remaining budget cannot safely cover the next grant."* Q5 verdict: **PASS** on the 600,000 figure — this section changes only its enforcement mechanics.
+
+### 5.1 The cumulative ledger
+
+`settledDelta(t) = phase settled (S5/capabilities read) − phase settled at the E0 census`. The opening figure at drafting is 732,303 (proposal §2.4); the census re-reads it and the record fixes the actual opening value. The ceiling binds `settledDelta` **at every observation** (every poll, every read-back): `settledDelta ≤ 600,000`. The metric is a phase figure — it does not reset at PT midnight, is not a day counter, and is unaffected by reservation churn. This replaces any reading of the proposal under which the ceiling could be per-day or per-cohort.
+
+### 5.2 The cover check — form, derivation, and worked figures
+
+**Operational form.** The machinery delivers autonomously once unpaused (§3.4 of the proposal); the executor's interposition points are the polls. At **every** G poll, before the next cohort can be relied on to proceed, the executor evaluates:
+
+```
+cover(next cohort) = settledDelta(now) + Σ_{occ ∈ next cohort} upperBoundAttemptMicro(chars_occ)  ≤  600,000
+```
+
+where the *next cohort* is the pending prefix `boundGrantTargets` will select (recomputable by the executor from the S2 pending order plus the day's derived headroom, `quota-budget.mjs:622-645`), and `upperBoundAttemptMicro(chars) = round(chars / 10 × 225)` (`gen-constants.mjs:88`). **If the check fails, the executor applies containment at that poll (re-pause, then re-halt) — which is a stop before further dispatch in the only form the shipped machinery admits** — and reports. The gate never relies on a cohort the ceiling cannot cover having "probably" a small realized cost.
+
+**Derivation — why the per-occurrence term is ONE upper-bound attempt, not twelve.** Settled cost accrues per attempt at `knownCostMicro(durationSec) = round(durationSec × 225)` (`gen-constants.mjs:100`) — i.e., for attempts that produce audio. A `POLICY_BLOCK` attempt produces no audio and settles no known cost; the Phase A record proves the semantics empirically: 44 attempts (30 success, 14 policy_block) settled a delta of **152,964**, against a success-only expected sum of **157,076** for the 8 committed segments — not the ≈ 620,000 that 44 full-length attempts would imply. The split tree partitions the occurrence's text — *"parts concatenate to the segment's text EXACTLY"* (`policy-split.mjs:5-8`), depth ≤ 4 — so the audio-producing attempts of one occurrence together synthesize at most its full text once: total settled per occurrence is bounded by one full-length attempt at the upper-bound rate, `upperBoundAttemptMicro(chars)`, up to per-part rounding (≤ 16 leaf parts × ≤ ½ × 225 ≈ ≤ 1,800 units per occurrence worst case; named here so Rowan can see it — it does not move any figure below by more than ~27,000 across all 15, and the executor's check uses the unadjusted sum, i.e. it is conservative by that much less; if Rowan wants the rounding allowance inside the formula, it is a one-line change at final verification). The 12-attempt budget (`SEGMENT_ATTEMPT_BUDGET = 12`, `gen-constants.mjs:16`) bounds **attempts** (quota slots and provider calls), not settled cost.
+
+**Worked figures (this plan, exact).** Per-occurrence uppers for the 15 sum to **469,444**; the live first cohort (positions {68, 69, 73, 75, 80, 82, 83, 89}) sums to **257,964**. Cover at gate opening: 0 + 257,964 ≤ 600,000 ✓. Because the all-15 total (469,444) is itself under the ceiling, every successive cohort passes cover provided realized settled tracks at or under its bound — the check still runs per cohort, and a hot-running gate (realized settled approaching the bound) fails cover for a later cohort and stops *before* that cohort's dispatch. That is A4's intent, in enforceable form.
+
+**The 12× reading — presented, not silently chosen.** The code's per-occurrence upper for the *phase* fence is `upperBoundOccurrenceMicro(chars) = 12 × upperBoundAttemptMicro(chars)` (`gen-constants.mjs:94-95`). If Rowan intends the cover check in **that** form against the 600,000 ceiling, the first cohort's worst case is **3,095,568** — the gate could not deliver even its first cohort, and Gate 4 as specified could not execute (the ceiling or the form would have to change). This amendment adopts the §5.2 form (derived from the ledger's cost semantics and Phase A's settled record) and **asks Rowan at final verification to confirm the form explicitly**; if she rules the 12× form intended, the executor's instruction is to STOP and return the gate for a ceiling amendment — not to improvise.
+
+**Tier-1 phase cover (the code's own fence, now executor-observed).** Separately, at census and at every poll the executor verifies the phase guard's projection inequality in its exact shipped arithmetic — `settled + reservedUnverified + inFlightUpper + Σ_{remaining} upperBoundOccurrenceMicro ≤ 13,500,000` (`d6PhaseBudgetCheck`, `grant-guards.mjs:108-117`) — so a breach is an observed STOP, never a silent park. At drafting figures: 732,303 + 5,648 + 0 + 5,633,328 = **6,371,279 ≤ 13,500,000** ✓.
+
+---
+
+## 6. A5 — rollover snapshot protocol (new §5.4 sub-section of the proposal)
+
+Rowan A5: *"If execution crosses PT midnight, record the before-and-after accounting snapshots, reservation ownership, settled totals, and plan progress."* Q6 verdict: amend — this section supplies the protocol; proposal §3.3's treatment of rollover as a normal continuation is unchanged and is reaffirmed.
+
+- **Trigger.** Any PT-day boundary (07:00Z) falling inside the gate window — during G, or between census and completion.
+- **The snapshot set** (captured at the **last poll before** the boundary and the **first poll after** it; each snapshot is the full §4.1 poll contents **plus**): S3 paginated in full so `dayTotals` shows **both** day keys with their dispatched/reserved/consumed; S1 with the live grant's id/state and granted set (the §3 ownership proof re-evaluated on whichever side of the boundary has open reservations); S2 with per-entry states; the phase-accounting view (settled + estimatedUnverified + reservedUnverified + unknownOpen); S7 conflicts.
+- **Day attribution, stated for the record.** Reservations carry their grant-day's `day_key` on the row (`quota-budget.mjs:124`, :575-582); a grant issued before midnight whose settlement lands after it closes reservations attributed to the **old** day key, while new-day cohorts reserve under the new key — `derivedDayTotals` is computed per `day_key` over the rows (:193-202), so the two days' figures in the snapshot pair are individually meaningful and their sum identities are checkable against the §4.2 cumulative figures. The execution record reports both days verbatim (proposal §6 item 8, extended in §10 below).
+- **Rules.** The gate neither pauses for a rollover nor treats it as an anomaly, a stall (§4.4), or a ceiling event (§5.1's ledger does not reset). Continuation across the boundary is the shipped path: on rollover the remaining pending set is re-evaluated whole, in order, against the new day (`boundGrantTargets` invariants, `quota-budget.mjs:604-620`). No executor act is needed or permitted to hurry it. If the before/after pair shows any figure that the cumulative identities (§4.2, §5.1, §3) cannot reconcile, that is a §7 STOP — reported with both snapshots, not smoothed over.
+
+---
+
+## 7. A6 — foreign generation: observable definition, STOP, holds, incident report (replaces proposal §7's foreign-generation bullet)
+
+Rowan A6: *"Because the Generate button remains live, any foreign generation activity must stop the gate. The closing holds must still be applied safely, and the incident must be reported without attempting an unauthorized repair."*
+
+**Detection surfaces** (read at every G poll, in addition to §4.1): **S6** plan list (every plan's state/totals); **S4** (`attemptsToday`, `providerDispatchesToday`); **S3** `dayTotals`; **S5** phase view plus the approved plan's own settled figure (`planSettledMicro` semantics — the diagnostics plan summary's phase view read alongside per-plan attempt attribution, `service.mjs:1103-1109`, :1443-1560); **S2/S1** for the parked job's plan entries (position 91) and the plan's job.
+
+**Foreign generation is ANY of:**
+
+- **(a)** a rise in gate-dispatched (§4.2) in a step that S5 cannot attribute to the approved plan's delivered cohort — i.e., dispatches with no execution records on this plan's occurrences;
+- **(b)** any *other* plan in the S6 list changing state or totals, or a new plan appearing;
+- **(c)** the parked job moving in any way: position 91 leaving `excluded_parked`, the parked job's fingerprint changing (census §4.2 item 9 of the proposal), or any exemption-journal movement;
+- **(d)** the forever-pucked phase settled rising by more than the approved plan's own settled rise over the same interval (phase-level activity the plan cannot account for);
+- **(e)** `attemptsToday` (S4) rising in any step not matched by an approved-cohort dispatch step.
+
