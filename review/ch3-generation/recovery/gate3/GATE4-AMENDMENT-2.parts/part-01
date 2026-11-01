@@ -1,0 +1,198 @@
+  nodes re-send their text as their children — that repetition costs
+  **attempt slots only**; a blocked node settles 0 (§2.1). Recursion
+  depth is capped at 4 (`policy-split.mjs:269`).
+- The pre-split (`synthesizeLongSegment`) applies the **same cut
+  machinery** to produce chunks of ≤ `PRE_SPLIT_MAX_CHARS` = 1,200
+  (`policy-split.mjs:222`): exact-concat again, and all chunks share
+  the caller's **one** budget object. `stitchWav` concatenates the
+  disjoint parts' PCM; a multi-part attempt's `durationSec` is the sum
+  of the part durations — no sample is duplicated.
+
+**Quantified:** across the successful calls of one pass, the synthesized
+texts are pairwise disjoint sub-texts of the segment — successful calls
+are exactly the leaves of the realized partition forest — so
+**Σ chars over successful calls ≤ the segment's chars**, with equality
+only when every part succeeds. The settled-cost duplication factor is
+**1.0**: no context is ever re-synthesized into a second *settled*
+charge for the same characters.
+
+**Successful-leaf bound.** Let S = successful calls in the pass,
+B = blocked calls. Every call consumes one budget unit: S + B ≤ 12
+(an erroring call settles 0 and ends the pass, so it only tightens
+this). Each chunk tree with s_c successes has ≥ s_c − 1 blocked
+internal nodes, so B ≥ S − #chunks. Every one of the 15 segments is
+1,215–1,493 chars, so the pre-split yields 2 chunks (3 only if boundary
+placement forces a first cut within ~293 chars of an edge — the
+midpoint fallback cut bounds any post-cut remainder to ≤ 1,443 chars,
+which then splits in two). With #chunks ≤ 3: 2S ≤ 12 + 3, hence
+**S ≤ 7** — and S ≤ 6 in the normal 2-chunk case.
+
+---
+
+## 4. R1(c) — The true per-occurrence worst case, derived
+
+### 4.1 The derivation
+
+For one occurrence, settled is the sum over its successful calls of
+`round(durationSec × 225)` (§2.1). For each successful call:
+
+- `round(x) ≤ x + 0.5` — rounding contributes at most **+0.5 per call**.
+- `durationSec ≤ chars / 10` for the call's text — **premise P**, §4.3.
+
+Summing over the pass, with §3's disjointness (Σ successful chars ≤
+segment chars) and S ≤ 7:
+
+> settled(occ) ≤ chars × 22.5 + 0.5 × 7 = chars × 22.5 + 3.5.
+
+The shipped bound function is `upperBoundAttemptMicro(chars) =
+Math.round(chars / 10 * 225)` (`gen-constants.mjs:88`). Against it, the
+per-occurrence allowance is set at **+5**: 0.5 (the model's side of the
+rounding) + 3.5 (per-call rounding at S ≤ 7) + **1.0 of slack for the
+shipped function's floating-point boundary behavior** (§4.2). Hence:
+
+> **settled(occ) ≤ upperBoundAttemptMicro(chars) + 5**, and for the
+> gate's whole scope: **Σ = 469,444 + 15 × 5 = 469,519 units**.
+
+For the drafting-time live cohort (8 occurrences): 257,964 + 40 =
+**258,004**.
+
+### 4.2 Comparison against the two candidate forms — and which one the code supports
+
+- **Amendment 1's adopted term, Σ = 469,444:** the exact sum of the
+  shipped `upperBoundAttemptMicro` over the 15 (recomputed by executing
+  the function, §1). It is the right base — but as a *bound* it was
+  incomplete: it carried no rounding allowance. This amendment
+  supersedes the figure with **469,519** (§9). Note the float subtlety,
+  verified live in §1's recomputation: `chars / 10` is inexact in
+  binary, so e.g. 1,397 chars yields 31,432 from the shipped function,
+  one unit below exact-arithmetic rounding (31,433); the shipped Σ
+  (469,444) sits one unit below the exact-arithmetic Σ (469,445). The
+  +5 allowance absorbs this class of effect with room to spare.
+- **The 12× form, Σ = 5,633,328 (cohort 3,095,568):** **not** a
+  settled-cost bound the code supports. It prices twelve full-text
+  successes per occurrence. §2 (one pass, ever) and §3 (the pass
+  partitions the text) make that unreachable: twelve attempts can
+  synthesize the segment's characters **once**, in total, into settled
+  successes. The 12× figure remains exactly what it is in the code —
+  the phase fence's per-occurrence **projection** (plan entries carry
+  `upper_micro_cents = upperBoundOccurrenceMicro(charCount)`,
+  `service.mjs:808`; refused against at grant time by
+  `d6PhaseBudgetCheck`, `grant-guards.mjs:108`) — a reserve-side
+  conservatism for admission control, not a prediction of settled cost.
+  At drafting figures its tier-1 projection is 732,303 + 5,648 + 0 +
+  5,633,328 = **6,371,279 ≤ 13,500,000**, so the fence admits this
+  gate's grants exactly as Amendment 1 §5.2 described.
+
+**Statement of the supported figure:** the code supports 469,519 as the
+worst-case settled delta for the gate's entire scope — expected value
+294,137; Phase A's 8 realized at ≈ 97.4% of their success-only expected
+figure (152,964 against 157,076, Amendment 1 §5.0), far under the
+chars/10 rate bound.
+
+### 4.3 Premise P — the one ruling this amendment asks Rowan to make
+
+The derivation's rate step — a successful call's `durationSec` cannot
+exceed its text's chars/10 — is **the pinned cost model's own bound**
+(`gen-constants.mjs:88-91`: seconds bounded at chars/10, "≥1.59× slower
+than the realized rate" of 15.96 chars/s). It is a premise, and this
+amendment names it as one: `durationSec` is **byte-measured actual
+audio** and is **not clamped by any code** — if the provider returned
+audio spoken slower than the model's slowest admitted rate, a call
+could settle above its chars/10 term. Two supporting observations:
+(i) the adapters' no-signal fallback duration estimate also sits under
+the bound for every part the splitter can produce (an ≈ chars/14
+estimate, capped — `adapters.mjs:201-202`; parts are ≥ 50 chars);
+(ii) the shipped phase fence already spends real refusal authority on
+this same premise — its projection terms are these same rate formulas,
+so the premise is the codebase's own pinned basis for money decisions,
+not an assumption invented for this gate. **Rowan is asked to confirm
+premise P as the ceiling basis explicitly** — the same kind of
+confirmation Amendment 1 §5.0 requested for the bound's form. §5.3
+states the consequence if she declines it.
+
+## 5. R1(d) — The enforcement construction
+
+### 5.1 Recommended: the ceiling binds by arithmetic (adopted, subject to Rowan's verification and Julie's GO)
+
+Because §4's bound is per-occurrence over a **closed scope** — 15 named
+occurrences, each settle-capped at `upperBoundAttemptMicro + 5`, each
+reachable in exactly one pass — the coordinator **cannot** settle more
+than **469,519** units of in-scope work no matter how autonomously it
+issues cohorts, at any poll cadence, including no polling at all. The
+standing **600,000** ceiling is therefore **unreachable within the
+gate's scope**, and enforcement does not depend on executor timing:
+
+- **Polling is demoted to detection, with teeth.** The cover check is
+  retained in proven form, evaluated at census and at every poll from
+  live figures: `settledDelta + Σ over remaining occurrences of
+  (upperBoundAttemptMicro(chars) + 5) ≤ 600,000`. At opening it reads
+  469,519 ≤ 600,000 — **130,481 of headroom** — and it is recomputed
+  from the live char counts each time, so any scope or text change
+  fails it loudly instead of passing on census memory.
+- **A proof-refuting observation is a STOP.** Any single observation
+  of `settledDelta > 469,519` refutes the premises in operation; under
+  A6 it is treated as foreign work: STOP + containment. (Reaching
+  600,000 without first crossing 469,519 is arithmetically impossible.)
+- **The phase fence remains the system's own independent hard stop** —
+  an in-transaction refusal at every grant issuance against the
+  13,500,000 phase budget (§4.2), executor-observed per Amendment 1
+  §5.2. The gate thus has two independent ceilings: the fence's
+  projection-side refusal, and §4's settled-side arithmetic.
+
+**No ceiling revision is proposed.** Julie's 600,000 stands as she
+approved it; this amendment asks Rowan to verify that the figure is
+unreachable in-scope — a stronger position than Amendment 1 could
+offer — and asks Julie for **no new figure at GO**. (If Rowan prefers
+the ceiling restated at the proven bound, the figure to adopt would be
+469,519; that restatement would be a revised figure for Julie's
+acceptance at her GO. The amendment recommends against it: lowering
+the number changes nothing enforceable.)
+
+### 5.2 Cohort-tranche interposition — analyzed, not adopted
+
+The alternative — executor re-pauses the queue as each cohort settles
+and re-verifies before unpausing for the next — fails on the shipped
+timing, and on budget:
+
+1. **No interposition point exists.** `driveOnce` issues the next
+   grant and drains the outbox in the same pass
+   (`service.mjs:1030-1035`: issuance, then `drainOutbox` at the tail),
+   inside one coordinator alarm invocation. Issuance and delivery are
+   one function chain; the executor observes over HTTP from outside
+   and cannot land between them.
+2. **A re-pause gates delivery, not execution** — and the settlement
+   that frees the next issuance lands at the *end* of the in-flight
+   execution (the report closes the grant). By the time any external
+   poll can see cohort N settled, the same alarm chain may already
+   have issued **and delivered** cohort N+1.
+3. **The mutation budget breaks anyway.** Standing budget: {halt flip,
+   unpause, closing re-pause, closing re-halt} = **4**. The tranche
+   form costs 4 + 2 × (number of inter-cohort gaps) — at minimum
+   **6** (the guard's sizing makes ≥ 2 cohorts certain for 15
+   occurrences), realistically 6–8 — exceeding the budget Rowan left
+   standing, for a mechanism that still guarantees nothing under
+   points 1–2.
+
+Tranche interposition is therefore **rejected**: adopted only in a
+design where the coordinator itself fences between cohorts — which is
+§5.3(b)'s code change, not an executor procedure.
+
+### 5.3 If premise P is declined — stated plainly
+
+If Rowan declines to let any ceiling rest on the pinned model's rate
+bound, then **no finite ceiling is provable from the shipped cost
+semantics** — a single call's duration is byte-measured and unclamped,
+and the 12× form does not escape the premise (it is the same rate,
+multiplied). In that case Gate 4 does **not** proceed under the 600,000
+figure as a guarantee. The remaining honest constructions are:
+**(a)** restate 600,000 as a detection-and-stop bound (executor STOP on
+observation) — legitimate as monitoring, but it must not be called
+enforcement, and Amendment 2 does not recommend presenting it as such;
+or **(b)** a separately gated code change — a gate-scoped settled-cost
+circuit breaker evaluated inside the dispatch transaction, the only
+place enforcement can mechanically live — as future work in the family
+of Amendment 1 §8's gaps. The fork is Rowan's to close at verification;
+Julie's GO is sought only on the construction Rowan verifies.
+
+---
+

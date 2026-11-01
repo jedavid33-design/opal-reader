@@ -1,0 +1,193 @@
+## 6. R2 — The stall signature, restated as a sliding window
+
+Amendment 1 §4.3's consecutive-pair rule is **replaced** by the
+following. Rowan's defect is repaired arithmetically: the binding span
+is a ≥ 35-minute window of *continuously observed* non-progress, and
+the intervening ~15-minute polls are evidence inside the window, not
+its boundary. Poll contents are Amendment 1 §4.1's, **plus** the live
+grant id recorded at every poll.
+
+1. **Anchor.** Let t0 be the time of the first poll at which a grant G
+   is observed **delivered** (Amendment 1 §4.2's definition: S5 shows
+   ≥ 1 execution under G, or the gate-dispatched figure rose
+   attributably to G). An undelivered grant never anchors.
+2. **Evaluation.** At every poll P with P − t0 ≥ 35 minutes, evaluate
+   the signature over the **whole window [t0, P]**: the stall fires
+   iff at **every** poll in the window — each intervening poll checked
+   individually — and at P: (1) the live grant is still G, same id;
+   (2) cumulative gate-dispatched (Amendment 1 §4.5 basis) is unchanged
+   from its value at t0's poll; (3) plan totals
+   (eligible/done/failed/blocked/prompts) are unchanged; (4) the
+   gate-settled-delta is unchanged; and at P, (5) S3 reads `ok: true`.
+3. **Resets.** Any intervening observation of movement on (2)–(4)
+   **negates** the window: if G settled with progress, no anchor
+   exists until a successor grant delivers (its own t0 at its first
+   delivered observation, per §8's verification); if G was replaced by
+   a *delivered* successor, the successor anchors at its delivery.
+   Replacement by an **undelivered** successor neither anchors nor
+   resets — the exclusions of Amendment 1 §4.4 (pending grants, lease
+   churn, PT rollover) are preserved in full, as is §4.6's
+   effect/non-effect statement.
+
+Concretely: two polls ~15 minutes apart can no longer conclude
+anything; the earliest a stall can fire is 35 minutes after a delivered
+grant's first observed dispatch with **every** observation in between
+showing the same frozen figures — the Phase A signature (Amendment 1
+§4.7) restated soundly.
+
+## 7. R3 — Zero-remaining open reservation rows: possible; the proof repaired
+
+### 7.1 The answer: yes — in exactly two shapes, both by consumption, never by creation
+
+- **(T) Transient.** `applyDispatchQuota` increments `slots_consumed`
+  per dispatch and refuses the *next* dispatch at `consumed ≥ total`
+  (`quota-budget.mjs:803`, `:814`). A row therefore reaches
+  `slots_consumed == slots_total` exactly on its occurrence's last
+  permitted dispatch, and it stays `open` until the grant's settlement
+  sweep closes it (`closeReservationsForGrant` at report time,
+  `quota-budget.mjs:714`). In between, `derivedDayTotals`
+  (`quota-budget.mjs:193-202`) counts it at **(total − consumed) = 0**
+  toward the day's reserved sum — an open row contributing zero.
+- **(P) Persistent.** The single close fence, `closeReservation`
+  (`quota-budget.mjs:662-672`), blocks a close while any
+  dispatch-capable execution exists for (grant, occurrence), and
+  blocks the `unknown_billing` close for every reason except
+  `halt_settled`. A grant whose last-slot attempt ended in an
+  unresolved unknown leaves its zero-remaining row open indefinitely
+  behind that execution.
+- **Never by creation.** `boundGrantTargets` breaks the cohort prefix
+  at `slots ≤ 0` (`quota-budget.mjs:624-645`), and the dispatch-time
+  re-reservation refuses `slots ≤ 0` (`DAY_ROLLOVER`,
+  `quota-budget.mjs:782-785`); every full-grant issuance passes through
+  `boundGrantTargets` first. (`reserveForGrant`'s own guard refuses
+  only `slots < 0` — unreachable on the coordinator's path.)
+
+### 7.2 Correction to Amendment 1, and the strengthened proof
+
+**Amendment 1 §3.2's Leg 3 premise — "every open reservation
+contributes ≥ 1" — is false in shapes (T)/(P), and is corrected
+here.** The conclusion survives, on evidence that actually excludes
+the shapes at this census. Legs 1, 2, 4 stand; Leg 3 is replaced by:
+
+- **Leg 3b (reconcile verifies every row, whatever its remaining
+  slots).** `reconcileQuota` iterates **every** reservation row —
+  `SELECT * FROM d6_grant_reservations`, no state filter
+  (`quota-budget.mjs:478` ff.) — and verifies each row's stored
+  `slots_consumed` against the derived count, flagging any mismatch
+  (and any `consumed > total`) as drift, which S3's `ok: true`
+  excludes. With census-day dispatched = 0: every row carrying the
+  census day_key has derived consumed = 0, hence (reconcile-verified)
+  stored consumed = 0, hence remaining = `slots_total`. A
+  zero-remaining census-day row would need `slots_total = 0` —
+  excluded for the 15 by Leg 2 (their rows are created at used = 0,
+  total = 12; `attemptsUsed` is monotone because the attempt log is
+  append-only, so used = 0 at census implies used = 0 at every
+  creation instant) and excluded account-wide for the census day by
+  S6 with dispatched = 0 (a consumption-side zero-remaining row needs
+  dispatches on that day_key — there are none).
+- **Subject-direct exclusion.** Shapes (T)/(P) require an execution
+  under the row's grant for one of the 15. S5 shows **no execution for
+  any of the 15 under any grant, ever** — the plan's only executions
+  are Phase A's 8, under the now-reported grant, all terminal — and
+  that grant's reservation rows were verified closed one by one at
+  Gate 3's E4.
+
+The residual honesty of Amendment 1 §3.3 stands unchanged: no surface
+projects the open-row **count**; the proof is by legs — now five, each
+shown.
+
+### 7.3 Read consistency during churn — order and stability rule (new)
+
+The census surfaces are separate, non-atomic reads, and the churn
+guarantees they can straddle a void/re-grant. The census is therefore
+taken in the **fixed order S1 → S2 → S5 → S3 (full pagination) → S4 →
+S7**, and is **valid only under the stability rule**: the A1 timed
+pair's second S1 must agree with the first pass on (live grant id,
+granted set), and a closing S4 re-read must agree with the first pass
+on (census-day totals, phase settled). Any disagreement restarts the
+census from S1 — figures are never mixed across grant generations.
+
+The **void-instant zero** (a single read showing reserved = 0,
+G = ∅, no live grant) is acceptable **only when the timed pair brackets
+it**: one pass zero-case, the other pass showing the predecessor
+(pre-void) or the successor grant with the full §3/§7.2 proof closing
+on it. **Two zero-case passes ≥ 16 minutes apart with no live grant at
+either = STOP**: `driveOnce` re-grants within one watchdog cycle of a
+void, so a persistent grantless state contradicts the driver's
+observed behavior, and the census does not proceed through it. The
+same rule binds G polls (§8): a poll whose S1 and S3 disagree about
+the live grant generation is discarded and re-read once before any
+figure from it is used.
+
+## 8. R4 — Every successor grant is verified before any reliance
+
+Amendment 1 §§2 and 7 are extended as follows. **Every newly observed
+grant id** — at census (including the timed pair's successor), at
+Amendment 1 §5.3's step 0, and at **every G poll** — receives the full
+verification **before** any reliance on it (before its figures feed
+the §5.1 cover check, the §6 stall window, or the A6 evaluation):
+
+1. S1 shows it as a grant **of this job**, and the unique live grant;
+2. its granted set ⊆ the approved 15, and equals the cohort the
+   guard's arithmetic selects — the executor recomputes
+   `boundGrantTargets`' inputs from S2 order and S3/S4 headroom and
+   compares;
+3. the ownership proof (§3 as repaired by §7.2) re-run, closing on
+   **its** reservation set;
+4. reconcile `ok: true` within the same read pass.
+
+A successor failing any leg = **STOP + containment** (proposal §5.7) —
+never noted-and-continued.
+
+**Lease freshness is never inferred from appearance.** No surface
+projects lease timestamps (Amendment 1 §8.1 stands), and a newly
+appeared `issued` grant may be seconds from expiry. What is used
+instead: the timed classification of Amendment 1 §2.1 step 4 at
+census, and at polls the observation pair (first-seen poll, next poll)
+classifying persisted/replaced the same way. Delivery safety rests on
+neither: it rests on the drain's **delivery fence**
+(`coordinator.mjs:1861-1876` — a dispatch leaves only while its grant
+is `issued`, at the job's current revision, with
+`now ≤ lease_expires_at`; otherwise the grant is voided in-transaction,
+its reservations released, and re-advance scheduled), which is the
+ultimate safeguard and is indifferent to what the executor believes
+about freshness.
+
+## 9. Amendment mechanics — what changes, what stands, satisfiability
+
+**This amendment replaces:** Amendment 1 §5.0–§5.2's cost-bound form
+and cover check (per-occurrence proven term `upperBoundAttemptMicro +
+5`; proven scope bound **469,519**; cover condition as §5.1 states);
+Amendment 1 §4.3 (sliding window, §6); Amendment 1 §3.2 Leg 3
+(corrected, Leg 3b added, §7). **It extends:** Amendment 1 §§2 and 7
+(successor verification, §8; census consistency, §7.3). **Everything
+else stands exactly as Amendment 1 left it** — A5, A6 as passed; Q3
+end-HELD; the R1/R2 sub-gates; the **4-mutation budget** (this
+amendment adds no mutation; the only construction that would have
+changed the budget — tranche interposition — is analyzed and not
+adopted, §5.2); the census surfaces; the STOP law; §8's two gaps,
+unchanged and still separately gated future work.
+
+**Satisfiability, stated plainly.** R1–R4 are each answered within the
+shipped machinery, as shown. Nothing in R2–R4 is unsatisfiable. In R1,
+the single point requiring a **ruling** rather than a reading is
+premise P (§4.3): if Rowan confirms it, the 600,000 ceiling is
+enforceable by arithmetic and Gate 4 may proceed on the verified
+construction at Julie's GO; if she declines it, §5.3 governs — Gate 4
+does not proceed under an unenforceable ceiling, and the alternatives
+(detection-restatement, or the separately gated circuit-breaker build)
+are named with whose decision each is. No other item in this amendment
+requires a decision beyond Rowan's verification and Julie's Gate 4 GO.
+
+**This amendment does not authorize execution.** Execution still
+requires Rowan's final verification of this amendment and Julie's
+separate GO, recorded before any step.
+
+---
+
+*Prepared by Wren (executor/drafter) for Rowan's verification —
+Amendment 2 to the Gate 4 proposal, answering REVISE items R1–R4.
+Read-only drafting; no production mutation, no preview call, no board
+filing (direct mode). File URLs for Rowan's reference accompany the
+return summary (the repo is private; the summary carries the
+substance).*

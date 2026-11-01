@@ -1,0 +1,188 @@
+# GATE 4 — AMENDMENT 2: Rowan's Amendment 1 REVISE (R1–R4) answered
+
+**Status:** DRAFTED for Rowan's final verification, then Julie's Gate 4
+decision. This amendment **authorizes nothing**. It changes the proposal
+as amended by Amendment 1 only as §9 itemizes; everything else in the
+proposal and in Amendment 1 stands exactly as written.
+
+**Amends:** the Gate 4 proposal, pinned `806cc53aebee15aaed8ec139c1213d79f7e664fb`
+(repo `jedavid33-design/opal-reader`, branch `ui1-review`, SHA-256
+`b524bb187d72c4c7881bf1d4470e6524b14a72678168ae23292245efc5abfabc`),
+as amended by Amendment 1, pinned `451f71ad5526879f6849f4f1607bb80024e439d0`
+(SHA-256 `af3ec5d397fb427b4f53e05f69ee6cfc82328bba9d95913dbc4002723baa7ef1`).
+Neither document is edited; this amendment is a child of Amendment 1's pin.
+
+**Responds to:** Rowan's Amendment 1 review — **REVISE** (relayed
+verbatim by Julie, Nov 1, 2026, direct mode). A1/A2/A5/A6 were found
+substantially addressed; **A5 PASS, A6 PASS outright**; end-HELD (Q3)
+accepted; the R1/R2 sub-gates and the 4-mutation executor budget stand —
+subject to four required items, **R1–R4**, which this amendment answers
+one by one, from the shipped source.
+
+**Live build:** `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867` (the range-fix
+build). The system sits HELD (halted + queue paused); this drafting made
+read-only calls only.
+
+**The resolution, in one paragraph.** R1 is answered by proof, not by a
+new mechanism: on the shipped code, all settled cost for an occurrence
+accrues inside **one synthesis pass** — the spend-intent fence admits
+exactly one pass per (job, occurrence) ever, the split machinery
+**partitions** text (duplication factor 1.0 for settled cost), and every
+non-success outcome settles exactly 0 — so the proven worst case for the
+gate's whole closed scope is **469,519 units**, below the standing
+**600,000** ceiling. The ceiling therefore binds **by arithmetic, not by
+polling**; the tranche-interposition alternative is analyzed and rejected
+(no interposition point exists in the shipped timing, and it would cost
+≥ 6 mutations against the standing budget of 4). The proof's one premise
+— the pinned cost model's rate bound — is named in §4 for Rowan's
+explicit ruling, with the consequence stated if she declines it (§5.3).
+R2 replaces the poll-pair rule with a ≥ 35-minute sliding window whose
+intervening polls are individually checked (§6). R3 answers **yes** — a
+zero-remaining open reservation row is possible in the machinery, in two
+shapes — corrects Amendment 1's Leg 3 premise, and repairs the proof with
+the evidence that actually excludes the shapes here, plus a read-order /
+stability protocol for the non-atomic census (§7). R4 makes every newly
+observed grant — census, step 0, every poll — pass the full A1
+verification before any reliance, and states that lease freshness is
+never inferred (§8).
+
+| Item | Where answered | One-line result |
+|---|---|---|
+| R1 — ceiling enforcement | §§2–5 | Proven scope bound 469,519 ≤ 600,000; ceiling unreachable in-scope; no budget revision proposed |
+| R2 — stall window | §6 | Sliding ≥ 35-min window; intervening polls checked; anchor resets on any movement |
+| R3 — zero-remaining rows | §7 | Possible (two shapes); Leg 3 corrected, Leg 3b added; census read-order + stability rule |
+| R4 — successor verification | §8 | Full verification for every new grant id before reliance; freshness never inferred |
+
+---
+
+## 1. Grounding — fresh live reads at drafting (2026-11-01, ~18:29–18:31Z)
+
+Amendment 2 was drafted against a fresh read pass over the same surfaces
+(Amendment 1 §1.1), in the order §7.3 now prescribes. **No contradiction
+with Amendment 1's stated state was found.** Figures identical to
+Amendment 1 / Gate 3 close unless noted:
+
+- **S1 job view:** job `generating` rev **6**; grants `…:ch2:1:full`
+  `reported`; `…:ch2:2:full`, `…:ch2:3:full`, `…:ch2:4:full` `voided`;
+  **`…:ch2:5:full` `issued` (live)**. The churn advanced two cycles past
+  Amendment 1's timed pair — the A1 mechanism working exactly as
+  described. Granted set of the live grant: positions
+  **{68, 69, 73, 75, 80, 82, 83, 89}** — Amendment 1's cohort set.
+- **S2 plan:** `active`, 23 eligible / 8 done / 0 failed / 0 blocked /
+  0 prompts — unchanged.
+- **S5 diagnostics:** phase settled **732,303**, estimatedUnverified
+  **19,018**, reservedUnverified **5,648** — unchanged.
+- **S3 reconcile (operator):** `ok: true`, `censusComplete: true`,
+  `currentDayBlocked: false`, drift **empty**, sole exception the
+  adjudicated straddler. Day totals: 2026-10-29 = 57/0/57,
+  2026-10-30 = 79/0/79, 2026-10-31 = 44/0/44,
+  **2026-11-01 = 0 dispatched / 96 reserved / 96 consumed** (the churn).
+- **S4 quota:** dayKey 2026-11-01, dispatched **0**, reserved **96**,
+  attemptsToday 8, settings revision **1**.
+- **Conflicts:** exactly the baseline **four** `schedule_dead` rows.
+- **Eligibility:** 15 / 20,864 / 294,137, digest
+  `9453ab5dc7ee6ade7c650d14066054b965875f2ef1b65eb24bc633588d778e67` —
+  byte-identical to the proposal's quote.
+- **Arithmetic re-verification:** every sum in §§4–5 was recomputed by
+  executing the shipped `gen-constants.mjs` functions over the proposal
+  §2.3 char table (all 15 char counts confirmed against the fresh S2
+  entries). Results: Σ `upperBoundAttemptMicro` = **469,444**;
+  Σ `upperBoundOccurrenceMicro` = **5,633,328**; Σ `expectedCostMicro` =
+  **294,137** (exactly the live quote). Amendment 1's figures are
+  confirmed exactly — including their floating-point behavior (§4.2).
+
+---
+
+## 2. R1(a) — Settled-cost semantics, proven from the shipped code
+
+The gate's ceiling is denominated in **phase settled** — the figure the
+S5 surface reports and the executor watches. What can move it, and by
+how much, is a closed question in the shipped tree.
+
+### 2.1 Phase settled counts exactly three outcomes, at exactly these costs
+
+`phaseAccounting` computes settled as `SUM(cost_micro_cents)` over
+confirmed attempts with `state = 'confirmed'` and outcome IN
+(`success`, `failed_known`, `policy_block`)
+(`worker/generation/genstore.mjs:403` ff.). The dispatch path writes
+those costs at exactly four confirm sites, all inside the executor's
+`wrappedSynthesize` (`worker/generation/d6-executor.mjs`):
+
+| Outcome | Confirm site | Cost written |
+|---|---|---|
+| `success` | `d6-executor.mjs:514` | `knownCostMicro(res.durationSec)` = `round(durationSec × 225)` (`gen-constants.mjs:100`) |
+| `policy_block` | `d6-executor.mjs:522` | **0** (hardcoded) |
+| `failed_known` (any HTTP answer incl. errors/429) | `d6-executor.mjs:525` | **0** (hardcoded) |
+| `unknown` (non-HTTP throw) | `d6-executor.mjs:529` | **NULL** — never in settled's outcome-sum with a value, and `markUnknownBilling` halts the phase fail-closed |
+
+Two consequences are immediate. **(i)** Settled moves only at a
+`success` confirm, by `round(durationSec × 225)`. A policy block settles
+**nothing**; a failed attempt settles **nothing**. **(ii)** The figure
+that lands in settled is the **actual measured audio duration** —
+`durationSec` is computed from the returned audio bytes
+(`audioDurationSec`, `worker/host/adapters.mjs:195`; used at
+`adapters.mjs:333`) — **not** the expected formula
+`round(chars / 15.96 × 225)` (`gen-constants.mjs:81`), which feeds
+estimates, the eligibility quote, and adjudication only. (The §4 bound
+deals with what that measurement can reach.)
+
+Phase A's realized figures corroborate the reading: 44 attempts =
+30 `success` + 14 `policy_block`, settled delta **152,964** — all of it
+from the 30 successes; the 14 blocks contributed exactly 0
+(Amendment 1 §5.0).
+
+### 2.2 One occurrence settles inside exactly one synthesis pass — retries cannot add a second
+
+- **The attempt budget is plan-lifetime.** `segmentAttemptsUsed(planId,
+  occurrenceId)` counts `dispatching` + `confirmed` attempts across
+  **all** executions of the plan (`genstore.mjs:243`);
+  `SEGMENT_ATTEMPT_BUDGET = 12` (`gen-constants.mjs:16`). A re-drive
+  starts with `remaining = 12 − used`; a quota-refused dispatch releases
+  its attempt and never reached the provider. No path gives an
+  occurrence more than 12 provider calls, ever.
+- **The spend-intent fence admits one pass.** `acquireSpendIntent`
+  (`worker/coordinator.mjs:2921-2942`): a live (non-superseded) intent
+  for (job, occurrence) is "the spend boundary: final" — a second
+  acquisition returns `acquired: false` permanently. In the executor's
+  `runFresh`, a non-acquired intent whose noted outcome is `success`
+  takes the **intent-recovery** path — re-commit from the durable R2
+  object with **no provider call and no new attempt rows**; any other
+  noted outcome (or an un-noted live intent) ends the execution as
+  `intent_fence` (`d6-executor.mjs:472`) — again **no provider call**.
+- **Nothing supersedes a Standard-lane intent.** The only writer of
+  `spend_intents.superseded_at` in the shipped tree is
+  `resolveBatchNeverAccepted` (`coordinator.mjs:3045`) — the Batch lane,
+  evidence-gated (`never_accepted`), not reachable from this gate's
+  Standard plan. The executor never loops on its own repair markers
+  (they are returned, not re-dispatched; recovery tails verify and
+  commit, they never synthesize), and the coordinator's repair-chain
+  follow-on spawn fires only for jobs of kind `repair`, which D6 plan
+  jobs are not.
+- **No other writer can settle inside the gate.** The adjudication path
+  never writes `cost_micro_cents` (the estimate lives in a separate
+  side record — Gate 5 law); `reconcileUnknown` is operator-only and
+  unreachable in-gate, because an `unknown` attempt halts the phase and
+  the gate STOPs (§5.5 of the proposal) before any operator action.
+
+**Conclusion (a):** per (plan, occurrence), settled cost accrues within
+**one** synthesis pass of at most 12 provider calls. Amendment 1's
+adopted term — one `upperBoundAttemptMicro` per occurrence — was the
+right *shape*; §§3–4 now prove it, with its rounding allowances made
+explicit.
+
+## 3. R1(b) — Split geometry: the parts partition the text; duplication factor 1.0
+
+Rowan's question — do split children partition the parent's text or
+overlap it (repeated context)? — has an exact answer in
+`worker/generation/policy-split.mjs`:
+
+- `splitText` chooses **one cut index** `i` and returns
+  `[text.slice(0, i), text.slice(i)]` (`policy-split.mjs:42` ff.). The
+  module's own header states the invariant: *"Concatenation identity:
+  the parts always join back to the exact input"* — the children are
+  **disjoint**, their concatenation is the parent, and each child is
+  ≥ `SPLIT_MIN_PART_CHARS` = 50 chars or no split occurs.
+- The synthesis recursion (`synthesizeWithPolicySplit`) explores this
+  binary tree under the budget object: a node that succeeds is a
+  **leaf** (its subtree is never explored); a node that returns
+  `POLICY_BLOCK` is replaced by its two children. Blocked internal
