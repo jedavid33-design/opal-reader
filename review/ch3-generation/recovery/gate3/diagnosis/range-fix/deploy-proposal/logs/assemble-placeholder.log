@@ -1,0 +1,13 @@
+[PASS] C1 spec identity + entry — main_module=v2/worker-entry-prod-d6.js
+[PASS] C2 closure resolves; bare specifiers node:-only — 31 modules
+[PASS] C3 part set == live 30 + prefix-range.mjs == 31 — 31 parts
+[PASS] C4 class table: 27 identical + 2 changed (coordinator, grant-finalizer) + 1 new (prefix-range) + 1 stamped — identical=27 changed=[v2/coordinator.mjs, v2/generation/grant-finalizer.mjs] new=[v2/generation/prefix-range.mjs] stamped=[v2/host/build-identity.mjs]
+[PASS] C5 stamp exactly once; stamped length == live stamped length (411) — stamped 411 B, live stamped 411 B
+[PASS] C6 metadata byte-identical to the live operative metadata (GENERATION_HALT "1", 10 bindings, no migrations)
+[PASS] C7 multipart round-trip: 31 module parts, filename == name, module MIME, bytes exact
+[PASS] C8 d6_grant_finalizations occurs only in grant-finalizer.mjs across all candidate worker sources
+[PASS] C9 GEN_SCHEMA byte-identical to live; exactly 8 tables
+[PASS] C10 prefix-range.mjs imported by both coordinator.mjs and grant-finalizer.mjs
+
+RANGE-FIX ENVELOPE ASSEMBLY: PASS (10/10 checks)
+envelope: 1438980 bytes, sha256 9d33848161019a36ea214fbeac50b7a7dfb1e451b076d02130434dd564ae2a98 (pin 0000000000000000000000000000000000000000, PLACEHOLDER — re-run with the real deploy pin before any upload; this envelope must never be uploaded)
