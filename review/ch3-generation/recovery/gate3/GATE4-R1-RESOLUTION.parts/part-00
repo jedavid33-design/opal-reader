@@ -1,0 +1,187 @@
+# GATE 4 — R1 RESOLUTION: the spending ceiling after premise P's rejection
+
+**Status:** DRAFTED for Rowan's verification, then Julie's Gate 4
+decision. This resolution **authorizes nothing**. It answers the one
+outstanding item of Rowan's Amendment 2 review — **R1** — and changes
+the Gate 4 paperwork only as §10 itemizes; everything else in the
+proposal, Amendment 1, and Amendment 2 stands exactly as written.
+
+**Amends:** the Gate 4 proposal, pinned `806cc53aebee15aaed8ec139c1213d79f7e664fb`
+(repo `jedavid33-design/opal-reader`, branch `ui1-review`, SHA-256
+`b524bb187d72c4c7881bf1d4470e6524b14a72678168ae23292245efc5abfabc`),
+as amended by Amendment 1, pinned `451f71ad5526879f6849f4f1607bb80024e439d0`
+(SHA-256 `af3ec5d397fb427b4f53e05f69ee6cfc82328bba9d95913dbc4002723baa7ef1`),
+and Amendment 2, pinned `34fceb04332c73dc85e71c39b1df53ccd933c331`
+(SHA-256 `4f92ced7eaa67ba074f05f5992d4b7a18de66dde0d9e1c03785db9083f3b0c09`).
+None of those documents is edited; this resolution is a child of
+Amendment 2's pin.
+
+**Responds to:** Rowan's Amendment 2 review — **HOLD, R1 ONLY**
+(relayed verbatim by Julie, Nov 1, 2026, direct mode). R2 PASS,
+R3 CONDITIONAL PASS, R4 PASS; A5, A6, the end-HELD closing sequence,
+the R1/R2 sub-gates, and the four-mutation executor budget all stand.
+**Premise P is rejected as proof of a hard spending maximum**: the
+469,519-unit figure depends on actual audio duration never exceeding
+chars/10, but shipped code measures duration from returned audio and
+enforces no such maximum — the figure is a forecast, not guaranteed
+maximum exposure. Rowan requires one of two approaches: **(1)** a
+separately gated mechanism that enforces the $0.60 cumulative limit,
+accounting for settled and in-flight work; or **(2)** an explicitly
+detection-only threshold with the potential exposure stated plainly
+for Julie's separate decision — never describing detection as a hard
+ceiling. This resolution works both approaches from the shipped
+source and recommends one (§9). **Wren's recommendation is Approach
+2**; the decision is Julie's; the verification is Rowan's either way.
+
+**Live build:** `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867` (the
+range-fix build). The system sits HELD; this drafting made read-only
+calls only.
+
+**The resolution, in one paragraph.** Without premise P, the gate's
+ledger exposure is exactly parameterized by the realized duration
+multiplier m (actual duration = m × the model's chars/10 bound):
+settled ≤ m × 469,444 + 15 × (0.5m + 4.5), which crosses 600,000 only
+at a scope-average m ≈ 1.28 — against Phase A's realized m ≈ 0.61
+(§4). The shipped phase fence does **not** strictly entail settled ≤
+13,500,000 either; the correct statement is settled ≤ 13,500,000 +
+Σ (per-occurrence excess over its 12× fence allowance), a term that
+vanishes to rounding dust (≤ ~10 units per occurrence) for any
+m ≤ 12 (§3). Real-cash exposure is a separate, smaller question:
+Google bills per input character, total submitted characters are
+hard-bounded at 216,000 (structural tightening 158,320), converting
+to at most ≈ $3.04 at Julie's introductory rate, behind a verified
+$17.83 prepay balance with auto-reload off (§5). Approach 1 — a
+gate-scoped check inside the dispatch transaction — is designed in
+full (§7), including its one-sentence achievable guarantee; the
+guarantee retains a single-in-flight-attempt excess term that **no**
+pre-dispatch mechanism in this architecture can remove, because the
+provider call precedes the measurement. Approach 2 (§8) relabels
+600,000 as a detection threshold with containment, and carries the
+verbatim exposure paragraph Julie would accept at GO.
+
+| Item | Where answered | One-line result |
+|---|---|---|
+| Exposure without premise P | §§3–6 | settled(m) ≤ m × 469,444 + slack; 600,000 crossed only at m ≈ 1.28; Phase A realized m ≈ 0.61 |
+| Approach 1 (enforcement design) | §7 | Dispatch-transaction gate check; guarantee = ceiling + one in-flight attempt's excess; +2 in-gate mutations, deploy under its own gate |
+| Approach 2 (detection-only) | §8 | 600,000 relabeled detection threshold; poll + containment; verbatim exposure paragraph for Julie |
+| Recommendation | §9 | **Approach 2** — proportions, backstops, precedent; Approach 1 cannot deliver a hard cap either |
+
+---
+
+## 1. Grounding — fresh live reads at drafting (2026-11-01, ~18:42Z)
+
+Read-only, against the same surfaces as Amendments 1–2. No
+contradiction with Amendment 2's grounding: `/health` reports build
+`1c2d1d0f…`, generation **halted**; the quota read for PT 2026-11-01
+shows `providerDispatchesToday: 0`, `providerReservedToday: 96` —
+the churn Amendment 1 identified, still turning over with zero
+dispatches and zero spend. Plan, phase figures, conflicts, and the
+eligibility digest are as Amendment 2 §1 recorded them (phase settled
+732,303 / estimatedUnverified 19,018 / reservedUnverified 5,648;
+plan active 8/23; conflicts the baseline four; digest `9453ab5d…`).
+All source citations below are to the range-fix build tree, the tree
+the live build was assembled from. All sums were recomputed from the
+proposal §2.3 char table using the shipped functions, as in
+Amendment 2 §1: Σ `upperBoundAttemptMicro` over the 15 = **469,444**;
+Σ expected = **294,137**.
+
+## 2. An open question carried forward — R3's condition
+
+Rowan's Amendment 2 review relayed **R3 as a CONDITIONAL PASS
+without spelling out the condition**. This resolution does not guess
+it and does not treat it as satisfied. **Rowan is asked to state the
+R3 condition explicitly at this verification.** Nothing in the R1
+resolution depends on it, and Gate 4's GO should not be sought until
+the condition is on the record — the same discipline as premise P:
+an unnamed condition is not a met condition.
+
+---
+
+## 3. Exposure mathematics I — what the phase fence actually bounds
+
+The phase fence is the only money check the shipped code runs, so
+its exact strength matters to both approaches.
+
+### 3.1 Composition, timing, transaction
+
+`d6GrantGuard` (`worker/generation/grant-guards.mjs`) is called from
+`GenerationCoordinator._issueGrant` (`worker/coordinator.mjs:1639`),
+**inside that method's single transaction**, after the park, daily
+quota, and monthly-cap checks (`coordinator.mjs:1644–1666`). It is
+evaluated **only at grant issuance** — never at dispatch, never at
+confirm. Its budget verdict is `d6PhaseBudgetCheck`
+(`grant-guards.mjs:108`):
+
+> projected = settledMicro + reservedUnverifiedMicro +
+> inFlightUpperMicro + pendingUpper > 13,500,000 ⇒ refuse
+> `phase_budget`.
+
+The terms, exactly as the code computes them:
+
+- **settledMicro** — `genstore.phaseAccounting`
+  (`worker/generation/genstore.mjs:403`): SUM of `cost_micro_cents`
+  over **confirmed** attempts with outcome ∈ {success, failed_known,
+  policy_block}, phase-wide. A success contributes
+  `round(durationSec × 225)` with `durationSec` byte-measured
+  (Amendment 2 §2.1); the other two outcomes contribute exactly 0.
+- **reservedUnverifiedMicro** — the adjudication reservations of
+  `estimated_unverified` dispositions (here: 5,648, the known
+  straddler's). Not gate spend; a fixed carried term.
+- **inFlightUpperMicro** — SUM of `upper_micro_cents` over the
+  phase's attempts in phases `reserved`/`dispatching`
+  (`genstore.mjs:410–413`): per-**attempt** model uppers
+  (`upperBoundAttemptMicro` of each attempt's own text, stored at
+  reservation, `d6-executor.mjs` `wrappedSynthesize`), **not**
+  per-occurrence 12× figures.
+- **pendingUpper** — SUM of `upper_micro_cents` over the **job's**
+  pending eligible plan entries (`grant-guards.mjs`, the `pending`
+  query), where each entry carries
+  `upperBoundOccurrenceMicro(chars)` = **12 ×
+  `upperBoundAttemptMicro(chars)`** (set at plan build,
+  `service.mjs:808`). At drafting figures this term is 5,633,328 for
+  the gate's 15. Note the guard sums the job's **full** pending set;
+  cohort bounding happens later in `_issueGrant`, so the fence is
+  evaluated against the whole remainder every time.
+
+### 3.2 settled ≤ budget is NOT strictly entailed — the correct bound
+
+The projection prices every not-yet-settled occurrence at its 12×
+allowance and every created attempt at its model upper. A confirmed
+success, however, lands in settledMicro at its **byte-measured
+actual**, which no term of the projection clamps. Track one
+occurrence's contribution across its life: while pending it
+contributes `a(occ) = 12 × upperAttempt(occ)` to pendingUpper; once
+its attempts are created, each contributes its own upper to
+inFlightUpper — and since an occurrence has ≤ 12 attempts ever
+(Amendment 2 §2.2), each on a sub-text of the occurrence (≤ the
+occurrence's upper), created uppers sum to ≤ `a(occ)`; on confirm,
+an attempt's contribution swaps its upper for its actual. Summing
+over the phase, the exact statement the code supports is:
+
+> **settled_final ≤ 13,500,000 + Σ_occ ( settled(occ) − a(occ) )⁺**
+> (+ the fixed reservedUnverified term, already inside the
+> projection).
+
+Only the amount by which an occurrence's realized settled **exceeds
+its full 12-attempt allowance** can leak past the fence. Under the
+m-parameterization of §4, `settled(occ) ≤ m × upperAttempt(occ) +
+0.5m + 4.5`, so the leak per occurrence is
+≤ ((m − 12) × upperAttempt(occ) + 0.5m + 4.5)⁺ — **zero, up to a
+rounding term of ≤ 0.5m + 4.5 ≤ 10.5 units per occurrence, for any
+m ≤ 12**. In words: the fence is a hard phase cap to within ~10
+units (a hundred-thousandth of a dollar) per occurrence for every
+duration multiplier up to 12× the model's slowest rate, and leaks
+only linearly in (m − 12) beyond that. For Gate 4 this is a
+backstop statement about the $13.50 phase total; the gate's own
+delta is bounded far tighter, directly, in §4.
+
+### 3.3 The monthly cap is not a settled-cost check
+
+For completeness, since it is sometimes mistaken for one: the
+monthly-cap check inside `_issueGrant` (`coordinator.mjs:1651`)
+compares `_spendIn(month)` — a SUM of `est_micro_cents` over the
+legacy `ledger_ops` for the month — plus the job's **expected**
+per-occurrence estimate × the full pending count, against
+`monthlyCap` ($50 ⇒ 50,000,000). It gates **issuance on estimates**
+in a different ledger; it never reads D6 settled actuals and cannot
+bound them. Gate 4 passes it trivially. It is not cited as a

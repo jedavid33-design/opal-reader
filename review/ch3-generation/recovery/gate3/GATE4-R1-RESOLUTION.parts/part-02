@@ -1,0 +1,196 @@
+  the bootstrap's figureless law (`quota_bootstrap_figure_caller_
+  supplied` precedent) applied to gate state.
+- **Close** — at the gate's end state, after the closing holds;
+  stamps `closed_at`. The check in §7.2 applies only while a row is
+  open for the attempt's plan, so closing retires the mechanism
+  with the gate.
+
+No settings change; no client surface; Batch and every other plan
+are untouched (no open row ⇒ the check is inert).
+
+### 7.4 The achievable guarantee — stated precisely
+
+> **With the check inside markDispatching's transaction, no attempt
+> is ever dispatched unless gate settled-to-date plus the model
+> uppers of every created-but-unconfirmed gate attempt, the
+> candidate included, total at most 600,000; final gate settled can
+> therefore exceed 600,000 only by the excess of the single
+> in-flight attempt's byte-measured actual cost over its own model
+> upper — at most (m − 1) × 27,000 + 1 units at realized multiplier
+> m (§6) — because the provider call that creates the cost
+> necessarily precedes any measurement of it.**
+
+A **margin variant** tightens this: enforce at an internal
+threshold T = 600,000 − E, and the guarantee becomes *settled ≤
+600,000 whenever the final attempt's excess ≤ E* — E = 27,000
+covers any single leaf at m ≤ 2; E = 108,000 covers m ≤ 5 — at the
+price of refusing in-scope work whose true cost might have fit.
+
+**What Approach 1 cannot do, stated plainly:** a literally
+unconditional hard cap is **not achievable in this architecture**.
+The single-attempt excess is unbounded in principle (duration is
+byte-measured after the call and clamped nowhere), so any
+pre-dispatch mechanism — this one included — leaves exactly that
+term. A design claiming otherwise would be premise P in a new
+place. What Approach 1 genuinely buys over §8 is replacing "a whole
+scope's worth of autonomous settling between polls" with "one
+attempt's excess" as the only unguarded term.
+
+### 7.5 Process cost, and its effect on the mutation budget
+
+- **Build:** the genstore check + refusal class, executor handling
+  (largely inherited from the quota path), the service park
+  mapping, two operator routes, the lazy table, and a test battery
+  (dispatch-transaction refusal tests, in-flight accounting tests,
+  open/close route tests) — a repo-only build of the same class as
+  the range-fix.
+- **Review:** Rowan source review of the build; this resolution's
+  paperwork verified against the new tree.
+- **Deploy:** a separate halted deploy gate under the family's
+  standing law (fresh census, STOP law, one upload, observability
+  re-check, denied probes, ends HELD).
+- **Paperwork:** Gate 4's census and verification texts cite build
+  `1c2d1d0f…` throughout; all must be re-verified (and where they
+  name the build, re-pinned) against the new build before a GO can
+  be sought.
+- **Mutation budget (identified separately, as Rowan required):**
+  the deploy's upload belongs to the deploy gate and does **not**
+  touch Gate 4's budget. Inside Gate 4's execution, Approach 1
+  adds exactly **two** executor mutations — the gate-budget **open**
+  (after census, before R1) and **close** (at the end state) — for
+  a Gate 4 total of **6**, against the standing 4. Rowan's and
+  Julie's approval of Approach 1 is approval of that revised count.
+
+---
+
+## 8. Approach 2 — the detection-only threshold (specification)
+
+### 8.1 Relabeling — every occurrence, no exceptions
+
+If Julie adopts Approach 2, the figure **600,000** is restated
+throughout the Gate 4 paperwork — proposal §5.5's cost bullet,
+Amendment 1 §5 (A4), Amendment 2 §5.1 — as a **detection
+threshold**, in these words: *"detection threshold (600,000 units):
+an executor stop-trigger on observation; not a cap, not a guarantee
+that settled spend stays at or under it."* Amendment 2 §5.1's
+sentence "the ceiling binds by arithmetic" is superseded by §4 of
+this resolution: 469,519 stands as the **m = 1 forecast**, labeled
+as a forecast wherever it appears. The cover-check form of
+Amendment 1 §5.2 is retained as a **detection** computation (a poll
+whose projected settled crosses the threshold stops the gate the
+same way), never described as enforcement.
+
+### 8.2 Detection and containment procedure
+
+Unchanged from the standing design, restated under the honest
+label: at census and at every G poll, the executor reads the gate's
+settled delta from live figures. On any observation of
+**settledDelta > 600,000**, or of **settledDelta > 469,519** (the
+forecast bound — crossing it refutes the operating picture and is
+treated as foreign work under A6, Amendment 2 §5.1), the executor
+STOPs and applies the closing holds in containment order
+(**re-pause, then re-halt**), with read-backs, and reports the
+figures. Between polls the coordinator's autonomous cohorts
+continue — that is the design's nature, and §8.3 says so to Julie
+in plain words. The detection lag is itself bounded: settling
+between two polls cannot exceed one cohort's worth, ≤ m × 258,004
+(§6, structural form), and the gate's total exposure at every m is
+§4's table, which no poll cadence changes.
+
+### 8.3 The exposure paragraph — verbatim, as it will be put to Julie at GO
+
+> Before you decide: the $0.60 figure in this gate is a **detection
+> threshold, not a guaranteed cap**. Software watches the running
+> total and stops the gate if it passes $0.60 — but batches run on
+> their own cycle between checks, so spending can pass $0.60 before
+> the stop lands. Here is the honest range. The job is expected to
+> cost about **$0.29**. On the cost model's own slowest-rate
+> assumption, the worst case is **$0.47** — already under the
+> threshold. The threshold can only be crossed at all if the audio
+> comes back at least ~28% slower than that slowest assumed rate
+> across the whole chapter; in Chapter 3's first batch the audio
+> actually ran about 39% *faster* than that bound (realized factor
+> 0.61). If durations ran 1.5× the bound, the total would be about
+> **$0.70**; 2×, about **$0.94**; 3×, about **$1.41**; even 5× —
+> speech at 2 characters per second, far outside anything observed
+> — about **$2.35**. Two independent backstops sit behind all of
+> this: the system's own **$13.50 phase budget** for Forever
+> Pucked, which the code refuses new batches against, and your
+> Google **prepay balance** ($17.83 on Oct 29, auto-reload off),
+> which physically caps all Google spending. Separately, Google
+> charges per character sent rather than per second of audio; the
+> absolute worst case for characters sent (every possible split
+> and retry) converts to about **$3.04** at today's introductory
+> rate. Approving this gate means accepting that $0.60 is
+> monitored-and-stopped — with the realistic worst case under
+> $0.50 and the extreme tail bounded as above — **not** a hard
+> guarantee of $0.60.
+
+---
+
+## 9. Recommendation — Approach 2
+
+Wren recommends **Approach 2**, for these reasons:
+
+1. **Proportions.** The cap under discussion is $0.60 on a job
+   expected to settle $0.29, whose forecast worst case ($0.47)
+   already sits under it. Crossing $0.60 requires the whole scope
+   to average m ≥ 1.28 against a realized 0.61 — and even the
+   m = 5 tail ($2.35) is small money, doubly backstopped (§§3, 5).
+2. **Approach 1 does not deliver the thing it would be bought
+   for.** Its guarantee (§7.4) is a ceiling plus one attempt's
+   excess — better than detection, honestly stated, but not the
+   hard cap R1 asks about, because no pre-dispatch mechanism in
+   this architecture can produce one. The real choice is between
+   two non-hard constructions: one cheap and immediate, one a
+   full build–review–deploy cycle.
+3. **Precedent.** Every generation gate in this program — Gate 8's
+   Chapter 2 run (≈ $0.38 recorded), Phase A itself — ran under
+   the phase fence plus modeled budgets plus monitoring. No gate
+   has carried a dispatch-transaction circuit breaker, and the
+   two completed runs both landed at or under their modeled
+   figures (Phase A at 97.4% of expected).
+4. **Approach 1 keeps its value at larger scope.** The rest of
+   Forever Pucked (≈ $5.84 modeled) or Batch arming would change
+   the proportions entirely; the §7 design is written to be
+   reusable there, with Gate 4's realized m as evidence.
+
+The recommendation is Wren's. **The exposure decision is Julie's
+separate decision**, taken on §8.3's paragraph if Approach 2 is
+adopted. Rowan's verification of this resolution — the mathematics
+of §§3–6 and the correctness of both constructions — is required
+either way, as is her answer on R3's condition (§2).
+
+---
+
+## 10. Amendment mechanics — what changes, what stands, satisfiability
+
+**Changes (only under the approach Julie adopts):**
+
+- *Approach 2:* the relabeling of §8.1 (proposal §5.5, Amendment 1
+  §5, Amendment 2 §5.1's enforcement language superseded by this
+  resolution §§4, 8); the exposure paragraph §8.3 becomes part of
+  the Gate 4 GO presentation. **No change to the four-mutation
+  budget**, the sub-gates, or any procedure.
+- *Approach 1:* the §7 build, review, and deploy sequence runs
+  first, under its own gates; Gate 4's paperwork is then
+  re-verified against the new build; Gate 4's mutation budget
+  becomes **6** (+ open, + close), identified here as Rowan
+  required. The 600,000 figure is then described exactly as §7.4
+  states — never as an unconditional cap.
+
+**Stands unchanged:** the proposal's scope, census, and STOP law;
+Amendment 1 in full (A1–A3, A5, A6 as amended); Amendment 2's R2
+sliding window, R3 five-leg proof and read-order protocol, R4
+successor verification; the end-HELD closing sequence; the
+four-mutation budget (except as Approach 1 §7.5 revises it, if
+adopted); the phase fence and quota guard as shipped.
+
+**Satisfiability.** R1 is answered under both of Rowan's permitted
+forms: the enforcement form is designed to the strongest guarantee
+the architecture admits, with its irreducible term named (§7.4);
+the detection form is specified with its exposure stated in the
+words Julie will decide on (§8.3). The one point that cannot be
+satisfied by anyone is a literally unconditional hard cap from
+pre-dispatch machinery — stated, not papered over. One question
+rides with this filing: **R3's unstated condition** (§2).

@@ -1,0 +1,210 @@
+safeguard anywhere in this resolution.
+
+---
+
+## 4. Exposure mathematics II — the m-parameterization (no premise P)
+
+Amendment 2 §4's derivation is re-run with its rate step replaced by
+a free multiplier. Define **m** by: a successful call's
+`durationSec = m_call × (its text's chars / 10)`. m = 1 is premise P
+(the model's slowest admitted rate, 10 chars/sec); the pinned
+realized rate 15.96 chars/sec corresponds to m ≈ 0.63. m is a
+property of returned audio, observable only after the fact — that is
+Rowan's point, and this section honors it: **no value of m is
+assumed anywhere below; the exposure is stated as a function of m.**
+
+Repeating Amendment 2 §4.1 with the multiplier carried through
+(successful calls are partition leaves, so Σ successful chars ≤
+segment chars; successes per occurrence S ≤ 7, Amendment 2 §3;
+per-call rounding +0.5; model-side and float slack as in Amendment
+2 §4.1):
+
+> **settled(occ) ≤ m × upperAttempt(occ) + (0.5m + 4.5)**, and for
+> the gate's closed scope of 15:
+> **settled_gate ≤ m × 469,444 + 15 × (0.5m + 4.5)**.
+
+| m | Meaning (speech rate) | Bound (units) | Bound ($) |
+|---|---|---|---|
+| 1.0 | 10 chars/s — the model's slowest admitted rate (premise P) | 469,519 | $0.47 |
+| 1.5 | 6.7 chars/s | 704,245 | $0.70 |
+| 2.0 | 5 chars/s | 938,971 | $0.94 |
+| 3.0 | 3.3 chars/s | 1,408,422 | $1.41 |
+| 5.0 | 2 chars/s — pathological, far outside observation | 2,347,325 | $2.35 |
+
+Structural caps used: successes per occurrence ≤ 7 ⇒ total
+successes ≤ **105**; total attempts ≤ **180** (12 × 15). The bounds
+above already absorb those caps; they are stated because they also
+bound §§5–6.
+
+**Threshold crossing.** Solving the bound = 600,000: the detection
+threshold of §8 can be crossed at all only if the scope-average
+multiplier reaches **m ≈ 1.28** — every successful call in the
+chapter averaging ≥ 28% slower than the slowest rate the cost model
+admits, sustained across the whole scope.
+
+**The empirical anchor — Phase A's realized m.** Phase A's cohort 1
+(8 occurrences, Gate 3 record): 30 successes settled **152,964**;
+the success-only expected sum was **157,076** (Amendment 1 §5.0).
+Leaf-level attempt rows are not reproduced in the gate paperwork,
+so Σ upperAttempt over the successful leaves is recovered from those
+two published sums: Σ upper = Σ expected × (15.96 / 10) ± ≤ 15 units
+of per-leaf rounding ≈ **250,693**, giving **m_A = 152,964 /
+250,693 ≈ 0.61** (0.609–0.611 allowing the rounding). Phase A's
+audio ran ~39% **under** the model's slowest-rate bound
+(equivalently, settled/expected = 0.974). This is evidence about
+what this provider, voice set, and text profile actually do — not a
+premise, and not used as one: the exposure table above stands for
+every m.
+
+---
+
+## 5. Exposure mathematics III — real cash (Google billing), separately
+
+The ledger above is the Reader's own accounting unit (micro-cents
+at 225 per audio second — the introductory $0.81/audio-hour rate).
+**Google's actual billing for TTS is per input character.** The two
+views answer different questions and are never mixed in this
+resolution: §§3–4 bound the ledger figure the gate's threshold
+watches; this section bounds the cash Julie's prepay is charged.
+
+**Rate basis (Julie's verified figures, converted by the pinned
+constants).** Introductory rate $0.81 per audio hour at the realized
+15.96 chars/sec ⇒ 225 / 15.96 ≈ **14.10 micro-cents per submitted
+character ≈ $14.10 per 1M characters**; at the doubled post-intro
+rate (Jan 1, 2027), ≈ **$28.20 per 1M characters**. (Google's own
+detail is day × product only — Gate 5 record — so cash figures here
+are rate conversions, not invoice reads.)
+
+**Submitted characters.** Every dispatched attempt submits its
+node's text; blocked and failed attempts submit too. Bounds:
+
+- **Assumption-free bound: 216,000 chars.** Attempts ≤ 180, and
+  every attempt's text ≤ 1,200 chars (the pre-split cap,
+  `PRE_SPLIT_MAX_CHARS`, `policy-split.mjs:222`, applied before any
+  synthesis, `policy-split.mjs:306`): 180 × 1,200 = 216,000.
+- **Structural tightening: 158,320 chars.** Within one pre-split
+  chunk, distinct attempted nodes occupy ≤ 5 levels (the chunk plus
+  split depth ≤ 4, `SPLIT_MAX_DEPTH`, `gen-constants.mjs`) and each
+  level partitions the chunk, so distinct-node submissions ≤ 5 ×
+  the occurrence's chars; repair retries resubmit an already-counted
+  node, ≤ 3 per chain (`REPAIR_MAX_RETRIES`, `gen-constants.mjs`),
+  adding ≤ 3 × 1,200 per occurrence. Total: 5 × 20,864 + 15 × 3,600
+  = **158,320**. (Assumptions stated: one repair chain per
+  occurrence, per Amendment 2 §2.2's one-pass finding; the
+  assumption-free bound above stands without them.)
+
+**Cash figures.** Expected: a clean pass submits 20,864 chars ≈
+**$0.29** (identical to the ledger expected, by construction); at
+Phase A's realized attempt profile (44 attempts: 30 successes, 14
+blocks) scaled to this scope, ≈ 30,000 chars ≈ **$0.43** (an
+estimate, labeled as such). Worst case: 216,000 chars ≈ **$3.04**
+introductory / **$6.09** post-intro; structurally tightened,
+158,320 chars ≈ **$2.23** / **$4.46**.
+
+**Physical backstop.** Julie's AI Studio prepay balance was
+**$17.83** verified Oct 29, 2026, auto-reload **off** — Google-side,
+total spend across everything stops when the balance exhausts; no
+figure in this resolution approaches it. The $50 monthly cap plays
+no role here (§3.3: it gates ledger estimates at issuance, not
+cash, not settled).
+
+---
+
+## 6. Exposure mathematics IV — in-flight billable work
+
+At any instant, billable-but-not-yet-settled work is the set of
+attempts in phase `dispatching` whose confirms have not landed
+(attempts still `reserved` are not billable: no provider call has
+occurred, and release counts them exactly zero, `genstore.mjs`
+`releaseAttempt`).
+
+- **Operational bound — one attempt.** The executor processes a
+  grant message strictly sequentially: the occurrence loop awaits
+  each execution (`d6-executor.mjs:795` ff.), and
+  `wrappedSynthesize` awaits its confirm before returning. Grant
+  exclusivity (a successor issues only when no grant reads
+  `issued`, Amendment 1 §2) means at most one grant of the gate
+  plan is ever executing. So at most **one** gate attempt is
+  dispatched-but-unconfirmed at any instant, and its eventual
+  settled ≤ m × upperAttempt(leaf) + 0.5 ≤ **m × 27,000 + 0.5**
+  (a leaf is ≤ 1,200 chars ⇒ upper ≤ 27,000).
+- **Structural bound — the whole live grant, no sequentiality
+  assumed.** All unconfirmed attempts of the live grant confirm as
+  successes: their leaves partition their occurrences, so the
+  total ≤ m × Σ upperAttempt over the grant's occurrences + 5 per
+  occurrence — for the cohort-8 form, **m × 258,004** (Amendment 2
+  §4.1's cohort figure at m = 1: 258,004).
+- An attempt whose confirm never lands (executor lost mid-call)
+  confirms as `unknown` on recovery: it settles **0** in the ledger
+  and halts the phase (Amendment 2 §2.1). Google may still have
+  billed its characters; that cost is inside §5's bounds, which
+  count every dispatched attempt.
+
+---
+
+## 7. Approach 1 — a separately gated enforcement mechanism (design)
+
+Specified to reviewable concreteness. Building it requires its own
+repo-only build approval, Rowan source review, and a halted deploy
+gate — none requested here.
+
+### 7.1 Where the check lives
+
+Inside **`genstore.markDispatching`** (`genstore.mjs:171`) — the
+only path that may precede a provider call (genstore header,
+`genstore.mjs:10`; the executor's `wrappedSynthesize` is its sole
+dispatch caller). The check runs **inside markDispatching's existing
+transaction** (`coord._tx`), immediately after `applyDispatchQuota`
+succeeds and before the phase transition to `dispatching`. A refusal
+throws, the transaction rolls back, the attempt stays `reserved`,
+and **no provider call may follow** — mechanically identical to the
+shipped `QuotaBudgetRefusal` (`quota-budget.mjs:75`), whose executor
+handling already exists: release the attempt (counts zero in every
+accounting view) and surface the refusal as the outcome.
+
+The grant guard was rejected as the check's home: it is
+projection-side and issuance-time (§3.1), and Amendment 2 §5.2
+showed issuance and drain are one pass — a per-grant check cannot
+bound within-grant settling above projections. The dispatch
+transaction is the only per-attempt interposition the architecture
+has.
+
+### 7.2 What it counts, and the refusal disposition
+
+A new refusal class, `GateBudgetRefusal`, modeled line-for-line on
+`QuotaBudgetRefusal`. On each dispatch of an attempt belonging to
+the gate plan, inside the transaction:
+
+> gateDelta = (plan-scoped settled now) − (opening settled figure)
+> \+ Σ `upper_micro_cents` over the gate plan's attempts in phases
+> `reserved`/`dispatching`
+> — refuse if gateDelta > ceiling (600,000).
+
+Plan-scoped settled uses the same SUM as `phaseAccounting` narrowed
+to the gate's plan (the `planUnverifiedAccounting` sibling at
+`genstore.mjs:437` is the shipped precedent for the plan-scoped
+form). The candidate attempt is itself in `reserved` at check time,
+so its upper is already inside the in-flight term: the check admits
+a dispatch only when settled-to-date plus **every** created-but-
+unconfirmed upper, including the candidate's, totals ≤ ceiling.
+
+Executor handling rides the quota path: the attempt is released,
+and the plan takes a shipped park state — the design specifies
+**`parked_budget`** (the plan-state the service's mapping already
+assigns to the `phase_budget` reason, `service.mjs:70`), via one
+new mapping row for the gate-budget refusal reason, mirroring the
+`provider_attempt_budget → parked_quota` rows (`service.mjs:60`).
+A parked plan issues no further grants; unparking stays a separate
+operator/Julie matter, exactly as with shipped parks. No new
+disposition semantics are introduced.
+
+### 7.3 Gate-scope state — minimal
+
+One lazily created table, `d6_gate_budget` (the lazy-DDL pattern of
+`d6_grant_finalizations` / the quarantine schema), one live row per
+gate: `gate_id, plan_id, ceiling_micro, opening_settled_micro,
+opened_at, closed_at`. Written only by two **new operator routes**:
+
+- **Open** — after the Gate 4 census, before sub-gate R1. The
+  opening figure is **computed server-side** from the gate plan's
+  accounting at open time; a caller-supplied figure is refused —
