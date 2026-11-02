@@ -1,0 +1,167 @@
+fails this check.)
+- **P-3 — The exemption stands:** eligibility chapter bound 26 /
+  parked 0 / eligible 1; segment eligible 1 / 569 / 8,022.
+  Read: `GET /v2/d6-eligibility` (chapter + segment scopes).
+- **P-4 — Halt:** GENERATION_HALT `"1"`; `/health` generation
+  `halted`. Reads: `/health`, capabilities, settings surface.
+- **P-5 — Queue paused:** `delivery_paused: true`. Read: cf-api
+  queue GET.
+- **P-6 — Conflicts:** exact-match the §3 item-11 four rows.
+  Read: `GET /v2/conflicts`.
+- **P-7 — Watermarks:** bindings 1841 entities, 0 idx-26 rows, 0
+  changes since seq 1841; content watermark 18. Reads: sync
+  snapshot/changes walks.
+- **P-8 — Money figures:** phase accounting and quota exactly as
+  §3 items 7–8, subject only to §7.3.
+- **P-9 — Parked job:** fingerprint
+  `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`
+  exact; `parked_policy` rev 1; grants []. Read: job view.
+
+### 7.3 The single named nuance — a drive-pass grant issuance (VERIFIED, correction C3)
+
+A drive pass of the PRE-EXISTING mechanism may issue the
+preserved plan's grant at any time the alarm chain runs —
+including during this gate's verification window. That was true
+before this gate existed (diagnostic report §6a/§6b: the
+preserved plan is a live trigger contained by the two holds;
+issuance is not halt-fenced, delivery is), and the
+instrumentation neither causes nor prevents it — the recorder
+issues nothing, and the unmodified build would behave
+identically on the same pass.
+
+**The transition below was verified firsthand against the
+deployed source for this amendment** (parts-e0, build
+`1c2d1d0f`; line anchors are to those parts), and the battery
+observed it live in the harness (T2: pass 1 issued the grant
+under halt; all other state evolved identically to the
+unmodified build). **ONLY this transition is pre-classified as
+expected live-trigger behavior. ANY other or unmatched state
+movement — any at all — is a preservation failure: STOP, and
+evaluate rollback under §8. The executor never self-clears a
+deviation from this itemization.**
+
+The issuance transition, exactly:
+
+- **Selection and grant step.** `driveOnce`
+  (`generation/service.mjs:888`) selects the plan (state `active`
+  is not in the selection exclusion at `service.mjs:923`); the
+  strict quarantine check passes on the census state (the plan
+  was born unmarked); with exactly one pending occurrence, no
+  live grant, and no in-flight execution record, the grant step
+  calls `coord.requestGrant(jobId)` (`service.mjs:992`), which
+  wakes and calls `_issueGrant` (`coordinator.mjs:1805`,
+  `coordinator.mjs:1636`). The issuance writes: one `grants` row,
+  state `issued`, lease = now + 15 minutes (`LEASE_MS`,
+  `coordinator.mjs:134`; insert at `coordinator.mjs:1743`); the
+  grant id is `grant:plan:19cad189fab54b9c804a74a6:seg:1:full`
+  (grammar `grant:${jobId}:${job.revision}:full`,
+  `coordinator.mjs:1696`, revision as read at issuance); one
+  occurrence event `grant` (pending → granted); one `ledger_ops`
+  `attempt` row; one UNSENT outbox `dispatch` row
+  (`coordinator.mjs:1755`); one pending `lease` schedule row; and
+  one `d6_grant_reservations` row via `reserveForGrant`
+  (`generation/quota-budget.mjs:544`), slots_total 12, state
+  `open`.
+- **Derived-surface movements (the complete set):** the job's
+  grants go [] → exactly [`grant:plan:19cad189fab54b9c804a74a6:seg:1:full`,
+  `issued`]; the occurrence goes `pending` → `granted`; the job
+  goes `queued` rev 1 → `generating` rev 2; the derived quota
+  reserved figure for the issuance PT day goes 0 → **12**
+  (`derivedDayTotals`, `quota-budget.mjs:193` — the sum of
+  `slots_total − slots_consumed` over open reservations). The
+  12 is the occurrence's full attempt budget:
+  `SEGMENT_ATTEMPT_BUDGET = 12` (`generation/gen-constants.mjs:16`),
+  bounded as a cohort by `boundGrantTargets`
+  (`quota-budget.mjs:624`); the per-attempt upper bound for 569
+  chars is `upperBoundAttemptMicro(569) = 12,803` micro
+  (`gen-constants.mjs:88`), and the occurrence ceiling
+  `12 × 12,803 = 153,636` (`gen-constants.mjs:95`) — the same
+  figures the Phase B record carries.
+- **Phase accounting does NOT move.** The prior draft of this
+  section predicted phase `reservedUnverified` would increase by
+  the grant's reservation. **That prediction is withdrawn: it is
+  disproven by the deployed derivation.** `phaseAccounting`
+  (`generation/genstore.mjs:403`) derives `reservedUnverifiedMicro`
+  ONLY from `d6_billing_adjudications` joined to
+  `estimated_unverified` attempt-log rows, and `inFlightUpperMicro`
+  ONLY from attempt-log rows in phase `reserved`/`dispatching`,
+  which are written only by `reserveAttempt`
+  (`genstore.mjs:129`) on the execution path. Grant issuance
+  writes NEITHER table. Therefore settled (1,029,420),
+  estimatedUnverified (19,018), **reservedUnverified (5,648)**,
+  inFlightUpper (0), and unknownOpen (0) must ALL read EXACTLY as
+  at census; any movement in any of them is unmatched → STOP.
+- **No delivery, no spend.** `sendGrant` is `undefined` unless
+  `GENERATION_HALT === "0"` (`worker-entry-prod-d6.js:323`,
+  `:340`); `driveOnce` drains the outbox only
+  `if (typeof env.sendGrant === "function")`
+  (`service.mjs:1034`). Under halt `"1"` the outbox row stays
+  unsent: zero `d6_provider_dispatches` rows, bindings remain
+  1841, spend remains $0. Plan totals remain {eligible 1, done
+  0, failed 0, blocked 0} and plan state remains `active`.
+- **The bounded lease-expiry cycle (also pre-classified, with
+  its invariants).** Fifteen minutes after issuance, the base
+  alarm's schedule processing (`case "lease"`,
+  `coordinator.mjs:2536`) finds the outbox row unsent and never
+  attempted and voids it (`_voidDispatch(...,
+  "lease_expired_undelivered")`, `coordinator.mjs:2589`): the
+  occurrence returns `granted` → `pending`, the grant becomes
+  `voided`, the reservation closes, the derived reserved figure
+  returns 12 → 0, and a `retry_grant` is scheduled at +30 s
+  (`coordinator.mjs:1801`); its handler
+  (`case "retry_grant"`, `coordinator.mjs:2625`) calls
+  `requestGrant` again (`coordinator.mjs:2636`), re-issuing
+  under the grant-id grammar at the then-current job revision.
+  Across any observation window the cycle's invariants are: at
+  most one live `issued` grant for this job at any instant;
+  derived reserved ∈ {0, 12}; dispatched always 0; every phase
+  figure frozen at census; bindings and watermarks frozen. A
+  reading that catches the cycle mid-flight (grant `issued`, or
+  grant `voided` with re-issuance pending, or no live grant with
+  the occurrence back at `pending`) is expected IF AND ONLY IF
+  it satisfies every invariant; anything else is unmatched →
+  STOP. (A quota-reconcile read turning non-ok is likewise
+  unmatched movement → STOP; reconcile internals were not
+  separately traced and are not pre-classified.)
+
+If observed, the executor itemizes the transition in the gate
+record as a first-class observation for Rowan and Julie. It is
+**not** a preservation failure, **not** a rollback trigger, and
+**not** attributable to the instrumentation.
+
+## 8. Rollback — conditions and procedure
+
+**Conditions (any one fires rollback evaluation; RB-1…RB-3 also
+STOP the gate):**
+
+- **RB-1 — Behavior change attributable to the build:** e.g. a
+  recorded row whose drive error is thrown by the recorder's own
+  code reaching the drive path (proof the swallow discipline
+  failed in production), or shipped-surface responses differing
+  from the census captures beyond timestamps and the new mode.
+- **RB-2 — Observability:** the upload reset observability and
+  the settings PATCH fails to restore it, or the PATCH changes
+  the code etag.
+- **RB-3 — Preservation failure attributable to the build:**
+  bindings moved, settings revision changed, queue unpaused,
+  conflicts changed, halt flipped.
+- **RB-4 — Direction:** Julie or Rowan directs a rollback.
+
+**Explicitly NOT rollback triggers:** absence of drive-pass rows
+in the observation window (§6 V5 — the INCONCLUSIVE no-rows
+outcome, consistent with H1 but not proof of it; the build is
+verified live and is the instrument); a §7.3 grant issuance or
+its bounded lease-expiry cycle; an error-stage row or a
+recorder-health failure that Rowan has classified as not
+build-attributable (§6 V5 / spec §8.5 — unclassified findings
+STOP the gate record at V7 for classification, they do not fire
+rollback on the executor's own call).
+
+**Procedure:** re-upload the byte-identical `parts-e0/` 31 parts
+(preserved in the attempt-3 evidence; all 31 re-hashed before
+the upload) with the then-live metadata carried forward —
+verifying GENERATION_HALT `"1"` in it before the upload. Read
+back: etag equals `f15fb1ae…` again; 31/31 parts byte-identical;
+observability re-checked and, if reset, re-applied via the
+settings-only PATCH (the rollback's own conditional PATCH in the
+§5 budget — settings-only, with the code etag veri

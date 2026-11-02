@@ -1,0 +1,184 @@
+ce construction (1461–1463) threw |
+| `recover` | `service.recover()` (1464) threw |
+| `drive` | `service.driveOnce()` (1465) was invoked and threw (`drive_invoked = 1`) |
+| `flush` | `cache.flush()` (1466) threw (the drive itself completed; its outcomes are recorded) |
+| `complete` | the handler ran end to end |
+
+This is the design's stage table with one naming already in the
+design (`base_alarm` … `complete`); the code sets `rec.stage`
+immediately BEFORE each step, and `rec.driveInvoked = 1`
+immediately before the `driveOnce()` call, so both fields are
+exact at any throw point. `rec.outcomes` captures the array
+`driveOnce` returns (`service.mjs:1046`) — the value its only
+caller previously discarded.
+
+### 4.2 Control flow (exact shape, as it appears in the diff)
+
+```
+alarm():
+  rec = { at: _drivePassNow(), stage: "base_alarm",
+          driveInvoked: 0, outcomes: null,
+          errorName: null, errorMessage: null }
+  try:
+    super.alarm();            stage → "construct"
+    cache/coord/service;      stage → "recover"
+    recover();                stage → "drive"; driveInvoked = 1
+    outcomes = driveOnce();   stage → "flush"
+    cache.flush();            stage → "complete"
+  catch e:
+    rec.errorName/errorMessage ← e.name / e.message (raw here;
+      scrubbed at write time, §5.2)
+    await _recordDrivePass(rec)     -- record
+    throw e                          -- then rethrow, unchanged (R-2)
+  await _recordDrivePass(rec)        -- success path: record last
+```
+
+### 4.3 Write discipline — the recorder can never break the chain
+
+- **Record last.** Success path: after `cache.flush()`, after
+  every real effect of the pass. Throw path: from the catch,
+  after the failing step, before the rethrow.
+- **Record-then-rethrow (R-2 REQUIRED).** The rethrown value is
+  the identical error object the drive path threw (`throw e` —
+  no wrapping, no substitution). Platform alarm-retry behavior
+  for a throwing handler is therefore exactly the shipped
+  build's.
+- **The recorder never throws.** `_recordDrivePass` wraps its
+  whole body in try/catch; any failure is noted on the health
+  channel (§4.4) and discarded. This mirrors the shipped
+  best-effort noting discipline (`service.mjs:897`,
+  `noteHaltObservation` under `try { … } catch { /* guard notes
+  strictly */ }`).
+- **No scheduling contact.** The recorder performs no
+  `setAlarm`, no schedule-table read or write, and no `wake()`.
+  The base alarm's unconditional re-arm in its `finally`
+  (`coordinator.mjs:2489–2525`) has already run before the
+  subclass records anything, on both paths. One `getAlarm()`
+  read (for `armed_after`) is the recorder's only contact with
+  the alarm API, and it is a read.
+
+### 4.4 The recording-failure channel (refinement F-2)
+
+A failed recording must itself be observable through a channel
+that does not depend on the failed write. The recorder therefore
+maintains one small object in **DO key-value storage** —
+`this.state.storage.get/put` under the key
+`"d6DrivePassRecorderHealth"` (constant `DRIVE_PASS_HEALTH_KEY`
+in the entry; the same literal in `drivePassDiagnostics` — a
+cross-part contract pinned by test T9):
+
+```json
+{ "recordingFailures": 0, "lastFailureAt": null,
+  "lastFailureStep": null, "lastFailureName": null,
+  "lastRecordedAt": null }
+```
+
+- On any recorder-step failure (DDL, serialize, insert, prune):
+  best-effort read-modify-write incrementing `recordingFailures`
+  and stamping `lastFailureAt` (recorder clock), `lastFailureStep`
+  (`"ddl" | "serialize" | "insert" | "prune"`), and
+  `lastFailureName` (sanitized per §5.2's error-name path,
+  ≤100 chars). Before carrying a previously stored object
+  forward, the writer projects it onto these five fields — a
+  corrupt or foreign-written health object cannot smuggle extra
+  keys or hostile values into a later write.
+- On every successful record: best-effort update of
+  `lastRecordedAt`.
+- A `getAlarm()` readback failure is NOT a recording failure: the
+  schema defines `armed_after` as nullable for exactly this case;
+  the row is written with `armed_after = NULL` and the failure
+  counter is untouched.
+- **Precedent honesty:** the deployed parts use `state.storage`
+  for `.sql`, `transactionSync`, `setAlarm`, and `getAlarm`
+  (`coordinator.mjs:359, 391, 2462, 2481`) — but NO part currently
+  uses the key-value `get/put` facet. This spec introduces its
+  first use. It is the same platform storage object, and it is
+  the only channel on that object whose failure modes are
+  independent of the SQL layer (a second SQL table would fail
+  together with the first under a SQL-layer fault — the failure
+  mode that matters most here). The test harness's storage fake
+  must be extended with async `get/put` (§9, T1); that extension
+  is test-tree work, not a production part.
+- **Residual blind spot, stated plainly:** if a pass's SQL write
+  AND its health note both fail (e.g. the DO's storage is wholly
+  faulting at that instant), that pass's recording failure leaves
+  no trace in either channel. Two things bound the damage: such a
+  storage fault would simultaneously break the coordinator's own
+  writes and the ordinary read surfaces (independently
+  observable), and §8.4's interpretation matrix classifies
+  "no rows + no health object" as INCONCLUSIVE — consistent with
+  H1 but never proof of it, and never read as proof of anything
+  beyond "the handler has not observably run." The distinction F-2
+  requires is preserved in every state where at least one
+  channel works — which includes the entire realistic failure
+  space of the recorder itself (a bug in the DDL, the insert, or
+  the prune cannot take down the KV note).
+
+## 5. Sanitization (refinement F-1, as amended by correction C5)
+
+Sanitization is **two-layered**. The primary layer is at **write
+time**, inside the recorder: the recorder is the table's only
+writer — no other code path in the diff inserts into
+`d6_drive_passes` — so the stored form is safe by construction
+(§5.1–§5.3). The second layer, added by correction C5, is
+**read-side revalidation** (§5.5): the read surface does NOT
+trust storage. A corrupt or foreign-written row — or a corrupt
+health object — must not let raw stored content escape through
+the diagnostics surface, so every stored value is re-validated
+before it is returned, and the former "parsed where it parses,
+raw otherwise" fallback is **abolished**: the raw stored string
+is never returned, under any circumstances. The shipped precedent
+for the projection shape is `sanitizeDiagnosticDetail`
+(`service.mjs:1428–1442`): an allowlist projection over a fixed
+key set with per-string bounds, under the stated rationale that
+"segment text or any other stored field can never ride this
+surface, whatever a detail payload holds" (`service.mjs:1410–1414`
+comment). This spec applies that discipline at BOTH boundaries,
+which is stronger than either alone: the unsanitized value never
+reaches durable storage, and a value that somehow reached storage
+unsanitized still cannot leave through the read.
+
+### 5.1 Outcomes allowlist (exact)
+
+Per-plan outcome objects (`service.mjs:928–1046`) are projected
+onto exactly these keys, and only scalar values
+(string/number/boolean) survive:
+
+```
+planId, state, stopReason, grantId, grantRefused, skipped,
+quarantined, approvalRequired, quarantineCheckFailed, advanced
+```
+
+These are plan ids, state names, and reason codes — internal
+identifiers and code vocabulary already exposed on the operator
+diagnostics surface today. No other key survives, whatever a
+future `driveOnce` grows: segment text, occurrence payloads,
+provider data, and detail JSON have no path in.
+
+The binding-projection entry is projected onto its numeric
+tallies only (`scanned, published, noop, conflicts, pending` —
+the exact return shape of `reconcileBindingProjections`,
+`binding-projection.mjs:240–243`). Its error variant
+(`{ bindingProjectionError: <raw error string> }`,
+`service.mjs:1043–1045`) is recorded as
+`{ "bindingProjectionError": true }` — presence only; the raw
+sweep error string is deliberately NOT recorded. (The row's own
+error fields are the exception channel, and they belong to the
+handler's throw, which is the datum the investigation needs; a
+sweep error rides a pass that otherwise completed, and its
+existence — not its text — is what a reader needs. If Rowan wants
+the sweep error scrubbed-and-kept instead, that is a one-line
+change to the projector, flagged here as the single judgment call
+in this section.)
+
+String values in allowlisted fields pass through the
+**grammar-or-scrub discipline** (§5.1a) and are capped at 200
+chars (`DRIVE_PASS_FIELD_CAP`); any slice sets `fieldsSliced`
+and any scrubbing sets `fieldsScrubbed`, both reported by the
+truncation marker (§5.3), and either sets
+`outcomes_truncated = 1`.
+
+### 5.1a String discipline for allowlisted outcome fields (C5)
+
+Every allowlisted outcome string is stored via exactly one of
+two path

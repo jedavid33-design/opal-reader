@@ -1,0 +1,170 @@
+# Phase B Instrumentation — PROPOSED BUILD/DEPLOY GATE (P2)
+
+- **Status: PROPOSAL ONLY — NOT AUTHORIZED.** This gate executes
+  only on Rowan's review PASS of this proposal **and** Julie's
+  explicit GO, both recorded on the Roundtable board before
+  execution (§9). Rowan's design approval and the specification's
+  existence do not authorize it. No production change of any kind
+  has been made for this document.
+- **AMENDED — HOLD FOR CORRECTIONS implemented.** Rowan's review
+  of the original spec + gate returned "HOLD FOR CORRECTIONS.
+  NOT APPROVED FOR DEPLOYMENT" with six required corrections
+  (C1–C6). All six are implemented in the companion spec and in
+  this proposal (§6 V5 and §12 for C1/C4; §5, §9, §10 for C2;
+  §7.3 for C3 — rewritten from a firsthand trace of the deployed
+  source, withdrawing the original draft's `reservedUnverified`
+  prediction, which the deployed accounting derivation disproves;
+  §4 B3 for C6 — the battery has been EXECUTED against the exact
+  candidate tree: 32/32 tests, exit code 0, log
+  `instrumentation-spec/BATTERY-RUN-LOG.txt`, SHA-256
+  `1fcacefa8e60062a87e9a3ecff47a59667346a1450d9282daf818bffbb85c2ce`).
+  The full compliance record is
+  `PHASEB-INSTRUMENTATION-AMENDMENT-NOTES.md`. This amended
+  proposal again requires Rowan's PASS and Julie's GO before any
+  execution.
+- **Companion document:** `PHASEB-INSTRUMENTATION-SPEC.md`
+  (SHA-256 `a805b473f293073cad5fd97bbdba05f30c12d76b3b41d78b3742fc0b1e34110e`),
+  whose Appendix A is the expected two-part diff and whose §2.2
+  pins the candidate part hashes this gate builds and verifies:
+  - candidate `v2/worker-entry-prod-d6.js`:
+    `45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab`
+  - candidate `v2/generation/service.mjs`:
+    `41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda`
+- **Target:** production worker `opalreader-api-v2-prod` only.
+  Staging is not read, built, or touched by this gate.
+- **Governing record for expectations:** the Phase B attempt-3
+  execution record (`PHASEB-ATTEMPT3-EXECUTION-RECORD.md`, pin
+  `ee8562b9d3eaa0e6f4eabbf5ffb32245125c8aad`) and the diagnostic
+  report (`PHASEB-STALL-DIAGNOSTIC-REPORT.md`, pin
+  `cccfea62d96bfc5a15a269f9455b169980c0226b`).
+
+## 1. Scope
+
+Build the instrumented candidate from the pinned deployed tree
+(the 31 parts preserved in `phaseb-attempt3/evidence/parts-e0/`)
+plus the spec's Appendix A diff and nothing else; run the spec's
+test battery on that candidate tree; upload the candidate to the
+production worker exactly once; verify; observe the first
+drive-pass records; file the execution record. The system is
+HELD (GENERATION_HALT `"1"`, queue paused) before, during, and
+after every step. No generation is involved at any point.
+
+## 2. Stage order
+
+1. **Census** (§3) — fresh reads against every expectation; any
+   deviation is a STOP (S-1).
+2. **Build** (§4) — assemble, patch, hash-verify, battery, pin.
+3. **Deploy** (§5) — exactly one upload + read-backs (+ the
+   conditional observability PATCH).
+4. **Observation + preservation verification** (§6, §7).
+5. **Record** — execution record filed on the board and
+   summarized to Julie, ending with whose turn it is (Rowan's
+   documentary review).
+
+## 3. Pre-flight census expectations
+
+Every figure below is **re-read fresh at execution census**; the
+values stated are the expectations the fresh reads must match,
+carried from the attempt-3 record's census (§1) and closing
+capture (§9). Nothing here is assumed live at execution time —
+a carried figure is an expectation to be verified, never a
+substitute for the read. Any deviation is a STOP under the
+standing executor law; the executor never self-clears.
+
+1. **Health:** build
+   `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`; generation
+   `halted`; coordinator `armed`.
+2. **Script:** etag
+   `f15fb1ae40f870fc4493f3499db0b096c4d801b9fff8d20fe5538d84c69c82ed`
+   exact; 31/31 parts byte-identical to the `parts-e0/` manifest;
+   observability enabled with `logs.persist: true` (script-settings
+   read).
+3. **Bindings/settings surface:** exactly 10 bindings;
+   GENERATION_HALT `"1"`; `OPALREADER_PHASE_POLICY` `"enforce"`.
+4. **Settings:** revision **1** (lane standard, cap $50).
+5. **Queue** `opalreader-generation-v2`: `delivery_paused: true`;
+   exactly 1 consumer. (The queue's `modified_on` is NOT an
+   expectation — attempt 3's own re-pause moved it; the invariant
+   is the paused state and the consumer count.)
+6. **Capabilities:** standard admitted; Batch `batch_not_armed`;
+   phase registry binds `forever-pucked` ↔
+   `5c589095-f812-48a2-8ab2-03ba2791f2b2`.
+7. **Phase accounting, exact on both surfaces:** settled
+   **1,029,420**; estimatedUnverified **19,018**;
+   reservedUnverified **5,648**; inFlightUpper **0**; unknownOpen
+   **0**; remaining **12,464,932** of 13,500,000.
+8. **Quota:** reconcile `ok: true`, drift empty on all pages,
+   sole exception the known adjudicated straddler
+   `att-37d63768-db4b-447d-8150-580b7c6ee257`
+   (`estimated_unverified`). Per-day dispatched totals for PT
+   2026-10-29 / 10-30 / 10-31 / 11-01 exactly **57 / 79 / 44 / 76**
+   as the attempt-3 record states; any later PT day exactly **0**;
+   reserved **0**. (The current PT day's own number is
+   date-dependent and is therefore expressed as this invariant —
+   no dispatch can have occurred since attempt 3 closed, because
+   dispatch requires an execution and no generation path has been
+   open — rather than as a single carried figure.)
+9. **Plans — exactly 5:** smoke `complete`; old Ch 2
+   `plan:603ab416bd67ab1b25de97be` `retired`; fresh Ch 2
+   `plan:b2dc2a3d1cd367a0245b9102` `complete` 18/18; Ch 3
+   `plan:e377a5559961b294154276b6` `complete` {eligible 23,
+   done 23, failed 0, blocked 0}; Phase B
+   `plan:19cad189fab54b9c804a74a6` `active` {eligible 1, done 0,
+   failed 0, blocked 0, prompts 0}, its single entry `pending`,
+   its job `plan:19cad189fab54b9c804a74a6:seg` `queued` rev 1,
+   quarantine `held: false`, **grants []**. No other
+   non-terminal plan; no live grant.
+10. **Eligibility (the exemption's projection):** chapter quote
+    bound **26** / parked **0** / eligible **1**; segment quote
+    eligible **1** / **569** chars / **8,022**. The attempt-3
+    closing record carries the closing digest only as the prefix
+    `cdef2c7e…` — the full digest is therefore **not** carried as
+    an expectation; the census instead requires the three scopes'
+    (chapter / segment / book) digests to be mutually consistent
+    on the fresh read, with the counts above exact.
+11. **Conflicts — exact-match to the pinned four-row baseline:**
+    id 1 @ 2026-10-29T23:54:14.808Z
+    `grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full`; id 2 @
+    2026-10-30T00:24:14.632Z
+    `grant:plan:603ab416bd67ab1b25de97be:ch1:1:full`; id 3 @
+    2026-10-31T05:14:24.089Z
+    `grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full`; id 4 @
+    2026-11-01T01:04:30.364Z
+    `grant:plan:e377a5559961b294154276b6:ch2:1:full` — every field
+    (cache_key `lease`, expected `7`, found `LIKE or GLOB pattern
+    too complex: SQLITE_ERROR`, reason `schedule_dead`) exact.
+12. **Parked job:** `1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a`
+    `parked_policy` rev 1, fingerprint
+    `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`
+    exact, grants [].
+13. **Watermarks + occupancy:** content watermark **18**;
+    bindings **1841** entities, **0** rows for occurrence
+    `2a85f74f-353d-4c25-a86a-4a4db392868b`, **0** changes since
+    seq 1841; the idx-26 R2 key
+    `audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590`
+    **FREE** (LIST empty).
+
+**Exemption evidence note:** the exemption's standing is
+evidenced as in every prior record — class (a) the E1 operator
+response on file (`applied`, `alreadyExempted: false`) and class
+(b) the eligibility projection in item 10. The exemption journal
+has no read surface (§9.2A(c) of the attempt-3 record:
+UNAVAILABLE); this gate does not claim a journal read.
+
+## 4. Build stage + verification (before any upload)
+
+- **B1 — Assemble:** copy all 31 parts from `parts-e0/` into the
+  candidate tree; SHA-256-verify every part against the
+  `parts-e0/` originals (31/31).
+- **B2 — Apply + identity:** apply the spec's Appendix A diff
+  (`patch -p1`). Verify: the entry and service parts hash to the
+  spec §2.2 candidate SHA-256s exactly; the other 29 parts remain
+  byte-identical to `parts-e0/`; the part count is still **31**
+  (the diff adds no part and removes none).
+- **B3 — Battery:** run the spec §9 battery (T0–T10) on the
+  candidate tree. The FULL log and the exit code are captured;
+  both are pinned with the gate record. Any failure, and any
+  incomplete log, is a STOP (S-3). **Amendment evidence:** this
+  battery was already executed once, during the
+  HOLD-FOR-CORRECTIONS amendment, against a candidate tree
+  assembled exactly this way and hash-verified to the §2.2 pins 

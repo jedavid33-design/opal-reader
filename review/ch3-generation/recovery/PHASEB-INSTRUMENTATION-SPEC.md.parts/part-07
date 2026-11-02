@@ -1,0 +1,183 @@
+ate the
+Durable Object (the 1101-fault mode), or never delivers the
+alarm invocation at all, no handler code runs: no row, no health
+note, nothing. That absence is classified **INCONCLUSIVE**
+(correction C1): it is consistent with H1 (a dead alarm chain)
+but it is NOT proof of H1 or of any other single cause — the
+pre-handler failure and a dual-channel storage failure (§4.4)
+produce the identical absence, and the instrumentation does not
+and cannot name the platform-side root cause. (The disposition
+consequence is unchanged: the remedy path is the same, which is
+why the gate treats the no-rows outcome as a successful
+observation rather than a failed gate — gate §6 V5.) Likewise,
+a pass that begins after the last recorded pass and is still in
+flight when the DO is evicted leaves no row for its partial
+progress (recording is end-of-pass by design); and per §4.4, a
+simultaneous dual-channel storage failure hides its own
+recording failure. Every other stage of the shipped alarm
+path — base alarm, construction, recover, drive, flush — is
+observed by exactly one row per invoked pass.
+
+### 10.3 Not in this spec
+
+No client change; no staging change (staging runs an older,
+different build and is untouched by the companion gate); no
+change to the preserved Phase B plan, the idx-26 exemption, the
+halt, or the queue; no generation of any kind. The deploy
+itself, its census, and its verification are the companion gate
+proposal's subject, not this spec's.
+
+## Appendix A — the expected two-part diff (verbatim)
+
+Produced as §2.3 describes; applies to the deployed parts with
+`patch -p1` from the tree root (paths `v2/…`). This is the diff
+the companion gate builds and hash-verifies; any byte of
+difference between a built candidate and this appendix's result
+is a STOP under that gate.
+
+```diff
+--- a/v2/worker-entry-prod-d6.js
++++ b/v2/worker-entry-prod-d6.js
+@@ -413,6 +413,242 @@
+   });
+ }
+ 
++// PHASE B INSTRUMENTATION (P2; design
++// PHASEB-INSTRUMENTATION-DESIGN.md as approved with refinements,
++// spec PHASEB-INSTRUMENTATION-SPEC.md): one durable row per
++// subclass alarm pass, written by the recorder below, so a drive
++// stall can be told apart from a silent alarm chain. The recorder
++// is the table's ONLY writer and sanitizes at write time
++// (allowlist projection + grammar-or-scrub discipline, spec
++// §5.1–§5.2); the read surface (service.mjs
++// drivePassDiagnostics) trusts nothing it reads back and
++// re-validates every stored value before returning it (spec
++// §5.5). Nothing here changes what a pass DOES: recording is
++// last, best-effort, and a drive error is rethrown unchanged by
++// alarm() after recording, so platform alarm-retry semantics are
++// exactly the shipped ones.
++const DRIVE_PASS_SCHEMA = `
++CREATE TABLE IF NOT EXISTS d6_drive_passes (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  at INTEGER NOT NULL,
++  finished_at INTEGER,
++  stage TEXT NOT NULL,
++  drive_invoked INTEGER NOT NULL,
++  outcomes_json TEXT,
++  outcomes_truncated INTEGER NOT NULL DEFAULT 0,
++  error_name TEXT,
++  error_message TEXT,
++  armed_after INTEGER
++);
++`;
++// The recorder-health channel: the one record of recording ITSELF
++// failing, kept in DO key-value storage under this key — a storage
++// facet the SQL table does not share, so a SQL-layer fault cannot
++// hide its own trace. service.mjs drivePassDiagnostics reads the
++// same literal key (a cross-part contract, pinned by the spec's
++// round-trip test). Shape:
++// { recordingFailures, lastFailureAt, lastFailureStep,
++//   lastFailureName, lastRecordedAt }.
++const DRIVE_PASS_HEALTH_KEY = "d6DrivePassRecorderHealth";
++// Retention is a COUNT cap (Rowan's ruling): the newest 288 rows
++// are kept; at the 10-minute watchdog cadence that is an ESTIMATE
++// of ~2 days, never a guaranteed duration.
++const DRIVE_PASS_RETENTION = 288;
++const DRIVE_PASS_OUTCOMES_CAP = 8000; // chars, on outcomes_json
++const DRIVE_PASS_FIELD_CAP = 200;     // chars, per outcome string field
++const DRIVE_PASS_ERROR_CAP = 500;     // chars, on error_message
++const DRIVE_PASS_NAME_CAP = 100;      // chars, on error_name
++// The outcomes allowlist: exactly the scalar fields driveOnce
++// writes on its per-plan outcome objects (service.mjs driveOnce),
++// plus the binding-projection sweep's numeric tallies. Anything
++// else a future outcome grows is dropped at record time, never
++// stored — segment text, detail payloads, and provider data have
++// no path into this table.
++const DRIVE_PASS_OUTCOME_KEYS = Object.freeze([
++  "planId", "state", "stopReason", "grantId", "grantRefused",
++  "skipped", "quarantined", "approvalRequired",
++  "quarantineCheckFailed", "advanced",
++]);
++const DRIVE_PASS_SWEEP_KEYS = Object.freeze([
++  "scanned", "published", "noop", "conflicts", "pending",
++]);
++
++// Scrub one free-text field (an error name or message) for durable
++// storage: non-strings and empties become NULL; control characters
++// are flattened; URL-shaped and long identifier-shaped runs are
++// redacted (an error message in this codebase can embed a provider
++// request id or a storage detail); the result is length-bounded.
++// The diagnostic shape survives — the error's name and its prose —
++// never the raw string, and never a stack trace (only .name and
++// .message are ever passed here).
++function scrubDrivePassText(value, cap) {
++  if (typeof value !== "string" || value.length === 0) return null;
++  let s = value.replace(/[\x00-\x1f\x7f]+/g, " ");
++  s = s.replace(/https?:\/\/\S+/g, "[url]");
++  s = s.replace(/\b[A-Za-z0-9_\-]{24,}\b/g, "[redacted]");
++  s = s.trim();
++  if (s.length === 0) return null;
++  return s.length > cap ? s.slice(0, cap) : s;
++}
++
++// Write-time discipline for allowlisted outcome strings (Rowan
++// correction 5 — hostile-input coverage): a stored string is safe
++// BY CONSTRUCTION, via exactly one of two paths.
++//   * GRAMMAR path: planId / grantId are machine
++//     identifiers from closed alphabets the shipped code itself
++//     generates (`plan:<hex>`,
++//     `grant:<jobId>:<revision>:full|probe` — coordinator.mjs
++//     grant issuance). A value matching the field's
++//     grammar cannot contain whitespace, control characters, or a
++//     URL (the alphabet excludes '/', ' ', and every control), so
++//     it is stored as-is, length-capped. A value NOT matching its
++//     grammar is not an identifier at all — it is hostile or
++//     corrupt free text and takes the scrub path.
++//   * TOKEN path: state / stopReason are code vocabulary
++//     (lowercase snake_case constants from the shipped stop maps
++//     and state writes). A value matching /^[a-z0-9_]+$/ is such a
++//     token by shape and is stored as-is, length-capped; anything
++//     else takes the scrub path.
++//   * NAME path: error names (the row's error_name, the health
++//     channel's lastFailureName) are bare class identifiers
++//     (Error, SqliteError, ProductionR2NamespaceError). A value
++//     matching the identifier grammar cannot contain a URL,
++//     whitespace, or control characters, so it is stored as-is,
++//     length-capped — the prose scrub's >=24-char redaction would
++//     otherwise destroy exactly the long class names this
++//     recorder exists to surface (a battery finding: the prose
++//     scrub reduced ProductionR2NamespaceError to "[redacted]").
++//     A non-identifier name takes the scrub path.
++//   * SCRUB path: the full prose scrub (scrubDrivePassText) —
++//     control characters flattened, URL-shaped runs replaced,
++//     >=24-char identifier-shaped runs redacted, capped. Any value
++//     changed by scrubbing (or by the length cap) is reported via
++//     fieldsScrubbed / fieldsSliced so the record never pretends
++//     to be a naive copy.
++const DRIVE_PASS_PLAN_ID_GRAMMAR = /^plan:[A-Za-z0-9_-]+$/;
++const DRIVE_PASS_GRANT_ID_GRAMMAR = /^grant:[A-Za-z0-9_:\-.]+$/;
++const DRIVE_PASS_TOKEN_GRAMMAR = /^[a-z0-9_]+$/;
++
++const DRIVE_PASS_NAME_GRAMMAR = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
++
++// The NAME path for error names (see the discipline comment
++// above): identifier-grammar values are stored as-is
++// (length-capped); anything else takes the full prose scrub.
++function sanitizeDrivePassName(value) {
++  if (typeof value !== "string" || value.length === 0) return null;
++  if (DRIVE_PASS_NAME_GRAMMAR.test(value))
++    return value.length > DRIVE_PASS_NAME_CAP
++      ? value.slice(0, DRIVE_PASS_NAME_CAP) : value;
++  return scrubDrivePassText(value, DRIVE_PASS_NAME_CAP);
++}
++
++function sanitizeDrivePassOutcomeString(key, value, flags) {
++  if (value.length > DRIVE_PASS_FIELD_CAP) flags.fieldsSliced = true;
++  const grammar = key === "planId" ? DRIVE_PASS_PLAN_ID_GRAMMAR
++    : key === "grantId" ? DRIVE_PASS_GRANT_ID_GRAMMAR
++    : DRIVE_PASS_TOKEN_GRAMMAR;
++  if (grammar.test(value) && value.length <= DRIVE_PASS_FIELD_CAP)
++    return value;
++  if (grammar.test(value)) { // grammatical but oversized: cap only
++    flags.fieldsSliced = true;
++    return val

@@ -1,0 +1,80 @@
+# Phase B Instrumentation — IMPLEMENTATION SPECIFICATION (P2)
+
+- **Status: SPECIFICATION ONLY.** No code has been deployed, no
+  production call has been made, nothing is authorized by this
+  document. It specifies the build that the companion gate proposal
+  (`PHASEB-INSTRUMENTATION-GATE-PROPOSAL.md`) would execute if —
+  and only if — Rowan passes that gate and Julie gives an explicit
+  GO.
+- **AMENDED — HOLD FOR CORRECTIONS implemented.** Rowan's review
+  of the original spec + gate (`ROWAN-P2-SPEC-GATE-REVIEW.md`:
+  "HOLD FOR CORRECTIONS. NOT APPROVED FOR DEPLOYMENT") named six
+  required corrections. All six are implemented in this amendment:
+  §1.3 maps each correction to the sections that carry it, and
+  `PHASEB-INSTRUMENTATION-AMENDMENT-NOTES.md` is the full
+  compliance record (changed sections, old vs new hashes, battery
+  outcome). The two-part architecture is preserved. The T0–T10
+  battery has been EXECUTED against the exact candidate tree in
+  this amendment (§9; log `instrumentation-spec/BATTERY-RUN-LOG.txt`,
+  SHA-256 `1fcacefa8e60062a87e9a3ecff47a59667346a1450d9282daf818bffbb85c2ce`,
+  exit code 0, 32/32 tests passing). This amendment is again
+  PROPOSAL ONLY: it awaits Rowan's review of the amended spec +
+  gate, and any execution still requires her PASS and Julie's
+  explicit GO.
+- **Authority:** Rowan's P2 instrumentation design review
+  (`ROWAN-P2-INSTRUMENTATION-DESIGN-REVIEW.md`): "DESIGN APPROVED
+  WITH REQUIRED REFINEMENTS… Prepare an implementation
+  specification and separately reviewable proposed build/deploy
+  gate, grounded in the exact deployed 31-part source. Include the
+  expected two-part diff, test plan, mutation budget, rollback
+  conditions, preservation checks, and explicit STOP conditions.
+  No production changes or deploy-ready execution are authorized
+  yet."
+- **Design implemented:** `PHASEB-INSTRUMENTATION-DESIGN.md`
+  (SHA-256 `c1e7fcf8e70a2ef0bd819f338527dce8dec1a4227e501a0dade292e4f0235210`),
+  including its three deviations from the diagnostic report's §8
+  sketch, all three ACCEPTED by Rowan (handler-level recording;
+  last-N read; per-pass `armed_after`).
+- **Source basis:** the deployed parts preserved at
+  `phaseb-attempt3/evidence/parts-e0/` (31 parts, build
+  `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`, script etag
+  `f15fb1ae40f870fc4493f3499db0b096c4d801b9fff8d20fe5538d84c69c82ed`).
+  The expected diff in Appendix A was produced by copying the two
+  deployed parts into `instrumentation-spec/scratch/`, editing the
+  copies, and diffing against the deployed originals; the patch
+  round-trips byte-for-byte (§2.3). The local
+  `~/workspace/d6-build/impl/` tree was NOT used; it does not
+  correspond to the live build (diagnostic report §0).
+
+## 1. Compliance map — every ruling and refinement, by name
+
+### 1.1 Rowan's six design rulings
+
+| # | Ruling | Where implemented |
+|---|---|---|
+| R-1 | Handler-level placement: APPROVED | §3 — the recorder lives in the subclass alarm handler in `worker-entry-prod-d6.js`; `driveOnce` is not edited. |
+| R-2 | Record-then-rethrow original exception: REQUIRED | §4.2 — on any drive-path throw, the recorder runs first, then `throw e` rethrows the identical error object; the recorder itself never throws (§4.3). Test group T3 asserts object identity of the rethrown error. |
+| R-3 | Retention: 288 rows APPROVED as a count cap, not a guaranteed duration | §3.3 + §7 — enforced as `LIMIT 288` in the prune; all duration figures in this spec are labeled estimates derived from the 10-minute watchdog cadence, never guarantees. |
+| R-4 | Clock: testable clock with unchanged production semantics | §6 — `_drivePassNow()` mirrors `GenerationCoordinator._now()` (`coordinator.mjs:384`): `env.now()` when provided, else `Date.now()`. The production env carries no `now` function, so production behavior is `Date.now()`, exactly as the shipped coordinator behaves. |
+| R-5 | Read route: existing operator-gated diagnostics `drive=1` APPROVED; reject ambiguous mode combinations | §8 — mode selected by the presence of a `drive` parameter; `drivePassDiagnostics` rejects, with the named reason `diagnostics_mode_ambiguous` (HTTP 400 via the class gate's existing rejected mapping), every combination except exactly `drive="1"` with no `planId`, no `jobId`, no `cursor`. As amended by C5/C6: a REPEATED mode parameter is also ambiguous — the class gate counts occurrences (`getAll`), and the public entry's forward, which copies each parameter singly and would otherwise collapse a repeat to its first value, forwards repetition explicitly (`repeated=1`) so the rejection fires on the real route too (battery T7). |
+| R-6 | Outcomes: 8,000-character limit conditionally accepted, with explicit truncation and preservation of diagnostic meaning | §5.3 — allowlist projection first, then entry-granular truncation under the cap with a terminal marker entry stating kept/dropped counts and field-slicing; the stored value is always valid JSON; `outcomes_truncated` flags every truncated record. |
+
+### 1.2 Rowan's six required refinements
+
+| # | Refinement | Where addressed |
+|---|---|---|
+| F-1 | Prevent sensitive data leakage through outcomes and exception fields | §5 — the full sanitization specification: a field allowlist for outcomes (the recorder is the table's only writer; sanitization happens at write time, before storage), a scrubber for error name/message (no stack traces, no URLs, no long identifier-shaped runs, bounded lengths), and test group T5 including a forbidden-pattern scan of stored rows. As amended by C5: a read-side revalidation layer (§5.5) re-validates every stored value before it is returned, and the former raw fallback for unparseable stored JSON is abolished — no raw stored content can escape through the read surface. |
+| F-2 | Preserve the distinction between absent alarm execution and failed diagnostic recording | §4.4 — the recorder-health channel in DO key-value storage (a storage facet the SQL table does not share), plus the read's three-state `tableState` and the interpretation matrix in §8.4. The residual blind spot is stated plainly in §4.4. |
+| F-3 | Document retry-burst and pruning overhead | §7 — per-pass write inventory, the ≤6-retry burst arithmetic (labeled Cloudflare documentation, not observation), prune cost, and the total storage bound under the cap. All sizes are labeled estimates. |
+| F-4 | Test recorder failures at every step without altering alarm semantics | §9, test group T4 — fault injection at DDL, serialization, getAlarm readback, insert, prune, and the health channel's get/put, each with an equivalence assertion against the unmodified build's behavior on the same seeded store. |
+| F-5 | Keep Step-0 procedural correction separate from instrumentation | §10.1 — the step-0 correction (verifying an issued grant before unpause; diagnostic report §7, Rowan's attempt-3 review) is named OUT OF SCOPE for this spec and for the companion gate. Nothing in the diff touches it. |
+| F-6 | State clearly that constructor/platform failures preceding handler invocation remain unobservable | §10.2 — stated in both this spec and the gate proposal: if the DO cannot be instantiated, or the platform never invokes `alarm()`, no recorder code runs and no row exists; that state is classified INCONCLUSIVE (§8.4, as amended by correction C1): consistent with a dead alarm chain but not proof of one, since a constructor/platform failure before handler invocation leaves the identical absence. The instrumentation does not name a platform-side root cause. |
+
+### 1.3 Rowan's HOLD-FOR-CORRECTIONS corrections (this amendment)
+
+| # | Correction (Rowan's words, condensed) | Where implemented |
+|---|---|---|
+| C1 | "No rows plus no health record" is INCONCLUSIVE — consistent with H1 but not proof; retain the dual-channel-failure and pre-handler limitations | §8.4 (matrix), §10.2, §4.4 — and the gate's §6 V5, §8, §12. Every place the absence was previously stated as H1 evidence/proof is rewritten to this classification. |
+| C2 | Budget must explicitly account for a possible observability PATCH after the forward upload AND a separate conditional PATCH after a rollback upload | Gate §5 (budget table), §9 (S-7), §10 (authorization block). Spec side: no change needed (the spec carries no mutation budget). |
+| C3 | §7.3: verify the predicted grant/reservation transition against deployed behavior; any unmatched state movement is STOP | Gate §7.3, rewritten from a firsthand source trace with file:line anchors. The prior draft's claim that phase `reservedUnverified` increases is WITHDRAWN — it is disproven by the deployed accounting derivation (genstore.mjs `phaseAccounting` reads only adjudication/attempt-log state, which grant issuance never writes). Battery T2 observes the verified transition live in the harness. |
+| C4 | Distinguish successful diagnostic capture from healthy coordinator execution; error

@@ -1,0 +1,164 @@
+—
+  32/32 tests passing, exit code 0, full log at
+  `instrumentation-spec/BATTERY-RUN-LOG.txt` (SHA-256
+  `1fcacefa8e60062a87e9a3ecff47a59667346a1450d9282daf818bffbb85c2ce`).
+  The build-stage run here is a RE-run on the gate's own
+  assembled tree; its log must also be complete and green, and
+  any divergence from the amendment run is a STOP (S-3).
+- **B4 — Pin the candidate:** the candidate manifest (31 part
+  hashes) + the battery log are pinned in the code repo
+  (`jedavid33-design/opal-reader`, branch `ui1-review`) before
+  the upload. Per the program's build-marker convention, the
+  deployed candidate's `/health` build stamp must equal that pin
+  commit; the gate record names the pin before the upload step.
+  (Repo pins and board filings are bookkeeping, not production
+  mutations; §8.)
+- **B5 — Envelope:** the upload envelope is built from the
+  candidate tree's 31 parts with the LIVE script's upload
+  metadata read fresh at build time and carried forward
+  unchanged: all 10 bindings (existing secrets as
+  `{"type": "inherit", "name": …}`), `compatibility_date`
+  `2026-08-29` + the `nodejs_compat` flag, `main_module` naming
+  the entry part with its module content type and filename
+  attributes — per the standing deploy law. GENERATION_HALT
+  remains `"1"` in the carried-forward metadata: **this gate
+  flips no setting.** The envelope digest is recorded in the
+  gate record before upload. Any metadata drift between the
+  build-time read and the census read, beyond the documented
+  GET-projection artifacts (the `namespace_id` projection on the
+  DO binding and secrets projected as `secret_text` where
+  uploads carry `inherit` — the artifacts the attempt-3 record
+  §4 documents), is a STOP (S-4).
+
+## 5. Deploy step + mutation budget
+
+- **D1:** exactly **ONE** multipart upload (PUT) of the §4
+  envelope to `opalreader-api-v2-prod`.
+- **D2 — immediate read-backs:** script GET (etag + part
+  hashes); script-settings GET (observability). If the upload
+  reset observability to null — the known upload side effect —
+  re-apply it with the standing settings-only multipart PATCH to
+  `/workers/scripts/{name}/settings` (observability object
+  only), then re-read script-settings AND the script etag: the
+  PATCH must leave the code etag unchanged.
+- **D3 — ambiguous upload:** if the upload errors without a
+  readable outcome, STOP. Verify live state by reads only. No
+  re-upload without fresh authorization naming the retry.
+
+**Mutation budget (complete; correction C2 — each PATCH is
+counted separately, including the rollback's):**
+
+| Kind | Budget |
+|---|---|
+| Script uploads (forward, D1) | **1** |
+| Settings-only observability PATCH after the forward upload | **≤1, conditional** (only if D2 finds observability reset; settings-only; the code etag must be unchanged across it) |
+| Rollback upload (§8, conditional) | **≤1, conditional** (only on a named §8 condition during this execution) |
+| Settings-only observability PATCH after the rollback upload | **≤1, conditional** (only if the rollback upload reset observability; settings-only; the code etag must be unchanged across it) |
+| Commands (`POST /v2/commands` or any operator POST) | **0** |
+| Settings flips (incl. GENERATION_HALT) | **0** |
+| Queue operations | **0** |
+| Plan / job / exemption operations | **0** |
+| Operator R2 writes | **0** |
+| Spend | **$0** (halt on, queue paused, no `sendGrant` wired; the instrumentation calls no provider) |
+
+In words, the complete write envelope is: **1 forward upload +
+≤1 conditional observability PATCH after it; PLUS, conditionally,
+1 rollback upload + ≤1 conditional observability PATCH after the
+rollback.** Nothing else writes.
+
+**Code effects, not operator mutations:** on the first alarm
+pass after the upload, the deployed build itself lazily creates
+`d6_drive_passes` and writes its first row, and the recorder
+writes the health key. These are the deployed code's own
+behavior — the observation this gate exists to make — named here
+so they are never mistaken for operator acts. The table's
+creation is a code effect of the approved build; no operator
+call creates it.
+
+## 6. Post-deploy verification
+
+- **V1 — Health:** `/health` build stamp equals the §4 pin
+  commit; generation `halted`; coordinator `armed`.
+- **V2 — Script identity:** the etag DIFFERS from
+  `f15fb1ae…` (a change is expected and required — an unchanged
+  etag means the upload did not take, a STOP); 31 parts; 29
+  byte-identical to `parts-e0/`; the entry and service parts
+  byte-identical to the candidate hashes (§4 B2).
+- **V3 — Settings surface:** observability enabled +
+  `logs.persist: true` (after the conditional PATCH if it was
+  needed); settings revision still **1**; GENERATION_HALT still
+  `"1"`; exactly 10 bindings.
+- **V4 — Queue (read-back only):** `delivery_paused: true`;
+  exactly 1 consumer. This gate makes no queue call.
+- **V5 — First drive-pass observation:** read
+  `GET /v2/d6-diagnostics?drive=1` (operator connector, with the
+  production scope/instance headers) at approximately +12
+  minutes and +25 minutes after the upload (the watchdog period
+  is 10 minutes; the times are estimates allowing platform
+  slack). Readings are classified per the spec's §8.4 matrix and
+  §8.5 classification table (corrections C1 + C4): **diagnostic
+  capture success and coordinator health are separate findings,
+  and neither kind of finding is, by itself, a gate failure.**
+  The possible readings:
+  - **Rows present, newest stage `complete`:** capture is
+    working AND the chain delivered at least one invocation that
+    ran end-to-end. `tableState` `"populated"`; `armedAfter`
+    non-null and consistent with the read's live
+    `alarm.armedAt`. The row's outcomes show the preserved plan
+    considered; a `grantId` may or may not be present — see
+    §7.3. `recorderHealth` is read and reported on its own terms
+    (below), not folded into this verdict.
+  - **Rows present with an error stage** (`base_alarm` /
+    `construct` / `recover` / `drive` / `flush`): **capture
+    succeeded; the coordinator pass failed at the named stage.**
+    This is a FINDING REQUIRING CLASSIFICATION, not failed
+    instrumentation and not a deploy failure by itself: the
+    executor reports the row(s) verbatim in the gate record and
+    Rowan classifies (pre-existing coordinator fault vs
+    build-attributable change — RB-1 turns on that
+    classification, and the executor never makes it alone).
+  - **`recorderHealth.recordingFailures > 0`:** a FINDING
+    REQUIRING CLASSIFICATION in the same way: the recorder
+    failed to write on that many passes, at the named steps; it
+    says nothing directly about coordinator health. Executor
+    reports; Rowan classifies. Not a deploy failure by itself.
+  - **No rows (nothing captured):** `tableState` `"missing"`,
+    `recorderHealth` null. **Classification: INCONCLUSIVE —
+    consistent with H1 (the chain is not delivering invocations)
+    but NOT proof of it.** The identical absence is produced by
+    (a) H1, (b) every pass failing BOTH channels — the SQL table
+    write and the KV health note together, which would coincide
+    with storage faults visible on other surfaces — and (c) a
+    constructor/platform failure before handler invocation,
+    which leaves no trace in either channel (§12). This is the
+    very datum the instrumentation exists to produce, stated at
+    its correct strength. The executor reports it and the gate's
+    verification ends there: the instrumented build is verified
+    live by V1–V4, it is the observation instrument, and it is
+    LEFT IN PLACE. **No alarm kick, no wake command, no replay,
+    and no other active probe is authorized by this gate** — a
+    manufactured wake would contaminate the observation and was
+    already refused as a method in Rowan's P1 ruling.
+- **V6 — Preservation reads:** §7 in full.
+- **V7 — Record:** the execution record (census capture, build
+  manifest + battery log pins, envelope digest, upload +
+  read-back envelopes, observation reads, preservation verdicts)
+  is filed on the board and summarized to Julie.
+
+## 7. Preservation checks
+
+Each check names its read surface; all are read at V6 against
+the §3 census values (which were themselves freshly verified at
+census — so preservation is judged census-to-close, not
+record-to-close).
+
+- **P-1 — The preserved plan:** `plan:19cad189fab54b9c804a74a6`
+  `active`, totals {eligible 1, done 0, failed 0, blocked 0,
+  prompts 0}, entry `pending`. Read: `GET /v2/d6-plans/<planId>`.
+- **P-2 — Its job:** `plan:19cad189fab54b9c804a74a6:seg`
+  `queued` rev 1, quarantine `held: false`. Read:
+  `GET /v2/jobs/<jobId>`. (State, revision, and grants are
+  subject to §7.3: under the verified issuance cycle the job may
+  instead read `generating` rev 2 with exactly the §7.3 grant
+  live, or a post-void state satisfying every §7.3 invariant.
+  Anything outside §7.3's itemization 

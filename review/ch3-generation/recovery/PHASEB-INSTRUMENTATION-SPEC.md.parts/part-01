@@ -1,0 +1,167 @@
+-stage rows and recorder-health failures are findings requiring classification, not automatically failed instrumentation | §8.5 (new classification table + named disposition: executor reports, Rowan classifies) — and the gate's §6 V5. |
+| C5 | Strengthen hostile-input coverage for allowlisted string values and the `outcomesRaw` fallback; no raw sensitive content may escape through malformed stored JSON | §5.1 (grammar-or-scrub string discipline), §5.2 (error-name identifier path), §5.3 (marker gains `fieldsScrubbed`), §5.5 (new: read-side revalidation — the raw fallback is ABOLISHED; parse failure yields `outcomes: null` + `outcomesMalformed`), §8.3 (response shape). Implemented in both candidate parts; hostile cases in T5. |
+| C6 | T0–T10 must EXECUTE against the exact candidate tree before deployment; include KV fault behavior and end-to-end diagnostics forwarding | §9 — EXECUTED: 32/32 tests, exit code 0, full log at `instrumentation-spec/BATTERY-RUN-LOG.txt` (SHA-256 `1fcacefa8e60062a87e9a3ecff47a59667346a1450d9282daf818bffbb85c2ce`). Battery-found corrections to this spec's own test text (T3(ii) stage boundary, T4 getAlarm surface) are recorded in §9's group notes and in the amendment notes. |
+
+## 2. The change in one paragraph + the expected diff
+
+### 2.1 What changes
+
+Exactly two of the 31 deployed parts change:
+
+- **`v2/worker-entry-prod-d6.js`** gains: (1) a module-level block
+  — the `d6_drive_passes` DDL, the recorder constants (retention,
+  caps, health key), the outcomes allowlists, the text scrubber,
+  the outcomes projector, and the truncating serializer; (2) three
+  class members on `OpalReaderCoordinatorProd` — `_drivePassNow()`
+  (the clock seam), `_noteDrivePassHealth()` (the health channel),
+  `_recordDrivePass()` (the recorder) — and a restructured
+  `alarm()` that tracks its stage, captures `driveOnce`'s return
+  value, records last on both paths, and rethrows the original
+  error unchanged; (3) a `drive` branch in the class-gate
+  diagnostics handler dispatching to the new service read; (4)
+  `"drive"` added to the public entry's diagnostics forward
+  whitelist (one token).
+- **`v2/generation/service.mjs`** gains: (1) `isNoSuchTableError`
+  added to the existing `./quarantine.mjs` import (one line);
+  (2) `drivePassDiagnostics({…})` beside `attemptDiagnostics` —
+  the mode-validating, read-only drive-pass read; (3) the method
+  name in the export list (one line).
+
+Nothing else changes. `driveOnce`, `coordinator.mjs`,
+`worker-entry.js`, `worker-entry-prod.js`, and the other 26 parts
+are byte-identical to the deployed build.
+
+### 2.2 Diff statistics (measured from the actual diff, Appendix A)
+
+| Part | Deployed lines | Candidate lines | Added | Removed | Hunks |
+|---|---|---|---|---|---|
+| `v2/worker-entry-prod-d6.js` | 1,964 | 2,365 | +418 | −15 | 4 |
+| `v2/generation/service.mjs` | 1,589 | 1,829 | +241 | −1 | 3 |
+| **Total** | | | **+659** | **−16** | **7** |
+
+SHA-256 of the deployed originals (from `parts-e0/`):
+
+- entry: `292ca83e892d5d675f1c107ea4adf1fed34cca6c054fcd068c51b403f79f8a31`
+- service: `aeeee06c8af9789426ae8135bd020be77e8ef3ea350de744472743e3dd14bd1d`
+
+SHA-256 of the candidate parts (deployed + this diff):
+
+- entry: `45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab`
+- service: `41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda`
+
+(These supersede the original draft's candidate pins —
+entry `f98a4552…`, service `0e7deef2…`, +399/−16 — which the
+HOLD-FOR-CORRECTIONS amendment replaced; see the amendment
+notes for the full old-vs-new record.)
+
+### 2.3 Diff provenance and verification performed for this spec
+
+The candidate parts were produced by editing scratch copies of
+the deployed parts (`instrumentation-spec/scratch/v2/…`), never
+the evidence originals. Both candidate parts pass a module-syntax
+parse (`node --check`). Applying Appendix A's diff to pristine
+copies of the deployed originals with `patch -p1` reproduces the
+candidate parts byte-for-byte (SHA-256 verified for both parts).
+That round-trip is the identity the companion gate's build stage
+re-verifies before any upload. It is also re-verified inside the
+executed battery (T0), against the assembled candidate tree the
+battery ran on (§9).
+
+### 2.4 An honest delta against the design's estimate
+
+The design estimated ≈+100 lines total. The original draft's
+diff was +399/−16; this amendment's is +659/−16. The recording
+core the design scoped (DDL, recorder, alarm restructure, read
+method, dispatch, whitelist) is close to that estimate; the
+growth is (a) the machinery Rowan's refinements added after the
+estimate was written — F-1's allowlist projector + scrubber +
+T5-grade write-time discipline, R-6's entry-granular truncating
+serializer, F-2's health channel (≈+160 lines across the three,
+approximate attribution); (b) comment density: the deployed
+parts carry their rationale in comments on every mechanism (the
+file headers and per-route rulings history are the codebase's
+norm), and this diff follows that norm (≈+120 lines of the
+entry's growth is comment text, approximate attribution); and
+(c) THIS AMENDMENT's correction-5 hardening, ≈+260 lines over
+the original draft: the read-side revalidation layer in the
+service part (a second, independent sanitizer on the read path —
+key lists, grammars, and caps duplicated as a cross-part
+contract), the grammar-or-scrub string discipline and the
+error-name identifier path in the entry part, and the
+repeated-parameter forwarding the battery's T7 case proved
+necessary (the public forward was silently collapsing repeated
+parameters). No functional element beyond the design +
+refinements + the six corrections is included. Rowan reviews
+this actual diff, by hash, through the companion gate; if the
+size itself is a concern, the honest cut candidates are comment
+density and the serializer's marker bookkeeping — not the
+sanitization or the health channel, which are rulings, not
+options.
+
+## 3. Schema
+
+### 3.1 The table (exact DDL, as it appears in the diff)
+
+```sql
+CREATE TABLE IF NOT EXISTS d6_drive_passes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at INTEGER NOT NULL,            -- handler entry time, ms epoch (recorder clock, §6)
+  finished_at INTEGER,            -- record time, ms epoch; NULL only if a future writer changes
+  stage TEXT NOT NULL,            -- step in progress at capture (§4.1); "complete" = ran end to end
+  drive_invoked INTEGER NOT NULL, -- 1 iff driveOnce was called in this pass
+  outcomes_json TEXT,             -- sanitized projection of driveOnce's outcomes (§5); NULL if not invoked or it threw
+  outcomes_truncated INTEGER NOT NULL DEFAULT 0, -- 1 iff a §5.3 marker is present (truncation, field-slicing, or scrubbing occurred)
+  error_name TEXT,                -- sanitized (§5.2 name path); NULL on success
+  error_message TEXT,             -- scrubbed, ≤500 chars (§5.2); NULL on success
+  armed_after INTEGER             -- getAlarm() read back at record time; NULL if that read failed
+);
+```
+
+The DDL is executed by the recorder itself on every pass
+(`CREATE TABLE IF NOT EXISTS` — the codebase's proven lazy,
+DDL-only, idempotent pattern: `gen-schema.mjs` header;
+`PLAN_RETIREMENT_SCHEMA` / `ensurePlanRetirementSchema()` at
+`service.mjs:516–524`; `ensureQuarantineSchema` at
+`quarantine.mjs:110`). No migration, no bootstrap call, no
+`.one()` read is involved, so the real-DO empty-result throw
+hazard does not arise. The table is additive: the current build
+contains no reference to it; a rollback build ignores it (§8 of
+the gate proposal).
+
+### 3.2 The prune (exact statement, as it appears in the diff)
+
+```sql
+DELETE FROM d6_drive_passes
+  WHERE id NOT IN
+    (SELECT id FROM d6_drive_passes
+      ORDER BY id DESC LIMIT ?)
+```
+with the bound parameter `DRIVE_PASS_RETENTION = 288`, executed
+immediately after each successful insert, in the same recorder
+call. The subquery walks the INTEGER PRIMARY KEY; steady state
+deletes exactly the rows above the cap (normally one). A prune
+failure leaves the inserted row in place and the table above cap
+until the next successful pass prunes again — the cap is
+self-healing, and a prune failure is recorded on the health
+channel with step `"prune"` (§4.4).
+
+### 3.3 Retention semantics
+
+288 is a **count cap** (ruling R-3). At the shipped watchdog
+cadence (10 minutes, `WATCHDOG_PERIOD_MS`, `coordinator.mjs:133`)
+a healthy held system writes ~6 rows/hour, so 288 rows correspond
+to an *estimate* of ~48 hours; under a retry burst the same count
+covers far less wall time (§7). No duration is promised anywhere
+in this spec or the gate.
+
+## 4. The recorder
+
+### 4.1 Stage tracking
+
+`alarm()` is restructured so `rec.stage` always names the step in
+progress; a throw therefore records the step that threw:
+
+| Recorded `stage` | Meaning |
+|---|---|
+| `base_alarm` | `await super.alarm()` (deployed line 1460) threw |
+| `construct` | `_cache()` / coordinator / servi

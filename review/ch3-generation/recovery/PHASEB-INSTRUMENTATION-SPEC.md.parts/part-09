@@ -1,0 +1,201 @@
+f prev.lastFailureStep === "string" ? prev.lastFailureStep : null,
++        lastFailureName:
++          sanitizeDrivePassName(prev.lastFailureName),
++        lastRecordedAt:
++          typeof prev.lastRecordedAt === "number" ? prev.lastRecordedAt : null };
++      if (failure) {
++        health.recordingFailures += 1;
++        health.lastFailureAt = this._drivePassNow();
++        health.lastFailureStep = failure.step;
++        health.lastFailureName =
++          sanitizeDrivePassName(failure.name);
++      }
++      if (recordedAt !== null) health.lastRecordedAt = recordedAt;
++      await this.state.storage.put(DRIVE_PASS_HEALTH_KEY, health);
++    } catch { /* best-effort by design; see the spec §5 */ }
++  }
++
++  // Record one alarm pass in d6_drive_passes. NEVER throws: any
++  // failure of the recording steps (DDL, serialization, insert,
++  // prune) is noted on the health channel and discarded here, so a
++  // recorder fault can never break the alarm chain, mask the
++  // original drive error, or alter any outcome — the shipped
++  // best-effort noting discipline (driveOnce's noteHaltObservation
++  // call, service.mjs). The getAlarm() readback is defined as
++  // nullable (armed_after), so its failure records NULL and is NOT
++  // counted as a recording failure. The recorder performs no
++  // setAlarm, no schedule read or write, and no wake: it observes
++  // the chain and does not participate in it.
++  async _recordDrivePass(rec) {
++    let step = "ddl";
++    try {
++      const sql = this.state.storage.sql;
++      sql.exec(DRIVE_PASS_SCHEMA);
++      step = "serialize";
++      const ser = serializeDrivePassOutcomes(rec.outcomes);
++      step = "getalarm";
++      let armedAfter = null;
++      try {
++        const armed = await this.state.storage.getAlarm();
++        armedAfter = typeof armed === "number" ? armed : null;
++      } catch { armedAfter = null; }
++      step = "insert";
++      sql.exec(
++        `INSERT INTO d6_drive_passes
++           (at, finished_at, stage, drive_invoked, outcomes_json,
++            outcomes_truncated, error_name, error_message, armed_after)
++         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
++        rec.at, this._drivePassNow(), rec.stage,
++        rec.driveInvoked ? 1 : 0, ser.json, ser.truncated,
++        sanitizeDrivePassName(rec.errorName),
++        scrubDrivePassText(rec.errorMessage, DRIVE_PASS_ERROR_CAP),
++        armedAfter);
++      step = "prune";
++      sql.exec(
++        `DELETE FROM d6_drive_passes
++          WHERE id NOT IN
++            (SELECT id FROM d6_drive_passes
++              ORDER BY id DESC LIMIT ?)`,
++        DRIVE_PASS_RETENTION);
++    } catch (e) {
++      await this._noteDrivePassHealth({ failure: {
++        step, name: e && e.name ? String(e.name) : "Error" } });
++      return;
++    }
++    await this._noteDrivePassHealth(
++      { recordedAt: this._drivePassNow() });
++  }
++
+   async alarm() {
+     // The coordinator's own alarm first (schedule, leases, parks),
+     // then the D6 driver's recovery + continuation. While halted,
+     // d6HostEnv wires no sendGrant, so driveOnce can settle plan
+     // state and re-derive grants but nothing can leave the outbox.
+-    await super.alarm();
+-    const cache = await this._cache();
+-    const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+-    const service = d6Service(coord, d6HostEnv(this.env, cache));
+-    await service.recover();
+-    await service.driveOnce();
+-    await cache.flush();
++    //
++    // PHASE B INSTRUMENTATION (P2): the pass is recorded by
++    // _recordDrivePass — the stage reached, the outcomes array
++    // driveOnce already computes (captured here, at its only
++    // caller, instead of being discarded), any throw, and the
++    // armed value read back. rec.stage names the step IN PROGRESS,
++    // so a throw records the step that threw; "complete" means the
++    // handler ran end to end. Recording is last on both paths; on
++    // a throw the ORIGINAL error is rethrown unchanged after
++    // recording (Rowan's record-then-rethrow requirement), so
++    // platform alarm-retry behavior is identical to the shipped
++    // build.
++    const rec = { at: this._drivePassNow(), stage: "base_alarm",
++      driveInvoked: 0, outcomes: null,
++      errorName: null, errorMessage: null };
++    try {
++      await super.alarm();
++      rec.stage = "construct";
++      const cache = await this._cache();
++      const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++      const service = d6Service(coord, d6HostEnv(this.env, cache));
++      rec.stage = "recover";
++      await service.recover();
++      rec.stage = "drive";
++      rec.driveInvoked = 1;
++      rec.outcomes = await service.driveOnce();
++      rec.stage = "flush";
++      await cache.flush();
++      rec.stage = "complete";
++    } catch (e) {
++      rec.errorName = e && e.name ? String(e.name) : "Error";
++      rec.errorMessage = e && e.message ? String(e.message) : String(e);
++      await this._recordDrivePass(rec);
++      throw e;
++    }
++    await this._recordDrivePass(rec);
+   }
+ }
+ 
+@@ -1713,9 +2107,18 @@
+   // above; forward() stamps the admission the class gate checks).
+   if (isDiagnosticsRoute) {
+     const dUrl = new URL("https://do.internal/internal/d6/diagnostics");
+-    for (const k of ["planId", "jobId", "limit", "cursor"])
++    for (const k of ["planId", "jobId", "limit", "cursor", "drive"])
+       if (url.searchParams.get(k) !== null)
+         dUrl.searchParams.set(k, url.searchParams.get(k));
++    // PHASE B INSTRUMENTATION (P2): the copy above takes each
++    // parameter singly, which would silently collapse a REPEATED
++    // parameter to its first value before the class gate could
++    // see it. Repetition of any diagnostics parameter is
++    // forwarded explicitly so the drive-mode ambiguity rejection
++    // (diagnostics_mode_ambiguous) can fire on it.
++    if (["planId", "jobId", "limit", "cursor", "drive"]
++        .some((k) => url.searchParams.getAll(k).length > 1))
++      dUrl.searchParams.set("repeated", "1");
+     return forward(new Request(dUrl.toString(), { method: "GET" }));
+   }
+   if (request.method === "GET" && url.pathname === "/v2/d6-eligibility") {
+--- a/v2/generation/service.mjs
++++ b/v2/generation/service.mjs
+@@ -28,6 +28,7 @@
+   ensureQuarantineSchema, quarantineHoldRow,
+   quarantineHoldRowSafe, recordQuarantineHold, applyQuarantineRelease,
+   quarantineView, heldQuarantineStrict, noteHaltObservation,
++  isNoSuchTableError,
+ } from "./quarantine.mjs";
+ import { closeReservationsForPlan } from "./quota-budget.mjs";
+ 
+@@ -75,6 +76,125 @@
+ const JOB_TERMINAL = Object.freeze(
+   ["complete", "partial", "failed", "cancelled", "superseded"]);
+ 
++// ---- Drive-pass read-side revalidation (spec §5.5; Rowan
++// correction 5) ----
++// The recorder (worker-entry-prod-d6.js) sanitizes at write time
++// and is the table's only INTENDED writer, but this read path
++// never trusts storage: a corrupt or foreign-written row — or a
++// corrupt health object — must not let raw stored content escape
++// through the diagnostics surface. Every stored value is
++// re-validated below before it is returned:
++//   * outcomes_json that does not parse, or parses to a
++//     non-array, yields outcomes: null with outcomesMalformed:
++//     true. The raw stored string is NEVER returned (there is no
++//     raw fallback in this response shape).
++//   * a parsed outcomes array is re-projected through local
++//     copies of the recorder's allowlists and string discipline
++//     (grammar-or-scrub); if re-projection changes the value, the
++//     pass is flagged outcomesRevalidated: true.
++//   * error strings are re-scrubbed; stage and failure-step are
++//     checked against their vocabularies; the health object is
++//     projected onto its five known fields.
++// The key lists, grammars, vocabularies, and caps below duplicate
++// the recorder's as a second cross-part contract; the battery's
++// hostile-storage cases (spec §9, T5) pin both sides.
++const DP_READ_OUTCOME_KEYS = Object.freeze([
++  "planId", "state", "stopReason", "grantId", "grantRefused",
++  "skipped", "quarantined", "approvalRequired",
++  "quarantineCheckFailed", "advanced",
++]);
++const DP_READ_SWEEP_KEYS = Object.freeze([
++  "scanned", "published", "noop", "conflicts", "pending",
++]);
++const DP_READ_STAGES = new Set([
++  "base_alarm", "construct", "recover", "drive", "flush",
++  "complete",
++]);
++const DP_READ_FAILURE_STEPS = new Set([
++  "ddl", "serialize", "insert", "prune",
++]);
++const DP_READ_PLAN_ID_GRAMMAR = /^plan:[A-Za-z0-9_-]+$/;
++const DP_READ_GRANT_ID_GRAMMAR = /^grant:[A-Za-z0-9_:\-.]+$/;
++const DP_READ_TOKEN_GRAMMAR = /^[a-z0-9_]+$/;
++
++function dpReadScrub(value, cap) {
++  if (typeof value !== "string") return null;
++  const flat = value.replace(/[\u0000-\u001f\u007f]+/g, " ")
++    .replace(/https?:\/\/\S+/gi, "[url]")
++    .replace(/\b[A-Za-z0-9_\-]{24,}\b/g, "[redacted]")
++    .trim();
++  if (!flat) return

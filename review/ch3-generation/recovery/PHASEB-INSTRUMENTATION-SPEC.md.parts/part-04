@@ -1,0 +1,152 @@
+alarm semantics as
+recorded in the diagnostic report §0/§10 (documentation, not
+observation of this DO): a throwing alarm invocation is retried
+with backoff, at most 6 retries. Each retry is a full handler
+invocation and writes its own row, so one persistently throwing
+due alarm can add up to 7 rows within minutes. If EVERY watchdog
+cycle threw persistently: ~42 rows/hour attempted, and the
+288-row retained window would cover ~6.9 hours of wall time
+(arithmetic on the cap, not a duration promise). In the expected
+held-and-healthy state: ~6 rows/hour, 288 rows ≈ ~48 hours. The
+count cap holds in all cases: storage is bounded by rows, not by
+rate.
+
+**Row size and total bound.** Typical row (current production
+shape — one selectable plan plus the sweep entry): outcomes JSON
+an estimated 150–450 chars; total row an estimated 0.3–0.7 KB.
+Worst-case row: outcomes at the 8,000-char cap + a 500-char error
++ names/numbers → ≤ ~8.7 KB. **Table bound at the cap: 288 ×
+8.7 KB ≈ ≤ 2.5 MB absolute worst case; realistically ≈ ≤ 200 KB.**
+Plus one health object (<300 bytes). Both are immaterial against
+the coordinator store's existing contents, and the worst case is
+a hard arithmetic bound from the cap, not a projection.
+
+**Timing.** The recorder's work is a handful of SQLite/KV
+operations appended to each alarm invocation, after the drive
+work completes (or fails). It cannot influence scheduling
+decisions (it reads no schedule state and writes none; §4.3).
+The one honest residual is microseconds-to-milliseconds of extra
+handler time per pass — named in the design §4 and unchanged
+here.
+
+## 8. The read surface
+
+### 8.1 Route and fences (unchanged)
+
+`GET /v2/d6-diagnostics` — the shipped operator surface. The
+public entry applies the production gate + operator admission
+and stamps `x-opalreader-operator-admitted: 1` on the forward;
+the class gate requires the stamp (else HTTP 403
+`migration_operator_required`). This diff adds `"drive"` to the
+forwarded-parameter whitelist (entry, one token) and a dispatch
+branch in the class-gate handler: the presence of a `drive`
+parameter (any value) routes to `drivePassDiagnostics` instead
+of `attemptDiagnostics`, passing `drive, planId, jobId, limit,
+cursor` through for validation. No new route, credential, or
+fence class; the client build has no path to this surface.
+
+### 8.2 Mode validation (ruling R-5, exact behavior)
+
+`drivePassDiagnostics` rejects — returning
+`{ "outcome": "rejected", "reason": "diagnostics_mode_ambiguous" }`,
+which the class gate's existing tail maps to **HTTP 400** — in
+every case except the single unambiguous one:
+
+| Request | Result |
+|---|---|
+| `?drive=1` (optionally `&limit=n`) | the drive-pass read (200) |
+| `?drive=1&planId=…` / `&jobId=…` / `&cursor=…` | 400 `diagnostics_mode_ambiguous` |
+| `?drive=0`, `?drive=true`, `?drive=` (any value ≠ `"1"`) | 400 `diagnostics_mode_ambiguous` |
+| no `drive` parameter (with/without a target) | `attemptDiagnostics`, exactly as shipped (including its own `diagnostics_target_required` rejection) |
+
+The modes never blend: a drive response contains no attempt
+data, and an attempt response is byte-for-byte the shipped one.
+
+### 8.3 Parameters and response (exact)
+
+`limit`: default 50; non-numeric → default; clamped to 1..288
+(the `attemptDiagnostics` clamp idiom, `service.mjs:1449`,
+widened to the retention cap). No cursor in drive mode (a cursor
+parameter is a mode violation, §8.2); the read is newest-first
+by row id, and the retention window bounds its size.
+
+Response (HTTP 200) shape, exactly as the diff returns it:
+
+```json
+{
+  "mode": "drive_passes",
+  "found": true,
+  "tableState": "populated",
+  "drivePasses": [
+    { "id": 12, "at": 1793587200000, "finishedAt": 1793587200003,
+      "stage": "complete", "driveInvoked": true,
+      "outcomes": [ …projected outcome objects… ],
+      "outcomesMalformed": false, "outcomesRevalidated": false,
+      "outcomesTruncated": false,
+      "errorName": null, "errorMessage": null,
+      "armedAfter": 1793587800000 }
+  ],
+  "alarm": { "armedAt": 1793587800000,
+             "pendingSchedule": 3, "pendingWatchdog": 1 },
+  "recorderHealth": { "recordingFailures": 0,
+    "lastFailureAt": null, "lastFailureStep": null,
+    "lastFailureName": null, "lastRecordedAt": 1793587200003 },
+  "asOf": 1793587205000
+}
+```
+
+- `outcomes` is the stored JSON parsed AND re-validated (§5.5).
+  If a stored value fails to parse, or parses to a non-array,
+  `outcomes` is null and `outcomesMalformed` is true — the raw
+  stored string is NEVER returned (the original draft's
+  `outcomesRaw` fallback is abolished by correction C5: a corrupt
+  row is reported as malformed, not echoed). If re-validation
+  altered a parsed value, `outcomesRevalidated` is true.
+- `alarm.armedAt` is a live `getAlarm()` at read time (null if
+  that read fails); `pendingSchedule` / `pendingWatchdog` are
+  `COUNT(*)` over the coordinator's `schedule` table
+  (`coordinator.mjs:181–184`; the watchdog-count idiom at
+  `coordinator.mjs:2470`).
+- `recorderHealth` is the §4.4 object **as re-validated on read**
+  (§5.5: projected onto its five known fields), or null when the
+  KV read fails or the key was never written.
+- `asOf` is `coord._now()` (the sibling-read idiom,
+  `service.mjs:1249`).
+- **Read-only discipline:** the method performs SELECTs, one
+  `getAlarm()`, and one storage `get`. It creates nothing (a
+  missing table is reported, §8.4 — the read does NOT run the
+  DDL), and no `wake()` is reachable from it.
+
+### 8.4 `tableState` and the interpretation matrix (refinement F-2)
+
+`tableState` is `"missing"` when the SELECT fails with a
+no-such-table error (the `quarantineHoldRowSafe` discipline,
+`quarantine.mjs:124–149`, via the newly imported
+`isNoSuchTableError`; any other error is rethrown and surfaces
+as a fault, never as a state), `"empty"` when the table exists
+with zero rows, `"populated"` otherwise.
+
+| `tableState` | `recorderHealth` | Reading |
+|---|---|---|
+| `missing` | null | **INCONCLUSIVE — consistent with H1 but not proof of it.** The handler has not observably run since the instrumented build deployed (no record, no failure note). The same absence is produced by (a) the chain not delivering invocations (H1), (b) every pass failing BOTH channels — the SQL write and the KV health note together (which would coincide with storage faults visible on other surfaces), and (c) a constructor/platform failure before handler invocation, which leaves no trace in either channel (§10.2). Never read as proof of any one of these alone. |
+| `missing` | `recordingFailures > 0` | The handler IS running; recording is failing at or before the table write; `lastFailureStep` names where. **Absent execution is excluded.** |
+| `empty` | any | The table exists, so the recorder's DDL has succeeded at least once — the handler HAS run since deploy (the recorder is the table's only creator). Zero rows with a created table means every insert since has failed or been pruned — but the prune never empties the table, so `empty` + `recordingFailures = 0` is an anomaly to report, not interpret. |
+| `populated` | any | Normal. `recordingFailures > 0` alongside rows means recording failed on some passes and succeeded on others; the failure count plus gaps in the `at` cadence bound how many passes were lost. |
+| `populated` | null | Rows are accruing but the health channel itself has never been written — the KV facet specifically is failing while SQL works. A channel fault, reported as such; it does not cloud the rows' evidence. |
+| `missing` | `lastRecordedAt` set, `recordingFailures = 0` | Contradictory on its face (a successful record implies the table exists; nothing ever drops it). Report as an anomaly; do not interpret. |
+
+### 8.5 Capture success vs coordinator health (correction C4)
+
+A populated read proves something about the **recorder**; it
+proves much less, by itself, about the **coordinator**. The two
+must never be conflated — in particular, an error-stage row is a
+SUCCESSFUL diagnostic capture of an unhealthy pass, not a failed
+instrument, and a recorder-health failure says nothing about
+whether drive passes ran well or badly. Post-deploy readings are
+classified with this table; the disposition step is named and
+mandatory:
+
+| Observation | What it proves about the RECORDER | What it does / doesn't say about the COORDINATOR | Disposition |
+|---|---|---|---|
+| Row with `stage = "complete"`, no error fields | Capture worked for that pass | The pass ran end-to-end; its outcomes are the coordinator evidence | Read the outcomes; no action |
+| Row with an error stage (`base_alarm` / `construct` / `recover` / `drive` / `flush`) | Capture worked — the recorder recorded a throwing pass and the handler rethrew the identical error | The pass FAILED at the named stage; the error fields are the coordinator evidence. This is a finding about the coordinator, NOT a recorder failure and NOT, by itself, a deploy

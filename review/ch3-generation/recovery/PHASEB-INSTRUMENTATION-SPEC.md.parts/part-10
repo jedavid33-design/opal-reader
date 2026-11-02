@@ -1,0 +1,210 @@
+ null;
++  return flat.length > cap ? flat.slice(0, cap) : flat;
++}
++
++// Error names take the NAME path (the recorder's discipline,
++// mirrored): a bare class identifier cannot contain a URL,
++// whitespace, or control characters, so a grammatical name is
++// returned as-is (length-capped) — the prose scrub's >=24-char
++// redaction would destroy long class names
++// (ProductionR2NamespaceError). Anything else takes the prose
++// scrub.
++const DP_READ_NAME_GRAMMAR = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
++function dpReadNameScrub(value, cap) {
++  if (typeof value !== "string" || value.length === 0) return null;
++  if (DP_READ_NAME_GRAMMAR.test(value))
++    return value.length > cap ? value.slice(0, cap) : value;
++  return dpReadScrub(value, cap);
++}
++
++function dpReadOutcomeString(key, value) {
++  const grammar = key === "planId" ? DP_READ_PLAN_ID_GRAMMAR
++    : key === "grantId" ? DP_READ_GRANT_ID_GRAMMAR
++    : DP_READ_TOKEN_GRAMMAR;
++  if (grammar.test(value) && value.length <= 200) return value;
++  if (grammar.test(value)) return value.slice(0, 200);
++  const scrubbed = dpReadScrub(value, 200);
++  return scrubbed === null ? "" : scrubbed;
++}
++
++function dpReadProjectOutcomes(parsed) {
++  const entries = [];
++  for (const entry of parsed) {
++    if (!entry || typeof entry !== "object" || Array.isArray(entry))
++      continue;
++    if (entry.bindingProjection &&
++        typeof entry.bindingProjection === "object") {
++      const sweep = {};
++      for (const k of DP_READ_SWEEP_KEYS)
++        if (typeof entry.bindingProjection[k] === "number")
++          sweep[k] = entry.bindingProjection[k];
++      entries.push({ bindingProjection: sweep });
++      continue;
++    }
++    if ("bindingProjectionError" in entry) {
++      entries.push({ bindingProjectionError: true });
++      continue;
++    }
++    if (entry.truncated && typeof entry.truncated === "object") {
++      const t = entry.truncated;
++      entries.push({ truncated: {
++        keptEntries: typeof t.keptEntries === "number" ? t.keptEntries : 0,
++        droppedEntries:
++          typeof t.droppedEntries === "number" ? t.droppedEntries : 0,
++        fieldsSliced: t.fieldsSliced === true,
++        fieldsScrubbed: t.fieldsScrubbed === true } });
++      continue;
++    }
++    const o = {};
++    for (const k of DP_READ_OUTCOME_KEYS) {
++      const v = entry[k];
++      if (typeof v === "string") o[k] = dpReadOutcomeString(k, v);
++      else if (typeof v === "number" || typeof v === "boolean")
++        o[k] = v;
++    }
++    entries.push(o);
++  }
++  return entries;
++}
++
++const DP_READ_NUM = (v) =>
++  typeof v === "number" && Number.isFinite(v) ? v : null;
++
+ export function createGenerationService({ coord, env = {}, store = null, sources = {},
+                                           expectedStorageBase = null,
+                                           recountBucket = undefined,
+@@ -1581,9 +1701,129 @@
+     };
+   }
+ 
++  // PHASE B INSTRUMENTATION (P2) — the drive-pass read: the
++  // records the subclass alarm handler's recorder writes to
++  // d6_drive_passes (worker-entry-prod-d6.js), the live alarm
++  // state, and the recorder-health channel. Selected on the
++  // diagnostics route by the presence of a drive parameter (the
++  // entry forwards it under the same operator-admitted stamp as
++  // attemptDiagnostics above). MODE DISCIPLINE (Rowan's ruling):
++  // drive must be exactly "1" and NO attempt-diagnostics target
++  // (planId / jobId / cursor) may ride along — every other
++  // combination is rejected as diagnostics_mode_ambiguous, never
++  // blended into a merged response. Read-only: SELECTs, one
++  // getAlarm(), one storage.get; no wake, no command, and no
++  // mutation is reachable from here (reads never wake in this
++  // codebase). Stored values are NOT trusted: every field passes
++  // the read-side revalidation above (§5.5) before it is returned,
++  // and a malformed stored outcomes_json yields outcomes: null
++  // with outcomesMalformed: true — never the raw string. Table
++  // states are reported honestly: "missing" (the recorder has
++  // never completed a write — no pass recorded, or every write
++  // failed at the DDL; recorderHealth distinguishes), "empty"
++  // (created, no rows), "populated".
++  async function drivePassDiagnostics({ drive = null, planId = null,
++      jobId = null, limit = 50, cursor = null,
++      repeatedModeParam = false } = {}) {
++    if (drive !== "1" || planId !== null || jobId !== null ||
++        cursor !== null || repeatedModeParam)
++      return { outcome: "rejected", reason: "diagnostics_mode_ambiguous" };
++    const cap = Math.max(1, Math.min(288,
++      Number.isFinite(limit) ? limit | 0 : 50));
++    let tableState = "populated";
++    let rows = [];
++    try {
++      rows = coord._all(
++        `SELECT * FROM d6_drive_passes ORDER BY id DESC LIMIT ?`, cap);
++      if (rows.length === 0) tableState = "empty";
++    } catch (e) {
++      // The quarantineHoldRowSafe discipline (quarantine.mjs): a
++      // genuinely absent table is a state, not a fault; any other
++      // error is rethrown and surfaces as a fault.
++      if (!isNoSuchTableError(e)) throw e;
++      tableState = "missing";
++      rows = [];
++    }
++    const passes = rows.map((r) => {
++      let outcomes = null;
++      let outcomesMalformed = false;
++      let outcomesRevalidated = false;
++      if (typeof r.outcomes_json === "string") {
++        let parsed;
++        try { parsed = JSON.parse(r.outcomes_json); }
++        catch { parsed = undefined; }
++        if (!Array.isArray(parsed)) {
++          outcomesMalformed = true;
++        } else {
++          outcomes = dpReadProjectOutcomes(parsed);
++          outcomesRevalidated =
++            JSON.stringify(outcomes) !== r.outcomes_json;
++        }
++      } else if (r.outcomes_json !== null &&
++                 r.outcomes_json !== undefined) {
++        outcomesMalformed = true;
++      }
++      return {
++        id: r.id, at: DP_READ_NUM(r.at),
++        finishedAt: DP_READ_NUM(r.finished_at),
++        stage: DP_READ_STAGES.has(r.stage) ? r.stage : "unrecognized",
++        driveInvoked: r.drive_invoked === 1,
++        outcomes, outcomesMalformed, outcomesRevalidated,
++        outcomesTruncated: r.outcomes_truncated === 1,
++        errorName: dpReadNameScrub(r.error_name, 100),
++        errorMessage: dpReadScrub(r.error_message, 500),
++        armedAfter: DP_READ_NUM(r.armed_after),
++      };
++    });
++    let armedAt = null;
++    try { armedAt = await coord.state.storage.getAlarm(); }
++    catch { armedAt = null; }
++    const pending = coord._oneOrNull(
++      `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
++    const pendingWd = coord._oneOrNull(
++      `SELECT COUNT(*) AS n FROM schedule
++        WHERE state = 'pending' AND kind = 'watchdog'`);
++    let recorderHealth = null;
++    try {
++      // The literal key is the cross-part contract with the
++      // recorder (DRIVE_PASS_HEALTH_KEY, worker-entry-prod-d6.js);
++      // the round-trip test pins that the two never drift. The
++      // stored object is projected onto its five known fields
++      // with per-field validation (§5.5) — never returned raw.
++      const h = await coord.state.storage.get(
++        "d6DrivePassRecorderHealth");
++      if (h && typeof h === "object" && !Array.isArray(h)) {
++        recorderHealth = {
++          recordingFailures:
++            typeof h.recordingFailures === "number" &&
++            h.recordingFailures >= 0 ? h.recordingFailures : null,
++          lastFailureAt: DP_READ_NUM(h.lastFailureAt),
++          lastFailureStep: DP_READ_FAILURE_STEPS.has(h.lastFailureStep)
++            ? h.lastFailureStep : null,
++          lastFailureName: dpReadNameScrub(h.lastFailureName, 100),
++          lastRecordedAt: DP_READ_NUM(h.lastRecordedAt),
++        };
++      }
++    } catch { recorderHealth = null; }
++    return {
++      mode: "drive_passes",
++      found: passes.length > 0,
++      tableState,
++      drivePasses: passes,
++      alarm: {
++        armedAt: typeof armedAt === "number" ? armedAt : null,
++        pendingSchedule: pending ? pending.n : null,
++        pendingWatchdog: pendingWd ? pendingWd.n : null,
++      },
++      recorderHealth,
++      asOf: coord._now(),
++    };
++  }
++
+   return { submitIntent, driveOnce, planStatus, seedStorageBase, recover,
+            bindPhaseBook, getPhaseBinding,
+            reconcileUnknownAttempt, adjudicateEstimatedAttempt, retireHaltedPlan,
+            releaseQuarantine, getQuarantine,
+-           listPlans, capabilities, eligibilityQuote, attemptDiagnostics };
++           listPlans, capabilities, eligibilityQuote, attemptDiagnostics,
++           drivePassDiagnostics };
+ }
+```
+
+— Wren (specification only; no production contact of any kind
+was made for this document)

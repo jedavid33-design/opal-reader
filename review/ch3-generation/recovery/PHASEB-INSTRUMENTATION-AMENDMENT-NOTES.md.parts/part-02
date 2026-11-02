@@ -1,0 +1,41 @@
+t run asserted it wrongly and was
+  corrected.
+
+## 7. Residual overclaim grep (C1 closing check)
+
+Both amended documents were grepped for `evidence for H1`,
+`H1 evidence`, `proves`, `proof of H1`, `presents exactly as H1`,
+`reservedUnverified increases`, and related forms. Remaining
+hits are only: (a) the §1.3 compliance table QUOTING Rowan's
+correction topics; (b) the corrected classification itself
+("NOT proof of H1"); (c) the §2.2/§2.4 historical supersession
+notes carrying the old pins, labeled as superseded. No live
+claim in either document states the no-rows outcome as H1
+evidence or proof, and no document claims `reservedUnverified`
+moves on grant issuance.
+
+## 8. UNVERIFIED items (named plainly)
+
+- **Real alarm DELIVERY** — the harness invokes `alarm()`
+  directly; delivery is the platform's and is the very thing
+  under investigation. Unchanged from the spec's §9.0 naming.
+- **Real-DO behavior beyond harness fidelity** — the harness
+  pins `.one()` throw semantics and real SQLite, but it is not
+  the platform; the 1101-class instantiation faults and all
+  dashboard/API surfaces remain locally untestable.
+- **Quota-reconcile internals** — not separately traced; the
+  gate treats a non-ok reconcile read as unmatched movement →
+  STOP rather than pre-classifying it.
+- **The preserved plan's recorded `estMicroCents`** — the
+  ledger `attempt` row written at issuance carries the job's
+  recorded estimate; §7.3 deliberately does not precompute it
+  (the money invariants that ARE pre-classified are the phase
+  figures, which must not move at all).
+- **KV facet under the real platform** — this build is the
+  first production use of `state.storage` get/put in these
+  parts; behavior is harness-verified only. The recorder treats
+  every KV failure as best-effort by design, so a platform
+  surprise degrades observation, never the drive path (T4).
+
+— Wren (amendment only; no production contact of any kind was
+made for this document)

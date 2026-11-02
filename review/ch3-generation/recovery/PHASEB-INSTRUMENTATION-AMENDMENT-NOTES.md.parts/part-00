@@ -1,0 +1,101 @@
+# Phase B Instrumentation — AMENDMENT NOTES (HOLD-FOR-CORRECTIONS)
+
+- **What this is:** the compliance record for the amendment of
+  `PHASEB-INSTRUMENTATION-SPEC.md` and
+  `PHASEB-INSTRUMENTATION-GATE-PROPOSAL.md` under Rowan's review
+  (`ROWAN-P2-SPEC-GATE-REVIEW.md`): **"HOLD FOR CORRECTIONS. NOT
+  APPROVED FOR DEPLOYMENT"**, six required corrections (C1–C6).
+- **Status:** amendment complete; documents + local test evidence
+  only. **No production calls, no deploy, no pinning, no board
+  posts** were made for this amendment. The deployed evidence
+  parts (`phaseb-attempt3/evidence/parts-e0/`) were never edited;
+  all candidate work happened in
+  `instrumentation-spec/scratch/`. The amended spec + gate await
+  Rowan's review; any execution still requires her PASS and
+  Julie's explicit GO. The two-part architecture is preserved.
+- **Battery:** EXECUTED against the exact final candidate tree —
+  32 tests, 32 pass, 0 fail, exit code 0. Log:
+  `instrumentation-spec/BATTERY-RUN-LOG.txt` (5,855 B, SHA-256
+  `1fcacefa8e60062a87e9a3ecff47a59667346a1450d9282daf818bffbb85c2ce`).
+  Harness + tests preserved at `instrumentation-spec/tests/`
+  (`harness.mjs`, `battery.test.mjs`); the run is replayable.
+
+## 1. Correction-by-correction compliance table
+
+| # | Rowan's correction | How implemented | Where |
+|---|---|---|---|
+| C1 | No-rows + no-health is INCONCLUSIVE (consistent with H1, not proof); retain dual-channel-failure and pre-handler limitations | Every H1-evidence/proof phrasing rewritten to the inconclusive classification, with both limitations named at each site | Spec §1.2 (F-6), §1.3, §4.4, §8.4 (matrix row 1), §8.5, §10.2; Gate header, §6 V5, §8 (not-triggers), §12 |
+| C2 | Budget: 1 forward upload + ≤1 conditional observability PATCH after it; PLUS, conditionally, 1 rollback upload + ≤1 conditional observability PATCH after the rollback; each PATCH settings-only, code etag unchanged across it | Budget table rewritten with four separately counted rows + the in-words envelope; STOP S-7 extended to the rollback PATCH (a third PATCH of any kind is itself a STOP); authorization block covers both PATCHes explicitly | Gate §5, §9 (S-7), §10; rollback procedure wording aligned in §8 |
+| C3 | Verify the §7.3 predicted grant/reservation transition against deployed behavior; ONLY the exactly-verified transition is pre-classified; any unmatched movement is STOP | Firsthand trace from parts-e0 (anchors below, §3 of these notes). The verified set: issuance writes + derived movements (grants []→[one issued grant], occurrence pending→granted, job queued rev 1→generating rev 2, derived reserved 0→12) + the bounded lease-expiry/re-grant cycle with invariants. **The prior draft's "phase reservedUnverified increases" is WITHDRAWN as disproven**: `phaseAccounting` (genstore.mjs:403) derives it only from adjudication/attempt-log state that grant issuance never writes — all five phase figures must remain exact. Battery T2 observed the verified transition live (pass-1 grant under halt, twin-identical state) | Gate §7.3 (rewritten), §7 P-2; Spec §1.3, §9 T2 note |
+| C4 | Distinguish diagnostic capture success from coordinator health; error-stage rows and recorder-health failures are findings requiring classification (named disposition), not automatically failed instrumentation | Classification table: observation → what it proves about the RECORDER → what it does/doesn't say about the COORDINATOR → disposition (**executor reports verbatim; Rowan classifies**). V5's rows-present verdict no longer requires `recordingFailures 0`; error-stage and health-failure readings are named findings with the disposition step | Spec §8.5 (new); Gate §6 V5 (rewritten), §8 (not-triggers) |
+| C5 | Hostile-input coverage for allowlisted string values + the `outcomesRaw` fallback; no raw sensitive content may escape through malformed stored JSON | **Code changed in both parts** (see §4): write-time grammar-or-scrub discipline for outcome strings (identifier/code-token grammars stored as-is; anything else fully scrubbed, disclosed via the new `fieldsScrubbed` marker field); error **name** identifier path (battery finding: the prose scrub redacted the 25-char `ProductionR2NamespaceError` to `[redacted]`); read-side revalidation layer (allowlist re-projection, stage vocabulary, health projection, per-field re-scrub); **`outcomesRaw` ABOLISHED** — parse failure or non-array → `outcomes: null` + `outcomesMalformed: true`, never the raw string; health writer projects the previous object before carrying it forward. Hostile-storage test cases added (malformed JSON, non-allowlisted keys, URL/token strings, oversized, unicode/control, smuggled health keys) | Spec §5 (intro, §5.1, §5.1a new, §5.2, §5.3, §5.4, §5.5 new), §8.3; battery T5/T5b |
+| C6 | Execute T0–T10 against the exact candidate tree; include KV fault behavior + end-to-end diagnostics forwarding | Battery built (candidate tree = 31 parts-e0 parts with the 2 amended parts; baseline twin = pristine copy; real-SQLite DO harness with throwing `.one()`, KV facet, statement-matching fault injector, entry-class instantiation) and EXECUTED: 32/32, exit 0, full log preserved + hash-cited in both documents. KV get/put faults in T4; e2e forwarding (public entry → forward whitelist → class gate → service read → response shape) in T9; repeated-parameter case in T7 forced a real code fix (§4) | Spec §9 (header + T2/T3/T4/T5/T7 texts as executed); Gate §4 B3 |
+
+## 2. C3 verification anchors (deployed parts, firsthand)
+
+- `driveOnce`: `generation/service.mjs:888`; plan selection
+  exclusion `:923`; grant step `coord.requestGrant(jobId)` `:992`;
+  outbox drain gated on `typeof env.sendGrant === "function"` `:1034`.
+- `requestGrant`: `coordinator.mjs:1805`; `_issueGrant` `:1636`;
+  `LEASE_MS` (15 min) `:134`; grantId grammar
+  `` `grant:${jobId}:${job.revision}:${probe ? "probe" : "full"}` ``
+  `:1696`; grants INSERT `:1743`; outbox INSERT `:1755`;
+  `case "lease"` `:2536`; void call
+  `"lease_expired_undelivered"` `:2589`; `retry_grant` scheduled
+  +30 s `:1801`; `case "retry_grant"` `:2625`, re-request `:2636`.
+- `reserveForGrant`: `generation/quota-budget.mjs:544`;
+  `derivedDayTotals` `:193`; `boundGrantTargets` `:624`.
+- `SEGMENT_ATTEMPT_BUDGET = 12`: `generation/gen-constants.mjs:16`;
+  `upperBoundAttemptMicro` `:88` (569 chars → 12,803);
+  `upperBoundOccurrenceMicro` `:95` (12 × 12,803 = 153,636).
+- `phaseAccounting`: `generation/genstore.mjs:403`;
+  `reserveAttempt` (the only writer of `reserved`/`dispatching`
+  attempt-log phases) `:129`.
+- `sendGrant` wired only when `GENERATION_HALT === "0"`:
+  `worker-entry-prod-d6.js:323`, `:340`.
+
+The one element deliberately NOT pre-classified: a quota-reconcile
+read turning non-ok (reconcile internals were not separately
+traced) — the gate names it unmatched movement → STOP.
+
+## 3. Exact changed sections
+
+### Spec (`PHASEB-INSTRUMENTATION-SPEC.md`)
+
+- Header: amendment status block added (corrections, battery
+  evidence, still proposal-only).
+- §1.2: F-1 row extended (read-side layer); F-6 row rewritten to
+  the inconclusive classification.
+- §1.3: NEW — the C1–C6 compliance map.
+- §2.2: diff statistics + candidate hashes replaced (see §5).
+- §2.3: battery T0 round-trip cross-reference added.
+- §2.4: growth attribution rewritten (+659/−16; ≈+260 attributed
+  to the C5 hardening).
+- §4.4: `lastFailureName` sanitization now by §5.2's name path;
+  health writer projects the stored object before carry-forward;
+  the residual-blind-spot paragraph now names the INCONCLUSIVE
+  classification.
+- §5: intro rewritten (two-layer sanitization; raw fallback
+  abolished). §5.1: string values now under §5.1a. **§5.1a NEW**
+  (grammar-or-scrub discipline). §5.2: split into the error-NAME
+  identifier path and the prose scrub (message). §5.3: marker
+  gains `fieldsScrubbed`; trigger includes scrubbing; the
+  truncated⇔marker invariant stated exactly. §5.4: extended to
+  the read-side hostile-storage scan. **§5.5 NEW** (read-side
+  revalidation, exact).
+- §8.3: response shape — `outcomesRaw` replaced by
+  `outcomesMalformed` + `outcomesRevalidated`; outcomes and
+  recorderHealth bullets rewritten to the revalidation behavior.
+- §8.4: matrix row 1 rewritten to the INCONCLUSIVE classification
+  with all three absence-producing causes named.
+- **§8.5 NEW** — capture-vs-health classification table with the
+  named disposition step (C4).
+- §9: header now reports the EXECUTED battery (32/32, exit 0, log
+  hash). T2: shadow-store comparison described as executed;
+  pass-1 grant observation noted. T3: executed-shape note for
+  (ii) + new T3(iib) (from-the-start cache fault lands at
+  `base_alarm` — the base alarm constructs the cache first,
+  `worker-entry.js:270`). T4: pass criteria scoped to
+  recorder-step faults; the `getAlarm` case rewritten to the
+  executed truth (drive-stage surfacing via
+  `_

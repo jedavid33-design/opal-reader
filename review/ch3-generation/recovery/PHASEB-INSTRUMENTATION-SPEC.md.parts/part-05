@@ -1,0 +1,151 @@
+ failure | **Executor reports the row verbatim; Rowan classifies** (pre-existing coordinator fault vs build-attributable change — gate RB-1 turns on that classification, and the executor never makes it alone) |
+| `recordingFailures > 0` (health channel) | The recorder failed to write on that many passes, at the named steps | Nothing, directly: the coordinator may have run perfectly while its passes went unrecorded. The count + `at` cadence gaps bound how much observation was lost | **Executor reports; Rowan classifies** (recorder defect vs platform storage fault). Not a deploy failure by itself |
+| Rows present but a pass's `outcomesMalformed` / `outcomesRevalidated` is set | The read-side revalidation (§5.5) caught a stored value the recorder would not have written | Evidence of storage corruption or a foreign writer — a platform/storage finding, not a coordinator-behavior finding | **Executor reports; Rowan classifies** |
+| No rows + no health object | Nothing about the recorder can be told (it may never have run, or both its channels failed) | **INCONCLUSIVE** — consistent with H1 (no delivery) but not proof; the dual-channel-failure and pre-handler possibilities stand (§8.4) | Report as inconclusive; the gate leaves the instrument in place (gate §6 V5) |
+
+## 9. Test plan — EXECUTED in this amendment (correction C6)
+
+**This battery has been run.** Executed against the exact
+candidate tree of this amendment (the §9.0 assembly: all 31
+`parts-e0` parts with the two amended parts replaced), on
+2026-11-02: **32 tests, 32 pass, 0 fail, exit code 0.** The full
+log is preserved at `instrumentation-spec/BATTERY-RUN-LOG.txt`
+(SHA-256 `1fcacefa8e60062a87e9a3ecff47a59667346a1450d9282daf818bffbb85c2ce`);
+the harness and battery sources are preserved beside it
+(`instrumentation-spec/tests/harness.mjs`,
+`instrumentation-spec/tests/battery.test.mjs`) so the run is
+replayable from the record. The companion gate's build stage
+still re-verifies assembly + identity (its B1–B3) before any
+upload; this execution is the evidence Rowan's correction
+required BEFORE deployment could be considered — syntax checks
+and the patch round-trip alone were explicitly insufficient, and
+they are not what is reported here. Pass criteria are stated per
+group; the gate's STOP conditions treat any failure, and any
+incomplete log, as a stop.
+
+Two group texts below differ from the original draft because the
+EXECUTION corrected them (the battery is the authority; the
+changes are also listed in the amendment notes): T3(ii)'s stage
+boundary (a cache-construction fault present from the start is
+recorded at `base_alarm`, because the base alarm constructs the
+cache first) and T4's `getAlarm` case (the shipped coordinator
+itself reads `getAlarm` on the grant path, so that fault fails
+the pass at the drive stage — the recorder's guarantees, not
+alarm resolution, are what that case pins).
+
+### 9.0 Why the battery runs against the candidate tree (and what "candidate tree" means)
+
+The candidate tree is assembled by copying all 31 parts from
+`parts-e0/` into a scratch worker tree (preserving the `v2/…`
+relative layout, so the parts' relative imports resolve exactly
+as deployed) and applying Appendix A. The only other complete
+tree in the workspace, `~/workspace/d6-build/impl/` with its
+suites, is **verified divergent** from build `1c2d1d0f`
+(diagnostic report §0: 12 modules match, 12 differ, 7 deployed
+modules absent) — a green battery there would prove nothing
+about the deployed code. The harness pattern the battery uses is
+the program's existing one (`tests/helpers/do-harness.mjs` in
+the worker-build trees): a Durable-Object-shaped runtime over
+REAL SQLite (`node:sqlite`), a `SqlCursor` whose `.one()` THROWS
+on empty/multiple results (production semantics), a fake clock
+via `env.now`, async `setAlarm`/`getAlarm`, and crash =
+discarding the instance while keeping storage. Import paths are
+adapted to the candidate tree's layout; the harness's semantics
+are not changed.
+
+**Named harness extensions the battery requires** (test-tree
+work only; no production part is touched):
+
+1. The fake `state.storage` gains async `get`/`put` over a Map
+   (the shipped fake has no KV facet; §4.4 introduces its first
+   production use).
+2. An entry-class instantiation path: `OpalReaderCoordinatorProd`
+   constructed over the fake state, with a stub
+   `OPALREADER_STORAGE` binding (an in-memory R2 fake sufficient
+   for `_cache()`: the alarm path constructs the cache but, while
+   halted, performs no audio reads on the seeded scenarios) and
+   no queue binding (so `d6HostEnv` wires no `sendGrant` —
+   matching production HELD exactly).
+3. A statement-matching fault-injection wrapper around the fake
+   `storage.sql` (throws a chosen error when the SQL matches a
+   chosen pattern), plus fault switches on `storage.getAlarm`,
+   `storage.get`, and `storage.put`. This is how T3/T4 inject
+   failures at exact steps.
+
+**What remains untestable locally, named plainly:** real alarm
+DELIVERY (the harness invokes `alarm()` directly — delivery is
+the platform's, and it is the very thing under investigation);
+real-DO behavior beyond the harness's documented fidelity (its
+`.one()` throw semantics are pinned, but it is not the
+platform); the 1101-class instantiation faults; and every
+dashboard/API surface. The battery proves the CODE's behavior
+under invoked alarms and injected faults. It cannot and does not
+claim to prove the platform will deliver alarms.
+
+### T0 — Assembly and identity
+
+Assemble the candidate tree per §9.0; verify: 29 parts
+byte-identical to `parts-e0/`; the 2 edited parts hash to §2.2's
+candidate SHA-256s; part count still 31; both edited parts pass
+a module-syntax parse. **Pass:** all hashes and counts exact.
+
+### T1 — Harness bring-up
+
+With the §9.0 extensions: construct the entry class over (a) an
+empty store and (b) a store seeded to the attempt-3 closing
+shape (the preserved Phase B plan active/queued with its single
+pending occurrence, the parked job, the four baseline conflicts,
+phase accounting at the attempt-3 figures — structural seeding
+from the execution record, no production data copied). **Pass:**
+construction succeeds on both; `ensureGenSchema` + the shipped
+schema bootstrap complete with no `.one()` deadlock (the
+P8-class hazard, exercised deliberately on the empty store).
+
+### T2 — Normal recording
+
+Seeded store (b), halt on. Invoke `alarm()` 6 times, advancing
+the fake clock 10 minutes between invocations. **Pass:** exactly
+6 rows; every row `stage = "complete"`; `drive_invoked = 1`;
+`at`/`finished_at` equal the fake-clock values (the clock seam,
+R-4 — and, in a variant run without `env.now`, `at` tracks wall
+`Date.now()`); `outcomes` equal `driveOnce`'s actual return
+projected through §5.1 (compared against the return of a
+`driveOnce()` call on an identically seeded shadow store driven
+through the same base-alarm + recover composition the class
+alarm performs, since the class discards the return by design);
+`armed_after` equals the harness's armed value after each pass;
+plan/job/quota state after each pass identical to the unmodified
+build's on the twin store; health shows `recordingFailures = 0`
+and `lastRecordedAt` advancing. (Executed: pass 1's recorded
+outcomes include the preserved-plan-shaped grant issuance —
+`grantId` present, exactly the §7.3-of-the-gate transition —
+observed live in the harness.)
+
+### T3 — Stage capture + record-then-rethrow (R-2, F-4)
+
+On twin seeded stores (candidate vs unmodified parts), inject
+one drive-path throw per run: (i) in the base alarm's schedule
+processing, (ii) in `_cache()` construction, (iii) in `recover()`
+(fault on its scan), (iv) in `driveOnce()` (fault on the
+`d6_plans` select). **Pass, per run:** `alarm()` rethrows the
+IDENTICAL error object injected (`===`); exactly one row, with
+`stage` = `base_alarm` / `construct` / `recover` / `drive`
+respectively, the injected error's scrubbed name/message, and
+`drive_invoked` = 1 only in run (iv); all durable state
+transitions (plan states, schedule rows, conflicts, quota)
+identical between candidate and unmodified runs — including the
+base chain's re-arm behavior (the harness's armed value after a
+throwing pass matches the unmodified build's).
+
+**Executed-shape note for (ii)** (battery-established, firsthand
+from the shipped composition): the base alarm
+(`OpalReaderCoordinator.alarm`, `worker-entry.js:270`) constructs
+the cache FIRST, inside `super.alarm()` — so a cache-namespace
+fault present from the start is recorded at stage `base_alarm`
+with the construction error's name (`ProductionR2NamespaceError`),
+and the battery asserts exactly that (T3(iib)). The `construct`
+stage names the SUBCLASS's own construction step, which runs
+after `super.alarm()` returns; the battery exercises it with a
+fault that arrives between the two constructions (T3(ii)). Both
+rows are successful captures of a construction failure; the stage
+records WHERE in t

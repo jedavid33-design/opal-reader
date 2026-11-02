@@ -1,0 +1,104 @@
+fied unchanged
+across it); ends HELD verified (health, queue, settings,
+conflicts spot reads). The
+`d6_drive_passes` table and the health key remain in the DO's
+storage, unreferenced by the rolled-back build and ignored by
+it; no cleanup is performed or needed. **Floor law:** the
+rollback target `1c2d1d0f` is above the permanent rollback floor
+`6a73d962…`; nothing in this gate ever rolls back to the floor.
+**Authorization:** a rollback fired by a named condition during
+this gate's execution (through the filing of its record) is
+inside the same GO; a rollback decision after the gate closes
+requires fresh authorization.
+
+## 9. STOP conditions (explicit, complete for this gate)
+
+- **S-1** Any census item (§3) deviates from its expectation —
+  any figure, any state, the digest-consistency invariant, the
+  dispatch invariant.
+- **S-2** Candidate assembly: any part-hash mismatch (the 29
+  unchanged parts or the 2 candidate hashes), part count ≠ 31,
+  or the diff does not apply cleanly.
+- **S-3** The battery fails in any group, or its full log + exit
+  code cannot be captured.
+- **S-4** Metadata drift at build time beyond the documented
+  GET-projection artifacts (§4 B5).
+- **S-5** The upload's outcome is ambiguous — STOP; reads-only
+  verification; no re-upload.
+- **S-6** Post-deploy identity failure: the etag does not change,
+  the parts do not match the candidate hashes, or `/health`'s
+  build stamp is not the §4 pin.
+- **S-7** Observability is null after the forward upload and
+  the settings PATCH fails, or that PATCH changes the code etag;
+  or, after a rollback upload, observability is null and the
+  rollback's settings PATCH fails, or that PATCH changes the
+  code etag. (Both PATCHes are inside the §5 budget; a third
+  PATCH of any kind is outside it and is itself a STOP.)
+- **S-8** Any preservation check (§7) fails outside the §7.3
+  nuance.
+- **S-9** First-row content shows recorder-caused behavior change
+  (RB-1 evidence).
+- **S-10** A 1101-class platform fault, or a connector/transport
+  failure, at any point mid-gate.
+
+On any STOP: preserve the state exactly as found, file what was
+observed, and wait for Rowan/Julie. The executor never
+self-clears a STOP, never retries a step on its own call, and
+the GO is consumed by the attempt.
+
+## 10. Authorization block
+
+This gate executes **only** when BOTH are on the Roundtable
+board record before execution begins:
+
+1. **Rowan's review PASS** of this gate proposal — which
+   incorporates the companion spec by its SHA-256 and the
+   candidate parts by their §2.2 hashes, so her PASS covers the
+   exact bytes this gate would deploy; and
+2. **Julie's explicit GO** for this gate.
+
+The GO covers exactly: the §3 census, the §4 build, **one**
+deploy attempt (§5 D1), the conditional observability PATCH
+after the forward upload, the §6 verification, and a conditional
+rollback (§8) fired by a named condition during the same
+execution — including, if that rollback fires, the rollback
+upload and its own conditional observability PATCH after it
+(the complete §5 budget, and nothing beyond it). It does not
+cover a second upload for any other reason, any generation, or
+any change to the preserved plan, the exemption, or the holds —
+each of those requires fresh authorization. The GO is consumed
+by the attempt, including a STOPPED attempt.
+
+## 11. Explicitly out of scope
+
+- **The Step-0 procedural correction** (verifying an issued
+  grant before unpause) — it belongs to the next generation
+  proposal (spec §10.1; Rowan's attempt-3 review). This gate
+  neither implements nor prejudges it, and nothing in the build
+  touches an unpause sequence — there is no unpause in this gate
+  at all.
+- **Attempt 4 / any generation** of any segment, and any second
+  SubmitJob for idx 26 (never — diagnostic report §11).
+- Any change to the preserved Phase B plan, its job, or the
+  idx-26 exemption (no retirement, revocation, release,
+  finalizer, or manual drive).
+- Any halt lift or queue unpause, for any purpose, however
+  brief.
+- Batch arming or batch work. Staging. Client changes. Clearing
+  or altering any conflicts row.
+
+## 12. Limitation restated (spec §10.2)
+
+**Constructor/platform failures preceding handler invocation
+remain unobservable** by the instrumentation this gate deploys:
+if the platform cannot instantiate the DO or never delivers the
+alarm, no recorder code runs, and the post-deploy observation
+(§6 V5, no-rows outcome) is classified **INCONCLUSIVE** —
+consistent with H1 (a dead alarm chain) but not proof of it,
+because a pre-handler failure and a dual-channel storage failure
+produce the identical absence; it is not a named platform root
+cause. The gate's verification is written so that this outcome
+is a successful observation, not a failed gate.
+
+— Wren (proposal only; no production contact of any kind was
+made for this document)

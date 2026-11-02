@@ -1,0 +1,160 @@
+armAlarmIfEarlier`, `coordinator.mjs:2481`); serialize case
+  described as executed (throwing-getter injection). T5:
+  name-path criterion + T5b fidelity + the read-side hostile
+  storage cases. T7: repeated-parameter case added.
+- §10.2: the "presents exactly as H1" sentence replaced by the
+  INCONCLUSIVE classification.
+- Appendix A: the embedded diff replaced with the amended
+  two-part diff (verified byte-identical to
+  `instrumentation-spec/scratch/combined.diff`).
+
+### Gate (`PHASEB-INSTRUMENTATION-GATE-PROPOSAL.md`)
+
+- Header: amendment block added; companion spec hash and both
+  candidate pins updated.
+- §4 B3: amendment battery evidence added; build-stage run is a
+  re-run whose divergence is a STOP.
+- §5: mutation budget rewritten (C2 — four counted rows + the
+  in-words envelope).
+- §6 V5: rewritten (C1 + C4 — four classified readings,
+  disposition step, no-rows = INCONCLUSIVE with all three causes
+  named; the success shape no longer folds `recordingFailures`
+  into the rows-present verdict).
+- §7 P-2: state/revision/grants explicitly §7.3-subject.
+- §7.3: rewritten in full from the verified trace (C3 — see §2
+  above); the `reservedUnverified` prediction withdrawn.
+- §8: not-rollback-triggers rewritten (inconclusive wording;
+  §7.3 cycle included; Rowan-classified findings excluded);
+  rollback procedure's PATCH wording aligned to the budget.
+- §9 S-7: extended to the rollback PATCH (C2).
+- §10: authorization block covers the rollback upload + its
+  PATCH explicitly (C2).
+- §12: limitation restated in the INCONCLUSIVE classification.
+
+## 4. Candidate code changes made in this amendment
+
+All in the two candidate parts; diffs regenerated from pristine
+deployed copies after every change and re-verified byte-for-byte
+(`patch -p1` round-trip; battery T0 also asserts it in-suite).
+
+1. **Read path (service)** — `outcomesRaw` raw pass-through
+   REMOVED. `drivePassDiagnostics` now re-validates everything
+   (§5.5): malformed/non-array stored JSON → `outcomes: null` +
+   `outcomesMalformed: true`; parsed outcomes re-projected
+   through a service-local copy of the allowlists/grammars (a
+   second cross-part contract) with `outcomesRevalidated`
+   flagging any change; stage vocabulary check (`"unrecognized"`);
+   error fields re-sanitized; health object projected onto its
+   five fields. A `repeatedModeParam` input joins the ambiguity
+   rejection.
+2. **Write path (entry)** — outcome strings under the
+   grammar-or-scrub discipline (§5.1a); the serializer's marker
+   gains `fieldsScrubbed` and is emitted whenever a field was
+   sliced OR scrubbed (invariant: `outcomes_truncated` = 1
+   exactly when a marker is present); the health writer projects
+   the previously stored object onto the five known fields
+   before carrying anything forward.
+3. **Error-name identifier path (both parts)** — battery finding:
+   the prose scrub's ≥24-char redaction destroyed long class
+   names (`ProductionR2NamespaceError` → `[redacted]`). Names
+   matching the identifier grammar are now stored/returned
+   as-is (capped); non-identifiers take the full scrub. Applies
+   to the row's `error_name`, the health `lastFailureName`
+   (write and carry-forward), and both read-side fields.
+4. **Repeated-parameter forwarding (entry)** — battery finding
+   (T7): the public diagnostics forward copies each parameter
+   singly (`searchParams.get` + `set`), silently collapsing a
+   repeated `drive` before the class gate could see it. The
+   forward now detects repetition of any diagnostics parameter
+   and forwards `repeated=1`; the class gate ORs it (and its own
+   `getAll` counts) into `repeatedModeParam`, and the service
+   rejects as `diagnostics_mode_ambiguous`. Attempt mode is
+   untouched (the flag is only passed to the drive read).
+5. **Allowlist reconciliation (service)** — the read-side
+   outcome allowlist is exactly the recorder's verified 10 keys
+   (`planId, state, stopReason, grantId, grantRefused, skipped,
+   quarantined, approvalRequired, quarantineCheckFailed,
+   advanced`), confirmed against every `out.*` assignment in the
+   deployed `driveOnce` (`service.mjs:888–1046`).
+
+## 5. Old vs new hashes and final counts
+
+| Artifact | Before (reviewed draft) | After (this amendment) |
+|---|---|---|
+| Spec | 66,557 B, `031f5dd338a38ec4d7f8d8b296d115b479230d88a186c3fc4d8de73015cc6e77` | 98,793 B, `a805b473f293073cad5fd97bbdba05f30c12d76b3b41d78b3742fc0b1e34110e` |
+| Gate | 22,446 B, `60e008b5b0f874876ef00467d8cafc3a7f4cd63a0afdf9281cd7430a190eb1c9` | 31,890 B, `d1e954ea1c6321e6782f1f892529c0c24c7bc042c3d68f5548aff10df69a5b9c` |
+| Candidate entry part | `f98a45528232b09b53fd1106da4a032374c6d9a9b24f94414133aa3f76057452` | 127,131 B, `45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab` |
+| Candidate service part | `0e7deef2472a76c77d246cc6fa22bba94ea753a116c9b42980830e5d7ed92be3` | 88,070 B, `41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda` |
+| Design (unchanged) | 24,208 B, `c1e7fcf8e70a2ef0bd819f338527dce8dec1a4227e501a0dade292e4f0235210` | — |
+
+Final diff (deployed → candidate): entry **+418/−15**, 4 hunks
+(diff file 22,405 B); service **+241/−1**, 3 hunks (11,469 B);
+**total +659/−16**, 7 hunks; combined diff 33,874 B
+(`instrumentation-spec/scratch/combined.diff`). Deployed
+originals unchanged: entry `292ca83e…`, service `aeeee06c…`
+(parts-e0, build `1c2d1d0f`, etag `f15fb1ae…`).
+
+## 6. Battery outcome summary (final run, exit code 0)
+
+- **T0** assembly & identity: 31 parts, 29 byte-identical, 2
+  amended parts match the candidate pins; patch round-trip
+  byte-for-byte; `node --check` clean; baseline tree pristine.
+- **T1** bring-up: empty store (no `.one()` deadlock; first pass
+  records) + seeded attempt-3 shape (plan/job/parked/conflicts
+  exact; phase accounting exactly {settled 1,029,420,
+  estimatedUnverified 19,018, reservedUnverified 5,648,
+  inFlightUpper 0, unknownOpen 0}; quarantine unheld — the seed
+  mirrors attempt 3's R1 halt-lift for the submission, disclosed
+  in the harness).
+- **T2** normal recording: 6 passes; every pass's full DB state
+  identical to the unmodified build (excluding the recorder's
+  own table); recorded outcomes equal `driveOnce`'s actual
+  return projected (shadow-store comparison); pass 1 issued the
+  grant under halt with the exact §7.3 grantId shape.
+- **T2b** clock fallback: without `env.now`, `at` tracks wall
+  `Date.now()`.
+- **T3** stage capture: all four stages + T3(iib); rethrown
+  errors are the identical injected objects (`===`); twin-state
+  equivalence under every fault.
+- **T4** recorder faults: DDL / insert / prune / getAlarm / KV
+  get / KV put / serialize — alarm resolves for every
+  recorder-step fault with identical drive effects; health
+  bookkeeping exact (incl. prune above-cap for exactly one pass,
+  KV channel self-heal); the getAlarm case pins the recorder's
+  guarantees against the shipped chain's own getAlarm use.
+- **T5 / T5b** sanitization: hostile write inputs (nothing raw
+  stored; sweep error = presence flag only; marker disclosure);
+  identifier fidelity (real ids/tokens byte-exact, no marker);
+  hostile STORAGE on read (malformed → null + flag, no raw
+  anywhere in the response; smuggled health keys dropped).
+- **T6** truncation: ≤8,000 chars always, valid JSON, whole
+  entries + exact marker counts; under-cap stores untruncated.
+- **T7** mode rejection: all ambiguous combinations → 400
+  `diagnostics_mode_ambiguous` (incl. repeated `drive` through
+  the real public route); 403 without the operator stamp (both
+  modes); attempt mode key-identical to the unmodified build.
+- **T8** retention: 300 records → exactly the newest 288;
+  7-throwing-pass burst holds the cap at every assertion point.
+- **T9** round-trip + contract: route read (public entry →
+  forward → class gate → service) returns exactly the recorded
+  rows incl. an error row and a crash-instance pass; health key
+  literal pinned in both parts; `tableState` missing →
+  populated; alarm block matches harness state.
+- **T10** shipped-surface equivalence: capabilities, plans list
+  + detail, eligibility (chapter/segment/book), quota,
+  conflicts, attempt diagnostics — field-for-field identical
+  between candidate and unmodified builds (timestamps excluded).
+
+### Test-implementation corrections disclosed (not code defects)
+
+- The seed submits the plan during a brief env halt-lift,
+  mirroring attempt 3's R1 — production behavior for a
+  halt-born plan is the quarantine birth-mark, which the seed
+  would otherwise (correctly) produce; the attempt-3 closing
+  shape is unheld, so the seed reproduces the R1 sequence.
+- T6 fixtures use only real allowlisted keys (an earlier fixture
+  draft used keys `driveOnce` never emits; the projector was
+  correctly dropping them).
+- T3(iv)'s `drive_invoked` expectation is 1 (driveOnce WAS
+  invoked; it threw inside) — the original draft text already
+  said this; the battery's firs

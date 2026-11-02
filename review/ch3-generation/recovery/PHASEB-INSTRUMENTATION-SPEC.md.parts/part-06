@@ -1,0 +1,174 @@
+he composition the pass died, which is the
+datum the stage field exists to provide.
+
+### T4 — Recorder-step failure injection (F-4)
+
+Drive path healthy; inject one recorder fault per run: DDL
+(fault on `CREATE TABLE … d6_drive_passes`), insert (fault on
+`INSERT INTO d6_drive_passes`), prune (fault on the prune
+DELETE), `getAlarm` (storage.getAlarm throws), health `put`
+throws, health `get` throws. **Pass, per run (recorder-step
+faults — DDL / insert / prune / health get / health put):**
+`alarm()` RESOLVES (never throws) and every drive-path effect is
+identical to the no-fault baseline (T2's twin comparison); for
+DDL/insert/prune faults, the health object shows
+`recordingFailures` incremented by exactly 1 with the correct
+`lastFailureStep` (`"ddl"` / `"insert"` / `"prune"`); for the
+prune fault, the row IS present (insert succeeded) and the table
+sits above cap until a later healthy pass prunes it back to
+exactly 288-or-fewer; for health-channel faults, recording
+itself is unaffected (rows accrue) and the next healthy pass's
+health note lands (the channel self-heals); a serialization case
+is covered by injecting a throw inside the serialize step at the
+wrapper level (a throwing outcomes getter): the catch discipline
+names it `"serialize"`, increments the health counter, and the
+record call returns without throwing. (The projected structure
+is plain scalars by construction, so `JSON.stringify` has no
+production failure mode — stated plainly.)
+
+**The `getAlarm` case is the named exception, corrected by
+execution.** The shipped coordinator itself reads
+`storage.getAlarm()` — `GenerationCoordinator._armAlarmIfEarlier`
+(`coordinator.mjs:2481`), called from `requestGrant`'s `wake()`
+on the grant path inside `driveOnce`. A `getAlarm` fault
+therefore does NOT leave the alarm resolvable: the pass fails at
+the **drive** stage (the grant step's wake throws before
+issuance — no grant, no spend), `alarm()` rethrows the identical
+injected object, and the recorder's guarantees are what the case
+pins: the row IS written, with `armed_after` NULL (the recorder's
+own read is isolated in its own try/catch), and
+`recordingFailures` is NOT incremented. The original draft's
+blanket "alarm resolves" wording for this sub-case was falsified
+by the shipped code's own `getAlarm` use; the recorder never
+breaking the alarm is a guarantee about RECORDER steps, and it
+holds for every one of them.
+
+### T5 — Sanitization (F-1)
+
+Unit level: `projectDrivePassOutcomes` / `serializeDrivePassOutcomes`
+/ `scrubDrivePassText` against hostile inputs — exercised through
+the recorder method that owns them (they are module-private by
+design; `_recordDrivePass` is the unit boundary) — outcomes carrying
+extra keys (a segment-text-shaped field, a detail payload with a
+URL and a token), a `bindingProjectionError` whose string is a
+URL + token, allowlisted string fields of 10,000 chars, error
+messages containing URLs, a 36-char UUID, control characters, a
+5,000-char message, an error object with a crafted `.stack` and
+extra properties. Integration level: a twin-store pass whose
+`driveOnce` is made (via seeded state) to emit the widest real
+outcome shape. **Pass:** stored rows contain ONLY allowlisted
+keys; the sweep error string never appears (presence flag only);
+no stored field matches /https?:\/\//; `error_message` contains
+no ≥24-char identifier run outside the `[redacted]` marker and
+no stack content; `error_name` is either a grammatical class
+identifier stored exactly (the §5.2 name path — long real names
+such as `ProductionR2NamespaceError` MUST survive) or scrubbed
+to the same standard as the message; `error_message` ≤ 500
+chars, `error_name` ≤ 100; sliced fields are flagged
+(`fieldsSliced` → marker + `outcomes_truncated = 1`), scrubbed
+fields likewise (`fieldsScrubbed`); grammatical identifiers
+(plan/grant ids, code tokens) are stored byte-exact with NO
+marker (T5b); the forbidden-pattern scan over ALL stored rows in
+the battery is clean.
+
+**Read-side hostile storage (C5, §5.5):** rows are inserted
+DIRECTLY into `d6_drive_passes`, bypassing the recorder —
+malformed JSON in `outcomes_json` (including a URL + token
+embedded in the malformed text), valid JSON carrying
+non-allowlisted keys and a URL-shaped `planId`, valid JSON that
+is not an array, an out-of-vocabulary `stage`, hostile
+`error_name` / `error_message` — plus a health object carrying
+smuggled keys and hostile field values. **Pass:** the read
+returns `outcomes: null` + `outcomesMalformed: true` for the
+malformed rows (and NO field anywhere in the response carries
+raw stored content — the response shape has no raw fallback);
+the valid-but-hostile row is re-projected (extra keys gone,
+URL-shaped values scrubbed) with `outcomesRevalidated: true`;
+the stage reads `"unrecognized"`; the health object is returned
+as exactly its five known fields, projected and scrubbed.
+
+### T6 — Truncation at the cap (R-6)
+
+Fabricate outcomes of 60 synthetic plan entries (via direct
+recorder calls with constructed outcome arrays). **Pass:**
+stored `outcomes_json` ≤ 8,000 chars; parses as JSON; the final
+entry is the truncation marker with exact kept/dropped counts;
+kept entries are the FIRST entries, whole, in order;
+`outcomes_truncated = 1`. Boundary cases: an outcomes array
+whose projection is exactly ≤ 8,000 stores untruncated with flag
+0; a single maximal entry (≈2.3 KB by construction) always fits
+with the marker — asserted, not assumed.
+
+### T7 — Mode rejection (R-5)
+
+Call the class-gate diagnostics handler (operator stamp present)
+and `drivePassDiagnostics` directly with: `drive=1` alone;
+`drive=1` + planId; `drive=1` + jobId; `drive=1` + cursor;
+`drive=1` REPEATED (`drive=1&drive=1` — through the full public
+route, whose forward copies parameters singly; the forward must
+carry the repetition explicitly or the class never sees it);
+`drive=0`; `drive=true`; `drive` absent + valid planId (attempt
+mode); `drive` absent + no target. **Pass:** the drive-mode
+combinations return exactly
+`{ outcome: "rejected", reason: "diagnostics_mode_ambiguous" }`
+(HTTP 400 at the handler); `drive=1` alone returns the §8.3
+shape; attempt mode behaves byte-identically to the unmodified
+build, including its own `diagnostics_target_required`
+rejection; with the operator stamp ABSENT, both modes return
+403 `migration_operator_required`, exactly as shipped.
+
+### T8 — Retention and bursts
+
+Drive 300 recorder records (direct `_recordDrivePass` calls and
+alarm invocations mixed), then a simulated retry burst: 7
+consecutive throwing passes on one due alarm. **Pass:** row
+count is exactly 288 after the 300; retained ids are the newest
+288 in order; the burst adds its rows and the count never
+exceeds 288 at any assertion point after a completed pass;
+oldest rows are dropped first.
+
+### T9 — Round-trip + the cross-part key contract
+
+Record passes through the entry class (healthy and
+fault-injected runs from T3/T4), then read through the full
+route path (public-entry forward → class gate → service) with
+the operator stamp. **Pass:** the read returns exactly the
+recorded rows (all fields, §8.3 shape); `recorderHealth` is the
+object the recorder wrote — proving the entry's
+`DRIVE_PASS_HEALTH_KEY` and the service's literal key agree;
+`tableState` transitions `"missing"` (before the first pass) →
+`"populated"` (after it); `alarm.armedAt` / pending counts match
+the harness's storage state at read time.
+
+### T10 — Shipped-surface equivalence smoke
+
+Against twin stores (candidate vs unmodified parts), run a
+scripted sequence of the shipped read surfaces — capabilities,
+plan status (all 5 plans), eligibility (chapter + segment +
+book), quota, conflicts, attempt diagnostics for the preserved
+plan — and compare responses field-for-field, excluding only
+`asOf`/`quotedAt` timestamps. **Pass:** identical. Named
+limitation: no pre-existing regression suite corresponds to
+build `1c2d1d0f` (the impl-tree suites target a divergent tree),
+so this equivalence smoke plus T0–T9 ARE the battery; Rowan's
+review of the actual diff is the other leg, exactly as the
+diagnostic report's harness caveat prescribes.
+
+## 10. Explicit exclusions and limitations
+
+### 10.1 Step-0 stays separate (refinement F-5)
+
+The step-0 procedural correction — the next generation proposal
+must explicitly resolve the shipped system's inability to verify
+an issued grant before unpause (diagnostic report §7; Rowan's
+attempt-3 review: "Do not silently substitute a different
+checkpoint") — is **out of scope** for this spec and for the
+companion gate. Nothing in the diff touches grant verification,
+the unpause sequence, or any generation procedure. The
+instrumentation neither implements nor prejudges the correction;
+it only makes future drive passes observable.
+
+### 10.2 What this instrumentation cannot see (refinement F-6)
+
+**Constructor/platform failures preceding handler invocation
+remain unobservable.** If the platform cannot instanti

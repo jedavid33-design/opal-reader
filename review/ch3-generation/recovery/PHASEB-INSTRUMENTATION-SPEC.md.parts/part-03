@@ -1,0 +1,181 @@
+s, so the stored form is safe **by construction**, even
+for adversarial values:
+
+- **Grammar path.** `planId` and `grantId` are machine
+  identifiers from closed alphabets the shipped code itself
+  generates (`plan:<hex>`; `grant:<jobId>:<revision>:full|probe`
+  — `coordinator.mjs:1696`). A value matching its field's
+  grammar (`/^plan:[A-Za-z0-9_-]+$/`,
+  `/^grant:[A-Za-z0-9_:\-.]+$/`) cannot contain whitespace,
+  control characters, or a URL — the alphabets exclude `/`,
+  spaces, and every control character — so it is stored as-is,
+  length-capped. `state` / `stopReason` / `grantRefused` /
+  `skipped` are code vocabulary (lowercase snake_case constants
+  from the shipped stop maps, state writes, and guard reasons):
+  a value matching `/^[a-z0-9_]+$/` is such a token by shape and
+  is likewise stored as-is, length-capped. (The token grammar is
+  deliberately NOT the prose scrub for these fields: legitimate
+  vocabulary such as `phase_halted_unknown_billing` is a single
+  ≥24-char identifier run, and redacting it would destroy the
+  datum. A lowercase snake token carries no URL structure, no
+  whitespace, and no control characters by construction.)
+- **Scrub path.** A value that does NOT match its field's
+  grammar is not an identifier or a code token at all — it is
+  hostile or corrupt free text, and takes the full prose scrub
+  (§5.2's `scrubDrivePassText`): control characters flattened,
+  URL-shaped runs replaced with `[url]`, ≥24-char
+  identifier-shaped runs replaced with `[redacted]`, capped at
+  200 chars. Scrubbing sets `fieldsScrubbed`, disclosed in the
+  marker — the record never pretends to be a naive copy.
+
+### 5.2 Error fields (exact scrub)
+
+Only `e.name` and `e.message` are ever read from a thrown error —
+never `.stack`, never any other property. They take **different
+paths**, because they are different kinds of value:
+
+- **The NAME path** (`error_name`, and the health channel's
+  `lastFailureName`): an error name is a bare class identifier
+  (`Error`, `SqliteError`, `ProductionR2NamespaceError`). A value
+  matching `/^[A-Za-z_$][A-Za-z0-9_$]*$/` cannot contain a URL,
+  whitespace, or control characters, so it is stored as-is,
+  capped at 100 chars. A non-identifier name takes the prose
+  scrub below. (Battery finding that forced this path: the prose
+  scrub's ≥24-char redaction reduced
+  `ProductionR2NamespaceError` — 25 chars — to `[redacted]`,
+  destroying exactly the datum the recorder exists to surface.
+  T3(iib) pins the corrected behavior.)
+- **The prose scrub** (`error_message`, cap 500 — the 500
+  precedent is `sanitizeDiagnosticDetail`'s slice), via
+  `scrubDrivePassText(value, cap)`:
+
+1. Non-strings and empty strings → NULL.
+2. Control characters (U+0000–U+001F, U+007F) flattened to spaces
+   (no newlines can smuggle structure into a stored field).
+3. URL-shaped runs (`http://…` / `https://…` through the next
+   whitespace) replaced with `[url]`.
+4. Identifier-shaped runs of ≥24 chars from `[A-Za-z0-9_-]`
+   replaced with `[redacted]` — this catches UUIDs, tokens, and
+   request ids embedded in messages. Accepted cost, stated
+   plainly: a benign long identifier in a message (e.g. an
+   attempt id in the adjudication error at `service.mjs:1552–1553`)
+   is also redacted; the error's prose — what names the failing
+   site — survives intact.
+5. Trimmed; sliced to the cap.
+
+### 5.3 Truncation (ruling R-6)
+
+Serialization order: project (§5.1) → `JSON.stringify` → if the
+result exceeds 8,000 chars (or any field was sliced or scrubbed),
+truncate at **entry granularity**: whole entries are kept from
+the front (drive order — `driveOnce` selects plans by
+`created_at`, so the earliest-selected plan's outcome, the most
+diagnostic, is kept first); the first entry that would cross the
+cap and everything after it is dropped; a terminal marker entry
+is appended:
+
+```json
+{ "truncated": { "keptEntries": 3, "droppedEntries": 57,
+                 "fieldsSliced": false, "fieldsScrubbed": false } }
+```
+
+and `outcomes_truncated` is set to 1. The invariant is exact:
+`outcomes_truncated` is 1 **exactly when** a marker is present,
+and the marker always discloses slicing and scrubbing — the
+stored form is never a silently altered copy of the outcomes
+array. The stored value is always
+valid JSON (never a mid-string slice). Bound argument: after the
+200-char field cap, one entry is at most ~2.3 KB (10 keys +
+string caps + JSON overhead), so at least one whole entry plus
+the marker always fits under 8,000 — truncation always
+terminates with ≥1 real entry. Production currently has exactly
+one selectable plan, so the cap is not expected to bind at all;
+it exists for pathological plan counts.
+
+### 5.4 Pre-write assertion (test-side)
+
+Test group T5 (§9) scans every stored row the battery produces —
+including rows written from deliberately poisoned outcomes and
+errors — for forbidden patterns (URL schemes, ≥24-char
+identifier runs in the error fields, stack-trace markers,
+non-allowlisted keys in parsed outcomes) and fails on any hit.
+This is the enforcement that the allowlist in §5.1 is complete
+against the real `driveOnce` output shape, not just against the
+fixtures. As amended by C5, T5 also covers the READ side (§5.5):
+rows and a health object are written DIRECTLY into storage in
+hostile form (malformed JSON, valid JSON with non-allowlisted
+keys, URL/token-shaped strings, oversized strings,
+unicode/control characters, an out-of-vocabulary stage, a health
+object carrying smuggled keys), and the read's response is
+scanned end-to-end: no raw stored content may appear anywhere in
+it.
+
+### 5.5 Read-side revalidation (correction C5)
+
+The read path (`drivePassDiagnostics`) never returns a stored
+value it has not re-validated. The key lists, grammars,
+vocabularies, and caps below are local copies of the recorder's
+— a second cross-part contract beside the health-key literal,
+pinned by the battery's hostile-storage cases (T5) and the
+round-trip identity for clean rows (T9):
+
+- **`outcomes_json` that does not parse, or parses to a
+  non-array:** `outcomes` is `null` and the pass carries
+  `outcomesMalformed: true`. There is **no raw fallback** — the
+  response shape contains no field that can carry the stored
+  string (the original draft's `outcomesRaw` is removed).
+- **A parsed outcomes array** is re-projected through the read
+  side's own copy of the §5.1 allowlist and §5.1a string
+  discipline (sweep tallies numeric-only; the sweep-error entry
+  a presence flag; the truncation marker re-validated field by
+  field). If re-projection changes the value, the pass carries
+  `outcomesRevalidated: true`. For rows the recorder itself
+  wrote, re-projection is the identity — T9 asserts
+  `outcomesRevalidated: false` and byte-equal outcomes on clean
+  rows, so the defense layer is invisible in the normal case.
+- **`stage`** is checked against the six-value vocabulary
+  (`base_alarm | construct | recover | drive | flush |
+  complete`); anything else is returned as `"unrecognized"`.
+- **`error_name` / `error_message`** are re-sanitized on read
+  (name path / prose scrub, §5.2, at the same caps); numeric
+  fields are returned only when finite numbers, else `null`.
+- **`recorderHealth`** is projected onto its five known fields
+  with per-field type checks (failure step checked against
+  `ddl | serialize | insert | prune`; `lastFailureName` through
+  the name path). Extra stored keys never reach the response.
+
+## 6. Clock seam (ruling R-4)
+
+`_drivePassNow()` on the class:
+
+```js
+typeof this.env.now === "function" ? this.env.now() : Date.now()
+```
+
+— the identical idiom to `GenerationCoordinator._now()`
+(`coordinator.mjs:384`). The coordinator's env in the subclass
+alarm is `d6HostEnv(this.env, cache)`, a spread of the class env;
+the recorder reads the class env directly. In production the
+platform env carries no `now` function, so the recorder's clock
+is `Date.now()` — unchanged production semantics. In the test
+harness, `env.now` is the fake clock (the do-harness pattern,
+§9), making `at`, `finished_at`, and the health timestamps
+exactly assertable. All three timestamps in a record use this
+one seam; no other clock is consulted.
+
+## 7. Overhead: retry bursts, pruning, storage bound (refinement F-3)
+
+All figures in this section are **estimates** derived from the
+shipped constants and the outcome-object shape; no instrumented
+pass has ever run, so nothing here is measured.
+
+**Per-pass write inventory** (appended after all drive work):
+1 DDL exec (`IF NOT EXISTS` — a catalog no-op after the first
+pass), 1 `getAlarm()` read, 1 INSERT, 1 prune DELETE, 1 KV
+`get` + 1 KV `put` (the health note). In steady state the prune
+deletes exactly the rows above the cap (normally 1). The prune's
+subquery is a bounded walk of the INTEGER PRIMARY KEY (≤289 ids);
+the DELETE touches only above-cap rows. No other storage is
+touched by the recorder.
+
+**Retry bursts.** Per Cloudflare's documented 

@@ -1,0 +1,80 @@
+PHASE B INSTRUMENTATION — T0–T10 BATTERY RUN LOG (FINAL)
+==================================================
+Run: 2026-11-02T04:10:38Z (UTC)
+Node: v24.22.1
+Command: node --test battery.test.mjs (in instrumentation-spec/tests/)
+Tree: instrumentation-spec/scratch/candidate-tree — 31 parts from
+  phaseb-attempt3/evidence/parts-e0 (build 1c2d1d0f) with the two
+  amended candidate parts replaced; baseline twin:
+  instrumentation-spec/scratch/baseline-tree (pristine copy).
+Candidate entry part SHA-256:   45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab
+Candidate service part SHA-256: 41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda
+==================================================
+▶ T0 — assembly & identity
+  ✔ candidate tree: 31 parts; 29 byte-identical to deployed; 2 amended parts match the scratch candidates (110.042844ms)
+  ✔ patch round-trip: combined.diff applied to pristine parts reproduces both candidates byte-for-byte (15.640251ms)
+  ✔ node --check passes on both candidate parts (168.515462ms)
+  ✔ baseline tree is the pristine deployed tree (31/31 byte-identical) (72.481081ms)
+✔ T0 — assembly & identity (368.718896ms)
+▶ T1 — harness bring-up
+  ✔ T1(a) empty store: class construction + first alarm resolve; no .one() bootstrap deadlock (51.869424ms)
+  ✔ T1(b) seeded attempt-3 shape: plan/job/parked/conflicts/phase figures exact (9.747832ms)
+✔ T1 — harness bring-up (61.998958ms)
+▶ T2 — normal recording (twin equivalence)
+  ✔ six alarm passes: candidate records each; all non-recorder state identical to the unmodified build (156.092678ms)
+✔ T2 — normal recording (twin equivalence) (156.449003ms)
+▶ T2b — clock seam fallback (R-4)
+  ✔ without env.now, recorded times track wall Date.now() (5.191567ms)
+✔ T2b — clock seam fallback (R-4) (5.452218ms)
+▶ T3 — stage capture & record-then-rethrow
+  ✔ T3(i) throw in the base alarm's schedule processing -> stage base_alarm, identical object rethrown (17.195653ms)
+  ✔ T3(ii) throw at cache construction -> stage construct (5.975583ms)
+  ✔ T3(iib) a cache-namespace fault present from the start is recorded at base_alarm (the base alarm constructs the cache first) (19.577086ms)
+  ✔ T3(iii) throw in recover() -> stage recover, identical object rethrown (18.959689ms)
+  ✔ T3(iv) throw in driveOnce -> stage drive, identical object rethrown (14.889724ms)
+✔ T3 — stage capture & record-then-rethrow (77.230705ms)
+▶ T4 — recorder-fault injection (the recorder may never break the alarm)
+  ✔ T4 DDL fault: alarm resolves, drive effects happen, health notes step 'ddl', no row (8.055323ms)
+  ✔ T4 INSERT fault: alarm resolves, health notes step 'insert', zero rows (8.290385ms)
+  ✔ T4 PRUNE fault: count exceeds the cap for exactly one pass, then recovers to <= cap (48.616204ms)
+  ✔ T4 getAlarm fault: row written with armed_after NULL and NO health increment (the shipped coordinator itself reads getAlarm, so the base chain — not the recorder — is what fails) (8.11951ms)
+  ✔ T4 KV get fault (health read): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (10.200801ms)
+  ✔ T4 KV put fault (health write): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (10.846139ms)
+  ✔ T4 serialize-step fault (wrapper level): the catch discipline names the step 'serialize' (5.095644ms)
+✔ T4 — recorder-fault injection (the recorder may never break the alarm) (99.978637ms)
+▶ T5 — sanitization (write-time discipline + hostile storage on read)
+  ✔ T5 write: hostile outcome values are grammar-checked or scrubbed; nothing raw is stored (3.987692ms)
+  ✔ T5 write: error name/message scrubbed (URL, token run, control chars, caps) (3.410977ms)
+  ✔ T5 write: an oversized grammatical identifier is sliced, and the slice is disclosed (3.34644ms)
+  ✔ T5 read: hostile stored rows and a hostile health object never escape raw (10.677156ms)
+✔ T5 — sanitization (write-time discipline + hostile storage on read) (21.848723ms)
+▶ T5b — identifier fidelity (real id shapes survive sanitization exactly)
+  ✔ plan/grant ids and code tokens are stored byte-exact, with no marker (4.190786ms)
+✔ T5b — identifier fidelity (real id shapes survive sanitization exactly) (4.370406ms)
+▶ T6 — truncation at the 8,000-char cap
+  ✔ T6 over-cap: whole entries only, terminal marker, kept+dropped = submitted (21.966971ms)
+  ✔ T6 under-cap: no marker, no flag, entries unaltered (5.048462ms)
+✔ T6 — truncation at the 8,000-char cap (27.403034ms)
+▶ T7 — mode rejection (the read that can never blend modes)
+  ✔ T7 ambiguous drive modes -> 400 diagnostics_mode_ambiguous; attempt mode unchanged; 403 without the operator stamp (49.004336ms)
+✔ T7 — mode rejection (the read that can never blend modes) (49.242173ms)
+▶ T8 — retention & bursts
+  ✔ T8 300 records prune to exactly the newest 288 (31.070135ms)
+  ✔ T8 burst of seven throwing passes: every pass recorded, cap holds throughout (40.749143ms)
+✔ T8 — retention & bursts (72.08694ms)
+▶ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding)
+  ✔ T9 route read returns exactly the recorded rows; health key contract holds; crash-instance records (26.063935ms)
+✔ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding) (26.238528ms)
+▶ T10 — shipped-surface equivalence smoke
+  ✔ twin stores: every shipped read surface answers field-for-field identically (46.065147ms)
+✔ T10 — shipped-surface equivalence smoke (46.268542ms)
+ℹ tests 32
+ℹ suites 13
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1250.655403
+==================================================
+BATTERY EXIT CODE: 0 (32 tests, 32 pass, 0 fail)
