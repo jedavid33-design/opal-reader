@@ -1,0 +1,192 @@
+ats post-act read-backs, not
+  ordering, as ground truth throughout.
+- **R-06 — Recorder dual-failure blind spot.** If a
+  drive pass and its recorder write both fail, the pass
+  is invisible on shipped surfaces (the P2 gate's V5
+  outcome was INCONCLUSIVE for exactly this reason).
+  The containment build does not close this blind spot;
+  §5's V5/V7 checks bound what an invisible pass could
+  have done under the holds ($0, the pre-classified
+  grant set), they do not eliminate the blindness.
+- **R-07 — Containment suppression under a live chain
+  is unverifiable before S1.** C1 deploys containment
+  code whose OPERATIONAL verification is C3's job and
+  remains PARTIAL by construction; C2 after it proves
+  readability only. **Deploying the code is not
+  verifying it**, and no C1 result may be cited as
+  evidence that containment works — only that the code
+  is live and reports its inert state.
+- **R-09 — The attempt-3 stall's causation is
+  unproven (H1/H4).** The recovery program proceeds
+  cause-unproven; C1 does not depend on the cause and
+  does not advance it.
+- **R-12 — `getAlarm()` semantics after retry
+  exhaustion are UNSPECIFIED.** The live `armedAt`
+  (1793562576104, ~20 h past due at last observation)
+  sits inside that unspecified region. Every gate value
+  here is a re-read expectation, never an assumption;
+  C1 neither relies on nor tests delivery.
+- **R-13 — The lying-read residual.** A storage read
+  that successfully returns a WRONG NORMAL cannot be
+  detected by construction; the state route and
+  `drive=1` read the SAME store, so their agreement
+  corroborates nothing. §2/§5 cross-checks against
+  facts containment does not control (plan / job /
+  phase / queue state) bound this at census and
+  postflight time only; between reads, nothing detects
+  it.
+
+Entries that do **not** bear on C1 itself (they attach
+to mechanisms C1 never exercises) but remain open for
+later gates: **R-03 / R-05** (retry supersession and
+the provisional 3,600,000 ms threshold — R5a arming
+semantics, absent from this candidate), **R-04** (no
+traffic-independent rate bound on wake-driven
+registrations — no wake occurs), **R-08** (exhausted
+-episode circumvention is paperwork-enforced — no stop
+episode exists or can be minted in C1), **R-10 / R-11**
+(wake-arithmetic branch B2 and the unobservability of
+D — both pre-R5a questions), **R-15** (commit-to-record
+uncertainty in the stop act — no stop act occurs).
+
+**C1-specific risks:**
+
+- **C1-R1 — First production execution of the
+  containment code is read-only, and that cuts both
+  ways.** The transition writer paths stay unexecuted
+  until C3; a latent defect in a READ path could
+  misreport state at §5 V5. Bounded by: the census
+  cross-checks (V6/V7 cover facts containment does not
+  control), trigger T4 (any containment surface
+  misbehavior fires rollback evaluation), and the
+  harness battery (§8).
+- **C1-R2 — Platform code-adoption timing is
+  undocumented.** When a script upload's new code takes
+  over DO instantiations is UNSPECIFIED in the reviewed
+  documentation. Bounded by: D2 read-back of the
+  deployed parts, V1's stamp check, and the dual
+  observation windows (§5).
+- **C1-R3 — The deployed tree is assembled at gate
+  time.** The build-pin/stamp convention (§1.3) means
+  the exact uploaded bytes exist only from the gate's
+  assembly step. Bounded by: hash assertions against
+  §1 at assembly, the battery re-run on the assembled
+  tree (§8), and the stamped-manifest read-back (V2).
+
+**What C1 does NOT resolve, stated plainly:** whether
+containment works operationally (C3, partial); whether
+the alarm chain can be revived (R5a-D + S1); why the
+alarm stalled (R-09); the recorder blind spot (R-06);
+any generation question. After a fully successful C1,
+the system differs from today in exactly one respect:
+the containment code is live and inert.
+
+## 7. Explicit GO wording and STOP conditions
+
+**The GO this package contemplates** (for a future
+execution, only after Rowan's review of this package;
+NOT requested here):
+
+> "GO — execute exactly one Gate C1 attempt as pinned
+> in the C1 readiness package (pin `<READINESS-PIN>`):
+> fresh census, battery re-run on the gate-assembled
+> tree, build pin, exactly one upload of the
+> containment V4 candidate (coordinator `6c19a50e…`,
+> entry `2bb0608b…`, service `5c5183e6…`) to
+> `opalreader-api-v2-prod`, at most one conditional
+> observability PATCH, and conditionally one rollback
+> upload of the preserved live build `86ad06ab…` parts
+> plus at most one conditional PATCH on the package's
+> named triggers T1–T6; passive reads only; NO
+> containment transition, NO command, NO SubmitJob, NO
+> hold or queue change, NO stimulus of any kind;
+> ending HELD with containment inert at NORMAL."
+
+**STOP conditions** (any one stops the attempt; the
+GO is consumed; no retry without a fresh GO):
+
+- any §2 census item deviates from its hard
+  expectation;
+- assembly mismatch: the gate-assembled tree differs
+  from §1 in any part, count, or hash;
+- battery re-run failure or divergence from §8's
+  standing results;
+- envelope/metadata drift vs the fresh live read
+  beyond the two documented projection artifacts
+  (§1.3 item 5);
+- an ambiguous upload response — no re-upload is made
+  until a read-back classifies the first attempt;
+- any §3 rollback trigger (T1–T6) post-upload →
+  rollback evaluation inside the same GO; a failed or
+  mismatched rollback → STOP, hold, report;
+- any movement in the §5 V7 no-movement set;
+- observability unrestorable within the §3/§4 budget.
+
+**Authorization discipline:** Rowan's review of this
+package is not a GO. Julie's GO is not requested by
+this package. If given later, the GO covers exactly
+one C1 attempt in the wording above and nothing else:
+not C2, not any transition, not R5a-D, not S1.
+
+## 8. Battery and evidence status
+
+**Standing results for this exact candidate tree**
+(complete runs; full logs + exit codes captured;
+hashes re-verified during this package's preparation):
+
+| suite | tree | result | exit | log SHA-256 |
+|---|---|---|---|---|
+| Containment battery v4 + CT14d (`containment-v4/tests/containment-battery.test.mjs`, `2b2befa5…`, 67,037 B) | v4 candidate | **42/42 pass** | 0 | `96c76d17446b9821f519bdbb5ed9673c7c205d8769eac35c8a6f66794bf9fd8b` (`containment-v4/logs/containment-v4-corrections-candidate.log`) |
+| Containment battery v4 (41 tests, pre-CT14d file) | v4 candidate | **41/41 pass** | 0 | `40bed0eeb250d8778aafb110e981dee021f1f4db6e43fa28735431e87a2c2c6c` (`containment-v4/logs/containment-v4-candidate.log`) |
+| P2 parameterized regression (`suites/p2-battery.test.mjs`, unmodified) | v4 candidate | **32/32 pass** | 0 | `4548c21f0457172a04a283d085427f2948e449b70e4ed6d9eec0a39b5689274f` (`suites-v4/logs/p2-v4-containment.log`) |
+
+The 42-test run supersedes the 41-test run on the same
+tree: CT14d (truth-table row 1's readable-record
+precondition, added in the V4 corrections round) is the
+only difference; no existing assertion was modified,
+deleted, or loosened in either round (identities
+records, §1.1). The R5a suite is **not applicable** to
+this tree — it exercises the R5a change, which exists
+only in the composed tree (R5a-D's subject); it ran
+23/23 exit 0 on the composed tree in the V4 package
+and is cited here only to keep it out of C1's evidence
+set. Harness caveats stand: the harness invokes
+`alarm()` directly and cannot prove real platform
+delivery, platform retry behavior, platform
+storage-effect ordering, or real-DO SQLite behavior
+beyond its mirrored `.one()` throw semantics.
+
+**Gate-time re-run requirement.** Before any upload, a
+C1 execution re-runs on the **gate-assembled tree**
+(the §1.3 fresh assembly, not the scratch candidate
+tree):
+
+1. the containment battery (42 tests incl. CT14d)
+   against the containment-v4 fixture identities; and
+2. the P2 parameterized regression (32 tests) against
+   the `suites-v4` containment fixture.
+
+Both must pass in complete runs with exit code 0; the
+logs are pinned with the build pin (§1.3 item 3) and
+cited in the execution record. Why: the pinned logs
+above are evidence about the pinned scratch tree; the
+gate uploads a fresh assembly, and the P2 gate's B3
+precedent (32/32 re-run on its gate-assembled tree) is
+the standing pattern — the assembly that ships is the
+assembly that was tested. Any divergence = STOP before
+upload (§7).
+
+## 9. Package contents and turn
+
+This package is a single consolidated document.
+Candidate identities are carried in full in §1 (the
+standalone identities addendum remains in the GitHub
+archive at `containment-v4/CANDIDATE-IDENTITIES-REVISED.md`,
+pin `621535f0…`; it does not ride in the review folder
+because §1 supersedes it for review purposes). The
+companion cp (`PHASEB-C1-READINESS-ROWAN-CP.md`)
+summarizes this package for the folder.
+
+**Production remains under INVESTIGATION HOLD. Nothing
+in this package executes, deploys, transitions, wakes,
+or mutates

@@ -1,0 +1,188 @@
+ainment absence pre-deploy** — the live build
+    contains no containment code and no containment
+    surface: `GET /v2/d6-containment` is not a route on
+    it, and no code path that could create the
+    containment tables exists on it. The expectation is
+    the mechanism's ABSENCE, proven by census item 1
+    (the live build stamp). There is no containment
+    state to inspect pre-deploy; post-deploy absence is
+    verified through the new build's read surfaces (§5,
+    V5).
+16. **No work in flight** — no gate executing, no GO
+    outstanding or partially consumed, no operator
+    action pending; the executor records the GO
+    (§7) on the board BEFORE the census begins, as at
+    prior gates.
+
+## 3. Mutation bounds and rollback
+
+| Write class | Bound | Notes |
+|---|---|---|
+| Forward worker script uploads | **exactly 1** | 31 parts, byte-identical to the stamped manifest (§1.3) |
+| Observability PATCH after forward upload | **≤1, conditional** | ONLY if the post-upload read shows observability reset (§4) |
+| Rollback uploads | **≤1, conditional** | ONLY on the named triggers below; the byte-identical preserved live parts (§1.3 item 6) |
+| Observability PATCH after rollback | **≤1, conditional** | Same condition, after a rollback upload |
+| Containment transitions | **0** | No `contain_drive`, no `stop_chain`, no `clear`, no `verify_chain_stop` |
+| Commands / reports / SubmitJob | **0** | — |
+| Hold flips / settings flips / queue changes | **0** | GENERATION_HALT stays `"1"`; queue stays paused |
+| Alarm registrations caused by this gate | **0 expected** | A deploy is not a wake; any `armedAt` change is a finding to classify (trigger T6), not a budget item |
+| Recorder rows | **0 expected** | The recorder writes only from the alarm handler |
+| Spend | **$0** | No dispatch is possible under the holds; dispatched must remain 0 (§5, V7) |
+
+**Rollback triggers (named; any one fires rollback
+evaluation inside the same GO):**
+
+- **T1** — post-upload read-back parts not
+  byte-identical to the stamped manifest.
+- **T2** — `/health` build stamp ≠ the build pin, or
+  generation not `halted`, or coordinator not `armed`.
+- **T3** — settings/bindings regression: settings
+  revision ≠ 1, bindings ≠ 10, GENERATION_HALT ≠ `"1"`,
+  phase policy ≠ `enforce`, or observability not
+  restorable within the §4 budget.
+- **T4** — containment surface misbehavior: the state
+  route or the `drive=1` containment projection errors,
+  reports any state other than NORMAL, reports
+  `verified: false` against an absent store, or
+  `stopConfidence` ≠ `"not_applicable"` at rest.
+- **T5** — any §5 preservation item fails: a change vs
+  census in the preserved plan, its job, the exemption
+  projection, the parked job, the conflicts baseline,
+  any phase figure, quota, or the watermarks that is
+  not fully explained by the deploy itself (the deploy
+  explains ONLY the script etag and build stamp
+  changing).
+- **T6** — `armedAt` changed across the upload
+  (unexplained alarm-registration movement).
+
+**Rollback shape and limits.** Rollback = ONE upload
+of the preserved byte-identical live parts (build
+`86ad06ab…`) + D2-style read-back + ≤1 conditional
+observability PATCH, then the §5 verification set
+re-run against the restored build. Rollback removes
+the containment CODE. It cannot un-create the
+containment tables — none are created in C1, because
+no transition runs (§1.4); un-fire any alarm — none is
+provoked; or un-issue any grant — none can issue:
+drive behavior in NORMAL is unchanged by the candidate
+(the containment gates default open at NORMAL/absent)
+and the system is held. If rollback itself fails or
+its read-back mismatches, the executor STOPs, holds,
+and reports — no second rollback attempt inside the
+same GO. **Any rollback after the gate closes needs
+its own authorization.** Ends HELD in every path,
+including the rollback path.
+
+## 4. Observability checks
+
+Standing deploy law (every Worker code upload): an
+upload can silently reset script-settings observability
+to null; it must be checked and, if reset, re-applied —
+and the settings PATCH must not touch code.
+
+- **Pre-upload:** census item 2 records observability
+  enabled + `logs.persist: true` from the
+  script-settings read.
+- **Post-upload:** the D2 read-back re-reads
+  script-settings. Precedent: observability SURVIVED
+  both the range-fix deploy and the P2 upload (PATCH
+  unspent both times) — survival is the expectation,
+  not an assumption.
+- **If reset:** re-apply via a multipart PATCH to
+  `/workers/scripts/{name}/settings` — the settings
+  WRITE path (the GET path `/script-settings` accepts
+  no PATCH) — with a single part named `settings`
+  (Content-Type application/json) carrying ONLY the
+  observability object (enabled + logs persisted).
+  Then verify: observability enabled + persisted on
+  re-read, AND the script etag unchanged by the PATCH
+  (the settings PATCH does not touch code). The PATCH
+  counts against the §3 budget (≤1 per upload leg).
+- **If observability cannot be restored within
+  budget:** STOP; rollback evaluation under trigger
+  T3.
+
+## 5. Post-deploy verification (read-only)
+
+All verification is passive reads. Two observation
+windows, mirroring the P2 gate's practice: an immediate
+post-deploy set and a second set after a platform-slack
+interval (the P2 gate used ≈ +10 min and ≈ +25 min);
+preservation must pass at both.
+
+- **V1 Health** — `/health` build stamp == the §1.3
+  build pin; generation `halted`; coordinator `armed`.
+- **V2 Script identity** — new etag ≠ the census etag
+  (required); 31 parts; **27 byte-identical to live**,
+  the 3 code parts byte-identical to their §1.1
+  candidate hashes, the identity part byte-identical
+  to its stamped form.
+- **V3 Settings surface** — revision still **1**;
+  exactly 10 bindings; GENERATION_HALT `"1"`; phase
+  policy `enforce`; observability per §4.
+- **V4 Queue** — `delivery_paused: true`, exactly 1
+  consumer (cf-api read-back; the gate makes no queue
+  call).
+- **V5 Containment reads** — `GET /v2/d6-containment`:
+  state **NORMAL**, `absent: true`, `verified: true`.
+  `drive=1` diagnostics: the containment projection
+  **present** (non-null on the new build), state
+  NORMAL / absent / verified; the v4 stop-record and
+  episode fields at their empty values (null / 0 /
+  false); `stopConfidence: "not_applicable"`; the
+  recorder fields unchanged vs census item 14
+  (`tableState: "missing"`, zero rows,
+  `recorderHealth: null`); `armedAt` **bit-identical**
+  to census.
+- **V6 Preservation** — census-to-close, every item
+  exact: preserved plan `active` {1,0,0,0,0} with its
+  entry `pending`; its job `queued` rev 1, grants [],
+  quarantine unheld; the exemption projection (chapter
+  bound 26 / parked 0 / eligible 1; segment 1 / 569 /
+  8,022; digest `cdef2c7e…`); GENERATION_HALT `"1"`;
+  queue paused; conflicts exact 4-row baseline;
+  watermarks content 18 / bindings 1841 with 0 idx-26
+  rows and 0 changes; all five phase figures frozen;
+  quota reconcile `ok: true` with the sole straddler;
+  parked job fingerprint exact.
+- **V7 No-movement** — no grant issued (grants []),
+  the occurrence still `pending`, the job still
+  `queued` rev 1, derived reserved **0**, dispatched
+  (current PT day) **0**, no new plans, commands, or
+  conflicts rows. A code deploy invokes no DO method,
+  so **any** movement in this set is unmatched movement
+  = STOP and report (and rollback evaluation under T5).
+- **V8 Record** — execution record with the census
+  transcript, assembly + battery logs (hashes), the
+  upload response, D2 read-back, observability reads,
+  both containment reads, the closing census repeat,
+  and the ends-HELD certification; filed on the board
+  with a Rowan cp. Classification of any unexpected
+  finding is Rowan's, not the executor's.
+
+Any V-item failure = STOP + rollback evaluation under
+the §3 triggers. STOP prevents further operator action
+inside the gate; per the standing correction-6
+discipline, STOP is never represented as affecting an
+alarm chain (none is provoked by C1).
+
+## 6. Unresolved risks bearing on C1
+
+From the corrected register
+(`PHASEB-UNRESOLVED-RISK-REGISTER-REVISED.md`, pin
+`621535f0…`): **14 of 15 entries remain open** (R-14
+resolved by Rowan's R1 acceptance). The entries that
+bear on C1, at their corrected strength:
+
+- **R-01 — Cross-invocation serialization (A-3) is
+  assumed, not documented.** The candidate's containment
+  gates are written against this assumption; C1 deploys
+  that code. C1 does not resolve it; nothing in C1
+  exercises a transition, so its exposure in this gate
+  is limited to read paths.
+- **R-02 — Storage-effect ordering is unspecified.**
+  Detection of a divergence happens only at the next
+  successful dual read that actually occurs; no surface
+  reads on a schedule. Bears on future stop acts, not
+  on this deploy — C1 performs no alarm operation —
+  but it is why §5 tre

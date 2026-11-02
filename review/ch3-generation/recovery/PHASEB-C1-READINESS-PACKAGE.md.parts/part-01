@@ -1,0 +1,193 @@
+d4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5` |
+
+**Explicitly NOT the C1 candidate:** the composed tree
+(coordinator `5303cb63…`) carries the R5a arming change
+in addition to containment. It is R5a-D's subject.
+Deploying it under C1 would exceed this gate's scope.
+
+### 1.3 Gate-time assembly, build pin, and stamp (P2 pattern)
+
+A C1 execution assembles its upload tree fresh, exactly
+as the P2 gate did (its §4, steps B1–B5):
+
+1. **Fresh assembly.** All 31 parts are downloaded from
+   the live script at census and verified byte-for-byte
+   against §1.2. The three stored diffs (§1.1) are
+   applied (`patch -p1`). The executor asserts: exactly
+   3 parts differ from the downloaded live parts, each
+   hashing exactly to its §1.1 identity; the other 28
+   byte-identical; part count 31; `node --check` clean
+   on the three changed parts.
+2. **Battery re-run** on the gate-assembled tree (§8) —
+   complete runs, logs + exit codes captured.
+3. **Build pin.** The unstamped assembled manifest + the
+   battery re-run logs are pinned as ONE commit on
+   `ui1-review` (repo `jedavid33-design/opal-reader`).
+   Per the standing build-marker convention, that pin
+   becomes the deployed build stamp.
+4. **Stamp.** `v2/host/build-identity.mjs`'s
+   `BUILD_COMMIT` is replaced with the build pin (same
+   40-character length; the part stays 411 B). The
+   deployed tree therefore differs from live in exactly
+   **4 parts**: the 3 candidate parts + the stamped
+   identity part. The full stamped manifest is computed
+   and recorded before upload; `/health`'s build stamp
+   == the build pin is verification item V1 (§5). This
+   is the same convention the P2 gate disclosed and
+   executed; the §1.1 identities are verified on the
+   assembled (unstamped) candidate.
+5. **Envelope.** Upload metadata is read fresh from the
+   live `/settings` surface at build time and carried
+   forward unchanged: all 10 bindings, existing secrets
+   as `{"type":"inherit"}`, `compatibility_date`
+   `2026-08-29` + `nodejs_compat`, `main_module`
+   `v2/worker-entry-prod-d6.js`, GENERATION_HALT `"1"`
+   (no setting flipped). The multipart envelope is
+   round-trip parsed and verified byte-identical (31
+   parts + metadata) before upload. Any metadata drift
+   vs the live read beyond the two documented GET
+   -projection artifacts (the DO binding's
+   `namespace_id` projection; secrets projected as
+   `secret_text` where uploads carry `inherit`) is a
+   STOP (§7).
+6. **Rollback basis preserved.** The census-downloaded
+   live parts (build `86ad06ab…`, §1.2) are preserved
+   byte-identical as the rollback upload source (§3).
+   The permanent rollback floor (`6a73d962…`) is NOT a
+   rollback target for this gate and remains untouched.
+
+### 1.4 Why a bare deploy ends inert (source-verified)
+
+In the candidate, the containment DDL
+(`CONTAINMENT_SCHEMA`: tables `d6_containment_state`,
+`d6_containment_events`) is executed at exactly two
+call sites, both inside transition methods of
+`v2/coordinator.mjs` — `applyContainmentTransition`
+(line 2872) and `_verifyChainStop` (line 3068).
+`readContainmentState` never writes and never creates
+tables. A deploy invokes no DO method; ordinary reads
+on the new build therefore create nothing, and the
+containment state reads **absent**, which the read
+discipline defines as structurally verified NORMAL
+(design v4 revised). The tables come into existence
+only when a transition runs — and no transition runs
+in C1 (budget: 0, §3).
+
+## 2. Fresh preflight census (hard expectations)
+
+A C1 execution begins with a fresh census. **Every
+value below is a hard expectation to be re-read fresh
+at execution time — never a presumed current fact.**
+Values observed on Nov 2, 2026 (at the P2 gate census
+and its verification windows) are labeled with that
+date per the R6 evidence discipline. Any deviation on
+any item = **STOP before upload**; the executor's own
+tracing never clears its own stop, and no deviation is
+self-cleared or retried inside the same GO.
+
+Items 1–13 mirror the P2 gate census, re-based to the
+current live build. Items 14–16 are containment
+-specific to C1.
+
+1. **Health** — build
+   `86ad06aba6083f7ea84d64b08eac1788d5bf570c`;
+   generation `halted`; coordinator `armed`.
+2. **Script** — etag
+   `ba80e81fc301b3ff001e8ebf4eab11189221d21471261729c28e509a7ce0d7af`;
+   **31/31 parts byte-identical** to the §1.2 manifest;
+   observability enabled, `logs.persist: true`.
+3. **Bindings / settings surface** — exactly **10**
+   bindings; GENERATION_HALT `"1"`;
+   `OPALREADER_PHASE_POLICY` `"enforce"`.
+4. **Settings** — revision **1** (lane standard,
+   cap $50).
+5. **Queue** `opalreader-generation-v2` (id
+   `93b6a35fb8cf4788a91a2c90b748ae66`) —
+   `delivery_paused: true`; exactly **1** consumer
+   (`f260f2188d80426bb0588685e9d084eb`). (The queue
+   state cannot be read by the Worker; cf-api read-back
+   is the proof, as at every prior census.)
+6. **Capabilities** — standard admitted; Batch
+   `batch_not_armed` (`d6StandardOnly`); phase registry
+   binds `forever-pucked` ↔ bookId
+   `5c589095-f812-48a2-8ab2-03ba2791f2b2`.
+7. **Phase accounting, exact on both surfaces**
+   (capabilities + diagnostics): settled **1,029,420**;
+   estimatedUnverified **19,018**; reservedUnverified
+   **5,648**; inFlightUpper **0**; unknownOpen **0**;
+   remaining **12,464,932** of 13,500,000;
+   `unverifiedStatus: provider_unverified`.
+8. **Quota** — reconcile `ok: true`, drift empty,
+   totals stable across pages; sole exception the known
+   adjudicated straddler
+   `att-37d63768-db4b-447d-8150-580b7c6ee257`
+   (`estimated_unverified`, never dispositionable). PT
+   dispatched totals (PT day rolls 07:00Z): 2026-10-29
+   = **57**, 2026-10-30 = **79**, 2026-10-31 = **44**,
+   2026-11-01 = **76**, 2026-11-02 = **0** (observed
+   Nov 2, 2026); **no dispatches on any PT day after
+   2026-11-01** — if the gate runs on a later day, that
+   day must read 0 and every intervening day 0.
+   Derived reserved **0**.
+9. **Plans — exactly 5:** smoke
+   `plan:3183ecbf2ac4bf50bbc6166e` `complete`; old Ch 2
+   `plan:603ab416bd67ab1b25de97be` `retired`; fresh
+   Ch 2 `plan:b2dc2a3d1cd367a0245b9102` `complete`;
+   Ch 3 `plan:e377a5559961b294154276b6` `complete`;
+   **preserved Phase B plan
+   `plan:19cad189fab54b9c804a74a6` `active`**, totals
+   {eligible 1, done 0, failed 0, blocked 0, prompts
+   0}, single entry (FP chapterIndex 2, idx 26,
+   occurrenceId
+   `2a85f74f-353d-4c25-a86a-4a4db392868b`, 569 chars)
+   `pending` / `executionState: null`; its job
+   `plan:19cad189fab54b9c804a74a6:seg` `queued` rev 1,
+   quarantine `held: false`, **grants []**. No other
+   non-terminal plan; no live grant.
+10. **Eligibility** — chapter bound **26** / parked
+    **0** / eligible **1**; segment eligible **1** /
+    **569** chars / **8,022** units; the chapter,
+    segment, and book scopes' digests mutually
+    consistent at
+    `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1`
+    (the post-exemption digest standing since Phase B
+    attempt 3).
+11. **Conflicts** — exact-match to the pinned four-row
+    `schedule_dead` lease baseline: id 1 @
+    2026-10-29T23:54:14.808Z (`grant:plan:3183ecbf…:seg:1:full`);
+    id 2 @ 2026-10-30T00:24:14.632Z
+    (`grant:plan:603ab416…:ch1:1:full`); id 3 @
+    2026-10-31T05:14:24.089Z (`grant:plan:b2dc2a3d…:ch1:1:full`);
+    id 4 @ 2026-11-01T01:04:30.364Z
+    (`grant:plan:e377a555…:ch2:1:full`); all cache_key
+    `lease`, expected `7`, found `LIKE or GLOB pattern
+    too complex: SQLITE_ERROR`, reason `schedule_dead`.
+12. **Parked job** —
+    `1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a`
+    `parked_policy` rev 1, definition fingerprint
+    `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`
+    exact, grants [].
+13. **Watermarks + occupancy** — content **18**;
+    bindings **1841**, **0** binding rows for the
+    idx-26 occurrence, **0** changes since seq 1841;
+    the idx-26 R2 key
+    (`audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590`)
+    **FREE** (LIST empty).
+14. **`drive=1` recorder baseline** (last observed
+    Nov 2, 2026 at the P2 gate, reads at 15:42:57Z and
+    15:58:02Z, identical): `tableState: "missing"`,
+    `drivePasses: []`, `recorderHealth: null`; alarm
+    block: `armedAt` **1793562576104** =
+    2026-11-01T19:49:36.104Z, `pendingSchedule` **2**,
+    `pendingWatchdog` **1**. Hard expectations: the
+    recorder fields exact; **`armedAt` bit-identical**
+    — both prior deploys (range-fix, P2) left the armed
+    value unchanged, and a deploy is not a wake; an
+    `armedAt` that already differs at census means
+    something else moved first = STOP and classify
+    before anything else. On the live (pre-containment)
+    build the `drive=1` containment projection reads
+    `null` (the shipped service duck-types the absent
+    coordinator method to null) — that null is the
+    expected pre-deploy value.
+15. **Cont
