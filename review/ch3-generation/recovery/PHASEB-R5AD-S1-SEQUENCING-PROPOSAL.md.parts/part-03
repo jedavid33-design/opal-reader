@@ -1,0 +1,143 @@
+ized by a W-4: no stop (no trigger), no second stimulus (the single stimulus, if used, is spent; a natural wake needs none), no re-send of anything. |
+| W-1f at window close | §3.5. |
+
+**S1-X triggers (carried from gates v4, unchanged):**
+(T1) recorder or plan/job evidence of grant activity
+beyond the §7.3 pre-classified set; (T2) any dispatch
+observed while GENERATION_HALT is `"1"`; (T3) phase
+or quota movement beyond the §7.3 predictions in any
+amount not in the set; (T4) a second grant, a second
+plan/job movement, or any movement in the conflicts
+baseline, watermarks, or parked job outside the set.
+
+**Evidence standard for a verified trigger
+(V4-4 (c), carried):** the observation was made by a
+scheduled §3.1 read; the raw observed values and
+timestamps are written into the window log **before**
+the stop act fires; the movement is outside the
+§7.3 set under the same classification standard the
+window reports under; **where paired surfaces
+disagree, or a value cannot be freshly read, the
+trigger is NOT verified** — the response is (b)/(c),
+never the stop. An impression, an unrecorded
+observation, or a single uncorroborated surface
+reading never arms S1-X.
+
+**S1-X budget when fired (carried):** exactly one
+`stop_chain` act + `verify_chain_stop` attempts
+within the episode bound (≤3 total). State writes
+≤4, audit rows ≤5, `deleteAlarm` ≤3, `setAlarm` 0,
+commands 0, all else 0. Ends HELD in CHAIN_STOPPED;
+immediate report with the trigger, the firing reads,
+and the stop record incl. `stopConfidence`. If the
+episode exhausts unverified, S1-X is spent and any
+further verification is R3-V territory (fresh Rowan
+ruling + Julie authorization) — not a window act.
+
+**Layer-1 `contain_drive` (part (B2), carried from
+gates v4 S1 Layer 1):** one application (+1 state
+write, +1 audit row) on out-of-set movement, to
+bound drive accumulation while reporting proceeds.
+It suppresses future drive passes; it does **not**
+stop the alarm chain — registrations continue and
+grant/void churn continues between passes. If S1-X
+later fires, the stop proceeds from DRIVE_CONTAINED
+(a legal transition). If (B2) is struck from the
+authorization, the W-3 response is report + (a)/(c)
+only. **Ruling Item E** asks Rowan to confirm (B2)
+rides in this authorization for a natural event, as
+it did for the deliberate one.
+
+**Continuing-effect honesty (correction 6, carried):**
+absent an S1-X stop, a revived chain continues its
+~10-minute passes and §7.3 churn **beyond the window
+close** — the window bounds observation, not the
+chain. Window close does not quiet it, C3 (when it
+comes) is the next authorized actor on it, and the
+interim state is bounded ($0, no dispatch, delivery
+fenced) but unbounded in duration. The window record
+states this in its closing certification rather than
+letting a clean close imply a quiet system.
+
+### 3.5 W-1f (future re-base) at window close
+
+If the event stands at W-1f when the window closes
+(a wake re-based the registration to a future D, and
+D has not arrived): the window record records the
+disposition as **WAKE OBSERVED — DELIVERY PENDING
+AT <D>**, with D now a known, observed value. This
+is **not** a completed S1 disposition for C3
+purposes (§4.3): the chain's delivery at D is a
+known future event whose §7.3 arrival will be
+unobserved once the window lapses. C3 does not
+start until Rowan dispositions the W-1f end-state
+(her options include extending observation to D
+under a fresh authorization, or re-deriving C3's
+stop-act expectations against a live future
+registration — the stop act deletes whatever
+registration is present, so a C3 against W-1f is
+mechanically the stale-registration case with a
+different `armedAt` value; the choice is hers, not
+this proposal's).
+
+---
+
+## 4. R5AD-3 — Boundary reconciliation
+
+### 4.1 Boundary map
+
+| Scope | Owns | Begins | Ends | Explicitly does NOT include |
+|---|---|---|---|---|
+| **R5a-D** | The deployment: census, assembly, battery, one upload, verification (§5 carries the accepted package) | Julie's part-(A) GO, recorded before census | Rowan's acceptance of the execution record (**CLOSED**) | Any wake, command, transition, or the event the deployment makes possible. Its close never depends on the wake |
+| **S1 (this sequence)** | The first-wake **event**: the window, detection, classification, disposition (§§2–3) | Window open = the upload's D2 read-back completion | Window close + Rowan's review of the window record (**CLOSED**, event dispositioned) | The deployment (R5a-D's), the stop (S1-X's, or C3's), any generation. Under Variant D it also owns the single conditional stimulus |
+| **S1-X** | The emergency chain stop, if a verified T1–T4 trigger fires inside the window | Armed at window open (part (C)) | Fired (once) or expired at window close | The event itself; any second firing; any use outside this window, this pin |
+| **C3** | Operational containment verification against the composed build: the mechanics pair + the physical stop act, PARTIAL verdict | Its own revised readiness + its own Julie GO, after §4.3's preconditions | CHAIN_STOPPED/verified (or STOPPED-unverified), record accepted | The first-wake event (already dispositioned before it starts); restoration; any stimulus |
+| **Standalone restoration** | CHAIN_STOPPED → NORMAL, once, on its own authorization (fresh census + demonstrated reason + episode disclosure + **historical audit review**, gates v4 text unchanged) | After C3, on Rowan's review of C3's record and Julie's separate GO | NORMAL, registration still absent, episode closed | Re-arming (the clear does not re-arm); any verification work (that is R3-V's); any place inside R5a-D/S1/C3's GOs |
+| **R3-V** | Post-exhaustion verification continuation, per exhausted episode (gates v4 text unchanged) | A Rowan ruling on an exhaustion record + Julie's authorization | One new episode's stop attempts, bounded as pinned | Any informal retry; any reset via `clear`; any scope beyond the named episode |
+
+No scope's GO includes another scope. The §6
+authorization is one *decision* containing four
+*named parts* for two scopes (R5a-D; S1 incl. its
+S1-X companion) because Option (ii) forbids
+separating them in time — the parts remain
+individually strikable in drafting (§6.1 states the
+consequence of each strike).
+
+### 4.2 State sequence (holds invariant throughout)
+
+| State | Description | Reached by |
+|---|---|---|
+| **S-0 HELD-STALE** (today) | C1 build live; containment NORMAL/inert; stale registration 1793562576104 in place; chain not delivering (causation unproven, R-09) | — |
+| **S-1 HELD-DEPLOYED-STALE** | Composed build live and verified; semantic armed; no wake yet; window running | R5a-D upload + read-back |
+| **S-1n HELD-DEPLOYED-STALE, TESTED** | As S-1, but the deliberate stimulus (Variant D) has evaluated the wake with **no observed revival** within the tested window, subject to recorder limitations; `armedAt` at its stimulus-observed value (D, or unchanged, as recorded) | Variant-D stimulus + W-0/W-1f-free observation to close — W-1f routes to §3.5 instead |
+| **S-2 HELD-REVIVED-CHURNING** | Chain live: ~10-min passes, §7.3 grant/void churn, recorder rows accruing; dispatched 0, $0; event dispositioned EXPECTED | W-2 inside the window |
+| **S-2x HELD-STOPPED-BY-S1X** | S1-X fired on a verified trigger: CHAIN_STOPPED (verified, or unverified/exhausted as recorded) before C3 | W-3 + verified T1–T4 |
+| **S-WX WINDOW-EXPIRED-UNRESOLVED** | Variant N only: window closed with no event; arrangements lapsed; semantic live; event unowned. **A named non-resting state** — C3 blocked; renewal or Rowan disposition required (§2.1) | Variant-N expiry |
+| **S-3 HELD-CHAIN_STOPPED/VERIFIED** | C3's stop act performed and verified against the then-current registration | C3 (its own GO) |
+| **S-4 HELD-NORMAL, REGISTRATION ABSENT** | Restoration's clear executed; episode closed; no registration in place | Standalone restoration (its own GO) |
+
+From S-4, the first subsequent wake arms a **fresh**
+registration by the ordinary rules — S-0's stale
+condition does not recur from the restoration
+itself (§1). What follows S-4 (any future S1-class
+deliberate work under gates v4's original remainder
+program) is outside this proposal.
+
+### 4.3 C3 dependency and census-form changes
+
+**Dependency (proposed, for Rowan's confirmation as
+part of Ruling Item C's supersession):** C3's
+preflight may open only when **all** of the
+following hold:
+
+1. R5a-D is CLOSED (Rowan's execution acceptance) —
+   Rowan's standing requirement, unchanged.
+2. The S1 window is CLOSED and the event stands
+   **dispositioned** in exactly one of these forms:
+   **EXPECTED-REVIVED** (state S-2), **NEGATIVE**
+   (state S-1n; the mandated wording on record),
+   or **STOPPED-BY-S1X** (state S-2x). W-1f-pending
+   (§3.5), W-4 (undispositioned), and S-WX are
+   **not** dispositions: C3 stays blocked until
+   Rowan rules on the end-state.
+3. Rowan has reviewed the window record.

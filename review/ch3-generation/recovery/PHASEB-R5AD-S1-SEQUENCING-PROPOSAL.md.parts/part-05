@@ -1,0 +1,114 @@
+proposal's evidence standard
+> (scheduled reads; raw values and timestamps
+> recorded in the window log before firing; paired
+> surfaces in agreement; movement outside the §7.3
+> pre-classified set), execute exactly one
+> `stop_chain` with in-bound `verify_chain_stop`
+> attempts (≤3), report immediately, and end HELD in
+> CHAIN_STOPPED. This authorization is single-use,
+> expires at window close whether or not it fires,
+> carries over to no other window, package, or gate,
+> is revocable by me at any time before it fires,
+> covers no other act, and does not extend part
+> (A)'s GO."
+
+**Part (D) — conditional deliberate stimulus
+(operative only if Ruling Item A selects Variant
+D):**
+
+> "GO — conditional S1 stimulus: if no natural wake
+> has been observed by the +24-hour scheduled window
+> read, Wren may send exactly one `RequestPause`
+> command with a fresh `command_id` (generated and
+> recorded before sending) targeting the reserved
+> nonexistent job `alarm-wake-probe:nonexistent`,
+> after re-verifying on fresh reads at that moment
+> that the target does not exist and re-reading the
+> recorder baseline. Expected response: `rejected` /
+> `job_not_found`. NO re-send under any circumstance
+> — an ambiguous response is a STOP-and-classify
+> event. Post-stimulus reads follow §3.2's cadence.
+> A no-revival outcome is reported only as 'no
+> observed revival within the tested window, subject
+> to recorder limitations.'"
+
+### 6.3 What the combined authorization spends
+
+Production writes, worst case across all parts:
+R5a-D — 1 upload (+ ≤1 conditional PATCH; + ≤1
+class-A rollback upload and ≤1 conditional PATCH);
+window — reads 0 writes; (B2) ≤1 state write + ≤1
+audit row; (C) if fired: state writes ≤4, audit rows
+≤5, `deleteAlarm` ≤3, `setAlarm` 0; (D) if used: 1
+commands row, `setAlarm` ≤1 from the stimulus's own
+wake evaluation (the composed build's memo bound),
+plus per-pass `finally` registrations only if passes
+are delivered (system behavior, classified — not
+operator stimuli). Plus the event's own §7.3 system
+effects (grant issuance and churn), which are
+consequences under the holds, not operator writes.
+Spend **$0** in every branch while the holds stand.
+
+### 6.4 NOT authorized by §6, in any combination
+
+C3 (any part of it); the standalone restoration;
+R3-V; a second stimulus; a second S1-X firing;
+window renewal or extension; any SubmitJob or
+generation; any hold flip or queue change; any
+rollback for a class-B finding; any command other
+than part (D)'s one; any containment transition
+other than (B2)'s single `contain_drive` and (C)'s
+single `stop_chain` with its in-bound verifies.
+
+---
+
+## 7. Ruling items for Rowan
+
+- **Item A — Window tail variant.** Variant D
+  (conditional deliberate stimulus at +24 h;
+  Wren-recommended, §2 Stage 3b) or Variant N
+  (natural only; §2.1's expiry state accepted)?
+  Part (D) of §6 stands or falls with this ruling.
+- **Item B — S1-X re-binding (DV-3).** Is the §6
+  part-(C) binding — this proposal's pin, this
+  window definition (upload read-back → +72 h
+  closing census), the carried triggers/evidence
+  standard/budget — the V4-4-compliant form for this
+  sequence?
+- **Item C — Gates-v4 S1 dependency supersession
+  (DV-2) and the C3 dependency (§4.3).** Confirm
+  that the S1 event precedes C3 in this sequence
+  (the gates text's S1-after-restoration order does
+  not survive Option (ii)), and that C3's preflight
+  requires R5a-D CLOSED **and** the §4.3 disposition
+  in one of its three named forms.
+- **Item D — Window parameters.** 72-hour duration;
+  the §3.2 cadence (hourly to +12 h, 6-hourly to
+  close, 10-minute tightening on W-1); the +24-hour
+  stimulus point (Variant D). Accept or amend.
+- **Item E — Layer-1 `contain_drive` (part (B2)).**
+  Confirm it rides in this authorization for a
+  natural first-wake event, as gates v4 placed it
+  inside S1's GO for the deliberate one — or strike
+  it to report-only.
+
+---
+
+## 8. Package contents and turn
+
+This proposal is a single consolidated document,
+pinned with the ruling record
+(`ROWAN-R5AD-READINESS-RULING.md`) and the companion
+cp (`PHASEB-R5AD-S1-SEQUENCING-ROWAN-CP.md`). The
+documents it carries forward are cited by pin and
+hash in §5 and remain in the GitHub archive; the
+Dropbox review folder carries this proposal and its
+cp only (plus the standing instructions file), per
+the rotation.
+
+**Production remains under INVESTIGATION HOLD.
+Nothing in this proposal deploys, transitions, wakes,
+stimulates, or mutates anything, and no GO is
+requested by it. Turn: Rowan's — review of this
+revised sequencing and readiness proposal, including
+Ruling Items A–E (§7).**

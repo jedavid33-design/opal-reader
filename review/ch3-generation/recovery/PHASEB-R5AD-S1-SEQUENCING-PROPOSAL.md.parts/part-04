@@ -1,0 +1,206 @@
+
+
+**What changes in C3, by branch** (C3's revised
+package owns the details; this proposal fixes the
+forms):
+
+- **Build/etag expectations** re-base to the
+  composed production build (its build pin and etag
+  as verified at R5a-D close) — in every branch,
+  per Rowan's existing instruction.
+- **EXPECTED-REVIVED (S-2):** the stop act targets a
+  **live chain**, not the stale registration. The
+  C3-0 `armedAt` hard expectation changes **form**:
+  from the fixed value 1793562576104 to a
+  **consistency expectation** — the value read at
+  C3-0, identical across C3-0's paired reads,
+  recorded as the stop act's `stopArmedBefore`
+  expectation. The recorder baseline becomes the
+  accrued rows/health as read; the preservation
+  baselines for the preserved plan, its job, grants,
+  and derived reserved become the **window closing
+  census** values (the churn state), which the C3
+  package must adopt as its census basis document.
+  The ledger is unchanged in shape and budget. Two
+  honest consequences: passes may occur during C3's
+  own execution (background, within the churn
+  invariants — a movement outside them is a C3 STOP
+  as before), and the C3-1 `contain_drive` leg gains
+  live meaning — a pass arriving after it will
+  record drive suppressed, which is live
+  drive-suppression evidence arising *inside* C3
+  without C3 manufacturing it. C3 does not stage
+  that arrival and its verdict remains **PARTIAL**
+  unless Rowan rules otherwise on C3's record; the
+  remainder is not silently discharged.
+- **NEGATIVE (S-1n):** the stop act targets the
+  stale registration exactly as C3's current package
+  designs. Census values adopt the window closing
+  census (`armedAt` = its recorded stimulus-observed
+  value — D if the stimulus re-based it, else
+  1793562576104; recorder as observed). No other
+  form change.
+- **STOPPED-BY-S1X (S-2x):** the physical stop has
+  already been performed by S1-X. C3's stop act is
+  not re-performed; C3 re-scopes (in its revised
+  package, for Rowan's ruling) to verification of
+  the existing stop record against fresh reads plus
+  the mechanics legs that remain meaningful. If
+  S1-X's episode stands exhausted/unverified, R3-V
+  — not C3 — owns further verification, and C3's
+  precondition (2) is met only with Rowan's express
+  disposition of that record.
+
+### 4.4 What does not move
+
+The standalone restoration's authorization shape,
+preconditions (including the V4-1 historical audit
+review), budget, and GO text are **unchanged**; it
+remains reachable only after C3, on its own
+decision. R3-V is **unchanged**. The Phase B
+preserved plan and the idx-26 exemption are
+untouched by every stage of this proposal: the
+§7.3 grant the event issues against the preserved
+plan is a system effect of the wake under the holds
+(already pre-classified and accepted as the
+consequence set), not an operator act on the plan,
+and no stage retires, releases, revokes, or
+resubmits anything.
+
+---
+
+## 5. Carried forward unchanged (accepted basis)
+
+From the R5a-D readiness package (pin
+`74b7120ee7073ba2df3544a98991819a89cf0420`), **without
+alteration**: candidate identity on both bases (§2
+there: coordinator `5303cb63…`, +66/−36 vs the live
+C1 build; entry `2bb0608b…` and service `5c5183e6…`
+byte-identical to live; deployed delta at gate time
+= coordinator + re-stamped identity, 29/31 identical);
+gate-time assembly, build pin, and stamp (§3 there);
+the 16-item fresh census (§4 there — the window-open
+baseline of §3.1 is its closing repeat, not a new
+census); mutation bounds and triggers T1–T6 (§5
+there — with the DV-4 disposition refinement for
+T5/T6 only); the class A / class B rollback
+classification and §5.2 safety conditions (§5.1–5.2
+there — the T5/T6 wake signature remains class B for
+rollback purposes in every branch: **no rollback
+answers a wake**); observability procedure (§6
+there); V1–V8 verification at C1-2 claim strength
+(§7 there — script deployment verified, runtime
+adoption NOT claimed, RD-R2's adoption edge standing);
+battery requirements and standing results (§8 there:
+containment 42/42, R5a 23/23, P2 32/32, exit 0 on the
+composed tree; gate-time re-run on the assembled tree
+required); STOP conditions (§9 there); unresolved
+risks (§10 there, register at corrected strength,
+incl. R-02/R-03/R-04/R-05/R-06/R-09/R-11/R-12/R-13
+and RD-R1..R3 — RD-R1's governance gap is what this
+proposal closes; its consequence set is unchanged).
+From gates v4 REVISED: the containment design's
+stop/verify/episode law (bound 3, exhaustion =
+STOP, clear ≠ retry reset), §R's recorded-vs-physical
+discipline, S1's stimulus identity and mandated
+negative wording, S1-X's triggers, budget, and
+evidence standard, the standalone restoration, and
+R3-V. Candidate code is untouched by this proposal;
+no battery re-run is proposed or needed for
+paperwork.
+
+---
+
+## 6. R5AD-4 — Authorization proposal (replaces readiness §11)
+
+### 6.1 Structure and the dependency rule
+
+One Julie decision, four separately named parts.
+Parts are severable **in drafting** — Julie or Rowan
+may strike any part before the decision is given —
+but the sequence imposes one hard dependency, stated
+rather than hidden: **part (A) is inoperative unless
+parts (B) and (C) are granted with it.** Striking (B)
+or (C) does not yield a leaner deployment; it yields
+no deployment, because a deployment whose first-wake
+consequence has no observation arrangements (B) or
+no verified-trigger stop standing by (C) is Option
+(i) under another name. Part (B2) may be struck
+independently (the W-3 response narrows to report +
+S1-X/escalate). Part (D) is genuinely optional: its
+absence selects Variant N for the window's tail,
+with §2.1's expiry consequences accepted knowingly.
+The whole authorization is revocable by Julie at any
+time before the upload; part (C) is additionally
+revocable at any time before it fires.
+
+### 6.2 Draft GO texts
+
+**Part (A) — R5a-D execution** (the readiness
+package's bounds; its Option-(i) acceptance
+paragraph replaced by the governing-parts sentence):
+
+> "GO — execute exactly one Gate R5a-D attempt as
+> pinned in the R5a-D readiness package (pin
+> `74b7120ee7073ba2df3544a98991819a89cf0420`) as
+> sequenced by the R5a-D/S1 sequencing proposal (pin
+> `<PIN — inserted at filing>`): fresh census,
+> battery re-run (containment 42 + R5a 23 + P2 32)
+> on the gate-assembled composed tree, build pin,
+> exactly one upload of the composed candidate
+> (coordinator `5303cb63…`; entry `2bb0608b…` and
+> service `5c5183e6…` byte-identical to the live C1
+> build) to `opalreader-api-v2-prod`, at most one
+> conditional observability PATCH, and — ONLY for a
+> confirmed deployment defect (class A) and ONLY
+> after the package's rollback-safety conditions are
+> all verified — conditionally one rollback upload
+> of the preserved C1 build `27b2b3a9…` parts plus
+> at most one conditional PATCH; any external or
+> causally unresolved movement (class B, including a
+> wake signature) authorizes NO rollback under this
+> GO — the response is HOLD, preserve evidence, and
+> escalate; passive reads only; NO containment
+> transition, NO command, NO wake or stimulus **by
+> the executor**, NO hold or queue change; ending
+> HELD with containment inert at NORMAL. The
+> first-wake consequence of this deploy is not
+> accepted as an unowned outcome: it is governed by
+> parts (B), (C) and (D) of this same authorization,
+> granted together with this part. If any of parts
+> (B)–(D) as applicable is not granted, this part
+> does not authorize execution."
+
+**Part (B) — S1 observation window (incl. B2):**
+
+> "GO — S1 observation window: from the completion
+> of the R5a-D upload's read-back, for 72 hours,
+> Wren will perform the read-only observation checks
+> of §3 of the sequencing proposal (pin `<PIN>`) at
+> its stated cadence, recording every read's raw
+> values in the window log, reporting any
+> classification other than W-0 to me immediately,
+> and filing the window record at close. Reads only:
+> no command, no stimulus except part (D), no
+> transition except part (B2). **(B2)** Layer-1
+> contingency: on movement outside the §7.3
+> pre-classified set that does not meet a verified
+> S1-X trigger, Wren may apply `contain_drive`
+> exactly once (+1 state write, +1 audit row),
+> reporting immediately; I understand `contain_drive`
+> bounds drive passes but does not stop the alarm
+> chain."
+
+**Part (C) — S1-X standing conditional authorization
+(re-bound to this proposal and this window, per
+V4-4's five conditions):**
+
+> "GO — standing conditional authorization for Gate
+> S1-X under the R5a-D/S1 sequencing proposal, pin
+> `<PIN — inserted at filing>`, armed only during
+> the single S1 observation window defined there
+> (from the R5a-D upload's read-back completion to
+> the window's closing census at +72 hours): if any
+> S1-X trigger (T1–T4, as carried in §3.4 of the
+> proposal) is observed at a scheduled window read
+> AND verified to the 

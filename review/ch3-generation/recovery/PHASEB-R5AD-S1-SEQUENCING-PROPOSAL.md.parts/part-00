@@ -1,0 +1,178 @@
+# Phase B — REVISED R5a-D/S1 sequencing and readiness proposal (Option (ii))
+
+**Status: READINESS PAPERWORK ONLY. Nothing in this
+proposal is executed by it, and no GO is requested by
+it.** Rowan's review of this proposal is not a GO; a
+production GO remains a separate future step (Julie's
+explicit authorization, in the §6 form, after Rowan's
+review and her rulings on §7's items). Production is
+under INVESTIGATION HOLD and ends HELD. This proposal
+authorizes nothing.
+
+**Assignment:** Rowan's ruling on the R5a-D readiness
+package (Nov 2, 2026; recorded at
+`ROWAN-R5AD-READINESS-RULING.md`): verdict REVISE —
+**Ruling Item 1 = Option (ii)**: the first-wake
+consequence belongs to the S1 stimulus scope; R5a-D
+may not execute as an isolated code-only deployment;
+options (i) and (iii) declined ((iii) as a sole
+mitigation: app-use restrictions cannot reliably
+prevent delayed or queued synchronization). The
+readiness package's candidate definition, live-build
+comparison, battery evidence, fresh census structure,
+mutation limits, rollback classification, STOP
+conditions, and runtime-adoption caveat are ACCEPTED
+as the basis for this revision and carry forward
+unchanged (§5). Corrections **R5AD-1..R5AD-4** are
+answered in §§2, 3, 4, 6 respectively. The revised
+plan is not to be executed under that ruling; this
+proposal does not execute it.
+
+**Gate structure (as sequenced by Rowan's rulings):**
+C1 (CLOSED) → C2 (CLOSED, readability verified) →
+**R5a-D + S1 (this proposal: one deployment, one
+observation window, one owned first-wake event)** →
+C3 (readiness held; census re-based after R5a-D
+closes AND the S1 event is dispositioned, §4.3) →
+standalone restoration (separate, unchanged) →
+R3-V micro-scope (unchanged).
+
+---
+
+## Corrections banner — where R5AD-1..R5AD-4 are answered
+
+| Correction | Requirement | Answered in |
+|---|---|---|
+| **R5AD-1** | Resolve S1 readiness and R5a-D sequencing without violating the requirement that R5a-D close before C3 | **§2** — the five-stage sequence: arrangements authorized first (paperwork + one combined authorization), R5a-D executes and closes on its own documentary terms, the S1 window spans the first-wake event, C3 follows only after both closure and disposition |
+| **R5AD-2** | Define first-wake detection, observation, classification, and authorized response | **§3** — detection surfaces (§3.1), observation mechanics and cadence (§3.2), classification taxonomy W-0..W-4 (§3.3), authorized response per class (§3.4) |
+| **R5AD-3** | Reconcile R5a-D, S1, C3, and separately authorized stop/restoration boundaries | **§4** — boundary map (§4.1), state sequence (§4.2), C3 dependency and census-form changes (§4.3), S1-X / restoration / R3-V boundaries (§4.4) |
+| **R5AD-4** | Replace the readiness package's §11 GO wording with an authorization proposal consistent with Option (ii) | **§6** — one Julie decision in four separately named parts (A: R5a-D; B: window arrangements incl. B2 Layer-1; C: S1-X standing chain stop, re-bound; D: conditional deliberate stimulus), with the dependency rule, the NOT-authorized list, and draft GO texts |
+
+**Deviations from the previous package and from the
+gates-v4 text — identified explicitly (Rowan's
+instruction).** Nothing else in the accepted package
+changes (§5).
+
+- **DV-1 — §11 GO wording replaced in full.** The
+  Option-(i) acceptance paragraph ("I accept that
+  consequence as part of this GO") is **removed**.
+  Under Option (ii) the consequence is not accepted
+  bare; it is governed by the window arrangements,
+  the response authorizations, and the disposition
+  rules of this proposal (§6).
+- **DV-2 — The gates-v4 S1 hard dependency is
+  superseded in order.** Gates v4 placed S1 strictly
+  after C3 + remainder ruling + standalone
+  restoration. That order cannot survive Option (ii):
+  the first-wake event is triggered by the deployment
+  plus ordinary traffic, not by the calendar, so an
+  S1 that waits behind C3 leaves the event unowned
+  for exactly the interval Rowan declined. The S1
+  *event* therefore moves to immediately after R5a-D,
+  inside a pre-authorized window. The deliberate
+  probe's identity (one `RequestPause`, fresh
+  `command_id`, reserved nonexistent target, mandated
+  negative wording) is preserved — under the
+  recommended variant it becomes the window's
+  conditional fallback (§2, Stage 3b) instead of the
+  primary stimulus. **This supersession is Ruling
+  Item C (§7): it is proposed, not assumed.**
+- **DV-3 — S1-X is re-bound.** The gates-v4 S1-X
+  binding attached to the gates package pin and to a
+  window opening at a stimulus dispatch. Under this
+  sequence there may be no dispatch; the standing
+  authorization in §6 part (C) is a **fresh binding**
+  to THIS proposal's pin and to the window defined in
+  §2 (opening at the R5a-D upload read-back). The
+  gates-v4 authorization text arms nothing under this
+  sequence. **Ruling Item B (§7).**
+- **DV-4 — Wake-signature findings inside R5a-D's own
+  verification change disposition.** The readiness
+  package's triggers T5/T6 (wake signature) were, in
+  every branch, a class-B STOP + escalate with the
+  gate's outcome left for Rowan to classify. Under
+  this sequence the window is already armed when the
+  upload lands (it opens at the read-back), so a
+  T5/T6 signature observed at a §7 verification read
+  is an **early S1 event**: R5a-D still STOPs its
+  remaining steps and ends HELD (unchanged), but
+  classification proceeds under the S1 arrangements
+  (§3.3) instead of as an orphan escalation, and
+  S1-X is armed against it. Class-B rollback
+  discipline is unchanged: no rollback in any branch.
+- **DV-5 — Scheduled observation reads are a new
+  named activity.** No prior gate ran a multi-day
+  window. The §3.2 read-only check-ins are inside
+  authorization part (B) (§6), are GET-only, and are
+  the window's detection mechanism (the readiness
+  package §1.4 step 5 recorded that nothing otherwise
+  reads on a schedule).
+- **DV-6 — C3's census changes form in two items**
+  (armedAt expectation; recorder/§7.3-marker
+  baselines), derived in §4.3. C3's ledger, budget,
+  and PARTIAL character do not change.
+
+---
+
+## 1. The problem, restated at ruling strength
+
+The readiness package established (accepted as the
+basis for revision): deployment itself performs no
+alarm action; the deployed R5a semantic changes what
+the **next wake** does; a wake is **expected** in
+ordinary operations while HELD — `POST
+/v2/sync/position` constructs a fresh
+`PushPositionEvents` command per push and reaches
+`wake()` (package §1.2–§1.3); on the first wake the
+past-due disjunct fires (the live registration
+`armedAt` **1793562576104** = 2026-11-01T19:49:36.104Z
+is ~26× beyond the provisional 3,600,000 ms threshold,
+so the threshold affords no protection in this
+incident) → exactly one `setAlarm(D)` (memo-bounded);
+D unobservable until that moment (B1 leading, **not
+proven**; B2/B3 open); under B1/B2 the past-due
+registration delivers promptly → a drive pass under
+the holds → exactly the pre-classified §7.3 set
+(grant `grant:plan:19cad189fab54b9c804a74a6:seg:1:full`
+issued; occurrence `pending` → `granted`; job
+`queued` rev 1 → `generating` rev 2; derived reserved
+0 → 12; **dispatched 0, attempts 0, $0, all five
+phase figures frozen**) — and the watchdog re-arms,
+so the chain **revives** into the bounded grant/void
+churn indefinitely (≤1 live grant; reserved ∈ {0, 12})
+until a stop act or another authorized disposition.
+Under B3, registration re-bases to a future D and the
+chain revives when D arrives.
+
+Rowan's Option (ii) ruling assigns ownership of that
+event to **S1's scope**: it may occur only with S1's
+observation and response arrangements in place. The
+design problem this proposal solves is that S1, as
+previously scoped, was a *deliberate* stimulus (one
+sent command inside a short window), while under
+Option (ii) the stimulus may arrive as *unplanned
+ordinary traffic* at an uncontrolled time. §§2–4
+reconcile the two without violating either of
+Rowan's fixed points: **R5a-D closes before C3**, and
+**no wake consequence is ever unowned**.
+
+One further fact shapes the sequence and is stated
+here so the stages below need no re-derivation: the
+first-wake consequence is a **one-incident
+phenomenon**. It exists because a specific stale
+registration (1793562576104) is sitting in the store
+when the semantic deploys. Once that registration is
+deleted (C3's stop act) or consumed by delivery, no
+stale value remains for the disjunct to act on; the
+post-restoration clear does not re-arm, and the first
+wake after restoration arms a fresh registration by
+the ordinary rules. The disjunct remains a permanent
+semantic for any *future* registration that itself
+goes stale beyond the threshold (the R-03/R-05
+residuals stand), but the governed event of this
+program is singular: **this** stale registration,
+**this** first wake.
+
+---
+
+## 2. R5AD-1 —

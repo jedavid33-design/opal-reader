@@ -1,0 +1,142 @@
+ked, outcomes, recorded error, `armed_after`), `recorderHealth`. Alarm: live `getAlarm()` value (`armedAt`), `pendingSchedule`, `pendingWatchdog` |
+| 2 | `GET /v2/d6-containment` (operator) | Containment state projection: state, absence, verified flag, `stopConfidence`, stop-record/episode fields — the second surface for the containment facts, and the surface that reports an S1-X firing's result |
+| 3 | `GET /v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6` | The preserved plan: state, totals, the idx-26 entry's disposition and `executionState`, grants projection, and `phaseAccounting` (both-surfaces rule: phase figures are read here AND at #5) |
+| 4 | `GET /v2/jobs/plan:19cad189fab54b9c804a74a6:seg` | The preserved job: state, revision, **grants [] → [the one grant]** — the §7.3 issuance marker |
+| 5 | `GET /v2/generation/capabilities` | Phase block (second phase surface), standard admitted / Batch `batch_not_armed`, phase registry binding |
+| 6 | `GET /v2/d6-quota-reconcile` (operator) | Reconcile `ok`, drift, the sole straddler; derived totals incl. **reserved 0 → 12** and per-PT-day dispatched (must stay 0) |
+| 7 | `GET /v2/conflicts` | The four-row `schedule_dead` baseline, exact-match (trigger T4 surface) |
+| 8 | `GET /v2/sync/changes?family=bindings&sinceSeq=1841` | 0 changes expected; any binding change is outside the §7.3 set |
+| 9 | cf-api queue read-back, `opalreader-generation-v2` | `delivery_paused: true`, exactly 1 consumer — the delivery fence, verified externally (the Worker cannot read it) |
+| 10 | `GET /health` | Build stamp unchanged across the window (no redeploy has occurred), generation `halted`, coordinator `armed` |
+
+The **window-open baseline** is the R5a-D closing
+census (the gate's §7 closing values), incorporated
+by reference as the window record's first entry:
+`armedAt` 1793562576104 (or its census-observed
+value), recorder missing/empty, preserved plan
+`active` {1,0,0,0,0} with entry `pending`, job
+`queued` rev 1 with grants [], derived reserved 0,
+dispatched 0, phase figures frozen, conflicts
+baseline exact, watermarks 18/1841, containment
+NORMAL/absent/verified.
+
+### 3.2 Observation mechanics and cadence
+
+**Vehicle:** Wren performs the scheduled checks as
+read-only check-ins for the window's duration (the
+activity authorized by §6 part (B)). Each check:
+performs the §3.1 set, appends the raw values with
+timestamps to the **window log** (evidence, filed
+with the window record), classifies under §3.3, and
+**reports to Julie immediately on any classification
+other than W-0** (and on any W-1 → W-2/W-3/W-4
+transition). W-0 checks are silent — logged, not
+reported — so the window does not become noise.
+Wren's checks are the *only* scheduled reads; they
+send nothing, and by §3.1's source basis they cannot
+wake the coordinator.
+
+**Cadence** (times from window open; Ruling Item D —
+Wren's proposal, Rowan's to amend):
+
+| Interval | Cadence | Notes |
+|---|---|---|
+| Open → +2 h | The gate's own V-sets (≈ +10, ≈ +25 min), then window reads at +1 h, +2 h | The gate's verification doubles as the window's first coverage (DV-4) |
+| +2 h → +12 h | Hourly | |
+| +12 h → +72 h | Every 6 h | |
+| On W-1 (wake observed, pass pending) | Every 10 min until a pass is observed, the value resolves as future (→ W-1f track), or 2 h elapse without a pass (→ W-4) | Aligns checks with the ~10-minute watchdog cadence so a revived chain's early passes are each observable |
+| On Variant-D stimulus dispatch | ≈ +2, +12, +37 min from dispatch (S1's own cadence), then rejoin the window cadence | |
+| +72 h | **Closing census** (full §3.1 set) and window record (§2, Stage 4) | |
+
+**Why these numbers:** the event is expected from
+ordinary use, which clusters in Julie's waking
+hours; hourly coverage for the first half-day makes
+a same-day event's detection lag ≤ ~1 h, and the
+10-minute tightening on W-1 bounds the
+wake-to-pass observation gap to roughly one watchdog
+period. The 72-hour length gives three full days of
+ordinary use for the natural event, and the +24-hour
+stimulus point (Variant D) sits one full day in —
+late enough that the natural event has had its
+chance, early enough that two full days of window
+remain to observe whatever the stimulus sets in
+motion. All three numbers are proposals, named as
+Ruling Item D.
+
+### 3.3 Classification taxonomy
+
+Every scheduled read is classified into exactly one
+class. Classification uses the same standard as the
+evidence rule in §3.4: paired surfaces must agree; a
+value that cannot be freshly read is not evidence.
+
+- **W-0 — NO EVENT.** Every read at its window-open
+  baseline value: `armedAt` bit-identical, recorder
+  still missing/empty (or present only with rows
+  already classified), grants [], occurrence
+  `pending`, job `queued` rev 1, reserved 0.
+  *Continue cadence.*
+- **W-1 — WAKE OBSERVED, PASS PENDING.** `armedAt`
+  has changed from the baseline to a new value V
+  (the wake's `setAlarm(D)` made D observable: V IS
+  D), and no drive pass has yet been observed (no
+  new recorder row, no §7.3 marker). Two tracks:
+  **W-1p** — V is past-due or near: delivery is
+  expected promptly (B1/B2); the tightened cadence
+  applies. **W-1f** — V is in the future (B3): the
+  registration has re-based; the chain revives when
+  V arrives. W-1f is recorded with V's value; the
+  window does **not** treat it as a completed event
+  (see §3.5).
+- **W-2 — EXPECTED S1 EVENT.** A drive pass has been
+  observed (a new recorder row whose stage shows the
+  pass ran) **and** every state marker sits exactly
+  inside the §7.3 pre-classified set: grants = [the
+  one grant `grant:plan:19cad189fab54b9c804a74a6:seg:1:full`]
+  (or its lease-expired void state, within the churn
+  invariants), occurrence `granted` (or its
+  then-current §7.3-consistent value), job
+  `generating` rev ≥ 2, reserved ∈ {0, 12},
+  dispatched 0 on every PT day, attempts 0, all five
+  phase figures frozen **on both surfaces**, conflicts
+  baseline exact, watermarks frozen, parked job
+  exact, containment NORMAL, and no recorder row
+  carrying an unexplained error. After the first
+  W-2, subsequent reads classify against the **churn
+  baseline** (the §7.3 invariants), not the pre-wake
+  census: movement inside the invariants is W-2
+  continuing; movement outside them is W-3.
+- **W-3 — ANOMALOUS.** Anything outside the above:
+  any S1-X trigger candidate (T1–T4, §3.4); a
+  recorder row with a non-null recorded error or a
+  stage showing the pass died before `driveOnce`
+  (an error-stage row is a finding requiring
+  classification, never absorbed into W-2 on the
+  strength of matching state alone); dispatched > 0;
+  any phase or quota movement beyond the §7.3
+  predictions; a second grant or any grant other
+  than the one; conflicts/watermark/parked movement;
+  containment state ≠ NORMAL for any reason other
+  than an authorized part-(B2)/(C) act; paired
+  surfaces disagreeing; a §3.1 value that errors or
+  cannot be read. *Response per §3.4.*
+- **W-4 — WAKE OBSERVED, DELIVERY NOT OBSERVED.**
+  A W-1p registration (past-due V) stands for 2
+  hours of tightened observation with no pass
+  observed: the original stall's signature recurring
+  on a fresh registration. Not an S1-X trigger (no
+  T1–T4 element is present: no grant activity, no
+  dispatch, no phase movement) — *report and escalate
+  (§3.4); the disposition is Rowan's.* The window
+  continues at the hourly cadence after the W-4
+  report unless Rowan rules otherwise.
+
+### 3.4 Authorized response per class
+
+| Class | Authorized response (complete) |
+|---|---|
+| W-0 | Log; continue cadence. Nothing else. |
+| W-1 (p/f) | Log with V's value; tighten cadence (W-1p); report to Julie at the next scheduled report point — **immediately** if V's arrival was via the Variant-D stimulus reads. No intervention of any kind: a pending registration is not acted on. |
+| W-2 | Log; report to Julie (first W-2 immediately; continuing W-2 in the window record and at close); continue cadence against the churn baseline. **No intervention** — the revived chain under the holds is the accepted, bounded state ($0, no dispatch); nothing in the window's authorization acts on an expected event. |
+| W-3 | **STOP the observation-only posture and report to Julie and (via the board) Rowan immediately**, with the raw values recorded in the window log **before** any act. Then, and only then: **(a)** if a T1–T4 trigger is **verified** to the §3.4 evidence standard → S1-X fires under part (C) (exactly one `stop_chain` + in-bound verifies); **(b)** else, if part (B2) was granted → the executor may apply `contain_drive` **exactly once** to bound drive accumulation while classification completes; **(c)** else → HOLD, preserve evidence, escalate; no act. A W-3 that is a trigger candidate is never "waited out." |
+| W-4 | Log; report to Julie immediately and file for Rowan's disposition; continue hourly observation. No act is author
