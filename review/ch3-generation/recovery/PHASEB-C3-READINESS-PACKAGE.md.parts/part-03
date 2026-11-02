@@ -1,0 +1,47 @@
+ census | no writes | NORMAL / absent / verified; stop + episode fields empty; `armedAt` 1793562576104 | `not_applicable` (row 1 — readable non-stopped record) |
+| C3-1 `contain_drive` applied | state write ×1; audit `contain_drive:applied` ×1 | state DRIVE_CONTAINED; `absent: false`; stop + episode fields still empty; alarm block unchanged (`armedAt` 1793562576104, pending 2/1 — the transition touches no alarm API) | `not_applicable` (row 1) |
+| C3-2 read-back | no writes | as C3-1, both surfaces agreeing | `not_applicable` |
+| C3-3 `clear` applied (reason recorded verbatim: "Gate C3 mechanics leg: restore opening state") | state write ×1; audit `clear:applied` ×1 (reason in the event); NO episode event (no stop episode is open) | state NORMAL; opening state restored exactly (stop + episode fields empty) | `not_applicable` (row 1) |
+| C3-4 read-back | no writes | as C3-0's containment projection | `not_applicable` |
+| C3-5 `stop_chain`, no-failure path | state write ×2 (commit, then stop record); audit ×2 (`stop_chain:applied` — its row id is the episode id; `stop_chain_verify:verified`); `deleteAlarm` ×1 | state CHAIN_STOPPED; `stopStatus: "verified"`; `stopVerifiedAt` = the act's timestamp; `stopVerifyAction: "stop_chain"`; `stopArmedBefore: 1793562576104`; `stopArmedAfter: null`; `stopVerifyAttempts: 1`; `stopEpisodeId` = the `stop_chain` audit row id; `stopEpisodeExhausted: false`; `armedAt: null`; `pendingSchedule` 2 / `pendingWatchdog` 1 **unchanged** (the stop preserves schedule rows) | `verified_current` (row 3 — recorded success + the surface's fresh null agree) |
+| C3-5, unverified branch (delete throws, or read-back throws / non-null) | state write ×2; audit ×2 (`stop_chain:applied`; `stop_chain_verify:unverified`); outcome `rejected/containment_stop_unverified` | state CHAIN_STOPPED; `stopStatus: "unverified"`; `stopVerifiedAt: null`; `stopVerifyAttempts: 1`; episode open, not exhausted; `armedAt` as physically observed (a surviving registration reads its value) | per fresh evidence: fresh value present → `contested` (row 8); fresh null → `unverified` (row 7); fresh read failed → `unknown` (row 9); no fresh observation → `unverified` (row 10) |
+| C3-6 verify, success (attempt 2 or 3) | per call: state write ×1; audit ×1 (`verify_chain_stop:verified` / re-verified event) | `stopStatus: "re_verified"`; `stopVerifiedAt` updated; `stopVerifyAttempts` = the succeeding attempt number; `stopArmedAfter: null` | `verified_current` (row 3 family — `re_verified` counts as verified) |
+| C3-6 verify, failure (attempt 2) | per call: state write ×1; audit ×1 (verify outcome: unverified) | `stopStatus: "unverified"`; **`stopVerifiedAt` unchanged** (a failure never erases the last-success record — in this gate's flow C3-5 was unverified, so it remains null); attempts = 2; episode open | rows 7–10 as above, by fresh evidence |
+| C3-6, attempt 3 unverified — EXHAUSTION | state write ×1 (carries `stopEpisodeExhausted: 1`); audit ×2 (verify outcome + `stop_episode_exhausted`) | state CHAIN_STOPPED; `stopEpisodeExhausted: true`; gate ends STOPPED-unverified; returns for ruling (R3-V is the only path onward) | `unverified` / `contested` / `unknown` by fresh evidence — never a verified display |
+| C3-7 closing census | no writes | every census item identical to C3-0 EXCEPT the ledger's own writes: containment projection as at the final C3-5/C3-6 stage; `armedAt: null` (no-failure path); containment state + audit tables now EXIST (created by the transitions — expected, and the only table-creation in the gate); recorder baseline otherwise identical (table still `missing`, 0 rows — no pass was provoked) | as at the final stage |
+
+**Preservation expectations across the whole gate:** every non-containment census figure (items 1–13) is identical at C3-0 and C3-7; dispatched stays 0 on every PT day; no grant, reservation, plan, job, conflict, watermark, or phase figure moves. The ledger's own writes (containment state + audit, the one registration deletion) are the ONLY deltas, and the closing delta table is checked against §3.1's worst-case totals.
+
+---
+
+## 6. STOP conditions
+
+Any one of these stops the execution immediately. The executor performs no further act beyond capturing the finding itself (and the §R reads), preserves all evidence, and reports. The GO is consumed by the attempt either way. There is no in-gate recovery path for any STOP except the ledger's own C3-6 branch (condition 5) and the §R re-entry procedure under the same GO after an interruption (condition 8).
+
+1. **Any C3-0 census deviation** — any §4 item not exact, **including any `armedAt` other than 1793562576104** — STOP before any mutation (executor STOP law).
+2. **Any transition rejected or non-applied** outside the ledger's named failure branches (illegal transition, unreadable state, missing reason) — STOP and classify; no writes beyond those the rejection itself made (a rejection makes none).
+3. **Cross-surface disagreement** at any read-back — the two containment surfaces disagree in substance, or a surface returns a shape outside the design's specified projections — STOP. (The surfaces read one store — register R-13 — so disagreement is itself an anomaly to classify, never something to average.)
+4. **Any movement outside the ledger** — any census figure other than the containment state/audit and the deleted registration changes; a registration appears that C3 did not delete and cannot account for; a recorder row appears (a spontaneous pass is movement to classify, not evidence to use); dispatched > 0 — STOP and escalate. This is the C1 Class B rule carried into C3: unexplained movement authorizes **no** response act inside this gate — no rollback exists for the stop in any case (§3.1), and no other remediation is in scope.
+5. **The stop act ends unverified and the episode bound is reached** — C3-6 attempts exhausted (§3.2): STOP; C3 ends STOPPED-unverified; the package returns for ruling. No clear, no re-stop, no further verify — R3-V or nothing.
+6. **Any ambiguous response that a fresh read cannot resolve** — a step remains UNRESOLVED after the §R step-4 fresh `getAlarm()` read (the read contradicts the record, or no fresh read can be obtained) — STOP; the gate does not resume on the record's word.
+7. **Verify-attempt accounting uncertainty** — the recorded attempt count cannot be established from the record (audit unreadable, surfaces disagree on the count) — STOP. Attempts are never counted from the executor's memory.
+8. **Interruption** (executor death, lost session, infrastructure restart) at any point — the attempt halts where it stands; resumption is ONLY via §R under the same GO, beginning from the three §R reads. A stopped C3 is never restarted fresh on anyone's interpretation; if §R cannot establish the recorded state, the gate returns for ruling.
+9. **Any hold disturbed** — GENERATION_HALT ≠ `"1"`, queue not paused, settings revision moved, observability reset — at any read-back: STOP and escalate. C3 carries no PATCH or flip budget and repairs nothing.
+
+---
+
+## 7. Exact GO wording (for Julie's future decision — NOT requested here)
+
+When Julie chooses to authorize one C3 execution, the operative wording is (following the accepted gates text, with the restoration dependency stated in the GO itself):
+
+> "GO — execute exactly one Gate C3 attempt as pinned at `<READINESS-PIN>`, on the build basis Rowan ruled under §1.1: preflight census including the armedAt expectation (1793562576104), the contain_drive + reasoned clear mechanics pair, and exactly one stop_chain act against the current registration (with verify_chain_stop retries only within the design's attempts bound of 3 if the stop is unverified), passive read-backs only, NO command, NO wake provocation, NO stimulus of any kind, ending HELD in CHAIN_STOPPED. I understand C3's verification is PARTIAL, that C3 does not restore NORMAL, that the return to NORMAL needs its own separate standalone authorization with a fresh census, a recorded reason, and a historical audit review, and that the deleted registration cannot be restored by this gate."
+
+Rowan's review of this package is not a GO. This package requests no GO. Production remains under INVESTIGATION HOLD, ending HELD.
+
+---
+
+## 8. Evidence status — what is proven, what remains platform-unobserved
+
+**No new code and no new battery belong to C3.** The deployed build is the C1-deployed containment-v4 candidate, byte-identical to the tree the battery below ran on. Per the accepted gates text, the battery re-run is NOT repeated at C3 (no code changes in this gate; the C1 gate-time records stand).
+
+**Harness evidence for the exact paths C3 exercises** — containment battery v4 + CT14d, **42/42 pass, exit 0**, complete runs on the exact candidate tree (log SHA-256 `96c76d17446b9821f519bdbb5ed9673c7c205d8769eac35c8a6f66794bf9fd8b`) and on the composed tree 

@@ -1,0 +1,58 @@
+# Phase B — Gate C3 readiness package: OPERATIONAL containment verification (PARTIAL by construction)
+
+**Status: READINESS PACKAGE — for Rowan's independent review. Nothing in this package is an execution, and nothing in it requests a GO. C3 executes only under Julie's separate explicit GO, after Rowan's review of this package.**
+
+**PARTIAL BY CONSTRUCTION — stated first, unhedged:** C3's verdict, if it executes perfectly, is **PARTIAL**. C3 can verify containment's transition mechanics and the full physical stop act live, against the existing stale alarm registration, without provoking anything. C3 **cannot** verify drive suppression under a live revived chain, arm-gate suppression under genuine wake traffic, or the re-check against a real racing wake — those are observable only when a pass would otherwise run, and manufacturing one would make the gate a stimulus, which C3 is not. That remainder is **not** absorbed into this package, not discharged by C3, and not claimed anywhere below: it is returned for Rowan's separate ruling (§8), and S1 may not be proposed for execution until she rules on it.
+
+**Predecessor state:**
+
+- **Gate C1 is CLOSED** — containment deployed, execution PASS accepted by Rowan (record pin `43642bd865e77a588edf4e8d6fd4f93fae37499b`). Live build `27b2b3a9f1e7070ef243ee017703246744d57d5c`, script etag `adb8e5a5b104858a20835a17ffd714a70f72cea5e066c6d61c4b80a49adac46f`, containment inert at NORMAL.
+- **Gate C2 is CLOSED** — execution PASS WITH QUALIFICATION (readability verified), record pin `13375e8d8c3d6d5ff26be84d99b878fc22adfa12`; D-1 accepted; D-2 documentary exception corrected in the companion document `PHASEB-C2-RECORD-CORRECTION.md` filed with this package (14 items fully verified; item 7 partially verified; the second-surface requirement recorded as UNFULFILLED). C2's GO is consumed.
+- System **HELD**: GENERATION_HALT `"1"`, queue `opalreader-generation-v2` delivery paused. Production remains under INVESTIGATION HOLD.
+
+**What Rowan's review of this package is and is not:** a documentary review of scope, census, the mutation ledger, expected results, STOP conditions, and GO wording — plus two rulings this package explicitly requests (§1.1 the build-basis question; §8 the unverifiable remainder). It is **not a GO** and authorizes no production act. Julie's GO is **not requested** in this package.
+
+**Pin:** this package is pinned on `ui1-review` at `<READINESS-PIN>` (the pin value is resolved in the board filing for this package, per the established pin-slot pattern; the Dropbox copy of the companion cp carries the filled value, disclosed there and on the board).
+
+---
+
+## 1. Scope — what C3 does
+
+C3 is the first live exercise of the containment transition path. It performs **operator transitions only** (state writes via the operator route `POST /v2/d6-containment` plus passive read-backs) and **one physical stop act against the CURRENT stale alarm registration** — `armedAt` **1793562576104** (2026-11-01T19:49:36.104Z, observed Nov 2, 2026), the registration left over from the attempt-3 stall, still current at every read since. The stop act is **subtractive**: it observes the registration, deletes it, and reads back. C3 **sends no command, induces no wake, delivers no pass, and manufactures no traffic of any kind.** An operator containment transition is not an alarm wake: it does not deliver a pass, does not evaluate the schedule, and registers nothing — `contain_drive` and `clear` touch no alarm API at all, and `stop_chain`'s only alarm-API acts are the subtractive `deleteAlarm()` and `getAlarm()` reads.
+
+In order, C3 (ledger §3):
+
+1. **C3-0** — full preflight census (§4), including the armedAt expectation.
+2. **C3-1 / C3-2** — `contain_drive`, read back on both surfaces: transition mechanics end-to-end on the production build (applies, persists, projects identically).
+3. **C3-3 / C3-4** — a reasoned `clear` back to NORMAL under design §5.2, restoring the gate's own opening state. This clear is the ONLY clear inside C3 and applies only to the DRIVE_CONTAINED mechanics leg — it is **not** a restoration (see §2).
+4. **C3-5** — `stop_chain`: the full physical stop act against the stale registration — state commit (enum + episode minted), physical act (observe → `deleteAlarm()` → read-back), stop-record write — ending, on the no-failure path, with the stop **verified** (`getAlarm()` read back null).
+5. **C3-6** — `verify_chain_stop` retries, ONLY if C3-5 ended unverified, within the episode bound (§3.2).
+6. **C3-7** — closing census repeat + both-surface stop-record read-back, delta checked against the ledger.
+
+**C3 ends CHAIN_STOPPED / verified** (no-failure path). It does not end at NORMAL, and it does not restore anything (§2).
+
+### 1.1 Build-basis question — RULING REQUESTED (read this first)
+
+The accepted gates text (PHASEB-RECOVERY-GATES-V4-REVISED.md, Gate C3) scopes C3 **"on the composed build"** and sets its preflight as "Gates C1, C2 (READABILITY VERIFIED), **R5a-D all closed**. CENSUS re-based to the composed build." The build actually deployed today is the **containment-only candidate** (C1's build, `27b2b3a9…`); the composed build (containment + the R5a arming change) has **not** been deployed — R5a-D has not executed. This package is drafted, per its assignment, against the **deployed** build, and it does **not** silently decide the discrepancy. The facts Rowan needs:
+
+- The containment code C3 exercises — the transition table, the stop act, `verify_chain_stop`, the read discipline, `deriveStopConfidence` — is **identical in both trees**. Entry (`2bb0608b…`) and service (`5c5183e6…`) parts are byte-identical across the candidate and composed trees. The composed coordinator (`5303cb63…`, 314,712 B) differs from the candidate coordinator (`6c19a50e…`, 313,063 B) by the R5a change to the `_armAlarmIfEarlier` arming condition (plus one comment line) — a code path C3 never exercises: C3's `setAlarm` budget is **0**, it issues no wake and no command, and no C3 step's outcome depends on the arming condition.
+- The containment battery runs **42/42, exit 0 on BOTH trees** (logs §8), including CT16a — the C3 sequence end-to-end — on each. Nothing about C3's mechanics is untested on the deployed tree specifically.
+
+**The two dispositions, for Rowan's ruling:**
+
+- **(i) C3 executes on the deployed containment build.** R5a-D remains a separate later gate. Consequence, stated honestly: if R5a-D later deploys the composed build, that build's *operational* containment behavior would rest on the harness battery plus this gate's evidence by analogy — the composed build itself would not have had a live stop act performed on it, unless a further operational check is gated then.
+- **(ii) R5a-D executes first** (its own readiness package, review, GO, and battery re-run on the composed tree), and this package's census is then re-based to the composed build (only §4's build/etag expectations and §8's basis note change; the ledger, STOP rules, and GO wording carry over with the basis named), exactly as the accepted gates text wrote it.
+
+This package's census (§4) and GO wording (§7) are written on basis **(i)** — the only build that exists in production — and are **not executable until Rowan rules on this section**. If she rules (ii), the package returns with the census re-based; no other section's substance changes.
+
+---
+
+## 2. The restoration dependency — read before anything else in this package
+
+**C3 ends the system CHAIN_STOPPED.** In that state the alarm chain is physically stopped: the stale registration is deleted, and on the shipped surfaces the chain cannot re-register itself (re-registration happens only through the ordinary wake paths under NORMAL). Concretely, while CHAIN_STOPPED stands:
+
+- The 10-minute watchdog cannot run; no drive pass can occur; **no grant/void cycle can turn**.
+- The preserved Phase B plan (`plan:19cad189fab54b9c804a74a6`) remains **preserved, untouched, and unexecutable** — containment changes nothing about its state; it simply has no mechanism that could drive it. The live idx-26 exemption is likewise untouched.
+- Generation remains halted regardless (GENERATION_HALT `"1"` and the paused queue are independent holds and are not touched by C3 or by containment state).
+
+**Returning to NORMAL is NOT part of C3** — not in its scope, its budget, or its GO. The return is the **standalone restoration authorization**: a separate named approval by Julie, after Rowan's review of C3's execution record, requiring ALL of: a fresh census executed at its start (whose reads re-observe the physical state and derive `stopConfidence` fresh — the C3 record alone never carries the physical stop into the restoration, per V4-2); a demonstrated reason recorded in the `clear` audit event; the design §5.3 preconditions (including that C3 ended `verified`); and the **mandatory historical audit review** (V4-1): the

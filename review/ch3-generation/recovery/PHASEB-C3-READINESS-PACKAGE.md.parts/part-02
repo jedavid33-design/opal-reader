@@ -1,0 +1,56 @@
+ro-scope:** a separately scoped authorization requiring (i) the historical audit review of the full append-only history, (ii) a fresh Rowan ruling, and (iii) fresh Julie authorization. R3-V is not part of C3, is not pre-authorized by C3's GO, and is not requested here.
+
+### 3.3 §R — STOP and re-entry procedure (no duplicate physical acts)
+
+The two facts are kept separate at every step (V4-2):
+
+- **RECORDED LOGICAL COMPLETION** — the record (audit rows, stop-record fields) shows the code path ran and committed its account of the step. A record proves a step was RECORDED. It never, by itself, proves a physical act landed.
+- **PHYSICAL VERIFICATION** — a fresh live read, made at re-entry, re-establishes the physical fact: for the stop act and the verifies, a `getAlarm()` observation read against the stop record's verification fields. A physical step is credited physically complete ONLY when the fresh read corroborates the recorded outcome.
+- **UNRESOLVED** — any step whose record and fresh physical read disagree, or whose physical state cannot be freshly read. An ambiguous response leaves its step UNRESOLVED until a physical read resolves it — never resolved by the executor's memory, never by the audit row alone.
+
+On any STOP mid-ledger, or before resuming after ANY interruption (including an executor restart):
+
+1. STOP all further acts. Preserve the gate record as-is.
+2. Re-read, in this order: the containment state route, the `drive=1` projection, and the audit event listing. These three reads — never the executor's memory — determine what has been RECORDED. (They do not yet determine what has physically happened; that is step 4.)
+3. Mark each ledger step RECORDED-complete iff its idempotency key is present in the record: the step's audit row and, for C3-5/C3-6, the stop-record fields (`stopVerifyAttempts` is the authoritative RECORDED attempt count — counting is a record fact, and counting a possibly-unlanded attempt as consumed errs conservatively). Pure state-write steps (C3-1, C3-3) have no separate physical fact beyond the state the record itself holds: for them, recorded completion read back consistently on both surfaces IS their completion criterion.
+4. For each physical step (C3-5, each C3-6 call), make a FRESH `getAlarm()` read at re-entry and classify: (a) fresh read corroborates the recorded outcome → PHYSICALLY VERIFIED to the recorded extent; (b) fresh read CONTRADICTS the record → UNRESOLVED: STOP and classify — the physical truth governs what remains, and the only permitted resumption act for the stop is `verify_chain_stop` within the episode bound; (c) no fresh read can be obtained → UNRESOLVED; the gate does not resume on the record's word.
+5. Resume ONLY at the first step that is neither RECORDED-complete nor PHYSICALLY VERIFIED to the extent its ledger row requires, with two hard rules: a `stop_chain` whose audit row exists is NEVER re-sent (an unverified or unresolved stop resumes exclusively through `verify_chain_stop`); a `deleteAlarm` is only ever issued by the code paths that first observe a registration in the same act, so a resume cannot delete blindly or twice (harness-proven: CT16b/CT16c assert the landed-delete count across stop + resume).
+6. If the reads cannot establish what was recorded (surfaces disagree, record unreadable), or a physical step remains UNRESOLVED after step 4, the gate does NOT resume: it returns for ruling with the reads attached.
+
+---
+
+## 4. Fresh census — hard preflight expectations (C3-0; values observed Nov 2, 2026)
+
+The C3-0 census must match **every** item below exactly before any mutation. These are **dated observations, not presumed current facts**: each value is labeled with where it was last observed, and any deviation at execution is a STOP (§6) — the executor never rationalizes a difference. This census deliberately repairs the C2 item-7 defect (see `PHASEB-C2-RECORD-CORRECTION.md` and its standing paperwork rule): **item 7 enumerates both phase-accounting reads by name**, so the item covers exactly the surfaces it claims.
+
+| # | Item | Hard expectation | Last observed |
+|---|---|---|---|
+| 1 | Health | build `27b2b3a9f1e7070ef243ee017703246744d57d5c` *(build-basis ruling §1.1 pending — if Rowan rules (ii), this line is re-based to the composed build before execution)*; generation `halted`; coordinator `armed` | C2 closing set, 2026-11-02T21:22:19Z |
+| 2 | Script identity | etag `adb8e5a5b104858a20835a17ffd714a70f72cea5e066c6d61c4b80a49adac46f` | C2, all sets (ETag header only; body never read) |
+| 3 | Bindings / holds / observability | exactly 10 bindings; GENERATION_HALT `"1"`; `OPALREADER_PHASE_POLICY` `"enforce"`; observability enabled + `logs.persist: true` | C2, all sets |
+| 4 | Settings | revision **1** (lane standard, cap $50) | C2, all sets |
+| 5 | Queue | `delivery_paused: true`; exactly 1 consumer (`f260f2188d80426bb0588685e9d084eb`) | C2, all sets |
+| 6 | Capabilities | standard admitted; Batch `batch_not_armed`; registry `forever-pucked` ↔ `5c589095-f812-48a2-8ab2-03ba2791f2b2` | C2, all sets |
+| 7 | Phase accounting — **BOTH surfaces, each enumerated**: (a) the capabilities phase block (`GET /v2/generation/capabilities`); (b) the plan-diagnostics body `plan.phaseAccounting` (`GET /v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6`) | settled **1,029,420**; estimatedUnverified **19,018**; reservedUnverified **5,648**; inFlightUpper **0**; unknownOpen **0**; remaining **12,464,932** of 13,500,000 — exact on (a), and exact on (b) in its field names (`settledMicroCents` etc.) | (a) C2, all sets; (b) C1 census/verification (`diag-pb` reads) — **not** re-read in C2 (the D-2 gap this item repairs) |
+| 8 | Quota | reconcile `ok: true`, drift empty, sole exception the adjudicated straddler `att-37d63768-db4b-447d-8150-580b7c6ee257`; PT dispatched 2026-10-29 / 10-30 / 10-31 / 11-01 = **57 / 79 / 44 / 76**; **0 for 2026-11-02 and every later PT day** at census time (any nonzero = movement); derived reserved **0** | C2, all sets |
+| 9 | Plans | exactly 5 (smoke `complete`; old Ch 2 `retired`; fresh Ch 2 `complete`; Ch 3 `complete`; Phase B `plan:19cad189fab54b9c804a74a6` `active` {eligible 1, done 0, failed 0, blocked 0}, entry `pending` / `executionState: null`, job `queued` rev 1, quarantine `held: false`, grants []) | C2, all sets |
+| 10 | Eligibility | chapter bound **26** / parked **0** / eligible **1**; segment eligible **1** / **569** chars / **8,022**; all three scope digests exactly `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1` | C2, all sets |
+| 11 | Conflicts | exact match to the pinned four-row `schedule_dead` lease baseline (ids 1–4, all fields) | C2, all sets |
+| 12 | Parked job | `1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a` `parked_policy` rev 1, fingerprint `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`, grants [] | C2, all sets |
+| 13 | Watermarks + occupancy | content **18**; bindings **1841** with 0 changes since; idx-26 R2 key FREE (LIST empty) | C2, all sets |
+| 14 | `drive=1` baseline incl. the stop act's target | `tableState: "missing"`; `drivePasses: []`; `recorderHealth: null`; **`armedAt` exactly 1793562576104** (2026-11-01T19:49:36.104Z); `pendingSchedule` **2**; `pendingWatchdog` **1** | C2, all sets (bit-identical) |
+| 15 | Containment projection (both surfaces) | state `NORMAL`; `absent: true`; `verified: true`; `stopConfidence: "not_applicable"`; stop-record and episode fields at their empty values | C2, all sets, both surfaces |
+
+**The armedAt expectation is census-hard in its own right** (gates v4, Gate C3 preflight): any value other than 1793562576104 at C3-0 — including null — is a STOP. The registration state has moved, and the stop act's expectations must be re-derived under a fresh ruling, not improvised by the executor.
+
+**Executor precondition (process, not a read):** Julie's GO recorded on the board before C3-0; Rowan's §1.1 build-basis ruling on file; no other gate or operator action outstanding.
+
+---
+
+## 5. Expected results, step by step
+
+The stop record keeps its **three facts separate** at every stage (design v4 §2): (i) the **state enum**; (ii) the **physical verification record** — `stopStatus`, `stopVerifiedAt`, `stopVerifyAction`, `stopArmedBefore`, `stopArmedAfter`, `stopVerifyAttempts` — of which the `stopVerified*` fields record the most recent SUCCESSFUL verification and are never erased by a later failure; (iii) the **stop-verification status as displayed** — `stopConfidence`, derived read-side by `deriveStopConfidence(read, fresh)` from the record plus the surface's own fresh `getAlarm()` observation in the same request. No surface may display `stopStatus` alone as a present-tense claim; `stopConfidence` is the present tense.
+
+| Stage | Expected durable result | Expected projection (both surfaces, identical in substance) | Expected `stopConfidence` (truth-table row) |
+|---|---|---|---|
+| C3-0
