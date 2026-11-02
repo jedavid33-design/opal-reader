@@ -1,0 +1,162 @@
+patch: **** Can't open patch file /home/hatch/workspace/ch2-program/ch3-recovery/r5a-revision/p2twin/scratch/combined.diff : No such file or directory
+▶ T0 — assembly & identity
+  ✖ candidate tree: 31 parts; 29 byte-identical to deployed; 2 amended parts match the scratch candidates (27.425368ms)
+  ✖ patch round-trip: combined.diff applied to pristine parts reproduces both candidates byte-for-byte (11.213378ms)
+  ✔ node --check passes on both candidate parts (184.372178ms)
+  ✔ baseline tree is the pristine deployed tree (31/31 byte-identical) (139.030584ms)
+✖ T0 — assembly & identity (363.931194ms)
+▶ T1 — harness bring-up
+  ✔ T1(a) empty store: class construction + first alarm resolve; no .one() bootstrap deadlock (132.16482ms)
+  ✔ T1(b) seeded attempt-3 shape: plan/job/parked/conflicts/phase figures exact (9.539556ms)
+✔ T1 — harness bring-up (142.060612ms)
+▶ T2 — normal recording (twin equivalence)
+  ✔ six alarm passes: candidate records each; all non-recorder state identical to the unmodified build (205.656921ms)
+✔ T2 — normal recording (twin equivalence) (206.071202ms)
+▶ T2b — clock seam fallback (R-4)
+  ✔ without env.now, recorded times track wall Date.now() (6.055087ms)
+✔ T2b — clock seam fallback (R-4) (6.324692ms)
+▶ T3 — stage capture & record-then-rethrow
+  ✔ T3(i) throw in the base alarm's schedule processing -> stage base_alarm, identical object rethrown (66.696932ms)
+  ✔ T3(ii) throw at cache construction -> stage construct (6.264721ms)
+  ✔ T3(iib) a cache-namespace fault present from the start is recorded at base_alarm (the base alarm constructs the cache first) (20.175437ms)
+  ✔ T3(iii) throw in recover() -> stage recover, identical object rethrown (15.714613ms)
+  ✔ T3(iv) throw in driveOnce -> stage drive, identical object rethrown (15.784438ms)
+✔ T3 — stage capture & record-then-rethrow (125.302132ms)
+▶ T4 — recorder-fault injection (the recorder may never break the alarm)
+  ✔ T4 DDL fault: alarm resolves, drive effects happen, health notes step 'ddl', no row (8.404893ms)
+  ✔ T4 INSERT fault: alarm resolves, health notes step 'insert', zero rows (8.169811ms)
+  ✔ T4 PRUNE fault: count exceeds the cap for exactly one pass, then recovers to <= cap (36.834708ms)
+  ✔ T4 getAlarm fault: row written with armed_after NULL and NO health increment (the shipped coordinator itself reads getAlarm, so the base chain — not the recorder — is what fails) (7.160065ms)
+  ✔ T4 KV get fault (health read): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (9.571254ms)
+  ✔ T4 KV put fault (health write): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (9.420207ms)
+  ✔ T4 serialize-step fault (wrapper level): the catch discipline names the step 'serialize' (5.403018ms)
+✔ T4 — recorder-fault injection (the recorder may never break the alarm) (85.655915ms)
+▶ T5 — sanitization (write-time discipline + hostile storage on read)
+  ✔ T5 write: hostile outcome values are grammar-checked or scrubbed; nothing raw is stored (3.809507ms)
+  ✔ T5 write: error name/message scrubbed (URL, token run, control chars, caps) (3.426011ms)
+  ✔ T5 write: an oversized grammatical identifier is sliced, and the slice is disclosed (3.297539ms)
+  ✔ T5 read: hostile stored rows and a hostile health object never escape raw (8.810242ms)
+✔ T5 — sanitization (write-time discipline + hostile storage on read) (19.808587ms)
+▶ T5b — identifier fidelity (real id shapes survive sanitization exactly)
+  ✔ plan/grant ids and code tokens are stored byte-exact, with no marker (3.529947ms)
+✔ T5b — identifier fidelity (real id shapes survive sanitization exactly) (3.674154ms)
+▶ T6 — truncation at the 8,000-char cap
+  ✔ T6 over-cap: whole entries only, terminal marker, kept+dropped = submitted (14.883747ms)
+  ✔ T6 under-cap: no marker, no flag, entries unaltered (3.156547ms)
+✔ T6 — truncation at the 8,000-char cap (18.272382ms)
+▶ T7 — mode rejection (the read that can never blend modes)
+  ✔ T7 ambiguous drive modes -> 400 diagnostics_mode_ambiguous; attempt mode unchanged; 403 without the operator stamp (39.013337ms)
+✔ T7 — mode rejection (the read that can never blend modes) (39.220769ms)
+▶ T8 — retention & bursts
+  ✔ T8 300 records prune to exactly the newest 288 (28.805759ms)
+  ✔ T8 burst of seven throwing passes: every pass recorded, cap holds throughout (39.093938ms)
+✔ T8 — retention & bursts (68.143012ms)
+▶ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding)
+  ✔ T9 route read returns exactly the recorded rows; health key contract holds; crash-instance records (25.244935ms)
+✔ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding) (25.420078ms)
+▶ T10 — shipped-surface equivalence smoke
+  ✔ twin stores: every shipped read surface answers field-for-field identically (44.479751ms)
+✔ T10 — shipped-surface equivalence smoke (44.648264ms)
+▶ R5A-T0 — assembly & identity
+  ✔ 31 parts; exactly one differs from the live tree: v2/coordinator.mjs (119.330771ms)
+  ✔ candidate coordinator identity + design markers (9.087167ms)
+  ✔ patch round-trip: coordinator.diff applied to the pristine part reproduces the candidate byte-for-byte (10.760258ms)
+  ✔ node --check passes on the candidate coordinator (147.566523ms)
+✔ R5A-T0 — assembly & identity (288.768687ms)
+▶ R5A-T1 — normal future alarms (legacy behavior preserved)
+  ✔ armed == due (future): wake registers nothing; earlier due advances once; then quiet (81.382241ms)
+  ✔ armed null: wake registers at due exactly as shipped (5.083939ms)
+✔ R5A-T1 — normal future alarms (legacy behavior preserved) (86.902345ms)
+▶ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command
+  ✔ exactly one setAlarm for the whole command wake; exactly one commands row; no other movement (6.053985ms)
+✔ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command (6.361296ms)
+▶ R5A-T3 — retry-gap safeguard (stale-age threshold)
+  ✔ armed 5 minutes past due (inside a plausible retry gap): NO re-registration (4.95806ms)
+  ✔ armed 59 minutes past due: still NO re-registration (4.78443ms)
+  ✔ armed exactly at the threshold boundary (60 min): re-registers (boundary is inclusive) (4.652462ms)
+  ✔ armed 61 minutes past due: re-registers at D (4.592392ms)
+  ✔ baseline twin at 61 minutes: shipped condition does NOT re-register (the delta is exactly the new disjunct) (82.195261ms)
+✔ R5A-T3 — retry-gap safeguard (stale-age threshold) (101.736356ms)
+▶ R5A-T4 — dedupe within a single wake operation
+  ✔ wake + post-apply evaluation with unchanged schedule: 1 registration total (4.555376ms)
+  ✔ corrective second registration ONLY when the operation schedules strictly earlier work (5.615918ms)
+  ✔ handleReport path also dedupes (replayed report on a reported grant) (5.049658ms)
+✔ R5A-T4 — dedupe within a single wake operation (15.622835ms)
+▶ R5A-T5 — B3 schedule ordering
+  ✔ B3-future beyond threshold: stale A is moved to the actual earliest future D (board ruling decision 2) (4.289257ms)
+  ✔ B3-future inside the retry-gap threshold: shipped behavior — no registration, future D stands untouched (3.849367ms)
+  ✔ D computation uses ALL pending kinds: an earlier retry_grant row, not the watchdog, sets the registration (4.022336ms)
+✔ R5A-T5 — B3 schedule ordering (12.439438ms)
+▶ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape)
+  ✔ stimulus registers once; the delivered pass issues exactly the pre-classified grant set; the chain then self-terminates the 5a branch (85.776726ms)
+✔ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape) (86.007752ms)
+▶ R5A-T7 — repeated wakes, delivery never happens (churn bound)
+  ✔ 10 wakes -> exactly 10 registrations, all at D, zero schedule growth, zero watchdog duplication (4.845572ms)
+✔ R5A-T7 — repeated wakes, delivery never happens (churn bound) (5.007605ms)
+▶ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery)
+  ✔ after the R2-form stimulus and no alarm firing: only the commands row changed; plan, job, occurrence, figures byte-identical (7.738794ms)
+✔ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery) (7.908208ms)
+▶ R5A-T9 — shipped-surface equivalence spot checks
+  ✔ drive=1 diagnostics read performs no wake and no registration (candidate) (18.891651ms)
+  ✔ future-alarm behavior identical on baseline and candidate (call sequences match) (12.542703ms)
+✔ R5A-T9 — shipped-surface equivalence spot checks (31.738971ms)
+ℹ tests 55
+ℹ suites 23
+ℹ pass 53
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1403.27983
+
+✖ failing tests:
+
+test at p2twin/tests/battery.test.mjs:102:3
+✖ candidate tree: 31 parts; 29 byte-identical to deployed; 2 amended parts match the scratch candidates (27.425368ms)
+  AssertionError [ERR_ASSERTION]: coordinator.mjs must be byte-identical
+  + actual - expected
+  
+  + 'bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a'
+  - 'd3d9005b9c2f83cd9a47ef7012b7cea5ed21d73886626d6e24bb655ee90389a3'
+  
+      at TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/ch3-recovery/r5a-revision/p2twin/tests/battery.test.mjs:117:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at node:internal/test_runner/test:1903:71
+      at node:internal/per_context/primordials:504:82
+      at new Promise (<anonymous>)
+      at new SafePromise (node:internal/per_context/primordials:478:3)
+      at node:internal/per_context/primordials:504:9
+      at Array.map (<anonymous>) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a',
+    expected: 'd3d9005b9c2f83cd9a47ef7012b7cea5ed21d73886626d6e24bb655ee90389a3',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at p2twin/tests/battery.test.mjs:124:3
+✖ patch round-trip: combined.diff applied to pristine parts reproduces both candidates byte-for-byte (11.213378ms)
+  Error: Command failed: patch -s -p1 -i /home/hatch/workspace/ch2-program/ch3-recovery/r5a-revision/p2twin/scratch/combined.diff
+  patch: **** Can't open patch file /home/hatch/workspace/ch2-program/ch3-recovery/r5a-revision/p2twin/scratch/combined.diff : No such file or directory
+  
+      at genericNodeError (node:internal/errors:986:15)
+      at wrappedFn (node:internal/errors:540:14)
+      at checkExecSyncError (node:child_process:943:11)
+      at execFileSync (node:child_process:979:15)
+      at TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/ch3-recovery/r5a-revision/p2twin/tests/battery.test.mjs:132:5)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12) {
+    status: 2,
+    signal: null,
+    output: [ null, <Buffer >, <Buffer 70 61 74 63 68 3a 20 2a 2a 2a 2a 20 43 61 6e 27 74 20 6f 70 65 6e 20 70 61 74 63 68 20 66 69 6c 65 20 2f 68 6f 6d 65 2f 68 61 74 63 68 2f 77 6f 72 6b ... 101 more bytes> ],
+    pid: 3945,
+    stdout: <Buffer >,
+    stderr: <Buffer 70 61 74 63 68 3a 20 2a 2a 2a 2a 20 43 61 6e 27 74 20 6f 70 65 6e 20 70 61 74 63 68 20 66 69 6c 65 20 2f 68 6f 6d 65 2f 68 61 74 63 68 2f 77 6f 72 6b ... 101 more bytes>
+  }
+EXIT_CODE=1

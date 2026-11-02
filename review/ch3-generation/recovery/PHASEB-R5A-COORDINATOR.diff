@@ -1,0 +1,122 @@
+--- a/v2/coordinator.mjs
++++ b/v2/coordinator.mjs
+@@ -131,6 +131,17 @@
+ export const SYNC_FAMILIES = ["content", "bindings", "position", "settings"];
+ 
+ const WATCHDOG_PERIOD_MS = 10 * 60 * 1000;
++// R5a (revised design): a past-due armed value is treated as unarmed
++// ONLY once it has been past due for longer than this threshold.
++// Inside the window the value may be a legitimate platform retry gap:
++// an alarm that "has failed and any retry has not begun" still reads
++// as set, platform retries (at most 6, exponential backoff starting
++// at 2 s) apply only to the most recent setAlarm call, and a fresh
++// setAlarm in the gap would supersede the pending retry. The
++// threshold is set far beyond the documented retry envelope (see
++// PHASEB-R5A-RETRY-SUPERSESSION.md for the derivation); it is a
++// design constant, not a platform guarantee.
++const ALARM_STALE_THRESHOLD_MS = 60 * 60 * 1000;
+ const LEASE_MS = 15 * 60 * 1000;
+ // Option D two-phase constants (design §3.3.7, §3.10): a pending
+ // migration command awaits operator approval for at most 24
+@@ -518,9 +529,10 @@
+       const st = this._migrationChunkState(cmd.payload || {});
+       if (st && st.ok) prepared = await this._prepareMigrationImport(cmd.payload || {});
+     }
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const outcome = this._tx(() => this._recordAndApply(cmd, prepared));
+-    await this._armAlarmIfEarlier(); // the command may have scheduled earlier work
++    await this._armAlarmIfEarlier(armMemo); // the command may have scheduled earlier work
+     return { command_id: cmd.command_id, ...outcome };
+   }
+ 
+@@ -1803,10 +1815,11 @@
+ 
+   // Executor entry point (called by the command API / plan advancer).
+   async requestGrant(jobId, opts = {}) {
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const g = this._issueGrant(jobId, { jobEvent: "grant",
+       cause: opts.cause || "requestGrant", probe: !!opts.probe });
+-    await this._armAlarmIfEarlier(); // the new lease may be the earliest work
++    await this._armAlarmIfEarlier(armMemo); // the new lease may be the earliest work
+     return g;
+   }
+ 
+@@ -2061,7 +2074,8 @@
+   // adoptable through bindings (content-addressed audio is never wasted).
+   async handleReport(report) {
+     if (!report || !report.grantId) return { ok: false, reason: "grant_required" };
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const result = this._tx(() => {
+       const grant = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, report.grantId);
+       if (!grant) return { ok: false, reason: "grant_not_found" };
+@@ -2216,7 +2230,7 @@
+       }
+       return { ok: true, ready, blocked, failed };
+     });
+-    await this._armAlarmIfEarlier(); // a retry/lease from this report may be earliest
++    await this._armAlarmIfEarlier(armMemo); // a retry/lease from this report may be earliest
+     return result;
+   }
+ 
+@@ -2466,24 +2480,49 @@
+   // consumed and handler died, retries exhausted, fresh start), re-arm it.
+   // Recovery never requires a client — any wake (command, report, alarm)
+   // re-establishes the chain, and the chain itself is self-perpetuating.
+-  async wake() {
++  async wake(armMemo) {
+     const wd = this._one(
+       `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending' AND kind = 'watchdog'`);
+     if (!wd || wd.n === 0) this._schedule(this._now() + WATCHDOG_PERIOD_MS, "watchdog", null, {});
+-    await this._armAlarmIfEarlier();
++    await this._armAlarmIfEarlier(armMemo);
+   }
+ 
+   // Arm the alarm at the earliest pending work if it is sooner than the
+   // currently armed time (or nothing is armed) — newly scheduled earlier
+   // work must ADVANCE the alarm, not wait for it (P2 review round 2,
+   // gap 5). Entry points call this after their writes commit.
+-  async _armAlarmIfEarlier() {
+-    const armed = await this.state.storage.getAlarm();
++  // armMemo (R5a revised design): a per-top-level-operation object
++  // created by handleCommand / requestGrant / handleReport and
++  // threaded through wake() and the post-apply call below. It bounds
++  // alarm registrations within one operation: once this operation
++  // has registered, a later evaluation in the SAME operation fires
++  // again ONLY if the operation scheduled work strictly earlier than
++  // the value it already registered (a corrective registration with
++  // a strictly smaller value). The memo carries no state across
++  // operations and is never persisted.
++  async _armAlarmIfEarlier(armMemo) {
++    const now = this._now();
+     const next = this._one(
+       `SELECT MIN(due_at) AS due FROM schedule WHERE state = 'pending'`);
+-    const due = next && next.due !== null ? next.due : this._now() + WATCHDOG_PERIOD_MS;
+-    if (armed === null || armed === undefined || due < armed)
++    const due = next && next.due !== null ? next.due : now + WATCHDOG_PERIOD_MS;
++    if (armMemo && armMemo.registered) {
++      // This operation already registered. Its own fresh registration
++      // is not a stale value and not a retry gap: only genuinely
++      // earlier work scheduled by this operation justifies a second
++      // registration, at the strictly earlier due.
++      if (due < armMemo.armedAfter) {
++        await this.state.storage.setAlarm(due);
++        armMemo.armedAfter = due;
++      }
++      return;
++    }
++    const armed = await this.state.storage.getAlarm();
++    if (armed === null || armed === undefined
++        || armed <= now - ALARM_STALE_THRESHOLD_MS
++        || due < armed) {
+       await this.state.storage.setAlarm(due);
++      if (armMemo) { armMemo.registered = true; armMemo.armedAfter = due; }
++    }
+   }
+ 
+   async alarm() {
