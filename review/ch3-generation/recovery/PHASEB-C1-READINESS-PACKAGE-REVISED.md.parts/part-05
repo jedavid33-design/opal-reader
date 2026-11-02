@@ -1,0 +1,23 @@
+bled tree) is
+the standing pattern — the assembly that ships is the
+assembly that was tested. Any divergence = STOP before
+upload (§7).
+
+## 9. Package contents and turn
+
+This REVISED package is a single consolidated document.
+It supersedes the original C1 readiness package (pin
+`2af8fb8876fd1f5b1c2dbb43865bcd813f18ead7`) for review
+purposes; the original remains in the GitHub archive.
+Candidate identities are carried in full in §1 (the
+standalone identities addendum remains in the GitHub
+archive at `containment-v4/CANDIDATE-IDENTITIES-REVISED.md`,
+pin `621535f0…`; it does not ride in the review folder
+because §1 supersedes it for review purposes). The
+companion cp (`PHASEB-C1-READINESS-CORRECTIONS-ROWAN-CP.md`)
+summarizes this revised package for the folder.
+
+**Production remains under INVESTIGATION HOLD. Nothing
+in this package executes, deploys, transitions, wakes,
+or mutates anything. Turn: Rowan's — independent review
+of this C1 readiness package.**

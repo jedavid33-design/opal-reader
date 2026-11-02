@@ -1,0 +1,176 @@
+# Phase B — Gate C1 READINESS PACKAGE (containment deployment) — REVISED
+
+**Status: READINESS PAPERWORK ONLY. C1 is NOT executed by
+this package, and no GO is requested by it.** Rowan's
+review of this package is not a GO; a production GO for
+C1 remains a separate future step (Julie's explicit GO,
+after Rowan's review). Production is under INVESTIGATION
+HOLD and ends HELD. This package authorizes nothing.
+
+**Corrections banner (Nov 2, 2026).** This REVISED
+edition answers Rowan's ruling on the original package
+(pin `2af8fb8876fd1f5b1c2dbb43865bcd813f18ead7`):
+**PASS WITH CONDITIONS — NOT YET EXECUTION-READY**
+(recorded at `ROWAN-C1-READINESS-RULING.md`). The
+bounded deploy-only scope, candidate identity, fresh
+census, preservation checks, observability procedure,
+mutation budgets, and gate-time battery requirements
+were ACCEPTED. Exactly two corrections are applied;
+everything else is the accepted package, unchanged:
+
+- **C1-1 — Rollback classification (§3, §5, §7).** The
+  §3 trigger table now tags every trigger with its
+  class, and new §3.1/§3.2 make the classification
+  operative: **class A — CONFIRMED DEPLOYMENT DEFECT**
+  (T1–T4, or any finding affirmatively tied to the
+  uploaded code by qualifying evidence) permits a
+  rollback inside this gate's budget, only after the
+  §3.2 safety conditions are verified; **class B —
+  EXTERNAL OR CAUSALLY UNRESOLVED MOVEMENT** (T5/T6,
+  and any finding whose cause is undetermined) permits
+  ONLY: STOP, HOLD, preserve evidence, escalate to
+  Rowan and Julie — rollback is **not** inside this
+  gate's budget for class B and needs a separate
+  ruling/GO. T5/T6 still STOP the gate; they no longer
+  automatically cause rollback evaluation toward a
+  rollback. §5's V7 response text and closing rule and
+  §7's GO wording and STOP conditions are rewritten to
+  match.
+- **C1-2 — Runtime-adoption evidence (§0, §5, §6).**
+  C1's checks establish **SCRIPT DEPLOYMENT
+  VERIFICATION** only. They do not establish **DURABLE
+  OBJECT RUNTIME ADOPTION** — existing DO instances
+  adopting the new code on their own lifecycle — and
+  every success claim in the package is narrowed
+  accordingly. Runtime adoption and the operational
+  behavior of the containment code paths are carried
+  as explicitly UNRESOLVED in §6 (C1-R2), observable
+  only in later scopes (C2/C3).
+
+The candidate code is **UNCHANGED**: §1's identities
+stand exactly as accepted, no new diff exists, and no
+battery re-run is required or claimed by this revision
+(§8 stands as accepted).
+
+**Assignment:** Rowan's ruling on the V4 corrections
+(PASS — corrections round CLOSED; recorded at
+`ROWAN-V4-CORRECTIONS-PASS.md`): "Prepare a focused C1
+deployment-gate readiness package for independent Rowan
+review. Include the exact pinned candidate identity,
+fresh preflight requirements, mutation and rollback
+bounds, observability checks, unresolved risks, and
+explicit GO wording. Do not execute C1 or any other
+gate."
+
+**Gate structure:** C1 is the containment-deployment
+scope of the accepted five-scope structure (C1 / C2 /
+C3 / R5a-D / S1, plus standalone restoration and the
+R3-V micro-scope) in `PHASEB-RECOVERY-GATES-V4-REVISED.md`
+(pin `621535f0456e3d61cc7bcbc2fda04f661dc63e49`). The
+design authority is `PHASEB-CONTAINMENT-DESIGN-V4-REVISED.md`
+(same pin). The deploy mechanics follow the proven P2
+instrumentation gate pattern (execution record
+`PHASEB-INSTRUMENTATION-GATE-EXECUTION-RECORD.md`, pin
+`0e8f802fbcdf842a342d876f7510c440ded57e04`): fresh census
+→ fresh assembly → battery re-run → build pin → ONE
+upload → read-back verification → ends HELD.
+
+## 0. What C1 is — and is not
+
+**C1 deploys code only.** It uploads the containment V4
+candidate (§1) to the production worker
+`opalreader-api-v2-prod` as a single script upload and
+verifies the **script deployment** with passive reads.
+That verification is script-level only: it does not
+establish that existing Durable Object instances have
+adopted the new code (runtime adoption — §5 preamble,
+§6 item C1-R2). It ends with:
+
+- containment **INERT at NORMAL** — no transition is
+  performed; the containment tables are created ONLY by
+  a transition (verified in the candidate source, §1.4),
+  so a bare deploy creates nothing and the state reads
+  **absent = structurally verified NORMAL**;
+- the system **HELD**: GENERATION_HALT `"1"`, queue
+  `opalreader-generation-v2` delivery paused, the
+  Generate button NOT live;
+- the preserved Phase B plan, the idx-26 exemption, the
+  parked job, and every other production fact exactly
+  as at census.
+
+**C1 is not:** a containment transition of any kind; C2
+readability verification (a separate zero-mutation
+scope that follows C1); C3 operational verification;
+the R5a deployment (the COMPOSED tree is R5a-D's
+subject and is explicitly NOT what C1 deploys); any
+alarm interaction, wake, command, report, SubmitJob,
+hold flip, or queue change; any generation. C1 does
+not touch the preserved plan
+`plan:19cad189fab54b9c804a74a6` or the live idx-26
+exemption in any way.
+
+## 1. Exact pinned candidate identity
+
+### 1.1 The three changed parts (verified firsthand)
+
+The candidate is the **containment V4 candidate tree**
+(`containment-v4/candidate-tree/`): the current live
+deployed tree plus the containment v4 code, in exactly
+**3 of 31 parts**. Identities below were re-computed
+from the candidate tree and re-diffed against the live
+baseline during this package's preparation (Nov 2,
+2026) — they match `containment-v4/CANDIDATE-IDENTITIES.md`
+and `CANDIDATE-IDENTITIES-REVISED.md` exactly:
+
+| part | bytes | SHA-256 (candidate) | SHA-256 (live) | diff vs live |
+|---|---|---|---|---|
+| `v2/coordinator.mjs` | 313,063 | `6c19a50e88d8bc00d357f7a5facf33ed8425b53daa20e8d700037f9fd121b2f2` | `bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a` (276,256 B) | **+753/−0** |
+| `v2/worker-entry-prod-d6.js` | 136,357 | `2bb0608b589a084ca275428c3236c24680f4a4692afe2245dfcb2880257983c1` | `45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab` (127,131 B) | **+175/−3** |
+| `v2/generation/service.mjs` | 91,500 | `5c5183e664218b9746c497e9456af45c7467a8ace66fd1b9ef0928eccb3c7c14` | `41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda` (88,070 B) | **+73/−2** |
+
+Stored unified diffs (in `containment-v4/`, `patch -p1`
+-applicable): `coordinator.diff` SHA-256
+`53306786125545df00d6993bfa1f28cfbefdc84e321b601e7995d38823ad224b`;
+`entry.diff` SHA-256
+`0d0fdf6aff6ae8126c20bb075da071fd55021936231288fc080d8e590d8fde75`;
+`service.diff` SHA-256
+`9b52249525bbafa84f4f640a6dc50431b2627bd80616771d61308a1be1701b65`.
+Round-trips were verified byte-for-byte in the V4
+package: live → candidate, parts-e0 → candidate, and
+v3 candidate → v4 candidate all reproduce the candidate
+parts exactly. Diff line counts were re-measured during
+this package's preparation and match the table above.
+
+### 1.2 The basis: the current live tree (full 31-part manifest)
+
+The deploy basis is the **CURRENT live tree**: the P2
+instrumented build, build stamp
+`86ad06aba6083f7ea84d64b08eac1788d5bf570c`, script etag
+`ba80e81fc301b3ff001e8ebf4eab11189221d21471261729c28e509a7ce0d7af`
+(both observed Nov 2, 2026 at the P2 gate; etag re-read
+fresh at any C1 census). The candidate derives from
+this tree and from no other. `containment-v4/baseline-tree/`
+is a byte copy of it, spot-verified at copy time; the
+P2 gate's census-downloaded parts are the same bytes.
+
+The other **28 parts are byte-identical** between live
+and candidate, including `v2/host/build-identity.mjs`
+(411 B, SHA-256
+`5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c`,
+stamping `86ad06ab…` in both trees — see §1.3 for the
+gate-time stamp). Full manifest (SHA-256 / bytes; the
+three changed parts appear with their candidate values
+in §1.1 and their live values here):
+
+| part | bytes (live) | SHA-256 (live) |
+|---|---|---|
+| `v2/api.mjs` | 13,632 | `9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d` |
+| `v2/audio-route.mjs` | 15,965 | `b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616` |
+| `v2/coordinator.mjs` | 276,256 | `bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a` |
+| `v2/executor.mjs` | 13,974 | `5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9` |
+| `v2/generation/binding-projection.mjs` | 12,818 | `d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654` |
+| `v2/generation/content-plane-adapter.mjs` | 8,150 | `d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7` |
+| `v2/generation/d6-executor.mjs` | 46,660 | `c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c` |
+| `v2/generation/d6-work-source.mjs` | 5,981 | `8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006` |
+| `v2/generation/eligible-set.mjs` | 7,284 | `a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7` |
+| `v2/generation/flush-store.mjs` | 8,497 | `e8f622bf4ed8745dd342cdbdd8d66

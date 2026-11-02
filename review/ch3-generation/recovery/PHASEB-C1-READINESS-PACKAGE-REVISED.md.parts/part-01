@@ -1,0 +1,166 @@
+f2a59a586ce034e8e1b1e21d68a2460f325` |
+| `v2/generation/gen-constants.mjs` | 4,936 | `9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d` |
+| `v2/generation/gen-schema.mjs` | 5,307 | `d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5` |
+| `v2/generation/genstore.mjs` | 48,703 | `811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a` |
+| `v2/generation/grant-finalizer.mjs` | 40,172 | `0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076` |
+| `v2/generation/grant-guards.mjs` | 12,936 | `9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629` |
+| `v2/generation/park-release.mjs` | 29,126 | `ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd` |
+| `v2/generation/phase-policy.mjs` | 7,299 | `09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f` |
+| `v2/generation/policy-split.mjs` | 15,074 | `61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876` |
+| `v2/generation/prefix-range.mjs` | 3,628 | `a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514` |
+| `v2/generation/quarantine.mjs` | 15,752 | `64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62` |
+| `v2/generation/quota-budget.mjs` | 42,048 | `2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820` |
+| `v2/generation/service.mjs` | 88,070 | `41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda` |
+| `v2/host/adapters.mjs` | 39,224 | `f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368` |
+| `v2/host/build-identity.mjs` | 411 | `5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c` |
+| `v2/p8/approved-freeze-carry.mjs` | 57,703 | `24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46` |
+| `v2/p8/approved-freeze-chunks.mjs` | 6,101 | `b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a` |
+| `v2/p8/approved-freeze-manifest.mjs` | 467,075 | `e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd` |
+| `v2/p8/migration-chunk-limits.mjs` | 4,733 | `886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41` |
+| `v2/worker-entry-prod-d6.js` | 127,131 | `45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab` |
+| `v2/worker-entry-prod.js` | 14,480 | `1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5` |
+| `v2/worker-entry.js` | 21,520 | `91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5` |
+
+**Explicitly NOT the C1 candidate:** the composed tree
+(coordinator `5303cb63…`) carries the R5a arming change
+in addition to containment. It is R5a-D's subject.
+Deploying it under C1 would exceed this gate's scope.
+
+### 1.3 Gate-time assembly, build pin, and stamp (P2 pattern)
+
+A C1 execution assembles its upload tree fresh, exactly
+as the P2 gate did (its §4, steps B1–B5):
+
+1. **Fresh assembly.** All 31 parts are downloaded from
+   the live script at census and verified byte-for-byte
+   against §1.2. The three stored diffs (§1.1) are
+   applied (`patch -p1`). The executor asserts: exactly
+   3 parts differ from the downloaded live parts, each
+   hashing exactly to its §1.1 identity; the other 28
+   byte-identical; part count 31; `node --check` clean
+   on the three changed parts.
+2. **Battery re-run** on the gate-assembled tree (§8) —
+   complete runs, logs + exit codes captured.
+3. **Build pin.** The unstamped assembled manifest + the
+   battery re-run logs are pinned as ONE commit on
+   `ui1-review` (repo `jedavid33-design/opal-reader`).
+   Per the standing build-marker convention, that pin
+   becomes the deployed build stamp.
+4. **Stamp.** `v2/host/build-identity.mjs`'s
+   `BUILD_COMMIT` is replaced with the build pin (same
+   40-character length; the part stays 411 B). The
+   deployed tree therefore differs from live in exactly
+   **4 parts**: the 3 candidate parts + the stamped
+   identity part. The full stamped manifest is computed
+   and recorded before upload; `/health`'s build stamp
+   == the build pin is verification item V1 (§5). This
+   is the same convention the P2 gate disclosed and
+   executed; the §1.1 identities are verified on the
+   assembled (unstamped) candidate.
+5. **Envelope.** Upload metadata is read fresh from the
+   live `/settings` surface at build time and carried
+   forward unchanged: all 10 bindings, existing secrets
+   as `{"type":"inherit"}`, `compatibility_date`
+   `2026-08-29` + `nodejs_compat`, `main_module`
+   `v2/worker-entry-prod-d6.js`, GENERATION_HALT `"1"`
+   (no setting flipped). The multipart envelope is
+   round-trip parsed and verified byte-identical (31
+   parts + metadata) before upload. Any metadata drift
+   vs the live read beyond the two documented GET
+   -projection artifacts (the DO binding's
+   `namespace_id` projection; secrets projected as
+   `secret_text` where uploads carry `inherit`) is a
+   STOP (§7).
+6. **Rollback basis preserved.** The census-downloaded
+   live parts (build `86ad06ab…`, §1.2) are preserved
+   byte-identical as the rollback upload source (§3).
+   The permanent rollback floor (`6a73d962…`) is NOT a
+   rollback target for this gate and remains untouched.
+
+### 1.4 Why a bare deploy ends inert (source-verified)
+
+In the candidate, the containment DDL
+(`CONTAINMENT_SCHEMA`: tables `d6_containment_state`,
+`d6_containment_events`) is executed at exactly two
+call sites, both inside transition methods of
+`v2/coordinator.mjs` — `applyContainmentTransition`
+(line 2872) and `_verifyChainStop` (line 3068).
+`readContainmentState` never writes and never creates
+tables. A deploy invokes no DO method; ordinary reads
+on the new build therefore create nothing, and the
+containment state reads **absent**, which the read
+discipline defines as structurally verified NORMAL
+(design v4 revised). The tables come into existence
+only when a transition runs — and no transition runs
+in C1 (budget: 0, §3).
+
+## 2. Fresh preflight census (hard expectations)
+
+A C1 execution begins with a fresh census. **Every
+value below is a hard expectation to be re-read fresh
+at execution time — never a presumed current fact.**
+Values observed on Nov 2, 2026 (at the P2 gate census
+and its verification windows) are labeled with that
+date per the R6 evidence discipline. Any deviation on
+any item = **STOP before upload**; the executor's own
+tracing never clears its own stop, and no deviation is
+self-cleared or retried inside the same GO.
+
+Items 1–13 mirror the P2 gate census, re-based to the
+current live build. Items 14–16 are containment
+-specific to C1.
+
+1. **Health** — build
+   `86ad06aba6083f7ea84d64b08eac1788d5bf570c`;
+   generation `halted`; coordinator `armed`.
+2. **Script** — etag
+   `ba80e81fc301b3ff001e8ebf4eab11189221d21471261729c28e509a7ce0d7af`;
+   **31/31 parts byte-identical** to the §1.2 manifest;
+   observability enabled, `logs.persist: true`.
+3. **Bindings / settings surface** — exactly **10**
+   bindings; GENERATION_HALT `"1"`;
+   `OPALREADER_PHASE_POLICY` `"enforce"`.
+4. **Settings** — revision **1** (lane standard,
+   cap $50).
+5. **Queue** `opalreader-generation-v2` (id
+   `93b6a35fb8cf4788a91a2c90b748ae66`) —
+   `delivery_paused: true`; exactly **1** consumer
+   (`f260f2188d80426bb0588685e9d084eb`). (The queue
+   state cannot be read by the Worker; cf-api read-back
+   is the proof, as at every prior census.)
+6. **Capabilities** — standard admitted; Batch
+   `batch_not_armed` (`d6StandardOnly`); phase registry
+   binds `forever-pucked` ↔ bookId
+   `5c589095-f812-48a2-8ab2-03ba2791f2b2`.
+7. **Phase accounting, exact on both surfaces**
+   (capabilities + diagnostics): settled **1,029,420**;
+   estimatedUnverified **19,018**; reservedUnverified
+   **5,648**; inFlightUpper **0**; unknownOpen **0**;
+   remaining **12,464,932** of 13,500,000;
+   `unverifiedStatus: provider_unverified`.
+8. **Quota** — reconcile `ok: true`, drift empty,
+   totals stable across pages; sole exception the known
+   adjudicated straddler
+   `att-37d63768-db4b-447d-8150-580b7c6ee257`
+   (`estimated_unverified`, never dispositionable). PT
+   dispatched totals (PT day rolls 07:00Z): 2026-10-29
+   = **57**, 2026-10-30 = **79**, 2026-10-31 = **44**,
+   2026-11-01 = **76**, 2026-11-02 = **0** (observed
+   Nov 2, 2026); **no dispatches on any PT day after
+   2026-11-01** — if the gate runs on a later day, that
+   day must read 0 and every intervening day 0.
+   Derived reserved **0**.
+9. **Plans — exactly 5:** smoke
+   `plan:3183ecbf2ac4bf50bbc6166e` `complete`; old Ch 2
+   `plan:603ab416bd67ab1b25de97be` `retired`; fresh
+   Ch 2 `plan:b2dc2a3d1cd367a0245b9102` `complete`;
+   Ch 3 `plan:e377a5559961b294154276b6` `complete`;
+   **preserved Phase B plan
+   `plan:19cad189fab54b9c804a74a6` `active`**, totals
+   {eligible 1, done 0, failed 0, blocked 0, prompts
+   0}, single entry (FP chapterIndex 2, idx 26,
+   occurrenceId
+   `2a85f74f-353d-4c25-a86a-4a4db392868b`, 569 chars)
+   `pending` / `executionState: null`; its job
+   `plan:19cad189fab54b9c804a74a6:seg` `queued` rev 1,
+   quarantine `held: false`, **g
