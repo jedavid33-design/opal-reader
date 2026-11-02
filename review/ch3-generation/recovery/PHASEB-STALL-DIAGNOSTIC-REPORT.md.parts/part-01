@@ -1,0 +1,141 @@
+ capture it). The one durable
+write `driveOnce` performs unconditionally — the halt-epoch
+observation (`noteHaltObservation`, `quarantine.mjs:296–333`, called
+best-effort at `service.mjs:897`) — lands in `d6_halt_epochs` /
+`d6_quarantine_meta`, for which no read surface exists either.
+**Whether any given drive pass ran is therefore not directly
+observable from outside the DO. This is an evidence limitation of
+the shipped build, stated plainly.**
+
+**F8 — The stall condition persists after the attempt.** In live
+read-only checks at ~02:40Z Nov 2 (about 30 minutes after re-halt;
+captured in `phaseb-stall-diagnostics/live-*.json`): health build
+`1c2d1d0f`, generation halted; the plan is still `active`, its entry
+still `pending` with `executionState: null`; the job still `queued`
+rev 1 with grants `[]`; diagnostics show **zero execution records**
+for the plan and phase accounting exact (settled 1,029,420 /
+estUnv 19,018 / resUnv 5,648 / remaining 12,464,932); reconcile
+`ok: true`, armed, sole straddler exception, PT 2026-11-01 totals
+76/0/76; conflicts still exactly the four baseline rows; eligibility
+still eligible 1 / 569 / 8,022 with the exemption-era digest
+`cdef2c7e…`. This matters analytically (see §4): grant *issuance*
+for a plan-linked job is **not** fenced by GENERATION_HALT in the
+source — the halt fences only *delivery* (F9). Had an effective
+drive pass run in the ~30 held minutes after re-halt (spanning at
+least two watchdog periods from any arming), it would have issued
+the grant and left the occurrence `granted` with 12 slots reserved,
+even though nothing could be delivered. It did not. (One narrow
+escape exists — an issue→lease-void cycle completing inside the
+interval — but the void path schedules a `retry_grant` 30 s out
+(`coordinator.mjs:1800`-region `_scheduleReAdvance`), whose
+re-issuance would have been live at the read instant; and no cycle
+can start without the chain processing schedule rows in the first
+place. The self-consistent reading is that no effective drive pass
+has occurred since re-halt either.)
+
+**F9 — The halt fences delivery, not issuance, for plan-linked
+jobs.** `d6HostEnv` wires `sendGrant` only when `GENERATION_HALT ===
+"0"` and the queue binding exists (`worker-entry-prod-d6.js:~340`);
+`driveOnce` drains the outbox only when a sender is wired
+(`service.mjs:1047–1048`). The grant guard's halt refusal
+(`grant-guards.mjs`, the `generation_halted` / halt-epoch fences)
+applies **only to plan-less jobs**; a plan-linked job's grant is
+checked against phase halt, phase budget, storage, quota, cap, and
+quarantine — never against GENERATION_HALT. The coordinator's own
+alarm/comment at `worker-entry-prod-d6.js:1458–1460` states the same
+design: "While halted, d6HostEnv wires no sendGrant, so driveOnce
+can settle plan state and re-derive grants but nothing can leave
+the outbox."
+
+**F10 — The exemption is not consulted by the drive/grant path at
+all.** `generation/service.mjs`, `coordinator.mjs`,
+`generation/grant-guards.mjs`, and `generation/quota-budget.mjs`
+contain no reference to the chapter exemption; `d6_chapter_exemptions`
+is read only by `park-release.mjs` (eligibility/park machinery —
+i.e., quote and plan-creation time) and `grant-finalizer.mjs`. The
+exemption did its work before the attempt's SubmitJob: it made
+idx 26 eligible so the plan could be created with the entry's
+disposition already `eligible`. Preserving or revoking it now has
+**no effect** on whether the preserved plan can be driven.
+
+## 2. Q1 — Was the alarm scheduled, and did it fire?
+
+**Scheduling (source-proven).** The alarm is armed from the durable
+schedule table: the next fire time is always the earliest pending
+schedule row (a watchdog row is manufactured whenever none exists),
+and the chain re-arms (i) unconditionally at the end of every alarm
+pass, (ii) on every command, report, and grant request via `wake()`,
+and (iii) after every command via `_armAlarmIfEarlier()`. It is not
+armed "only on transitions"; it is armed continuously, and any
+single coordinator wake re-establishes it if it was lost (F2).
+
+**Firing — before the fault:** proven (F3). **During the 1101
+fault:** any alarm that came due would have been delivered to a DO
+that, on the diagnosis memo's leading hypothesis, could not
+instantiate (every fetch faulted at that layer with bare 1101). The
+watchdog row's next due time after Gate 4's close falls inside the
+fault's onset window (the memo's §4 maturation analysis). On
+documented platform semantics, a failing alarm invocation is
+retried with backoff from 2 s, up to 6 retries — a span of minutes,
+against a fault that lasted ~4¾ hours — after which the invocation
+is dropped; and because no handler code ran, the code's own
+unconditional re-arm never executed. The stored alarm would stand
+consumed. This is a mechanism, stated conditionally — the memo
+ranks the platform/construction cause as most plausible but
+**unconfirmed**, and this report adopts the same status.
+
+**Firing — during the attempt-3 window:** indeterminate by direct
+evidence (F7), and this is the crux. Two command wakes are certain
+after recovery: the exemption POST at 01:22:15Z is a direct service
+route in the DO fetch handler (`worker-entry-prod-d6.js:1269`) and
+does not itself pass through `handleCommand`; the SubmitJob at
+01:23:15Z **does** reach `handleCommand` — the service's
+`createJobForEntries` invokes it for the inner job submission
+(`service.mjs:160–171`) — and `handleCommand` calls `wake()` before
+applying (`coordinator.mjs:521`), then `_armAlarmIfEarlier()` after.
+So at 01:23:15Z the chain was either still armed (if it had survived)
+or was re-armed then, with a fire time at the earliest pending
+schedule row — a pre-fault watchdog row's long-past `due_at`, or
+≤ 01:33:15Z for a fresh one. A delivered alarm at any point in
+01:23–02:09Z would have run the chain in F1. §3 shows a delivered,
+completed drive pass cannot be reconciled with the window state
+unless it died before the grant step on every cycle. §5 ranks the
+residual explanations.
+
+**What can break the chain (complete over the source):**
+(1) platform-level delivery loss of a due alarm with retries
+exhausted before any handler code runs (above) — the chain then
+waits for the next command/report wake, and pure read traffic never
+revives it;
+(2) the armed-value trust in `_armAlarmIfEarlier()` — if the
+platform reports an armed time later than the next due work, the
+code sets nothing and cannot detect non-delivery; no code-originated
+`setAlarm` value can be far-future (all are a pending row's `due_at`
+or now + 10 min), so a wrong armed value would have to be a
+platform-side artifact;
+(3) a throw in the subclass alarm *after* `super.alarm()` (in
+`recover()` or `driveOnce`) — breaks that pass's driving only, not
+the chain (the base `finally` already re-armed);
+(4) eviction/hibernation — cannot break it (platform-persisted
+alarm; stateless coordinator);
+(5) poison schedule rows — cannot break it (per-row isolation;
+death is visible, and conflicts stayed at the baseline four).
+
+## 3. Q3 — Every refusal/return path in the grant-issuance path, evaluated
+
+(The refusal analysis is presented before Q2's conclusion because
+Q2 depends on it. "Visible" = necessarily writes durable state the
+polls read. All line cites are the deployed parts.)
+
+### 3a. Paths that would have been VISIBLE — all ruled out
+
+| # | Path (source) | Would have written | Verdict |
+|---|---|---|---|
+| V1 | Driver phase-halt pre-check (`service.mjs:971–975`) | plan → `halted_unknown` | OUT — plan stayed `active`; phase not halted (census + Gate 4 granted under this phase state) |
+| V2 | Driver storage projection (`service.mjs:978–983`, `grant-guards.mjs:57–73`) | plan → `parked_storage` | OUT — no park; projection is far inside the 10 GB boundary (R2 ≈57% at last seed-era accounting; remaining eligible chars for this plan = 569) |
+| V3 | `quota_parked` — unreleased `quota_parks` row (`coordinator.mjs:1645–1646`; stop-map `service.mjs:66`) | plan → `parked_quota` | OUT — no park; live `/v2/quota` still shows `parked: null` |
+| V4 | `quota_estimate_exhausted`, ledger check (`coordinator.mjs:1650–1651`) and cohort count check (1697–1698) | plan → `parked_quota` | OUT — day attempts 76 (provider dispatches) / 15 (net ledger attempts on the live read), both < 100; cohort size 1 |
+| V5 | `spending_cap` (`coordinator.mjs:1661–1662`; stop-map) | plan → `parked_cap` | OUT — month spent far under the $50 cap; job estimate is one segment's |
+| V6 | Guard `phase_halted_unknown_billing` (`grant-guards.mjs:196–197`; stop-map) | plan → `halted_unknown` | OUT — same evidence as V1 |
+| V7 | Guard `phase_budget` (`grant-guards.mjs`, `d6PhaseBudgetCheck` 108–119) | plan → `parked_budget` | OUT — projection 1,029,420 + 5,648 + 0 + 153,636 (occurrence ceiling; the entry's own upper is 8,022-scale) = 1,188,704 ≤ 13,500,000 |
+| V8 | 

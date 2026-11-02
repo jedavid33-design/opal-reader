@@ -1,0 +1,98 @@
+Guard `storage_boundary` (`grant-guards.mjs:225–226`; stop-map) | plan → `parked_storage` | OUT — as V2 |
+| V9 | Cohort bound empty → `provider_attempt_budget` / `…_bootstrap_incomplete` / `…_day_over_limit` (`quota-budget.mjs:624–646`; `_issueGrant` 1737–1741; stop-map) | plan → `parked_quota` | OUT — quota armed and reconcile `ok: true` at census and every poll (bootstrap completed at Gate (b)); the one occurrence needs 12 worst-case slots (`SEGMENT_ATTEMPT_BUDGET = 12`, `gen-constants.mjs:16`) against headroom 24 (100 − 76) |
+| V10 | `reserveForGrant` refusal (`coordinator.mjs:1743–1748`; stop-map reasons) | plan → `parked_quota` | OUT — same evidence as V9; reserved stayed 0 with drift empty on all reconcile pages |
+
+### 3b. Paths that leave NO durable trace — evaluated individually
+
+| # | Path (source) | Mechanism | Verdict |
+|---|---|---|---|
+| I1 | `job_not_found` (`coordinator.mjs:1643`) | job row missing at drive time | OUT — job read at SubmitJob read-back, all 23 polls, and live (queued rev 1) |
+| I2 | `nothing_pending` (`coordinator.mjs:1658–1659`) | no `pending` occurrences for the job | OUT — the occurrence read `pending` at every poll and live |
+| I3 | `grant_exists` (`coordinator.mjs:1700–1703`) | a grant row already holds the deterministic id `grant:<jobId>:<revision>:full` | OUT — the job was created at 01:23:15Z in this attempt; no prior grant requester for it exists; `jobView` projects all of the job's grants and showed `[]` at every poll |
+| I4 | Driver `execution_in_flight` skip (`service.mjs:1001–1006`) | a non-terminal execution record exists for the pending occurrence | OUT — `executionState: null` at read-back and all polls; live diagnostics show zero execution records for this plan; no execution was ever created for this job |
+| I5 | Driver D7-2 quarantine skip (`service.mjs:954–968`) and guard `plan_quarantined` / `job_quarantined` (`grant-guards.mjs:157–160`) | a held quarantine row, or the strict hold read failing (treated as held by the driver; throwing in the guard) | OUT — the plan was born after the halt lift and read back `held: false`; the identical holds SELECT was exercised by the plan view at read-back and all 23 polls, and the view's reader rethrows any non-"no such table" error (`quarantine.mjs:139–149`), so a table fault would have failed the polls, not masqueraded as an all-clear. (Formal residue: a fault present *only* at drive instants and never at any of 23 polls — no mechanism suggests itself; not credited.) |
+| I6 | Guard `phase_accounting_incomplete` (`grant-guards.mjs`, `d6PhaseBudgetCheck` shape fence) | `phaseAccounting` returns a legacy-shaped object (missing/invalid unverified fields) | OUT — the same function's output was read on the capabilities and diagnostics surfaces at census and every poll with both fields present and exact (19,018 / 5,648) |
+| I7 | Driver silent skip: no current job (`service.mjs:985–988`) | `d6_plan_jobs` has no row for the plan | OUT — `createJobForEntries` inserts the link row in the same invocation that created the job (`service.mjs:172–176`), the plan entries carry the job id, and plan/job views resolved throughout |
+| I8 | Live-grant block in the grant step (`service.mjs:985–988` region, grantStep pending/liveGrant checks) | an `issued` grant already exists | OUT — grants `[]` at every poll (same evidence as I3) |
+| I9 | A THROW inside the grant transaction or its callers — e.g. in `_issueGrant`'s occurrence/ledger writes, in `requestGrant`'s `wake()`, in `recover()` before `driveOnce`, or in the subclass alarm's cache/service construction before `driveOnce` | exception propagates out of the platform alarm invocation; the pass leaves no durable trace (the guard's in-transaction epoch note rolls back with it) | **INDETERMINATE, ranked low.** Every component named was exercised successfully by poll reads in the same minutes — each poll constructed the coordinator, service, genstore, and host cache inside the same DO and read the same tables — and `recover()` is a plain SELECT scan (`genstore.mjs:922–941`) that is a no-op on this store (no non-terminal execution records; it ran on substantially this store state in every Gate 4 pass). A storage fault recurring at every expected alarm cycle (~01:33, ~01:43, ~01:53, ~02:03Z, plus platform retries) while never touching any of the interleaved reads has no identified mechanism. It cannot be excluded by any read surface (F7). |
+
+No other return exists in `driveOnce`, its grant step, `requestGrant`,
+`_issueGrant`, or `d6GrantGuard`: the enumeration above is complete
+over the deployed source. (The plan-selection exclusion at
+`service.mjs:928–930` — complete/partial/retired/halted_unknown —
+does not apply: the plan is `active`. The job state machine is not a
+hidden fence either: `grant` is a legal transition from `queued`
+(`coordinator.mjs:51–71`, `JOB_TRANSITIONS`), applied inside the
+grant transaction at 1764–1775.)
+
+## 4. Q2 — Did driveOnce run during the window?
+
+- It did **not** complete a grant issuance (F4, proven).
+- It did **not** run and refuse at any visible stop (F5, proven).
+- It did **not** run and refuse at any enumerated invisible refusal
+  (F6 / §3b — each ruled out on window evidence).
+- The remaining possibilities are exactly two: **(a)** no effective
+  drive pass occurred — the alarm never fired, or fired and died
+  before the grant step on every cycle (I9, disfavored); or **(b)**
+  `driveOnce` ran to the grant step and something outside the
+  enumerated source paths intervened — which, the enumeration being
+  complete over the deployed source, would require the deployed
+  parts analyzed here to not be the code that ran (contradicted by
+  the census: etag and 31/31 part hashes verified *during* the
+  attempt, before and after the window).
+- F8 extends the observation: the non-issuance persisted for ~30
+  minutes after re-halt, in a state where issuance (not delivery)
+  was possible. Whatever prevented issuance is **still in effect**
+  as of the last live read, or the chain is still not firing. It is
+  not specific to the unpaused window, the queue state, or the halt
+  flag.
+
+**Conclusion for Q2:** on the complete source enumeration plus the
+window evidence, the supported statement is: **no effective drive
+pass reached the grant step at any point from the SubmitJob
+(01:23:15Z) through the last live read (~02:40Z)**. Whether that is
+because the alarm never fired or because every pass died pre-grant
+is indeterminate from read-only evidence (F7); the pre-grant-death
+variant requires a fault class that the same minutes' read traffic
+contradicts (I9).
+
+## 5. Q4 — Could the 1101 fault have broken the alarm chain?
+
+Mechanism-level only; causation is **not** assumed.
+
+For the fault to have broken the chain, four things must all be
+true:
+1. **A coordinator alarm came due during the fault.** Plausible to
+   the point of near-certainty: the watchdog cadence is 10 minutes,
+   Gate 4 activity ran to ~19:40Z, and the memo's onset window is
+   19:46–19:59Z — a watchdog (or a Gate 4 grant's 15-minute lease
+   row) maturing in that window is the expected course of events.
+2. **The DO could not execute handler code during the fault.** This
+   is the memo's leading (unconfirmed) hypothesis: bare 1101 on
+   every DO-forwarded fetch, identical on staging's different build
+   and data, points at instantiation/the platform layer.
+3. **Platform retries were exhausted inside the fault.** On
+   documented semantics (backoff from 2 s, ≤ 6 retries ≈ minutes)
+   against a ~4¾-hour fault, yes — *if* 1 and 2 hold, the due
+   invocation was dropped and, no handler code having run, the
+   code's unconditional re-arm never fired. The chain would then be
+   dead with the alarm consumed.
+4. **Nothing revived it before attempt 3.** Attempt 2 was
+   reads-only (reads never call `wake()` — F2), and attempt 3's
+   first wake was the SubmitJob at 01:23:15Z.
+
+**The timeline is consistent with 1–4 — but step 4 has a hard
+consequence the naive version of this hypothesis does not survive:**
+the 01:23:15Z wake *did* run `_armAlarmIfEarlier()`. If the
+platform's armed value was null (consumed) or earlier than the
+earliest pending row, the wake re-armed it, and a delivered alarm
+should have produced a drive pass by ~01:33Z. It did not (F4–F6).
+So the fault hypothesis, to explain the *attempt-3* stall and not
+just a dead chain during the fault, requires one further condition:
+**(5)** the re-armed (or never-lost) alarm was *not delivered* —
+e.g., the platform held a stale armed timestamp for this DO that
+`getAlarm()` faithfully reported (so the code, which only ever
+moves an alarm earlier and never verifies delivery, set nothing),
+or `setAlarm` registrations were silently ineffective for this DO
+after the fault cleared. Both variants are platform-side, invisible
+to every read surface (F7), and indistinguishable from each oth

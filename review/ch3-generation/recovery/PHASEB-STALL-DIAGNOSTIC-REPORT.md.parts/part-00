@@ -1,0 +1,161 @@
+# Phase B Attempt 3 — Coordinator Alarm / driveOnce Stall: Read-Only Diagnostic Report
+
+- **Authorization:** Rowan's Phase B Attempt 3 review (documentary PASS on
+  stop and containment; INVESTIGATION HOLD), relayed Nov 1, 2026 —
+  read-only investigation of the coordinator alarm and `driveOnce` path
+  using existing source, metadata, logs, and read-only evidence.
+  **No production mutation of any kind was made for this report.** The
+  only production contact was read-only GETs through the prod client
+  and operator connectors (listed in §9).
+- **Subject:** why, during Phase B attempt 3 (unpause
+  2026-11-02T01:24:40Z → stall declared 02:09:27Z), no grant ever
+  issued for plan `plan:19cad189fab54b9c804a74a6` despite a verified
+  clean live state — and whether the preserved plan can safely resume.
+- **Governing records:** `PHASEB-ATTEMPT3-EXECUTION-RECORD.md`;
+  `PROD-1101-DIAGNOSIS.md`; `ROWAN-PHASEB-ATTEMPT3-REVIEW.md`.
+- **A note on method, per Rowan's instruction:** this report does NOT
+  infer an alarm failure solely from the absence of grants. Every
+  candidate mechanism is evaluated against the source and the captured
+  state; what is proven, what is inferred, and what is indeterminate
+  are labeled as such throughout.
+
+## 0. Source basis — what "the source" means in this report
+
+All source claims are grounded in the **deployed build's own modules**:
+the 31 script parts downloaded from production at the attempt-3 census
+and preserved at
+`~/workspace/ch2-program/ch3-recovery/phaseb-attempt3/evidence/parts-e0/`
+(part names `v2/…`). For this report I re-hashed every on-disk part
+against the census parse manifest (`parts-parse-e0.log`): **31/31
+parts match the deployed manifest byte-for-byte** (script etag
+`f15fb1ae40f870fc4493f3499db0b096c4d801b9fff8d20fe5538d84c69c82ed`,
+build `1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`). Line numbers below
+cite these part files.
+
+The local tree `~/workspace/d6-build/impl/` does **not** correspond to
+the deployed build (only 12/31 files hash-match; 12 differ, 7 deployed
+modules — including `quota-budget.mjs`, `park-release.mjs`,
+`prefix-range.mjs` — have no local counterpart). No source claim in
+this report rests on `impl/`; it was not used.
+
+Platform-behavior statements (single alarm per Durable Object,
+`setAlarm` replaces, alarms persist across eviction, at-least-once
+delivery, automatic retry of a throwing `alarm()` handler with
+exponential backoff starting at 2 s for up to 6 retries, after which
+the invocation is not retried further) are Cloudflare's documented
+Durable Objects alarm semantics, retrieved 2026-11-02. They are
+platform documentation, not observations of this DO.
+
+## 1. Confirmed findings
+
+**F1 — `driveOnce` has exactly one caller in the deployed bundle: the
+Durable Object alarm.** A grep over all 31 deployed parts finds a
+single call site: `v2/worker-entry-prod-d6.js:1465`, inside
+`OpalReaderCoordinatorProd.alarm()` (lines 1455–1468). No fetch,
+command, queue, or report path drives grants. The full invocation
+chain is:
+
+1. platform alarm → `OpalReaderCoordinatorProd.alarm()`
+   (`worker-entry-prod-d6.js:1455`);
+2. `await super.alarm()` → the base DO alarm (`worker-entry.js:270`),
+   which constructs a `GenerationCoordinator` and runs
+   `coord.alarm()` — the schedule/watchdog processor
+   (`coordinator.mjs:2489`) — then flushes the host cache;
+3. back in the subclass: `service.recover()` (`service.mjs:1386`),
+   then `service.driveOnce()` (`service.mjs:888`), then cache flush.
+
+There is no try/catch in the subclass alarm around steps 2–3: a throw
+in `super.alarm()`'s caller-visible portion, in `recover()`, or in
+`driveOnce()` propagates out of the platform alarm invocation. (The
+base coordinator alarm itself isolates per-row errors and re-arms in
+a `finally` — F2 — so a throw *after* it, e.g. in `driveOnce`, does
+not break the chain; it only skips that pass's driving.)
+
+**F2 — The alarm chain is self-perpetuating, with three distinct
+re-arm mechanisms, and it is re-armed by command/report traffic — but
+never by reads.** In `coordinator.mjs`:
+
+- `_armAlarm()` (2459–2463): `setAlarm` to the earliest pending
+  schedule row's `due_at`, or now + `WATCHDOG_PERIOD_MS`
+  (10 min, line 133) when the schedule is empty.
+- The base `alarm()` (2489–2525) processes due schedule rows with
+  per-row isolation (a failing row backs off 30 s × 2^n, capped at
+  900 s; at `SCHEDULE_MAX_ATTEMPTS` = 8, line 148, it dies visibly as
+  a `schedule_dead` row in `binding_conflicts`), and in its `finally`
+  block — reached whenever the handler runs at all — ensures a
+  pending watchdog row exists and calls `_armAlarm()`
+  **unconditionally**.
+- `wake()` (2469–2474) ensures a pending watchdog row exists and
+  calls `_armAlarmIfEarlier()`. Its only callers in the bundle are
+  `handleCommand` (coordinator.mjs:521 — every command),
+  `requestGrant` (1805), and `handleReport` (2064). **No GET/read
+  path calls `wake()`.**
+- `_armAlarmIfEarlier()` (2480–2488) sets the alarm **only** if
+  `getAlarm()` returns null or the earliest due time is *earlier*
+  than the armed time. It trusts the platform's armed value: it
+  never corrects an armed time that is later than the next due work,
+  and nothing anywhere in the bundle verifies that an armed alarm is
+  ever delivered. There is no `deleteAlarm` call anywhere in the
+  deployed bundle.
+
+Corollary (source-proven): the chain can be broken in exactly one
+code-visible way — if a due alarm's invocation never executes any
+handler code (so the `finally` re-arm never runs) *and* the platform
+consumes the alarm, the chain stays dead until the next
+command/report wake. Ordinary eviction cannot do this (alarms are
+platform-persisted; the coordinator holds no in-memory state by
+design, `coordinator.mjs:11`).
+
+**F3 — The chain provably worked before the 1101 fault, on this same
+code and data.** (a) Conflicts row 4 (`schedule_dead`, recorded
+2026-11-01T01:04:30Z — attempt-3 record §1 item 11) exists only
+because the base alarm processed a lease row to its 8th failure that
+day. (b) Gate 4 (19:01–19:40Z Nov 1) issued and closed three grant
+cohorts — possible only through alarm drive passes per F1. (c) Phase
+A (Oct 31) likewise issued a grant. The last externally visible
+evidence of the chain firing is Gate 4's close, ~19:37–19:40Z Nov 1.
+
+**F4 — No grant, reservation, ledger, or outbox write of any kind
+occurred during the attempt-3 window.** Proven by the 23 polls
+(attempt-3 record §8): grants `[]` at every poll; quota reserved 0
+and dispatched 76 throughout; phase settled delta 0; plan `active`
+with `updatedAt` never moving from its creation timestamp
+(1793582596359 — verified in poll diagnostics p01 and p23,
+`poll-diag-p01.json` / `poll-diag-p23.json`, executions `[]` in
+both). A completed grant issuance writes all of those durably
+(`coordinator.mjs:1750–1763`), so none happened.
+
+**F5 — No GRANT_STOP_MAP refusal occurred during the window.** Every
+stop-map reason (`service.mjs:55–75`) terminates in a durable plan
+state write (`parked_quota` / `parked_cap` / `parked_budget` /
+`parked_storage` / `halted_unknown`) via `setPlanState` in the grant
+step (`service.mjs:996–1000`) or in `driveOnce`'s own pre-checks
+(971–983). The plan's state, stopReason (null), and `updatedAt` were
+value-identical at all 23 polls. Therefore none of those refusals
+fired — including every quota-family refusal, the phase-budget
+refusal, the storage refusal, and the phase-halt transition. This
+also rules out the quota guard's cohort/reservation refusals
+(`provider_attempt_budget*`), which park visibly.
+
+**F6 — Every *invisible* refusal path in the drive/grant path is
+individually contradicted by window evidence.** The complete
+enumeration is §3. In summary: `job_not_found`, `nothing_pending`,
+`grant_exists`, the `execution_in_flight` skip, both quarantine
+refusals/skips, and the phase-accounting shape-fence refusal are each
+ruled out by state the polls read through the *same code paths* the
+guard itself uses (notably: the plan-view quarantine read,
+`quarantineHoldRowSafe`, rethrows any error other than "no such
+table" — `quarantine.mjs:139–149` — so a holds-table fault during
+the window would have failed the polls themselves, not silently
+read as "no hold"; and `phaseAccounting`, whose output the shape
+fence checks, returned both unverified fields as proper integers on
+the capabilities and diagnostics surfaces at census and every poll).
+
+**F7 — No read surface exposes the alarm, the schedule table, or
+drive-pass outcomes.** Exhaustive over the deployed routes:
+`getAlarm()` is called only inside `coordinator.mjs` (2469–2488);
+no route returns it; the schedule table is written and read only by
+the coordinator's alarm machinery; `driveOnce`'s return value (the
+per-plan outcomes array, including `out.grantRefused` and
+`out.quarantined`) is **discarded** by its only caller
+(`worker-entry-prod-d6.js:1465` does not

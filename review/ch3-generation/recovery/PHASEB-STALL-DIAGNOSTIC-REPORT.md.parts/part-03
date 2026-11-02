@@ -1,0 +1,164 @@
+er
+from here.
+
+Equally consistent with all observations: the alarm-delivery defect
+for this DO is **independent of** the 1101 fault (the fault is then
+coincidence; the memo already grades its own alarm-maturation
+correlation as coincidence-grade for the fetch fault). Read-only
+evidence cannot separate fault-caused from fault-coincident. What
+the evidence does support is the *mechanism family*, not the cause:
+**the chain is armed-or-armable but its alarms are not producing
+drive passes** — a delivery-side failure, not a code-path refusal.
+
+One more consistency check in the fault hypothesis's favor: no new
+`schedule_dead` conflicts appeared during or after the fault
+(conflicts remained exactly the baseline four at census, all polls,
+and the live read). A *firing* chain processing the overdue watchdog
+row would also leave no conflicts row (the watchdog row processes
+cleanly), so this neither confirms nor refutes firing — recorded as
+neutral.
+
+## 6. Q5 — The preserved plan: resume trace, and containment
+
+### 6a. Exactly what the next successful drive pass would do
+
+Assuming the drive mechanism is restored and a pass reaches the
+grant step with the plan as preserved (traced line-by-line through
+F1's chain; state values from the live read):
+
+1. Base alarm processes due schedule rows; `recover()` runs its
+   scan — a no-op (no non-terminal execution records exist).
+2. `driveOnce` selects the plan (the **only** non-terminal plan;
+   selection is by `created_at`, `service.mjs:928–930`), passes the
+   strict quarantine read (no holds — live-verified), the phase-halt
+   pre-check (phase not halted), and the storage projection.
+3. Grant step for job `plan:19cad189fab54b9c804a74a6:seg`: one
+   `pending` occurrence, no live grant, no execution record →
+   `requestGrant` → `wake()` → `_issueGrant`:
+   - no quota park (live: `parked: null`); day ledger attempts far
+     below 100 on any day;
+   - monthly-cap check passes (month spent ≈ $2.94-scale against a
+     $50 cap; this job's estimate is one 569-char segment's);
+   - `d6GrantGuard` passes (quarantine clear; phase projection
+     1,188,704 of 13,500,000; storage projection passes);
+   - cohort bound: the occurrence's worst case is 12 slots
+     (`SEGMENT_ATTEMPT_BUDGET`); same-PT-day resume (PT 2026-11-01,
+     consumed 76) fits at 88 ≤ 100; on any later PT day (the day
+     rolls at midnight PT — 08:00Z now that PT is on standard time)
+     headroom is the full 100. **The quota arithmetic is not a
+     blocker on any day.**
+   - reservation of 12 slots; grant row
+     `grant:plan:19cad189fab54b9c804a74a6:seg:1:full` issued;
+     occurrence → `granted`; ledger attempt row; outbox dispatch
+     row; lease schedule row (+15 min, `LEASE_MS`,
+     `coordinator.mjs:134`); job transitions `queued → generating`
+     (legal, in the same transaction).
+4. Delivery then depends on the holds, not on the plan: if the halt
+   is lifted, `driveOnce`'s drain hands the dispatch to the queue
+   binding; if the queue is unpaused, the consumer invokes the
+   executor, which generates the one segment (expected cost per the
+   standing quote ≈ 8,022 units ≈ $0.008; the occurrence's modeled
+   ceiling is 153,636 units) and reports; the binding publishes and
+   the chapter completes at 27/27.
+5. **No new SubmitJob is needed, and none should be sent:** the
+   plan already carries the entry with disposition `eligible`. A
+   fresh segment intent would build a *second* plan for the same
+   occurrence (it remains unbound and — the exemption standing —
+   eligible), creating two independently drivable jobs for one
+   segment; the executor's content-key collision machinery would
+   arbitrate at flush time, but the duplicate-plan state is an
+   avoidable hazard. If generation resumes for this segment, it
+   should resume *this* plan.
+6. **The standing exemption plays no role in the resume** (F10): it
+   is neither consulted nor required by the drive path. Its
+   preservation matters only for the alternative future in which
+   the preserved plan were retired and a fresh plan needed.
+
+**Verdict on resume:** the preserved plan *can* safely resume if
+the drive mechanism is restored — mechanically it is the cleanest
+possible resume (one occurrence, all fences passing on live
+figures, no disposition prerequisites). Whether it *should* resume,
+and under what gate, is a disposition decision for Julie/Rowan; the
+drive-mechanism question (§8) should be settled first, because
+resuming into an undiagnosed drive path risks repeating the stall
+with the system open.
+
+### 6b. Containment — is the preserved plan a live trigger?
+
+**Yes, conditionally — and the containment is exactly the two
+holds, with distinct roles that should not be conflated:**
+
+- **As preserved (halt "1" + queue paused): fully contained, and
+  verified so.** No grant has issued under the halt (F8); reserved
+  is 0; the outbox holds nothing for this plan; the queue holds no
+  message for it (no dispatch was ever sent). Nothing can reach the
+  provider.
+- **Queue unpause alone (halt still "1"): cannot generate.** A
+  drive pass (if the chain revives) could *issue* the grant —
+  issuance is not halt-fenced for plan-linked jobs (F9) — flipping
+  the occurrence to `granted` and reserving 12 slots; but with no
+  `sendGrant` wired, the dispatch never leaves the outbox, the
+  queue receives nothing, and at lease expiry (+15 min) the lease
+  handler safe-voids the undelivered grant (outbox row never
+  attempted → occurrences return to `pending`, reservations
+  released, one `retry_grant` scheduled). Bounded churn; no
+  provider contact; no spend. It would, however, make the plan's
+  state move — an unpause-only gate should expect grant/void
+  cycling, not stillness.
+- **Halt lift alone (queue still paused): stages a live dispatch.**
+  A drive pass would issue the grant *and* drain it to the queue;
+  the queue would hold the message (delivery paused; retention
+  86,400 s). The executor does not run it while paused — but the
+  message is real, and any later unpause inside the retention
+  window delivers it; the executor's own entry re-checks the halt
+  flag at execution time (`worker-entry-prod-d6.js:1433`,
+  `assertGenerationEnabled`), so it would generate only if the
+  halt is still lifted at delivery. A halt-lift-only gate must
+  therefore treat this plan as armed-to-the-queue, not as inert.
+- **Both lifted: the plan executes end-to-end with no further
+  command, submission, or approval touchpoint in code.** The drive
+  path needs nothing else. Any future gate that lifts the halt and
+  unpauses — for any reason, including work unrelated to this
+  segment — will pick this plan up first (it is the only selectable
+  plan). This is the single most important containment fact in this
+  report.
+
+## 7. Step-0 procedural variance (recorded per Rowan's review)
+
+The approved Phase B procedure's step-0 required grant-level
+verification before unpause (grant names this plan; granted set
+exactly {idx 26}; reservation closes at 12). No grant existed at
+step-0 — on the shipped machinery a grant can only come into
+existence inside a drive pass, which requires the unpause the
+step-0 precedes — so the executor substituted deliverable-set
+verification (only non-terminal plan; its job queued with exactly
+one pending occurrence; reserved 0) and re-applied the grant-level
+checks at every poll after unpause. **This is recorded as a
+procedural variance.** The observed exclusivity evidence is useful,
+but the substitution must be explicitly addressed in the next
+proposal — including the structural point this investigation
+confirms: as the machinery stands, a pre-unpause grant-level
+verification is *unsatisfiable by construction*, because no grant
+can exist before the first post-unpause drive pass. The next
+proposal should say so and design its step-0 accordingly, rather
+than paper over it again.
+
+## 8. Diagnostic proposal — PROPOSAL ONLY, nothing here is executed
+
+Read-only evidence is **insufficient** to settle the mechanism: the
+two surviving explanations (alarm not delivered vs. every pass
+dying pre-grant) are indistinguishable from outside the DO (F7),
+and the decisive datum — whether `alarm()` invocations occur and
+what they throw — exists only in the Worker's invocation logs,
+which the available API credential cannot read (the telemetry
+query route 403s; a standing limitation, not retried here).
+
+**P1 — Dashboard log observation (minimum, zero production
+effect).** Julie opens the production Worker's logs in the
+Cloudflare dashboard (observability is enabled with
+`logs.persist: true`, verified at census and closing) during a
+bounded window that includes at least two watchdog periods and one
+deliberate coordinator wake (any ordinary command — commands call
+`wake()`; note even a *rejected* or replayed command wakes first,
+`coordinator.mjs:521`). Read for: Durable Object alarm invocations
+(present/absent, cadence), and any exc

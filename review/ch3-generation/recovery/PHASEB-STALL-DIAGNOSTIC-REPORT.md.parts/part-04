@@ -1,0 +1,136 @@
+eption text from the alarm
+path. *Production effects:* none — log viewing only; the wake
+command, if one is sent for the test, should be an idempotent
+replay carrying no state change. *Mutation budget:* **0**.
+*Rollback/containment:* not applicable; the system stays HELD
+throughout, and P1 is safe under the halt for the reasons in §6b.
+*Approval needed:* Julie's own dashboard access; no gate, no
+deploy. *What it settles:* alarm invocations absent → H1
+(delivery-side). Invocations present with exceptions → H2, with
+the exception text naming the site. Invocations present, clean,
+with grants still not issuing → forces a re-examination of §3
+against a live pass.
+
+**P2 — Drive-pass heartbeat instrumentation (only if P1 is
+unavailable or inconclusive).** A minimal code change: `driveOnce`
+durably records each pass (timestamp + outcome summary per plan,
+including refusal reasons — i.e., persist the outcomes array it
+already computes and the caller already discards), and the
+operator diagnostics surface gains a read of the last drive pass
+and of `getAlarm()` / the pending-schedule summary. *Exact
+production effects:* one Worker deploy (script etag changes; the
+deployed parts become the pinned tree plus this diff and nothing
+else); thereafter one small meta-row write per alarm pass
+(self-limiting, no user data, no book content); **no** commands,
+**no** settings or queue changes, system HELD throughout (the
+heartbeat writes occur inside passes that the halt already renders
+incapable of delivery). *Mutation budget:* 1 deploy (+ the standing
+post-deploy observability re-application if the upload resets it,
+per established deploy law) + 0 commands. *Rollback:* redeploy of
+the current byte-identical parts (etag `f15fb1ae…`, preserved in
+the attempt-3 evidence) under the standard rollback preconditions,
+system HELD before and after; the heartbeat table is additive and
+lazy (the proven schema pattern) and is ignored by the rolled-back
+build. Note the rollback floor: the current build `1c2d1d0f`
+remains above the floor build `6a73d962`; P2 must be built on the
+current tree, never on the floor. *Approval needed:* a named gate
+— Rowan source review of the diff plus Julie's explicit GO. It is
+**not** covered by the consumed attempt-3 GO nor by Rowan's
+read-only investigation authorization, and this report does not
+execute any part of it.
+
+A behavioral probe without instrumentation (wake-and-watch through
+the existing read surfaces) was considered and is **not** proposed:
+F7 establishes that no existing surface can register the outcome,
+so such a probe would spend mutations (or gate capital) for no
+readable signal.
+
+## 9. Evidence index
+
+- Deployed source: `phaseb-attempt3/evidence/parts-e0/v2/…` (31
+  parts; re-verified 31/31 against the census manifest for this
+  report).
+- Window evidence: `phaseb-attempt3/evidence/` — census verdict
+  (`census-verdict-e0.txt`, 13/13), E1/E2 envelopes, step-0 reads,
+  23 poll series (`poll-*.json`, incl. `poll-diag-p01…p23.json`:
+  plan `updatedAt` and executions `[]` invariant), closing capture.
+- Live read-only checks for this report (2026-11-02 ~02:40Z, GETs
+  only, prod client + operator connectors, scope/instance headers
+  as required): `/health`, `/v2/settings`, `/v2/quota`,
+  `/v2/d6-plans/plan:19cad189fab54b9c804a74a6`,
+  `/v2/jobs/plan:19cad189fab54b9c804a74a6:seg`, `/v2/conflicts`,
+  `/v2/generation/capabilities`,
+  `/v2/d6-eligibility?…scope=chapter&chapterIndex=2`,
+  `/v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6`,
+  `/v2/d6-quota-reconcile` — envelopes preserved in
+  `phaseb-stall-diagnostics/live-*.json`. No POST, no command, no
+  cf-api mutation of any kind was issued.
+
+## 10. Unresolved hypotheses, ranked
+
+**H1 — Alarm delivery failure for this DO (highest).** The chain's
+alarms are not producing drive passes: the armed alarm was lost in
+the 1101 fault (due invocation dropped after platform retry
+exhaustion while the DO could not instantiate — §5 steps 1–3), and
+the post-recovery state satisfies §5 step 5 (a stale armed value
+the code trusts, or silently ineffective `setAlarm` registration),
+so the 01:23:15Z wake did not restore delivered alarms. *For:*
+complete refusal enumeration leaves nothing else standing (§3);
+the failure persists post-window in a delivery-independent state
+(F8); the same code+data generated whenever the chain demonstrably
+ran (F3). *Against:* requires a platform behavior (stale armed
+value / lost registration) that cannot be observed from here.
+*Settled by:* P1 (alarm invocations absent in logs) or P2.
+
+**H2 — Every alarm pass died between `super.alarm()` and the grant
+step (low).** A persistent throw in the subclass alarm's
+construction/cache/`recover()` segment. *For:* it is the only
+other family consistent with F4–F6. *Against:* every component was
+exercised by poll reads in the same minutes inside the same DO;
+`recover()` is a no-op scan on this store; the throw would have to
+be perfectly correlated with alarm invocations and never with any
+of dozens of interleaved reads. *Settled by:* P1 (invocations
+present, exception text) or P2.
+
+**H3 — An unenumerated invisible refusal in `driveOnce` (residual
+only).** Would require the deployed-source enumeration in §3 to be
+wrong; the parts analyzed are hash-verified as the code that ran.
+Retained for completeness; no evidence favors it. *Settled by:*
+P2 (persisted per-pass outcomes).
+
+**H4 — The stall is unrelated to the 1101 fault (causation
+variant of H1).** A platform alarm-delivery defect for this DO
+arising independently; the fault is coincidence. Indistinguishable
+from H1 on read-only evidence; it changes the causal story, not
+the diagnosis (delivery-side), the disposition, or the remedy
+path. *Settled by:* P1/P2 plus, if ever available, a Cloudflare
+incident acknowledgment — none is required for the recommended
+course.
+
+## 11. Recommended disposition
+
+1. **PRESERVE plan `plan:19cad189fab54b9c804a74a6` as-is**
+   (active/queued). It is the cleanest resume vehicle (§6a), needs
+   no disposition prerequisite, and is fully contained while both
+   holds stand (§6b). Do NOT resubmit a second intent for this
+   segment, and do NOT retire the plan while the drive mechanism is
+   undiagnosed — retirement forecloses the clean resume and buys
+   no safety the holds don't already provide.
+2. **PRESERVE the idx-26 chapter exemption.** It has no effect on
+   the preserved plan either way (F10); revoking it buys nothing
+   and destroys the re-plan option if the preserved plan were ever
+   retired instead. (Rowan's standing disposition already orders
+   exactly this preservation; the source analysis independently
+   supports it.)
+3. **PRESERVE HELD status** (halt "1", queue paused) until the
+   drive mechanism is diagnosed. Flag for every future gate: **any
+   halt lift together with a queue unpause — for any purpose —
+   will execute this plan without further code touchpoints** (§6b).
+4. **Sequence:** P1 (zero-effect log observation) → Rowan's ruling
+   on its result → only then, if needed, the P2 gate → only after
+   the drive mechanism is understood, a fresh generation gate for
+   the preserved plan's resume. No Attempt 4 is proposed by this
+   report.
+
+— Wren (executor of the read-only investigation; no production
+mutation performed)
