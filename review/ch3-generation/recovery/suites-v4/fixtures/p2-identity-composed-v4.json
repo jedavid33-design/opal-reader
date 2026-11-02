@@ -1,0 +1,46 @@
+{
+  "changedParts": [
+    {
+      "rel": "worker-entry-prod-d6.js",
+      "sha256": "2bb0608b589a084ca275428c3236c24680f4a4692afe2245dfcb2880257983c1"
+    },
+    {
+      "rel": "generation/service.mjs",
+      "sha256": "5c5183e664218b9746c497e9456af45c7467a8ace66fd1b9ef0928eccb3c7c14"
+    },
+    {
+      "rel": "coordinator.mjs",
+      "sha256": "5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed"
+    },
+    {
+      "rel": "host/build-identity.mjs",
+      "sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c"
+    }
+  ],
+  "nodeCheckParts": [
+    "worker-entry-prod-d6.js",
+    "generation/service.mjs",
+    "coordinator.mjs"
+  ],
+  "note": "Composed V4 tree (live + R5a + containment v4) vs deployed parts-e0. host/build-identity.mjs carries the live build's stamp (86ad06ab) in every live-derived tree vs parts-e0's 1c2d1d0f stamp \u2014 pinned as identity data.",
+  "roundTrips": [
+    {
+      "diff": "containment-v4/diffs-e0/entry.diff",
+      "files": [
+        "worker-entry-prod-d6.js"
+      ]
+    },
+    {
+      "diff": "containment-v4/diffs-e0/service.diff",
+      "files": [
+        "generation/service.mjs"
+      ]
+    },
+    {
+      "diff": "containment-v4/diffs-e0/composed-coordinator.diff",
+      "files": [
+        "coordinator.mjs"
+      ]
+    }
+  ]
+}

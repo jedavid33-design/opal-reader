@@ -1,0 +1,49 @@
+--- a/v2/generation/service.mjs
++++ b/v2/generation/service.mjs
+@@ -1776,8 +1776,9 @@
+       };
+     });
+     let armedAt = null;
++    let armedReadFailed = false;
+     try { armedAt = await coord.state.storage.getAlarm(); }
+-    catch { armedAt = null; }
++    catch { armedAt = null; armedReadFailed = true; }
+     const pending = coord._oneOrNull(
+       `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
+     const pendingWd = coord._oneOrNull(
+@@ -1842,6 +1843,35 @@
+           stopVerifyAttempts:
+             typeof cs.stopVerifyAttempts === "number"
+               ? cs.stopVerifyAttempts : 0,
++          // CONTAINMENT v4: episode bookkeeping (design v4 §4)
++          // and the derived CURRENT PHYSICAL CONFIDENCE (§2),
++          // computed by the coordinator from the stored record
++          // and THIS read's own registration observation (the
++          // armedAt above; a failed read is passed as failed,
++          // never as absent). A pre-v4 coordinator (no such
++          // method) projects them as null/false.
++          stopEpisodeId:
++            typeof cs.stopEpisodeId === "number"
++              ? cs.stopEpisodeId : null,
++          stopEpisodeExhausted: cs.stopEpisodeExhausted === true,
++          prevEpisodeId:
++            typeof cs.prevEpisodeId === "number"
++              ? cs.prevEpisodeId : null,
++          prevEpisodeAttempts:
++            typeof cs.prevEpisodeAttempts === "number"
++              ? cs.prevEpisodeAttempts : null,
++          prevEpisodeExhausted:
++            typeof cs.prevEpisodeExhausted === "boolean"
++              ? cs.prevEpisodeExhausted : null,
++          prevEpisodeClosedAt: DP_READ_NUM(cs.prevEpisodeClosedAt),
++          stopConfidence:
++            typeof coord.containmentConfidence === "function"
++              ? coord.containmentConfidence(armedReadFailed
++                  ? { kind: "failed" }
++                  : { kind: "value",
++                      armed: typeof armedAt === "number"
++                        ? armedAt : null })
++              : null,
+         };
+       }
+     } catch { containment = null; }

@@ -1,0 +1,28 @@
+{
+  "changedParts": [
+    {
+      "rel": "v2/coordinator.mjs",
+      "sha256": "5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed"
+    },
+    {
+      "rel": "v2/worker-entry-prod-d6.js",
+      "sha256": "2bb0608b589a084ca275428c3236c24680f4a4692afe2245dfcb2880257983c1"
+    },
+    {
+      "rel": "v2/generation/service.mjs",
+      "sha256": "5c5183e664218b9746c497e9456af45c7467a8ace66fd1b9ef0928eccb3c7c14"
+    }
+  ],
+  "nodeCheckParts": [
+    "v2/coordinator.mjs"
+  ],
+  "note": "Composed V4 tree (live + R5a + containment v4) vs live baseline tree (R5a suite view)",
+  "roundTrips": [
+    {
+      "diff": "containment-v4/composed-coordinator.diff",
+      "files": [
+        "v2/coordinator.mjs"
+      ]
+    }
+  ]
+}

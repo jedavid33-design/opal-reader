@@ -1,0 +1,416 @@
+--- a/v2/coordinator.mjs
++++ b/v2/coordinator.mjs
+@@ -220,8 +220,39 @@
+ //     gate — the wake could re-register after the stop's
+ //     deleteAlarm() had landed (and a null read-back — the
+ //     just-deleted registration — satisfied the shipped
+-//     re-arm-if-unarmed condition). The re-check makes the last
+-//     physical act win in every interleaving (analysis doc §3).
++//     re-arm-if-unarmed condition). The re-check makes any stop
++//     committed BEFORE the re-check visible to the wake. What
++//     stands physically when a stop commits AFTER the wake's
++//     setAlarm initiation depends on platform storage-effect
++//     ordering, which v4 does NOT claim as guaranteed (async
++//     analysis v4 §2; assumption family A-3, unresolved).
++//
++// V4 ADDENDUM (Phase B containment design v4;
++// PHASEB-CONTAINMENT-DESIGN-V4.md; Rowan containment V3 ruling,
++// required corrections R1/R3):
++//   * STOP-RECORD TRUTH (R1): read surfaces additionally derive
++//     a CURRENT PHYSICAL CONFIDENCE at read time
++//     (deriveStopConfidence below) from the stored facts PLUS a
++//     fresh getAlarm() observation supplied by the caller. The
++//     stored enum NEVER downgrades; the derived confidence is
++//     not the enum and degrades freely on later evidence — a
++//     surviving registration (contested), a failed fresh read
++//     (unknown) — WITHOUT erasing the last-successful-
++//     verification fact: stop_verified_at & friends are still
++//     written only by stop actions, exactly as in v3.
++//   * EPISODE LAW (R3): every stop_chain act mints a stop
++//     EPISODE (stop_episode_id = the id of the stop_chain audit
++//     event that opened it). Verification attempts belong to
++//     the episode; reaching MAX_STOP_VERIFY_ATTEMPTS unverified
++//     marks the episode EXHAUSTED (stop_episode_exhausted + a
++//     stop_episode_exhausted audit event) and verify_chain_stop
++//     refuses further attempts within it. A clear CLOSES the
++//     episode: its summary is copied to the prev_episode_*
++//     fields and a stop_episode_closed audit event is appended
++//     BEFORE the record resets, so an exhausted episode is
++//     never silently reset — it stays readable on every
++//     surface after the clear, and gate paperwork must
++//     disclose it (design v4 §4).
+ // ------------------------------------------------------------------
+ export const CONTAINMENT_STATES = Object.freeze([
+   "NORMAL", "DRIVE_CONTAINED", "CHAIN_STOPPED",
+@@ -248,7 +279,13 @@
+   stop_verify_action TEXT,
+   stop_armed_before INTEGER,
+   stop_armed_after INTEGER,
+-  stop_verify_attempts INTEGER NOT NULL DEFAULT 0
++  stop_verify_attempts INTEGER NOT NULL DEFAULT 0,
++  stop_episode_id INTEGER,
++  stop_episode_exhausted INTEGER NOT NULL DEFAULT 0,
++  prev_episode_id INTEGER,
++  prev_episode_attempts INTEGER,
++  prev_episode_exhausted INTEGER,
++  prev_episode_closed_at INTEGER
+ );
+ CREATE TABLE IF NOT EXISTS d6_containment_events (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,
+@@ -281,13 +318,19 @@
+ export function readContainmentState(sql) {
+   const NO_STOP = { stopStatus: null, stopVerifiedAt: null,
+     stopVerifyAction: null, stopArmedBefore: null,
+-    stopArmedAfter: null, stopVerifyAttempts: 0 };
++    stopArmedAfter: null, stopVerifyAttempts: 0,
++    stopEpisodeId: null, stopEpisodeExhausted: false,
++    prevEpisodeId: null, prevEpisodeAttempts: null,
++    prevEpisodeExhausted: null, prevEpisodeClosedAt: null };
+   let rows;
+   try {
+     rows = sql.exec(
+       `SELECT state, updated_at, authorization_ref,
+               stop_status, stop_verified_at, stop_verify_action,
+-              stop_armed_before, stop_armed_after, stop_verify_attempts
++              stop_armed_before, stop_armed_after, stop_verify_attempts,
++              stop_episode_id, stop_episode_exhausted,
++              prev_episode_id, prev_episode_attempts,
++              prev_episode_exhausted, prev_episode_closed_at
+          FROM d6_containment_state WHERE id = 1`).toArray();
+   } catch (e) {
+     const msg = String((e && e.message) || e);
+@@ -320,6 +363,14 @@
+     stopVerifyAttempts:
+       typeof r.stop_verify_attempts === "number"
+         ? r.stop_verify_attempts : 0,
++    stopEpisodeId: num(r.stop_episode_id),
++    stopEpisodeExhausted: r.stop_episode_exhausted === 1,
++    prevEpisodeId: num(r.prev_episode_id),
++    prevEpisodeAttempts: num(r.prev_episode_attempts),
++    prevEpisodeExhausted:
++      r.prev_episode_exhausted === 1 ? true
++        : r.prev_episode_exhausted === 0 ? false : null,
++    prevEpisodeClosedAt: num(r.prev_episode_closed_at),
+     errorName: null };
+ }
+ 
+@@ -341,6 +392,74 @@
+   return read.state === "CHAIN_STOPPED";
+ }
+ 
++// CONTAINMENT v4 — CURRENT PHYSICAL CONFIDENCE values (design v4
++// §2). A derived DISPLAY status, never stored, never the enum.
++export const CONTAINMENT_STOP_CONFIDENCES = Object.freeze([
++  "not_applicable", "verified_current", "verified_recorded",
++  "contested", "unverified", "unknown",
++]);
++
++// Derive the CURRENT PHYSICAL CONFIDENCE of a chain stop from
++// (a) the stored stop record (a readContainmentState result) and
++// (b) a FRESH registration observation supplied by the caller:
++//   fresh = { kind: "value", armed: <number|null> } — the caller
++//     just read getAlarm() and this is what it returned;
++//   fresh = { kind: "failed" } — that read threw;
++//   fresh = { kind: "unavailable" } — the surface cannot read
++//     the registration (stored record alone).
++// Strength discipline (design v4 §2.3's truth table is the proof
++// artifact; this function is its mechanical form):
++//   * "verified_current" requires BOTH a stop action's recorded
++//     verification AND a fresh null observation in THIS call —
++//     never either alone;
++//   * a fresh NON-NULL observation under CHAIN_STOPPED is
++//     "contested" whatever the record says: physical reality
++//     outranks the record, and the record — including the
++//     last-successful-verification fact — is left untouched
++//     beside it (the derivation writes nothing);
++//   * a failed fresh read is "unknown", never better;
++//   * with no fresh observation the strongest claim is
++//     "verified_recorded": the record's word, dated by
++//     stopVerifiedAt, not re-confirmed;
++//   * an unverified record whose last ACTION failed after an
++//     earlier success is "unknown" (the failure is the latest
++//     action evidence), while one that never succeeded is
++//     "unverified" — even when a fresh read shows no
++//     registration, because no stop action has ever confirmed
++//     one.
++// The enum is never downgraded by this function and never
++// upgraded either: it returns a display status only.
++export function deriveStopConfidence(read, fresh) {
++  if (!read || !read.verified || !read.known) return "unknown";
++  if (read.state !== "CHAIN_STOPPED") return "not_applicable";
++  const f = fresh && typeof fresh === "object"
++    ? fresh : { kind: "unavailable" };
++  if (f.kind === "failed") return "unknown";
++  if (f.kind === "value") {
++    if (typeof f.armed === "number") return "contested";
++    if (f.armed !== null) return "unknown";
++    // A fresh null observation in this very derivation.
++    if (read.stopStatus === "verified" ||
++        read.stopStatus === "re_verified")
++      return "verified_current";
++    if (read.stopStatus === "unverified" &&
++        typeof read.stopVerifiedAt === "number")
++      return "unknown";
++    return "unverified";
++  }
++  // No fresh observation: the stored record alone, at its
++  // own strength.
++  if (read.stopStatus === "verified" ||
++      read.stopStatus === "re_verified")
++    return "verified_recorded";
++  if (read.stopStatus === "unverified" &&
++      typeof read.stopVerifiedAt === "number")
++    return "unknown";
++  if (read.stopStatus === "unverified" || read.stopStatus === null)
++    return "unverified";
++  return "unknown";
++}
++
+ const LEASE_MS = 15 * 60 * 1000;
+ // Option D two-phase constants (design §3.3.7, §3.10): a pending
+ // migration command awaits operator approval for at most 24
+@@ -2681,8 +2800,15 @@
+     // computation above is synchronous SQL and this gate read and
+     // the setAlarm() initiation below are one synchronous stretch
+     // with no await between them, so no transition can commit
+-    // inside the window; a stop committed later lands its
+-    // deleteAlarm after this registration and removes it.
++    // inside the window. A stop committed after this initiation
++    // issues its deleteAlarm later in JS order; that the delete's
++    // storage effect removes this registration rests on PLATFORM
++    // storage-effect ordering, not on anything this code can
++    // guarantee (async analysis v4 §2 — assumption family A-3,
++    // unresolved). The stop's own read-back verification and the
++    // v4 confidence derivation (contested on a surviving
++    // registration) are the mechanisms that surface it if the
++    // effects ever landed the other way.
+     if (containmentArmSuppressed(readContainmentState(this.sql))) {
+       this._noteContainmentArmSuppressed("_armAlarm");
+       return;
+@@ -2694,6 +2820,13 @@
+   // the service diagnostics (never throws, never writes).
+   containmentState() { return readContainmentState(this.sql); }
+ 
++  // CONTAINMENT v4: the derived CURRENT PHYSICAL CONFIDENCE
++  // (design v4 §2) for read surfaces that can supply a fresh
++  // registration observation. Synchronous, write-free.
++  containmentConfidence(fresh) {
++    return deriveStopConfidence(readContainmentState(this.sql), fresh);
++  }
++
+   _noteContainmentArmSuppressed(path) {
+     try {
+       this._logTransition("containment", "alarm_chain",
+@@ -2768,6 +2901,7 @@
+       return { outcome: "rejected",
+         reason: "containment_transition_refused",
+         state: before.state, verified: before.verified };
++    let newEpisodeId = null;
+     this._tx(() => {
+       this.sql.exec(
+         `INSERT INTO d6_containment_state
+@@ -2784,17 +2918,60 @@
+          VALUES (?, ?, ?, ?, ?, 'applied', ?)`,
+         this._now(), action, from, spec.to, authorizationRef,
+         action === "clear" ? JSON.stringify({ reason }) : null);
++      if (action === "stop_chain") {
++        // EPISODE MINTING (design v4 §4): the episode is keyed
++        // by the audit event that opened it. Captured inside
++        // the commit transaction; persisted on the row by the
++        // stop-record write after the physical act.
++        const ev = this._one(`SELECT last_insert_rowid() AS id`);
++        newEpisodeId = ev && typeof ev.id === "number" ? ev.id : null;
++      }
++      if (action === "clear" && before.stopEpisodeId != null) {
++        // EPISODE CLOSE (design v4 §4): the closing episode's
++        // summary is copied to the prev_episode_* fields and a
++        // stop_episode_closed event is appended BEFORE the
++        // record resets — a clear can never silently reset an
++        // (exhausted) episode; its history stays readable.
++        this.sql.exec(
++          `INSERT INTO d6_containment_events
++             (at, action, from_state, to_state, authorization_ref,
++              outcome, detail_json)
++           VALUES (?, 'stop_episode_closed', ?, 'NORMAL', ?,
++                   'closed', ?)`,
++          this._now(), from, authorizationRef,
++          JSON.stringify({
++            episodeId: before.stopEpisodeId,
++            attempts: before.stopVerifyAttempts,
++            exhausted: before.stopEpisodeExhausted === true,
++            finalStopStatus: before.stopStatus,
++            reason }));
++        this.sql.exec(
++          `UPDATE d6_containment_state SET
++             prev_episode_id = ?, prev_episode_attempts = ?,
++             prev_episode_exhausted = ?,
++             prev_episode_closed_at = ? WHERE id = 1`,
++          before.stopEpisodeId, before.stopVerifyAttempts,
++          before.stopEpisodeExhausted ? 1 : 0, this._now());
++      }
++      if (action === "clear")
++        // The stop-record reset is part of the SAME commit
++        // (v4; in v3 it was a separate post-commit write): a
++        // return to NORMAL and the closing of its episode are
++        // one atomic fact.
++        this.sql.exec(
++          `UPDATE d6_containment_state SET stop_status = NULL,
++             stop_verified_at = NULL, stop_verify_action = NULL,
++             stop_armed_before = NULL, stop_armed_after = NULL,
++             stop_verify_attempts = 0, stop_episode_id = NULL,
++             stop_episode_exhausted = 0 WHERE id = 1`);
+     });
+     if (action === "clear") {
+-      // A return to NORMAL closes the stop episode: the physical
+-      // stop record is reset so a future stop starts a fresh
+-      // episode (fresh attempts bound). The audit events retain
+-      // the closed episode's full history.
+-      this.sql.exec(
+-        `UPDATE d6_containment_state SET stop_status = NULL,
+-           stop_verified_at = NULL, stop_verify_action = NULL,
+-           stop_armed_before = NULL, stop_armed_after = NULL,
+-           stop_verify_attempts = 0 WHERE id = 1`);
++      // A return to NORMAL closes the stop episode: the
++      // episode close and the stop-record reset were recorded
++      // inside the commit transaction above (design v4 §4), so
++      // a future stop starts a fresh episode AND the closed
++      // episode's history — the audit events and the
++      // prev_episode_* fields — is retained, never silent.
+       return { outcome: "applied", action, state: "NORMAL",
+         idempotent: false, stopVerified: null,
+         stateRead: readContainmentState(this.sql) };
+@@ -2837,9 +3014,12 @@
+            stop_status = ?, stop_verified_at = ?,
+            stop_verify_action = 'stop_chain',
+            stop_armed_before = ?, stop_armed_after = ?,
+-           stop_verify_attempts = 1 WHERE id = 1`,
++           stop_verify_attempts = 1, stop_episode_id = ?,
++           stop_episode_exhausted = ? WHERE id = 1`,
+         stopVerified ? "verified" : "unverified",
+-        stopVerified ? this._now() : null, armedBefore, armedAfter);
++        stopVerified ? this._now() : null, armedBefore, armedAfter,
++        newEpisodeId,
++        !stopVerified && 1 >= MAX_STOP_VERIFY_ATTEMPTS ? 1 : 0);
+       if (!stopVerified)
+         this.sql.exec(
+           `INSERT INTO d6_containment_events
+@@ -2849,7 +3029,16 @@
+                    'unverified', ?)`,
+           this._now(), from, authorizationRef,
+           JSON.stringify({ verifyError, armedBefore, armedAfter,
+-            attempt: 1 }));
++            attempt: 1, episodeId: newEpisodeId }));
++      if (!stopVerified && 1 >= MAX_STOP_VERIFY_ATTEMPTS)
++        this.sql.exec(
++          `INSERT INTO d6_containment_events
++             (at, action, from_state, to_state, authorization_ref,
++              outcome, detail_json)
++           VALUES (?, 'stop_episode_exhausted', ?, 'CHAIN_STOPPED', ?,
++                   'exhausted', ?)`,
++          this._now(), from, authorizationRef,
++          JSON.stringify({ episodeId: newEpisodeId, attempts: 1 }));
+     });
+     if (!stopVerified)
+       return { outcome: "rejected",
+@@ -2868,9 +3057,16 @@
+   // clears containment. It:
+   //   1. refuses unless the state reads (verified) CHAIN_STOPPED;
+   //   2. refuses once the episode's attempt bound is exhausted
+-  //      (MAX_STOP_VERIFY_ATTEMPTS, stop_chain's act included) —
+-  //      further attempts require a fresh stop_chain act under a
+-  //      fresh authorization, opening a new episode;
++  //      (MAX_STOP_VERIFY_ATTEMPTS, stop_chain's act included).
++  //      V4 (design v4 §4): exhaustion is recorded durably
++  //      (stop_episode_exhausted + audit event) and SURVIVES a
++  //      clear in the prev_episode_* fields — a clear is not an
++  //      informal retry reset. A later stop_chain mints a NEW
++  //      episode in code, but gate paperwork must disclose the
++  //      exhausted episode and carry a fresh Rowan ruling +
++  //      Julie authorization before that path may be used; the
++  //      code enforces refusal within the episode, the paperwork
++  //      carries the anti-circumvention rule;
+   //   3. reads getAlarm(); re-issues deleteAlarm() ONLY if a
+   //      registration is present; reads back;
+   //   4. persists the verification record from THIS action's own
+@@ -2893,13 +3089,34 @@
+         reason: "containment_verify_not_stopped",
+         state: before.state, verified: true };
+     const attempts = before.stopVerifyAttempts || 0;
+-    if (attempts >= MAX_STOP_VERIFY_ATTEMPTS)
++    if (attempts >= MAX_STOP_VERIFY_ATTEMPTS) {
++      // EXHAUSTION LAW (design v4 §4): the refusal itself makes
++      // no physical act and no state change — but the episode's
++      // exhaustion is durable audit fact. If the attempt that
++      // reached the bound somehow left it unrecorded, record it
++      // now (once); after that, refused calls write nothing.
++      if (!before.stopEpisodeExhausted)
++        this._tx(() => {
++          this.sql.exec(
++            `UPDATE d6_containment_state SET
++               stop_episode_exhausted = 1 WHERE id = 1`);
++          this.sql.exec(
++            `INSERT INTO d6_containment_events
++               (at, action, from_state, to_state, authorization_ref,
++                outcome, detail_json)
++             VALUES (?, 'stop_episode_exhausted', 'CHAIN_STOPPED',
++                     'CHAIN_STOPPED', ?, 'exhausted', ?)`,
++            this._now(), authorizationRef,
++            JSON.stringify({ episodeId: before.stopEpisodeId,
++              attempts }));
++        });
+       return { outcome: "rejected",
+         reason: "containment_verify_attempts_exhausted",
+         state: "CHAIN_STOPPED", stopVerified: false,
+         stopStatus: before.stopStatus,
+         stopVerifyAttempts: attempts,
+         stateRead: readContainmentState(this.sql) };
++    }
+     const attempt = attempts + 1;
+     let armedBefore = null;
+     let armedAfter = null;
+@@ -2925,19 +3142,23 @@
+     const stopStatus = stopVerified
+       ? (before.stopStatus === "verified" ? "verified" : "re_verified")
+       : "unverified";
++    const exhaustedNow = !stopVerified &&
++      attempt >= MAX_STOP_VERIFY_ATTEMPTS;
+     this._tx(() => {
+       this.sql.exec(
+         `UPDATE d6_containment_state SET
+            stop_status = ?, stop_verified_at = ?,
+            stop_verify_action = 'verify_chain_stop',
+            stop_armed_before = ?, stop_armed_after = ?,
+-           stop_verify_attempts = ? WHERE id = 1`,
++           stop_verify_attempts = ?, stop_episode_exhausted = ?
++           WHERE id = 1`,
+         stopStatus,
+         // stop_verified_at means exactly one thing: the last
+         // time a stop action observed a null read-back. Success
+         // updates it; failure leaves it untouched.
+         stopVerified ? this._now() : before.stopVerifiedAt,
+-        armedBefore, armedAfter, attempt);
++        armedBefore, armedAfter, attempt,
++        exhaustedNow || before.stopEpisodeExhausted ? 1 : 0);
+       this.sql.exec(
+         `INSERT INTO d6_containment_events
+            (at, action, from_state, to_state, authorization_ref,
+@@ -2947,7 +3168,18 @@
+         this._now(), authorizationRef,
+         stopVerified ? "verified" : "unverified",
+         JSON.stringify({ attempt, armedBefore, armedAfter,
+-          deleteAttempted, verifyError }));
++          deleteAttempted, verifyError,
++          episodeId: before.stopEpisodeId }));
++      if (exhaustedNow)
++        this.sql.exec(
++          `INSERT INTO d6_containment_events
++             (at, action, from_state, to_state, authorization_ref,
++              outcome, detail_json)
++           VALUES (?, 'stop_episode_exhausted', 'CHAIN_STOPPED',
++                   'CHAIN_STOPPED', ?, 'exhausted', ?)`,
++          this._now(), authorizationRef,
++          JSON.stringify({ episodeId: before.stopEpisodeId,
++            attempts: attempt }));
+     });
+     return { outcome: stopVerified ? "applied" : "rejected",
+       reason: stopVerified ? null : "containment_stop_unverified",

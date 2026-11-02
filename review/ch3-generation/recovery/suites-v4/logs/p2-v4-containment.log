@@ -1,0 +1,66 @@
+▶ T0 — assembly & identity (fixture-parameterized)
+  ✔ candidate tree: 31 parts; fixture changed parts differ from deployed and match fixture identities; every other part byte-identical (122.412776ms)
+  ✔ patch round-trip: each fixture diff applied to pristine parts reproduces the candidate parts byte-for-byte (29.803987ms)
+  ✔ node --check passes on every fixture changed part (candidate tree) (306.392965ms)
+  ✔ baseline tree is the pristine deployed tree (31/31 byte-identical) (78.78311ms)
+✔ T0 — assembly & identity (fixture-parameterized) (540.821393ms)
+▶ T1 — harness bring-up
+  ✔ T1(a) empty store: class construction + first alarm resolve; no .one() bootstrap deadlock (59.802526ms)
+  ✔ T1(b) seeded attempt-3 shape: plan/job/parked/conflicts/phase figures exact (11.276673ms)
+✔ T1 — harness bring-up (71.636475ms)
+▶ T2 — normal recording (twin equivalence)
+  ✔ six alarm passes: candidate records each; all non-recorder state identical to the unmodified build (193.057653ms)
+✔ T2 — normal recording (twin equivalence) (193.481058ms)
+▶ T2b — clock seam fallback (R-4)
+  ✔ without env.now, recorded times track wall Date.now() (7.574837ms)
+✔ T2b — clock seam fallback (R-4) (7.942399ms)
+▶ T3 — stage capture & record-then-rethrow
+  ✔ T3(i) throw in the base alarm's schedule processing -> stage base_alarm, identical object rethrown (36.084442ms)
+  ✔ T3(ii) throw at cache construction -> stage construct (8.875079ms)
+  ✔ T3(iib) a cache-namespace fault present from the start is recorded at base_alarm (the base alarm constructs the cache first) (13.463264ms)
+  ✔ T3(iii) throw in recover() -> stage recover, identical object rethrown (18.887534ms)
+  ✔ T3(iv) throw in driveOnce -> stage drive, identical object rethrown (17.810258ms)
+✔ T3 — stage capture & record-then-rethrow (95.878345ms)
+▶ T4 — recorder-fault injection (the recorder may never break the alarm)
+  ✔ T4 DDL fault: alarm resolves, drive effects happen, health notes step 'ddl', no row (11.073378ms)
+  ✔ T4 INSERT fault: alarm resolves, health notes step 'insert', zero rows (9.871855ms)
+  ✔ T4 PRUNE fault: count exceeds the cap for exactly one pass, then recovers to <= cap (43.035703ms)
+  ✔ T4 getAlarm fault: row written with armed_after NULL and NO health increment (the shipped coordinator itself reads getAlarm, so the base chain — not the recorder — is what fails) (7.233084ms)
+  ✔ T4 KV get fault (health read): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (10.013377ms)
+  ✔ T4 KV put fault (health write): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (20.714636ms)
+  ✔ T4 serialize-step fault (wrapper level): the catch discipline names the step 'serialize' (4.965452ms)
+✔ T4 — recorder-fault injection (the recorder may never break the alarm) (107.738163ms)
+▶ T5 — sanitization (write-time discipline + hostile storage on read)
+  ✔ T5 write: hostile outcome values are grammar-checked or scrubbed; nothing raw is stored (3.605211ms)
+  ✔ T5 write: error name/message scrubbed (URL, token run, control chars, caps) (2.993262ms)
+  ✔ T5 write: an oversized grammatical identifier is sliced, and the slice is disclosed (3.368786ms)
+  ✔ T5 read: hostile stored rows and a hostile health object never escape raw (8.888088ms)
+✔ T5 — sanitization (write-time discipline + hostile storage on read) (19.209007ms)
+▶ T5b — identifier fidelity (real id shapes survive sanitization exactly)
+  ✔ plan/grant ids and code tokens are stored byte-exact, with no marker (3.422867ms)
+✔ T5b — identifier fidelity (real id shapes survive sanitization exactly) (3.553723ms)
+▶ T6 — truncation at the 8,000-char cap
+  ✔ T6 over-cap: whole entries only, terminal marker, kept+dropped = submitted (3.804099ms)
+  ✔ T6 under-cap: no marker, no flag, entries unaltered (3.21211ms)
+✔ T6 — truncation at the 8,000-char cap (7.267847ms)
+▶ T7 — mode rejection (the read that can never blend modes)
+  ✔ T7 ambiguous drive modes -> 400 diagnostics_mode_ambiguous; attempt mode unchanged; 403 without the operator stamp (49.847827ms)
+✔ T7 — mode rejection (the read that can never blend modes) (50.081207ms)
+▶ T8 — retention & bursts
+  ✔ T8 300 records prune to exactly the newest 288 (46.132752ms)
+  ✔ T8 burst of seven throwing passes: every pass recorded, cap holds throughout (59.952281ms)
+✔ T8 — retention & bursts (106.423861ms)
+▶ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding)
+  ✔ T9 route read returns exactly the recorded rows; health key contract holds; crash-instance records (19.345613ms)
+✔ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding) (19.543789ms)
+▶ T10 — shipped-surface equivalence smoke
+  ✔ twin stores: every shipped read surface answers field-for-field identically (48.034075ms)
+✔ T10 — shipped-surface equivalence smoke (48.200855ms)
+ℹ tests 32
+ℹ suites 13
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1496.156831

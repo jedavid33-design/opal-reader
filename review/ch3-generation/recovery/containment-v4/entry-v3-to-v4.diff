@@ -1,0 +1,36 @@
+--- a/v2/worker-entry-prod-d6.js
++++ b/v2/worker-entry-prod-d6.js
+@@ -1679,10 +1679,11 @@
+         const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+         const state = coord.containmentState();
+         let armedAt = null;
++        let armedReadFailed = false;
+         try {
+           const armed = await this.state.storage.getAlarm();
+           armedAt = typeof armed === "number" ? armed : null;
+-        } catch { armedAt = null; }
++        } catch { armedAt = null; armedReadFailed = true; }
+         const pending = coord._oneOrNull(
+           `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
+         const pendingWd = coord._oneOrNull(
+@@ -1706,6 +1707,20 @@
+           stopArmedBefore: state.stopArmedBefore,
+           stopArmedAfter: state.stopArmedAfter,
+           stopVerifyAttempts: state.stopVerifyAttempts,
++          // CONTAINMENT v4: episode bookkeeping (design v4 §4)
++          // and the derived CURRENT PHYSICAL CONFIDENCE (§2) —
++          // derived from the stored record and THIS request's
++          // own registration read; a failed read is passed as
++          // failed, never collapsed to "absent".
++          stopEpisodeId: state.stopEpisodeId,
++          stopEpisodeExhausted: state.stopEpisodeExhausted,
++          prevEpisodeId: state.prevEpisodeId,
++          prevEpisodeAttempts: state.prevEpisodeAttempts,
++          prevEpisodeExhausted: state.prevEpisodeExhausted,
++          prevEpisodeClosedAt: state.prevEpisodeClosedAt,
++          stopConfidence: coord.containmentConfidence(
++            armedReadFailed ? { kind: "failed" }
++              : { kind: "value", armed: armedAt }),
+           alarm: { armedAt,
+             pendingSchedule: pending ? pending.n : null,
+             pendingWatchdog: pendingWd ? pendingWd.n : null },
