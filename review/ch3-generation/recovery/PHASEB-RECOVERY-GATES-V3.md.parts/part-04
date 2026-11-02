@@ -1,0 +1,110 @@
+e
+NORMAL, stop record reset, registration absent). The v2
+readiness pair is REMOVED from this gate — its substance
+was exercised in C3, on the same build, under its own
+authorization; S1 contains no containment transition in
+its preflight at all.
+
+**Preflight (hard):** Gates C1, C2 (READABILITY VERIFIED),
+R5a-D, C3 all closed; the remainder ruling and the
+standalone restoration on record. CENSUS re-based to the
+composed build with containment state NORMAL (post-
+restoration read-backs attached); PLUS the R2 preflight
+(target nonexistence verified on live job/plan reads;
+fresh command_id generated and recorded in the execution
+record BEFORE the stimulus; recorder state known — any
+recorder row or armedAt different from the restoration's
+closing read = STOP, the state has already moved).
+
+**The stimulus (exactly this, once):** one
+`POST /v2/commands` `{command_id: <fresh>, type:
+"RequestPause", payload: {jobId:
+"alarm-wake-probe:nonexistent"}}`. Expected response:
+outcome `rejected`, reason `job_not_found`. **No re-send**
+under any circumstance — a timeout or ambiguous response
+is a STOP-and-classify event.
+
+**Mutation budget (complete):** Commands rows: **exactly
+1** (the stimulus). `setAlarm` registrations: ≤1 from the
+stimulus command's own wake evaluation (composed build,
+R5a bound; the memo bounds the whole operation), plus
+per-pass `finally` registrations ONLY if passes are
+delivered (each is shipped behavior, recorded, and
+classified — not operator stimuli). Schedule rows: 0
+expected from the stimulus (watchdog already pending;
+pendingWatchdog 0 at preflight = census deviation =
+STOP). Containment transitions in preflight: **0** (see
+the hard dependency). Uploads/PATCHes/hold flips/queue
+changes/SubmitJob: **0**. **Contingency (named,
+bounded):** if any post-stimulus movement falls OUTSIDE
+the §7.3 pre-classified set, the executor applies
+`contain_drive` once (+1 state-row write, +1 audit event)
+to bound accumulation while reporting — `stop_chain` is
+NOT authorized in this gate (it has its own verified
+procedure and record from C3; using it here would be a
+fresh act under a stimulus gate's GO). Spend: $0 in every
+branch while the holds stand.
+
+**Observability:** `drive=1` + state-route + plan/job
+reads at ≈ +2, +12, and +37 minutes (the final read
+beyond one full 35-minute stall-window convention), then
+a closing census. No further stimulus during the window,
+whatever the reads show.
+
+**Result classification:** revival observed → classify
+every movement against the §7.3 set (grants [] → [the one
+grant], occurrence pending → granted, job queued rev 1 →
+generating rev 2, derived reserved 0 → 12, phase figures
+frozen, dispatched 0; the bounded lease-expiry/re-grant
+cycle with its invariants); anything outside = STOP +
+report (+ the contingency above). No revival → the
+mandated wording (above) and nothing stronger.
+
+**STOP behavior:** correction 6 governs, verbatim, with
+this gate's specific edge: once the single command is
+sent, there is nothing left for a STOP to prevent — the
+remaining steps are reads, the contingency, and
+reporting; if the chain revives, STOP does not quiet it,
+containment (operationally verified to C3's PARTIAL scope
+and ruled on by Rowan) is the standing answer. STOP
+before the stimulus on: any preflight item failing,
+target existence ambiguous, command_id collision,
+restoration record incomplete, recorder state already
+moved.
+
+**Rollback limits:** there is no rollback for a sent
+command — the commands row stands as the audit record of
+the probe. A revived chain is not "rolled back"; it is
+contained (contingency above, or a further gate for
+`stop_chain` under its own authorization, informed by
+C3's verified stop procedure).
+
+**Postflight evidence:** execution record: preflight
+transcripts (census, C3 + remainder-ruling + restoration
+references, target-nonexistence, command_id), stimulus
+request/response, the three observation transcripts with
+classifications, contingency record if fired, closing
+census (expected deltas, and only these: +1 commands row;
+≤ the budgeted registrations; recorder rows if passes
+ran; grant-cycle state ONLY if revival occurred and ONLY
+within the §7.3 set), ends-HELD certification (halt "1",
+queue paused, preserved plan and exemption untouched).
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute exactly one Gate S1 (R2 stimulus) attempt
+> as pinned: preflight census (C3 complete and reviewed,
+> remainder ruled on, standalone restoration executed),
+> exactly one `RequestPause` command with the recorded
+> fresh command_id targeting `alarm-wake-probe:
+> nonexistent`, no re-send, observation reads only, the
+> named contain_drive contingency if movement leaves the
+> pre-classified set, ending HELD. I understand a negative
+> result will be reported as 'no observed revival within
+> the tested window, subject to recorder limitations' and
+> proves nothing about B2, and that if the chain revives,
+> no STOP can quiet it — containment is the standing,
+> separately verified answer."
+
+**Turn: Rowan's** (review of all five gates as separate
+scopes, the C3 scope recommendation, and the standalone
+restoration step). No GO is requested by this proposal.

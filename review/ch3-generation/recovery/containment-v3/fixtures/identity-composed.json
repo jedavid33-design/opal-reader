@@ -1,0 +1,23 @@
+{
+  "baseline": "baseline-tree (live instrumented build 86ad06ab)",
+  "changedParts": [
+    {
+      "rel": "v2/coordinator.mjs",
+      "sha256": "8ad74a938b37f0ef1698a81ff906ef51062f4108d1c7836a2b263e6124e3cd7f"
+    },
+    {
+      "rel": "v2/generation/service.mjs",
+      "sha256": "bccda90983ef2f2352cb6ccb1a2262ad2a53e58f00949a4d9ece4bd48665fe52"
+    },
+    {
+      "rel": "v2/worker-entry-prod-d6.js",
+      "sha256": "f746c632bd0b7dfa0aa6f8cebabc78dc21786f13962798ef6f6cb0075e0229d9"
+    }
+  ],
+  "nodeCheckParts": [
+    "v2/coordinator.mjs",
+    "v2/generation/service.mjs",
+    "v2/worker-entry-prod-d6.js"
+  ],
+  "tree": "composed-tree"
+}

@@ -1,0 +1,184 @@
+t();
+    assert.ok(armedBefore !== null);
+    const error = new Error("battery deleteAlarm fault");
+    w.faults.deleteAlarm = error;
+    const r = await entryPost(w, "/v2/d6-containment",
+      { action: "stop_chain", authorizationRef: REF },
+      { operator: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.outcome, "rejected");
+    assert.equal(r.body.reason, "containment_stop_unverified");
+    assert.equal(r.body.state, "CHAIN_STOPPED");
+    assert.equal(r.body.stopVerified, false);
+    assert.equal(w.alarmAt(), armedBefore,
+      "the registration physically survives (the act failed)");
+    w.faults.deleteAlarm = null;
+    // The arm gates are the second layer: even with a surviving
+    // registration value, no wake re-registers, and a delivered
+    // pass is contained and does not re-arm.
+    w.clearAlarmCalls();
+    await w.coord.wake();
+    assert.equal(w.alarmCalls.length, 0);
+    await w.fireClassAlarm();
+    const rows = driveRows(w);
+    assert.equal(rows[rows.length - 1].stage, "contained");
+    assert.equal(w.alarmCalls.length, 0);
+    const ev = w.db.prepare(
+      `SELECT * FROM d6_containment_events
+        WHERE action = 'stop_chain_verify'`).all();
+    assert.equal(ev.length, 1);
+    assert.equal(ev[0].outcome, "unverified");
+    // v3: the stop record itself says unverified (attempt 1) —
+    // the enum alone never claims a physical stop (design v3 §2).
+    const cs = w.coord.containmentState();
+    assert.equal(cs.state, "CHAIN_STOPPED");
+    assert.equal(cs.stopStatus, "unverified");
+    assert.equal(cs.stopVerifyAttempts, 1);
+    assert.equal(cs.stopArmedBefore, armedBefore);
+    assert.equal(cs.stopVerifiedAt, null);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT7 — alarm-handler retries under containment (simulated re-invocation)", () => {
+  test("a throwing base alarm under DRIVE_CONTAINED rejects identically on re-invocation; containment state and chain survive; the next healthy pass is contained", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const r = await w.coord.applyContainmentTransition(
+      "contain_drive", REF);
+    assert.equal(r.outcome, "applied");
+    const error = new Error("battery schedule fault");
+    w.faults.sql = {
+      match: (q) => /FROM schedule/i.test(q), error };
+    await assert.rejects(w.fireClassAlarm(), (e) => e === error);
+    // Simulated platform retry: the same fault, the same result.
+    await assert.rejects(w.fireClassAlarm(), (e) => e === error);
+    const rows = driveRows(w);
+    assert.ok(rows.every((x) => x.stage === "base_alarm"));
+    w.faults.sql = null;
+    await w.fireClassAlarm();
+    const rows2 = driveRows(w);
+    assert.equal(rows2[rows2.length - 1].stage, "contained");
+    assert.equal(w.coord.containmentState().state, "DRIVE_CONTAINED");
+    assert.equal(grants(w).length, 0);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT8 — in-flight grant activity at the moment of the stop", () => {
+  test("the stop does not interrupt anything retroactively; a later delivered pass closes the in-flight grant by lease and issues nothing new", async () => {
+    const w = await makeWorld(CAND);
+    const seed = await seedAttempt3Shape(w);
+    await w.fireClassAlarm(); // grant issued, lease pending
+    assert.equal(grants(w).length, 1);
+    assert.equal(grants(w)[0].state, "issued");
+    const r = await entryPost(w, "/v2/d6-containment",
+      { action: "stop_chain", authorizationRef: REF },
+      { operator: true });
+    assert.equal(r.body.outcome, "applied");
+    assert.equal(grants(w)[0].state, "issued",
+      "the stop itself changed no grant state");
+    // The in-flight pass problem in reverse: a pass delivered
+    // after the stop still runs base processing exactly once —
+    // the lease closes the grant — and drive stays off.
+    w.advance(16 * MIN);
+    await w.fireClassAlarm();
+    const g = grants(w);
+    assert.equal(g.length, 1);
+    assert.equal(g[0].state, "voided");
+    const occ = w.db.prepare(
+      `SELECT * FROM occurrences WHERE job_id = ?`).get(seed.jobId);
+    assert.equal(occ.state, "pending");
+    assert.equal(w.alarmAt(), null, "no re-arm after the stop");
+    assert.equal(w.queue.sent.length, 0,
+      "nothing was ever dispatched (halt fence intact throughout)");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT9 — transition discipline, route fences, and the return path", () => {
+  test("transition table enforced; idempotent re-apply audited; downgrade refused with no writes; clear restores ordinary arming", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const t1 = await w.coord.applyContainmentTransition("stop_chain", REF);
+    assert.equal(t1.outcome, "applied");
+    const evCount = () => w.db.prepare(
+      `SELECT COUNT(*) AS n FROM d6_containment_events`).get().n;
+    const n0 = evCount();
+    const down = await w.coord.applyContainmentTransition(
+      "contain_drive", REF);
+    assert.equal(down.outcome, "rejected");
+    assert.equal(down.reason, "containment_transition_refused");
+    assert.equal(evCount(), n0, "a refused transition writes nothing");
+    assert.equal(w.coord.containmentState().state, "CHAIN_STOPPED");
+    const again = await w.coord.applyContainmentTransition("stop_chain", REF);
+    assert.equal(again.outcome, "applied");
+    assert.equal(again.idempotent, true);
+    const clr = await w.coord.applyContainmentTransition("clear", REF,
+      { reason: "battery CT9: restore after stop assertions" });
+    assert.equal(clr.outcome, "applied");
+    assert.equal(clr.state, "NORMAL");
+    // Return path: clearing did not itself register anything...
+    assert.equal(w.alarmAt(), null);
+    // ...but ordinary arming works again on the next wake.
+    w.clearAlarmCalls();
+    await w.coord.wake();
+    assert.equal(w.alarmCalls.length, 1,
+      "after clear, a wake re-arms through the ordinary paths");
+    assert.ok(w.alarmAt() !== null);
+    const clr2 = await w.coord.applyContainmentTransition("clear", REF,
+      { reason: "battery CT9: idempotent clear re-apply" });
+    assert.equal(clr2.outcome, "applied");
+    assert.equal(clr2.idempotent, true);
+  });
+  test("route fences: closed allowlist, operator-only admission, client token alone refused", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const extra = await entryPost(w, "/v2/d6-containment",
+      { action: "contain_drive", authorizationRef: REF, bogus: 1 },
+      { operator: true });
+    assert.equal(extra.status, 200);
+    assert.equal(extra.body.outcome, "rejected");
+    assert.equal(extra.body.reason, "containment_request_key_not_allowed");
+    const badAction = await entryPost(w, "/v2/d6-containment",
+      { action: "explode", authorizationRef: REF }, { operator: true });
+    assert.equal(badAction.body.reason, "containment_action_not_allowed");
+    const noRef = await entryPost(w, "/v2/d6-containment",
+      { action: "contain_drive" }, { operator: true });
+    assert.equal(noRef.body.reason, "authorization_ref_required");
+    const clientOnly = await entryPost(w, "/v2/d6-containment",
+      { action: "contain_drive", authorizationRef: REF },
+      { operator: false });
+    assert.equal(clientOnly.status, 403);
+    const noOperatorState = await entryGet(w, "/v2/d6-containment",
+      { operator: false });
+    assert.equal(noOperatorState.status, 403);
+    assert.equal(w.coord.containmentState().absent, true,
+      "none of the refused calls moved any state");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT10 — preserved-plan integrity across the full containment sweep", () => {
+  test("contain -> passes -> stop -> command -> clear leaves plan, job, occurrence, figures, parked job, and conflicts byte-identical", async () => {
+    const w = await makeWorld(CAND);
+    const seed = await seedAttempt3Shape(w);
+    const EXCLUDE = ["commands", "schedule", "d6_drive_passes",
+      "d6_containment_state", "d6_containment_events", "transitions"];
+    const before = snapshotDb(w.db, { exclude: EXCLUDE });
+    await w.coord.applyContainmentTransition("contain_drive", REF);
+    w.advance(11 * MIN);
+    await w.fireClassAlarm();
+    await w.coord.applyContainmentTransition("stop_chain", REF);
+    await w.coord.handleCommand({
+      command_id: "ct10-cmd", type: "RequestPause",
+      payload: { jobId: "alarm-wake-probe:nonexistent" } });
+    await w.fireClassAlarm();
+    await w.coord.applyContainmentTransition("clear", REF,
+      { reason: "battery CT10: close the containment sweep" });
+    const after = snapshotDb(w.db, { exclude: EXCLUDE });
+    assert.equal(after, before);
+    const pa = w.store.phaseAccounting("forever-pucked");
+    assert.deepEqual(pa, { settledMicro: 1029420,
+      inFlightUpperMicro: 0, unknownOpen: 0,
+      estimatedUnverified

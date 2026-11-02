@@ -1,0 +1,31 @@
+"verified");
+    await w.fireClassAlarm();
+    assert.equal(driveRows(w).at(-1).stage, "contained");
+    assert.equal(w.alarmAt(), null);
+  });
+  test("CT13f state-read failure at the parked wake's re-check: unverified means suppressed (darker branch at the new boundary too)", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const stale = T0 + 30 * MIN;
+    w.seedAlarm(stale);
+    w.clearAlarmCalls();
+    const release = w.deferGetAlarm();
+    const wakeP = w.coord.wake();
+    await flush();
+    assert.equal(w.deferArmed(), false);
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "applied");
+    const error = new Error("battery containment read fault");
+    error.name = "BatteryContainmentReadError";
+    w.faults.sql = {
+      match: (q) => /FROM d6_containment_state/i.test(q), error };
+    release(stale);
+    await wakeP;
+    assert.equal(w.alarmCalls.length, 0,
+      "a re-check that cannot verify the state suppresses the arm");
+    assert.equal(w.alarmAt(), null);
+    w.faults.sql = null;
+    assert.equal(w.coord.containmentState().state, "CHAIN_STOPPED");
+  });
+});

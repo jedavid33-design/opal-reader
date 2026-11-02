@@ -1,0 +1,191 @@
+     return { outcome: "rejected",
++        reason: "containment_transition_refused",
++        state: before.state, verified: before.verified };
++    this._tx(() => {
++      this.sql.exec(
++        `INSERT INTO d6_containment_state
++           (id, state, updated_at, authorization_ref)
++         VALUES (1, ?, ?, ?)
++         ON CONFLICT(id) DO UPDATE SET state = excluded.state,
++           updated_at = excluded.updated_at,
++           authorization_ref = excluded.authorization_ref`,
++        spec.to, this._now(), authorizationRef);
++      this.sql.exec(
++        `INSERT INTO d6_containment_events
++           (at, action, from_state, to_state, authorization_ref,
++            outcome, detail_json)
++         VALUES (?, ?, ?, ?, ?, 'applied', ?)`,
++        this._now(), action, from, spec.to, authorizationRef,
++        action === "clear" ? JSON.stringify({ reason }) : null);
++    });
++    if (action === "clear") {
++      // A return to NORMAL closes the stop episode: the physical
++      // stop record is reset so a future stop starts a fresh
++      // episode (fresh attempts bound). The audit events retain
++      // the closed episode's full history.
++      this.sql.exec(
++        `UPDATE d6_containment_state SET stop_status = NULL,
++           stop_verified_at = NULL, stop_verify_action = NULL,
++           stop_armed_before = NULL, stop_armed_after = NULL,
++           stop_verify_attempts = 0 WHERE id = 1`);
++      return { outcome: "applied", action, state: "NORMAL",
++        idempotent: false, stopVerified: null,
++        stateRead: readContainmentState(this.sql) };
++    }
++    if (action !== "stop_chain")
++      return { outcome: "applied", action, state: spec.to,
++        idempotent: false, stopVerified: null,
++        stateRead: readContainmentState(this.sql) };
++    // stop_chain's physical act (design v3 §2.2): OBSERVE the
++    // registration, remove it, then read it back. The observed
++    // values and the outcome are PERSISTED on the state row as the
++    // durable stop record — the enum alone never asserts the
++    // physical stop. Failure of any step is reported, never
++    // laundered: the state row stands at CHAIN_STOPPED (the arm
++    // gates keep every later wake from re-registering), and the
++    // outcome says the stop is UNVERIFIED. A persistence failure
++    // of the stop record itself throws (route: HTTP 500) — the
++    // stop is then recorded as UNVERIFIED by absence (stop_status
++    // stays NULL), never as a silent success.
++    let armedBefore = null;
++    try {
++      const a = await this.state.storage.getAlarm();
++      armedBefore = typeof a === "number" ? a : null;
++    } catch { armedBefore = null; }
++    let stopVerified = false;
++    let verifyError = null;
++    let armedAfter = armedBefore;
++    try {
++      await this.state.storage.deleteAlarm();
++      const armed = await this.state.storage.getAlarm();
++      armedAfter = typeof armed === "number" ? armed : null;
++      stopVerified = armed === null || armed === undefined;
++      if (!stopVerified) verifyError = "alarm_still_armed";
++    } catch (e) {
++      verifyError = e && e.name ? String(e.name) : "Error";
++    }
++    this._tx(() => {
++      this.sql.exec(
++        `UPDATE d6_containment_state SET
++           stop_status = ?, stop_verified_at = ?,
++           stop_verify_action = 'stop_chain',
++           stop_armed_before = ?, stop_armed_after = ?,
++           stop_verify_attempts = 1 WHERE id = 1`,
++        stopVerified ? "verified" : "unverified",
++        stopVerified ? this._now() : null, armedBefore, armedAfter);
++      if (!stopVerified)
++        this.sql.exec(
++          `INSERT INTO d6_containment_events
++             (at, action, from_state, to_state, authorization_ref,
++              outcome, detail_json)
++           VALUES (?, 'stop_chain_verify', ?, 'CHAIN_STOPPED', ?,
++                   'unverified', ?)`,
++          this._now(), from, authorizationRef,
++          JSON.stringify({ verifyError, armedBefore, armedAfter,
++            attempt: 1 }));
++    });
++    if (!stopVerified)
++      return { outcome: "rejected",
++        reason: "containment_stop_unverified",
++        action, state: "CHAIN_STOPPED", stopVerified: false,
++        stateRead: readContainmentState(this.sql) };
++    return { outcome: "applied", action, state: "CHAIN_STOPPED",
++      idempotent: false, stopVerified: true,
++      stateRead: readContainmentState(this.sql) };
++  }
++
++  // CONTAINMENT v3 — verify_chain_stop: the explicit, auditable
++  // RE-VERIFICATION / RETRY of a physical stop whose state row
++  // already stands at CHAIN_STOPPED (design v3 §3). It NEVER
++  // changes the enum, NEVER downgrades the state, and NEVER
++  // clears containment. It:
++  //   1. refuses unless the state reads (verified) CHAIN_STOPPED;
++  //   2. refuses once the episode's attempt bound is exhausted
++  //      (MAX_STOP_VERIFY_ATTEMPTS, stop_chain's act included) —
++  //      further attempts require a fresh stop_chain act under a
++  //      fresh authorization, opening a new episode;
++  //   3. reads getAlarm(); re-issues deleteAlarm() ONLY if a
++  //      registration is present; reads back;
++  //   4. persists the verification record from THIS action's own
++  //      read-back (verified / re_verified / unverified, the
++  //      observed armed values, the attempt number) and appends
++  //      one audit event — for EVERY attempt, success or failure.
++  // Idempotent: repeating it against an already-absent
++  // registration performs no delete and simply re-records the
++  // verification. A persistence failure throws (route: HTTP 500):
++  // an unrecorded verification is never reported as one.
++  async _verifyChainStop(authorizationRef) {
++    this.sql.exec(CONTAINMENT_SCHEMA);
++    const before = readContainmentState(this.sql);
++    if (!before.known || !before.verified)
++      return { outcome: "rejected",
++        reason: "containment_transition_refused",
++        state: before.state, verified: before.verified };
++    if (before.state !== "CHAIN_STOPPED")
++      return { outcome: "rejected",
++        reason: "containment_verify_not_stopped",
++        state: before.state, verified: true };
++    const attempts = before.stopVerifyAttempts || 0;
++    if (attempts >= MAX_STOP_VERIFY_ATTEMPTS)
++      return { outcome: "rejected",
++        reason: "containment_verify_attempts_exhausted",
++        state: "CHAIN_STOPPED", stopVerified: false,
++        stopStatus: before.stopStatus,
++        stopVerifyAttempts: attempts,
++        stateRead: readContainmentState(this.sql) };
++    const attempt = attempts + 1;
++    let armedBefore = null;
++    let armedAfter = null;
++    let deleteAttempted = false;
++    let verifyError = null;
++    let stopVerified = false;
++    try {
++      const a = await this.state.storage.getAlarm();
++      armedBefore = typeof a === "number" ? a : null;
++      armedAfter = armedBefore;
++      if (armedBefore !== null) {
++        deleteAttempted = true;
++        await this.state.storage.deleteAlarm();
++        const b = await this.state.storage.getAlarm();
++        armedAfter = typeof b === "number" ? b : null;
++      }
++      stopVerified = armedAfter === null;
++      if (!stopVerified) verifyError = "alarm_still_armed";
++    } catch (e) {
++      verifyError = e && e.name ? String(e.name) : "Error";
++      stopVerified = false;
++    }
++    const stopStatus = stopVerified
++      ? (before.stopStatus === "verified" ? "verified" : "re_verified")
++      : "unverified";
++    this._tx(() => {
++      this.sql.exec(
++        `UPDATE d6_containment_state SET
++           stop_status = ?, stop_verified_at = ?,
++           stop_verify_action = 'verify_chain_stop',
++           stop_armed_before = ?, stop_armed_after = ?,
++           stop_verify_attempts = ? WHERE id = 1`,
++        stopStatus,
++        // stop_verified_at means exactly one thing: the last
++        // time a stop action observed a null read-back. Success
++        // updates it; failure leaves it untouched.
++        stopVerified ? this._now() : before.stopVerifiedAt,
++        armedBefore, armedAfter, attempt);
++      this.sql.exec(
++        `INSERT INTO d6_containment_events
++           (at, action, from_state, to_state, authorization_ref,
++            outcome, detail_json)
++         VALUES (?, 'verify_chain_stop', 'CHAIN_STOPPED',
++                 'CHAIN_STOPPED', ?, ?, ?)`,
++        this._now(), authorizationRef,
++        stopVerified ? "verified" : "unverified",
++        JSON.stringify({ attempt, armedBefore, armedAfter,
++          deleteAttempted, verifyError }));
++    });
++    return { outcome: stopVerified ? "applied" : "rejected",
++      reason: stopVerified ? null : "containment_stop_unverified",
++      action: "verify_chain_stop", state: "CHAIN_STOPPED",
++      // Idempotent in the transitions' sense: the call needed no
++      // physical act (registration already absent) and the
++      // recorded status already said what this call proved.
++      idempotent: stopVerified && !d

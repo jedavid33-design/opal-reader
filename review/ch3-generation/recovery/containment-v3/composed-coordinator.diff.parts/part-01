@@ -1,0 +1,171 @@
+--- a/v2/coordinator.mjs
++++ b/v2/coordinator.mjs
+@@ -131,6 +131,216 @@
+ export const SYNC_FAMILIES = ["content", "bindings", "position", "settings"];
+ 
+ const WATCHDOG_PERIOD_MS = 10 * 60 * 1000;
++// R5a (revised design): a past-due armed value is treated as unarmed
++// ONLY once it has been past due for longer than this threshold.
++// Inside the window the value may be a legitimate platform retry gap:
++// an alarm that "has failed and any retry has not begun" still reads
++// as set, platform retries (at most 6, exponential backoff starting
++// at 2 s) apply only to the most recent setAlarm call, and a fresh
++// setAlarm in the gap would supersede the pending retry. The
++// threshold is set far beyond the documented retry envelope (see
++// PHASEB-R5A-RETRY-SUPERSESSION.md for the derivation); it is a
++// design constant, not a platform guarantee.
++const ALARM_STALE_THRESHOLD_MS = 60 * 60 * 1000;
++// ------------------------------------------------------------------
++// CONTAINMENT (Phase B containment design, REVISED state semantics;
++// PHASEB-CONTAINMENT-DESIGN-REVISED.md). A durable operational
++// state for the alarm chain, stored in the coordinator's own SQLite
++// as a SINGLETON ROW with an ENUMERATED state value — the contained
++// vs chain-stopped distinction is structural (three distinct
++// values), not prose over one boolean.
++//
++//   NORMAL          — shipped behavior, unchanged.
++//   DRIVE_CONTAINED — alarm passes run (base schedule processing,
++//                     lease-driven grant closure, the finally
++//                     re-arm) but the subclass handler skips
++//                     recover()/driveOnce(): no new grants, no
++//                     plan advancement. The chain stays alive.
++//   CHAIN_STOPPED   — DRIVE_CONTAINED, plus: every setAlarm path
++//                     in this part is gated off, and the stop
++//                     transition itself performs deleteAlarm().
++//                     No registration, no passes, no resurrection
++//                     via wake(). Pending schedule rows are left
++//                     untouched (evidence).
++//
++// Read discipline (the fail-closed core):
++//   * Reads NEVER write and NEVER create the tables. The tables
++//     are created ONLY by a transition (applyContainmentTransition
++//     below), so an ABSENT table is a structurally verified NORMAL:
++//     no transition has ever been recorded, hence no stop exists
++//     that a read failure could defeat.
++//   * Any OTHER read failure (or an unrecognized stored value)
++//     yields verified=false, and every consuming path defaults
++//     DARKER: drive is treated as contained, arming is treated as
++//     stopped. A read failure can therefore never silently defeat
++//     a recorded stop: with the table present and a stop recorded,
++//     a failed read suppresses registration instead of permitting
++//     it, and the suppression is itself recorded (transitions
++//     ledger, best-effort; the recorder's armed_after on the next
++//     pass is the second witness).
++//   * A stop is VERIFIED only by evidence after the act: the
++//     transition reads the state row back AND reads getAlarm()
++//     (must be null). An unverified stop is reported as such —
++//     outcome "rejected", reason containment_stop_unverified —
++//     with the state row left at CHAIN_STOPPED (darker), never as
++//     a silent success.
++//
++// V3 ADDENDUM (Phase B containment design v3;
++// PHASEB-CONTAINMENT-DESIGN-V3.md; Rowan containment-correction
++// ruling, required work B/D and async item C):
++//   * The state row now carries the PHYSICAL STOP RECORD as
++//     separate durable fields (stop_status / stop_verified_at /
++//     stop_verify_action / stop_armed_before / stop_armed_after /
++//     stop_verify_attempts). The enum alone NEVER asserts a
++//     physical stop: stop_status is written ONLY from a getAlarm()
++//     null read-back observed inside the same operator action
++//     (stop_chain or verify_chain_stop). A CHAIN_STOPPED row with
++//     stop_status NULL or 'unverified' is a stop NOT known to be
++//     physical — consumers and paperwork must treat it as such.
++//   * verify_chain_stop: the explicit, auditable RE-VERIFICATION /
++//     RETRY action for an unverified stop. It changes NO enum
++//     value; it re-reads getAlarm(), re-issues deleteAlarm() only
++//     if a registration is present, reads back, persists the
++//     verification record, and appends an audit event for EVERY
++//     attempt. A failed verification NEVER downgrades the state
++//     and NEVER clears containment. Attempts are bounded per stop
++//     episode (MAX_STOP_VERIFY_ATTEMPTS, stop_chain's own act
++//     included); exhausting the bound refuses further attempts
++//     until a fresh stop_chain act under a fresh authorization
++//     opens a new episode.
++//   * clear now REQUIRES RESTORATION evidence: a nonblank reason,
++//     recorded in the audit event. There is NO automatic clear
++//     anywhere — not after a failed verification, not on any pass,
++//     wake, or read.
++//   * RACE FIX (async analysis, centerpiece): _armAlarmIfEarlier
++//     RE-CHECKS the arm gate after its getAlarm() await, in the
++//     same synchronous stretch that initiates setAlarm(). The v2
++//     shape read the gate BEFORE the await, so a stop committed
++//     during the await was invisible to a wake already past the
++//     gate — the wake could re-register after the stop's
++//     deleteAlarm() had landed (and a null read-back — the
++//     just-deleted registration — satisfied the shipped
++//     re-arm-if-unarmed condition). The re-check makes the last
++//     physical act win in every interleaving (analysis doc §3).
++// ------------------------------------------------------------------
++export const CONTAINMENT_STATES = Object.freeze([
++  "NORMAL", "DRIVE_CONTAINED", "CHAIN_STOPPED",
++]);
++// Stop-verification statuses recorded on the state row. 'verified'
++// is written only by stop_chain's own verified act; 're_verified'
++// only by verify_chain_stop moving an unverified (or unrecorded)
++// stop to a null read-back. Anything else — NULL included — means
++// the physical stop is NOT verified.
++export const CONTAINMENT_STOP_STATUSES = Object.freeze([
++  "verified", "unverified", "re_verified",
++]);
++// Bounded physical-verification attempts per stop episode,
++// INCLUDING stop_chain's own act (attempt 1).
++export const MAX_STOP_VERIFY_ATTEMPTS = 3;
++const CONTAINMENT_SCHEMA = `
++CREATE TABLE IF NOT EXISTS d6_containment_state (
++  id INTEGER PRIMARY KEY CHECK (id = 1),
++  state TEXT NOT NULL,
++  updated_at INTEGER NOT NULL,
++  authorization_ref TEXT,
++  stop_status TEXT,
++  stop_verified_at INTEGER,
++  stop_verify_action TEXT,
++  stop_armed_before INTEGER,
++  stop_armed_after INTEGER,
++  stop_verify_attempts INTEGER NOT NULL DEFAULT 0
++);
++CREATE TABLE IF NOT EXISTS d6_containment_events (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  at INTEGER NOT NULL,
++  action TEXT NOT NULL,
++  from_state TEXT,
++  to_state TEXT,
++  authorization_ref TEXT,
++  outcome TEXT NOT NULL,
++  detail_json TEXT
++);
++`;
++
++// Read the containment state. Never throws, never writes.
++// Returns { state, known, absent, verified, updatedAt,
++// authorizationRef, stopStatus, stopVerifiedAt, stopVerifyAction,
++// stopArmedBefore, stopArmedAfter, stopVerifyAttempts, errorName }:
++//   absent=true            -> no table / no row: verified NORMAL.
++//   known=true             -> stored value is one of the enum.
++//   verified=false         -> a read failure or an unrecognized
++//                             value: consumers must default darker.
++// The stop* fields are the durable physical-stop record (design
++// v3 §2): three facts kept permanently separate — the enum (this
++// read's `state`), the last physical verification (stopVerifiedAt,
++// stopVerifyAction, stopArmedBefore/stopArmedAfter), and the
++// stop-verification status (stopStatus). stopStatus is null
++// whenever no verification has been recorded; under CHAIN_STOPPED
++// a null or 'unverified' status means the physical stop is NOT
++// verified — never infer it from the enum.
++export function readContainmentState(sql) {
++  const NO_STOP = { stopStatus: null, stopVerifiedAt: null,
++    stopVerifyAction: null, stopArmedBefore: null,
++    stopArmedAfter: null, stopVerifyAttempts: 0 };
++  let rows;
++  try {
++    rows = sql.exec(
++      `SELECT state, updated_at, authorization_ref,
++              stop_status, stop_verified_at, stop_verify_action,
++              stop_armed_before, stop_armed_after, stop_verify_attempts
++         FROM d6_containment_state WHERE id = 1`).toArray();
++  } catch (e) {
++    const msg = String((e && e.message) || e);
++    if (/no such table/i.test(msg))
++      return { state: "NORMAL", known: true, absent: true,
++        verified: true, updatedAt: null, authorizationRef: null,
++        ...NO_STOP, errorName: null };
++    return { state: null, known: fa

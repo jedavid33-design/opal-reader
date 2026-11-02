@@ -1,0 +1,436 @@
+--- a/v2/coordinator.mjs
++++ b/v2/coordinator.mjs
+@@ -184,16 +184,71 @@
+ //     outcome "rejected", reason containment_stop_unverified —
+ //     with the state row left at CHAIN_STOPPED (darker), never as
+ //     a silent success.
++//
++// V3 ADDENDUM (Phase B containment design v3;
++// PHASEB-CONTAINMENT-DESIGN-V3.md; Rowan containment-correction
++// ruling, required work B/D and async item C):
++//   * The state row now carries the PHYSICAL STOP RECORD as
++//     separate durable fields (stop_status / stop_verified_at /
++//     stop_verify_action / stop_armed_before / stop_armed_after /
++//     stop_verify_attempts). The enum alone NEVER asserts a
++//     physical stop: stop_status is written ONLY from a getAlarm()
++//     null read-back observed inside the same operator action
++//     (stop_chain or verify_chain_stop). A CHAIN_STOPPED row with
++//     stop_status NULL or 'unverified' is a stop NOT known to be
++//     physical — consumers and paperwork must treat it as such.
++//   * verify_chain_stop: the explicit, auditable RE-VERIFICATION /
++//     RETRY action for an unverified stop. It changes NO enum
++//     value; it re-reads getAlarm(), re-issues deleteAlarm() only
++//     if a registration is present, reads back, persists the
++//     verification record, and appends an audit event for EVERY
++//     attempt. A failed verification NEVER downgrades the state
++//     and NEVER clears containment. Attempts are bounded per stop
++//     episode (MAX_STOP_VERIFY_ATTEMPTS, stop_chain's own act
++//     included); exhausting the bound refuses further attempts
++//     until a fresh stop_chain act under a fresh authorization
++//     opens a new episode.
++//   * clear now REQUIRES RESTORATION evidence: a nonblank reason,
++//     recorded in the audit event. There is NO automatic clear
++//     anywhere — not after a failed verification, not on any pass,
++//     wake, or read.
++//   * RACE FIX (async analysis, centerpiece): _armAlarmIfEarlier
++//     RE-CHECKS the arm gate after its getAlarm() await, in the
++//     same synchronous stretch that initiates setAlarm(). The v2
++//     shape read the gate BEFORE the await, so a stop committed
++//     during the await was invisible to a wake already past the
++//     gate — the wake could re-register after the stop's
++//     deleteAlarm() had landed (and a null read-back — the
++//     just-deleted registration — satisfied the shipped
++//     re-arm-if-unarmed condition). The re-check makes the last
++//     physical act win in every interleaving (analysis doc §3).
+ // ------------------------------------------------------------------
+ export const CONTAINMENT_STATES = Object.freeze([
+   "NORMAL", "DRIVE_CONTAINED", "CHAIN_STOPPED",
+ ]);
++// Stop-verification statuses recorded on the state row. 'verified'
++// is written only by stop_chain's own verified act; 're_verified'
++// only by verify_chain_stop moving an unverified (or unrecorded)
++// stop to a null read-back. Anything else — NULL included — means
++// the physical stop is NOT verified.
++export const CONTAINMENT_STOP_STATUSES = Object.freeze([
++  "verified", "unverified", "re_verified",
++]);
++// Bounded physical-verification attempts per stop episode,
++// INCLUDING stop_chain's own act (attempt 1).
++export const MAX_STOP_VERIFY_ATTEMPTS = 3;
+ const CONTAINMENT_SCHEMA = `
+ CREATE TABLE IF NOT EXISTS d6_containment_state (
+   id INTEGER PRIMARY KEY CHECK (id = 1),
+   state TEXT NOT NULL,
+   updated_at INTEGER NOT NULL,
+-  authorization_ref TEXT
++  authorization_ref TEXT,
++  stop_status TEXT,
++  stop_verified_at INTEGER,
++  stop_verify_action TEXT,
++  stop_armed_before INTEGER,
++  stop_armed_after INTEGER,
++  stop_verify_attempts INTEGER NOT NULL DEFAULT 0
+ );
+ CREATE TABLE IF NOT EXISTS d6_containment_events (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,
+@@ -209,37 +264,62 @@
+ 
+ // Read the containment state. Never throws, never writes.
+ // Returns { state, known, absent, verified, updatedAt,
+-// authorizationRef, errorName }:
++// authorizationRef, stopStatus, stopVerifiedAt, stopVerifyAction,
++// stopArmedBefore, stopArmedAfter, stopVerifyAttempts, errorName }:
+ //   absent=true            -> no table / no row: verified NORMAL.
+ //   known=true             -> stored value is one of the enum.
+ //   verified=false         -> a read failure or an unrecognized
+ //                             value: consumers must default darker.
++// The stop* fields are the durable physical-stop record (design
++// v3 §2): three facts kept permanently separate — the enum (this
++// read's `state`), the last physical verification (stopVerifiedAt,
++// stopVerifyAction, stopArmedBefore/stopArmedAfter), and the
++// stop-verification status (stopStatus). stopStatus is null
++// whenever no verification has been recorded; under CHAIN_STOPPED
++// a null or 'unverified' status means the physical stop is NOT
++// verified — never infer it from the enum.
+ export function readContainmentState(sql) {
++  const NO_STOP = { stopStatus: null, stopVerifiedAt: null,
++    stopVerifyAction: null, stopArmedBefore: null,
++    stopArmedAfter: null, stopVerifyAttempts: 0 };
+   let rows;
+   try {
+     rows = sql.exec(
+-      `SELECT state, updated_at, authorization_ref
++      `SELECT state, updated_at, authorization_ref,
++              stop_status, stop_verified_at, stop_verify_action,
++              stop_armed_before, stop_armed_after, stop_verify_attempts
+          FROM d6_containment_state WHERE id = 1`).toArray();
+   } catch (e) {
+     const msg = String((e && e.message) || e);
+     if (/no such table/i.test(msg))
+       return { state: "NORMAL", known: true, absent: true,
+         verified: true, updatedAt: null, authorizationRef: null,
+-        errorName: null };
++        ...NO_STOP, errorName: null };
+     return { state: null, known: false, absent: false,
+       verified: false, updatedAt: null, authorizationRef: null,
++      ...NO_STOP,
+       errorName: e && e.name ? String(e.name) : "Error" };
+   }
+   if (!rows || rows.length === 0)
+     return { state: "NORMAL", known: true, absent: true,
+       verified: true, updatedAt: null, authorizationRef: null,
+-      errorName: null };
++      ...NO_STOP, errorName: null };
+   const r = rows[0];
+   const known = CONTAINMENT_STATES.includes(r.state);
++  const num = (v) => typeof v === "number" ? v : null;
++  const str = (v) => typeof v === "string" ? v : null;
+   return { state: r.state, known, absent: false, verified: known,
+-    updatedAt: typeof r.updated_at === "number" ? r.updated_at : null,
+-    authorizationRef:
+-      typeof r.authorization_ref === "string" ? r.authorization_ref : null,
++    updatedAt: num(r.updated_at),
++    authorizationRef: str(r.authorization_ref),
++    stopStatus: CONTAINMENT_STOP_STATUSES.includes(r.stop_status)
++      ? r.stop_status : null,
++    stopVerifiedAt: num(r.stop_verified_at),
++    stopVerifyAction: str(r.stop_verify_action),
++    stopArmedBefore: num(r.stop_armed_before),
++    stopArmedAfter: num(r.stop_armed_after),
++    stopVerifyAttempts:
++      typeof r.stop_verify_attempts === "number"
++        ? r.stop_verify_attempts : 0,
+     errorName: null };
+ }
+ 
+@@ -2596,6 +2676,13 @@
+     // containment read) the finally re-arm does not register. The
+     // suppression is noted in the transitions ledger best-effort —
+     // a failed note never re-enables registration.
++    // No post-await re-check is needed HERE (contrast
++    // _armAlarmIfEarlier, design v3 / async analysis §3): the due
++    // computation above is synchronous SQL and this gate read and
++    // the setAlarm() initiation below are one synchronous stretch
++    // with no await between them, so no transition can commit
++    // inside the window; a stop committed later lands its
++    // deleteAlarm after this registration and removes it.
+     if (containmentArmSuppressed(readContainmentState(this.sql))) {
+       this._noteContainmentArmSuppressed("_armAlarm");
+       return;
+@@ -2619,18 +2706,28 @@
+   // (/internal/d6/containment). Actions:
+   //   contain_drive : NORMAL -> DRIVE_CONTAINED
+   //   stop_chain    : NORMAL|DRIVE_CONTAINED -> CHAIN_STOPPED,
+-  //                   plus deleteAlarm() after the state commit,
+-  //                   verified by a getAlarm() read-back (null).
++  //                   plus the physical stop act after the state
++  //                   commit (observe getAlarm(), deleteAlarm(),
++  //                   read back), whose outcome is PERSISTED as the
++  //                   row's stop record (design v3 §2).
++  //   verify_chain_stop : CHAIN_STOPPED -> CHAIN_STOPPED (NO enum
++  //                   change). The explicit re-verification / retry
++  //                   of the physical stop (design v3 §3).
+   //   clear         : DRIVE_CONTAINED|CHAIN_STOPPED -> NORMAL.
+-  //                   Clearing never re-arms anything itself.
++  //                   Requires a nonblank restoration `reason`
++  //                   (opts.reason), recorded in the audit event.
++  //                   Clearing never re-arms anything itself, and
++  //                   nothing anywhere clears automatically.
+   // An already-in-target request is an idempotent applied no-op
+   // (audited). A transition from any other state is rejected with
+   // NO writes. A state WRITE failure throws out of the transaction
+   // (the route surfaces HTTP 500): a transition is never reported
+   // applied unless its write committed and was read back. A failed
+-  // or unverifiable deleteAlarm leaves the row at CHAIN_STOPPED
+-  // and reports outcome "rejected" / containment_stop_unverified.
+-  async applyContainmentTransition(action, authorizationRef) {
++  // or unverifiable stop act leaves the row at CHAIN_STOPPED and
++  // reports outcome "rejected" / containment_stop_unverified.
++  async applyContainmentTransition(action, authorizationRef, opts = {}) {
++    if (action === "verify_chain_stop")
++      return this._verifyChainStop(authorizationRef);
+     const TARGETS = {
+       contain_drive: { to: "DRIVE_CONTAINED", from: ["NORMAL"] },
+       stop_chain: { to: "CHAIN_STOPPED",
+@@ -2641,6 +2738,17 @@
+     const spec = TARGETS[action];
+     if (!spec) return { outcome: "rejected",
+       reason: "containment_action_not_allowed" };
++    // Restoration discipline (design v3 §5): a clear must carry a
++    // demonstrated reason. Enforced here (method level) as well as
++    // at the route, so no caller can clear without one.
++    const reason = typeof opts.reason === "string"
++      ? opts.reason.trim() : "";
++    if (action === "clear" && reason.length === 0)
++      return { outcome: "rejected",
++        reason: "containment_reason_required" };
++    if (action === "clear" && reason.length > 2000)
++      return { outcome: "rejected",
++        reason: "containment_reason_too_long" };
+     this.sql.exec(CONTAINMENT_SCHEMA);
+     const before = readContainmentState(this.sql);
+     const from = before.known ? before.state : null;
+@@ -2673,31 +2781,66 @@
+         `INSERT INTO d6_containment_events
+            (at, action, from_state, to_state, authorization_ref,
+             outcome, detail_json)
+-         VALUES (?, ?, ?, ?, ?, 'applied', NULL)`,
+-        this._now(), action, from, spec.to, authorizationRef);
++         VALUES (?, ?, ?, ?, ?, 'applied', ?)`,
++        this._now(), action, from, spec.to, authorizationRef,
++        action === "clear" ? JSON.stringify({ reason }) : null);
+     });
++    if (action === "clear") {
++      // A return to NORMAL closes the stop episode: the physical
++      // stop record is reset so a future stop starts a fresh
++      // episode (fresh attempts bound). The audit events retain
++      // the closed episode's full history.
++      this.sql.exec(
++        `UPDATE d6_containment_state SET stop_status = NULL,
++           stop_verified_at = NULL, stop_verify_action = NULL,
++           stop_armed_before = NULL, stop_armed_after = NULL,
++           stop_verify_attempts = 0 WHERE id = 1`);
++      return { outcome: "applied", action, state: "NORMAL",
++        idempotent: false, stopVerified: null,
++        stateRead: readContainmentState(this.sql) };
++    }
+     if (action !== "stop_chain")
+       return { outcome: "applied", action, state: spec.to,
+         idempotent: false, stopVerified: null,
+         stateRead: readContainmentState(this.sql) };
+-    // stop_chain's physical act: remove the registration, then
+-    // VERIFY by reading it back. Failure of either step is
+-    // reported, never laundered: the state row stands at
+-    // CHAIN_STOPPED (the arm gates keep every later wake from
+-    // re-registering), and the outcome says the stop is
+-    // UNVERIFIED.
++    // stop_chain's physical act (design v3 §2.2): OBSERVE the
++    // registration, remove it, then read it back. The observed
++    // values and the outcome are PERSISTED on the state row as the
++    // durable stop record — the enum alone never asserts the
++    // physical stop. Failure of any step is reported, never
++    // laundered: the state row stands at CHAIN_STOPPED (the arm
++    // gates keep every later wake from re-registering), and the
++    // outcome says the stop is UNVERIFIED. A persistence failure
++    // of the stop record itself throws (route: HTTP 500) — the
++    // stop is then recorded as UNVERIFIED by absence (stop_status
++    // stays NULL), never as a silent success.
++    let armedBefore = null;
++    try {
++      const a = await this.state.storage.getAlarm();
++      armedBefore = typeof a === "number" ? a : null;
++    } catch { armedBefore = null; }
+     let stopVerified = false;
+     let verifyError = null;
++    let armedAfter = armedBefore;
+     try {
+       await this.state.storage.deleteAlarm();
+       const armed = await this.state.storage.getAlarm();
++      armedAfter = typeof armed === "number" ? armed : null;
+       stopVerified = armed === null || armed === undefined;
+       if (!stopVerified) verifyError = "alarm_still_armed";
+     } catch (e) {
+       verifyError = e && e.name ? String(e.name) : "Error";
+     }
+-    if (!stopVerified) {
+-      try {
++    this._tx(() => {
++      this.sql.exec(
++        `UPDATE d6_containment_state SET
++           stop_status = ?, stop_verified_at = ?,
++           stop_verify_action = 'stop_chain',
++           stop_armed_before = ?, stop_armed_after = ?,
++           stop_verify_attempts = 1 WHERE id = 1`,
++        stopVerified ? "verified" : "unverified",
++        stopVerified ? this._now() : null, armedBefore, armedAfter);
++      if (!stopVerified)
+         this.sql.exec(
+           `INSERT INTO d6_containment_events
+              (at, action, from_state, to_state, authorization_ref,
+@@ -2705,18 +2848,119 @@
+            VALUES (?, 'stop_chain_verify', ?, 'CHAIN_STOPPED', ?,
+                    'unverified', ?)`,
+           this._now(), from, authorizationRef,
+-          JSON.stringify({ verifyError }));
+-      } catch { /* the response below is itself the report */ }
++          JSON.stringify({ verifyError, armedBefore, armedAfter,
++            attempt: 1 }));
++    });
++    if (!stopVerified)
+       return { outcome: "rejected",
+         reason: "containment_stop_unverified",
+         action, state: "CHAIN_STOPPED", stopVerified: false,
+         stateRead: readContainmentState(this.sql) };
+-    }
+     return { outcome: "applied", action, state: "CHAIN_STOPPED",
+       idempotent: false, stopVerified: true,
+       stateRead: readContainmentState(this.sql) };
+   }
+ 
++  // CONTAINMENT v3 — verify_chain_stop: the explicit, auditable
++  // RE-VERIFICATION / RETRY of a physical stop whose state row
++  // already stands at CHAIN_STOPPED (design v3 §3). It NEVER
++  // changes the enum, NEVER downgrades the state, and NEVER
++  // clears containment. It:
++  //   1. refuses unless the state reads (verified) CHAIN_STOPPED;
++  //   2. refuses once the episode's attempt bound is exhausted
++  //      (MAX_STOP_VERIFY_ATTEMPTS, stop_chain's act included) —
++  //      further attempts require a fresh stop_chain act under a
++  //      fresh authorization, opening a new episode;
++  //   3. reads getAlarm(); re-issues deleteAlarm() ONLY if a
++  //      registration is present; reads back;
++  //   4. persists the verification record from THIS action's own
++  //      read-back (verified / re_verified / unverified, the
++  //      observed armed values, the attempt number) and appends
++  //      one audit event — for EVERY attempt, success or failure.
++  // Idempotent: repeating it against an already-absent
++  // registration performs no delete and simply re-records the
++  // verification. A persistence failure throws (route: HTTP 500):
++  // an unrecorded verification is never reported as one.
++  async _verifyChainStop(authorizationRef) {
++    this.sql.exec(CONTAINMENT_SCHEMA);
++    const before = readContainmentState(this.sql);
++    if (!before.known || !before.verified)
++      return { outcome: "rejected",
++        reason: "containment_transition_refused",
++        state: before.state, verified: before.verified };
++    if (before.state !== "CHAIN_STOPPED")
++      return { outcome: "rejected",
++        reason: "containment_verify_not_stopped",
++        state: before.state, verified: true };
++    const attempts = before.stopVerifyAttempts || 0;
++    if (attempts >= MAX_STOP_VERIFY_ATTEMPTS)
++      return { outcome: "rejected",
++        reason: "containment_verify_attempts_exhausted",
++        state: "CHAIN_STOPPED", stopVerified: false,
++        stopStatus: before.stopStatus,
++        stopVerifyAttempts: attempts,
++        stateRead: readContainmentState(this.sql) };
++    const attempt = attempts + 1;
++    let armedBefore = null;
++    let armedAfter = null;
++    let deleteAttempted = false;
++    let verifyError = null;
++    let stopVerified = false;
++    try {
++      const a = await this.state.storage.getAlarm();
++      armedBefore = typeof a === "number" ? a : null;
++      armedAfter = armedBefore;
++      if (armedBefore !== null) {
++        deleteAttempted = true;
++        await this.state.storage.deleteAlarm();
++        const b = await this.state.storage.getAlarm();
++        armedAfter = typeof b === "number" ? b : null;
++      }
++      stopVerified = armedAfter === null;
++      if (!stopVerified) verifyError = "alarm_still_armed";
++    } catch (e) {
++      verifyError = e && e.name ? String(e.name) : "Error";
++      stopVerified = false;
++    }
++    const stopStatus = stopVerified
++      ? (before.stopStatus === "verified" ? "verified" : "re_verified")
++      : "unverified";
++    this._tx(() => {
++      this.sql.exec(
++        `UPDATE d6_containment_state SET
++           stop_status = ?, stop_verified_at = ?,
++           stop_verify_action = 'verify_chain_stop',
++           stop_armed_before = ?, stop_armed_after = ?,
++           stop_verify_attempts = ? WHERE id = 1`,
++        stopStatus,
++        // stop_verified_at means exactly one thing: the last
++        // time a stop action observed a null read-back. Success
++        // updates it; failure leaves it untouched.
++        stopVerified ? this._now() : before.stopVerifiedAt,
++        armedBefore, armedAfter, attempt);
++      this.sql.exec(
++        `INSERT INTO d6_containment_events
++           (at, action, from_state, to_state, authorization_ref,
++            outcome, detail_json)
++         VALUES (?, 'verify_chain_stop', 'CHAIN_STOPPED',
++                 'CHAIN_STOPPED', ?, ?, ?)`,
++        this._now(), authorizationRef,
++        stopVerified ? "verified" : "unverified",
++        JSON.stringify({ attempt, armedBefore, armedAfter,
++          deleteAttempted, verifyError }));
++    });
++    return { outcome: stopVerified ? "applied" : "rejected",
++      reason: stopVerified ? null : "containment_stop_unverified",
++      action: "verify_chain_stop", state: "CHAIN_STOPPED",
++      // Idempotent in the transitions' sense: the call needed no
++      // physical act (registration already absent) and the
++      // recorded status already said what this call proved.
++      idempotent: stopVerified && !deleteAttempted
++        && before.stopStatus === "verified",
++      stopVerified, stopStatus, stopVerifyAttempts: attempt,
++      stateRead: readContainmentState(this.sql) };
++  }
++
+   // Called on every coordinator wake: if the chain is unarmed (alarm
+   // consumed and handler died, retries exhausted, fresh start), re-arm it.
+   // Recovery never requires a client — any wake (command, report, alarm)
+@@ -2768,6 +3012,23 @@
+       return;
+     }
+     const armed = await this.state.storage.getAlarm();
++    // CONTAINMENT v3 RACE FIX (async analysis §3, centerpiece):
++    // the gate at the top of this method was read BEFORE this
++    // await. A stop committed while the getAlarm was in flight is
++    // invisible to that read — and the condition below would then
++    // re-register (the stale value satisfies the past-due disjunct
++    // or due < armed; even a null value — the just-deleted
++    // registration — satisfies the unarmed branch). RE-CHECK the
++    // gate now: this read and any setAlarm() initiation below are
++    // one synchronous stretch, so no transition can commit in
++    // between, and any stop committed before this read is seen.
++    // (The memo branch above needs no re-check: no await separates
++    // its gate read from its setAlarm initiation.)
++    if (containmentArmSuppressed(readContainmentState(this.sql))) {
++      this._noteContainmentArmSuppressed(
++        "_armAlarmIfEarlier#recheck");
++      return;
++    }
+     if (armed === null || armed === undefined
+         || armed <= now - ALARM_STALE_THRESHOLD_MS
+         || due < armed) {

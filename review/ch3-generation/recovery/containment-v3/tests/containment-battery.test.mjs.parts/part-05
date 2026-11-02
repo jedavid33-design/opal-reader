@@ -1,0 +1,193 @@
+wait w.coord.applyContainmentTransition("contain_drive", REF);
+    const noReason = await w.coord.applyContainmentTransition(
+      "clear", REF);
+    assert.equal(noReason.outcome, "rejected");
+    assert.equal(noReason.reason, "containment_reason_required");
+    const blank = await w.coord.applyContainmentTransition(
+      "clear", REF, { reason: "   " });
+    assert.equal(blank.reason, "containment_reason_required");
+    const route = await entryPost(w, "/v2/d6-containment",
+      { action: "clear", authorizationRef: REF }, { operator: true });
+    assert.equal(route.body.outcome, "rejected");
+    assert.equal(route.body.reason, "containment_reason_required");
+    assert.equal(w.coord.containmentState().state, "DRIVE_CONTAINED",
+      "refused clears change nothing");
+    const ok = await entryPost(w, "/v2/d6-containment",
+      { action: "clear", authorizationRef: REF,
+        reason: "battery CT12a: restoration demonstration" },
+      { operator: true });
+    assert.equal(ok.body.outcome, "applied");
+    assert.equal(ok.body.state, "NORMAL");
+    const clearEv = events(w).filter((e) => e.action === "clear");
+    assert.equal(clearEv.length, 1);
+    assert.equal(JSON.parse(clearEv[0].detail_json).reason,
+      "battery CT12a: restoration demonstration");
+  });
+  test("CT12b clearing CHAIN_STOPPED never re-arms: the registration stays absent until an ordinary wake under NORMAL", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    const schedBefore = schedSnapshot(w);
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "applied");
+    const clr = await w.coord.applyContainmentTransition("clear", REF,
+      { reason: "battery CT12b: standalone restoration" });
+    assert.equal(clr.outcome, "applied");
+    assert.equal(w.alarmAt(), null,
+      "clear does NOT silently re-register an alarm");
+    assert.equal(clr.stateRead.stopStatus, null);
+    assert.equal(schedSnapshot(w), schedBefore,
+      "pending schedule rows were preserved through stop and clear");
+    w.clearAlarmCalls();
+    await w.coord.wake();
+    assert.equal(w.alarmCalls.length, 1,
+      "the first subsequent wake re-arms per the ordinary rules");
+    assert.ok(w.alarmAt() !== null);
+  });
+  test("CT12c NO automatic clear anywhere: an unverified stop persists across time, passes, wakes, commands, and reads", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    w.faults.deleteAlarm = new Error("battery deleteAlarm fault");
+    await w.coord.applyContainmentTransition("stop_chain", REF);
+    w.faults.deleteAlarm = null;
+    w.advance(24 * 60 * MIN); // a full day passes
+    await w.fireClassAlarm();
+    await w.coord.wake();
+    await w.coord.handleCommand({
+      command_id: "ct12-cmd", type: "RequestPause",
+      payload: { jobId: "alarm-wake-probe:nonexistent" } });
+    await entryGet(w, "/v2/d6-containment", { operator: true });
+    await entryGet(w, "/v2/d6-diagnostics?drive=1", { operator: true });
+    const cs = w.coord.containmentState();
+    assert.equal(cs.state, "CHAIN_STOPPED",
+      "nothing — time, traffic, or reads — restores NORMAL on its own");
+    assert.equal(cs.stopStatus, "unverified");
+    assert.equal(cs.stopVerifyAttempts, 1,
+      "no background process retried the verification either");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT13 — async races at the await boundaries (ruling item C)", () => {
+  test("CT13a a wake parked at getAlarm() cannot resurrect the chain after a stop lands mid-wake (stale-value branch)", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const stale = T0 + 30 * MIN;
+    w.seedAlarm(stale); // armed 30 min out; a watchdog is due sooner
+    w.clearAlarmCalls();
+    const release = w.deferGetAlarm();
+    const wakeP = w.coord.wake();
+    await flush();
+    assert.equal(w.deferArmed(), false,
+      "the wake consumed the deferred read: it is parked at getAlarm()");
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "applied");
+    assert.equal(stop.stopVerified, true);
+    assert.equal(w.alarmAt(), null);
+    release(stale); // the parked read observes the PRE-STOP value
+    await wakeP;
+    assert.equal(w.alarmCalls.length, 0,
+      "the v3 gate re-check suppresses the parked wake's re-arm");
+    assert.equal(w.alarmAt(), null);
+  });
+  test("CT13b the same race, null branch: the parked read resolves after the delete and STILL cannot re-arm", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const stale = T0 + 30 * MIN;
+    w.seedAlarm(stale);
+    w.clearAlarmCalls();
+    const release = w.deferGetAlarm();
+    const wakeP = w.coord.wake();
+    await flush();
+    assert.equal(w.deferArmed(), false);
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "applied");
+    assert.equal(w.alarmAt(), null);
+    release(null); // the read was processed after the delete
+    await wakeP;
+    assert.equal(w.alarmCalls.length, 0,
+      "pre-fix code re-registered here via its re-arm-if-unarmed branch");
+    assert.equal(w.alarmAt(), null);
+  });
+  test("CT13c a verify_chain_stop landing while a wake is parked: the last physical act wins and the record stays truthful", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    const armed = w.alarmAt();
+    assert.ok(armed !== null);
+    w.clearAlarmCalls();
+    const release = w.deferGetAlarm();
+    const wakeP = w.coord.wake(); // parks under NORMAL, pre-stop
+    await flush();
+    assert.equal(w.deferArmed(), false);
+    w.faults.deleteAlarm = new Error("battery deleteAlarm fault");
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "rejected");
+    assert.equal(stop.stateRead.stopStatus, "unverified");
+    assert.equal(w.alarmAt(), armed, "the registration survived");
+    w.faults.deleteAlarm = null;
+    const v = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF);
+    assert.equal(v.outcome, "applied");
+    assert.equal(v.stateRead.stopStatus, "re_verified");
+    assert.equal(w.alarmAt(), null, "the verify's delete landed last");
+    release(armed); // the parked wake now resumes with a stale read
+    await wakeP;
+    assert.equal(w.alarmCalls.length, 0,
+      "the parked wake cannot undo the verified stop");
+    assert.equal(w.alarmAt(), null);
+    const cs = w.coord.containmentState();
+    assert.equal(cs.stopStatus, "re_verified",
+      "the audit record still matches physical reality");
+  });
+  test("CT13d contain_drive lands mid-pass: the running pass completes under its gate-time state; the NEXT pass is contained", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const release = w.deferGetAlarm();
+    const passP = w.fireClassAlarm();
+    await flush();
+    assert.equal(w.deferArmed(), false,
+      "the pass is parked inside driveOnce -> requestGrant -> wake");
+    assert.equal(grants(w).length, 0,
+      "no grant yet: the pass is suspended before issuance");
+    const r = await w.coord.applyContainmentTransition(
+      "contain_drive", REF);
+    assert.equal(r.outcome, "applied");
+    release(w.alarmAt());
+    await passP;
+    assert.equal(grants(w).length, 1,
+      "the already-running pass was NOT interrupted: it issued its grant under the state it read at its gate");
+    assert.equal(driveRows(w).at(-1).stage, "complete");
+    await w.fireClassAlarm();
+    assert.equal(driveRows(w).at(-1).stage, "contained",
+      "the next pass observes the new state");
+    assert.equal(grants(w).length, 1);
+  });
+  test("CT13e stop_chain lands mid-pass: the pass completes, its post-grant arm is suppressed, and the stop record survives", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const release = w.deferGetAlarm();
+    const passP = w.fireClassAlarm();
+    await flush();
+    assert.equal(w.deferArmed(), false);
+    assert.equal(grants(w).length, 0);
+    const armedAtPark = w.alarmAt();
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "applied");
+    assert.equal(stop.stopVerified, true);
+    assert.equal(w.alarmAt(), null);
+    release(armedAtPark); // stale read for the parked wake in the pass
+    await passP;
+    assert.equal(grants(w).length, 1,
+      "the running pass completed and issued its grant (the stop is not retroactive)");
+    assert.equal(w.alarmAt(), null,
+      "the pass's own arm paths did not resurrect the registration");
+    const cs = w.coord.containmentState();
+    assert.equal(cs.state, "CHAIN_STOPPED");
+    assert.equal(cs.stopStatus, 

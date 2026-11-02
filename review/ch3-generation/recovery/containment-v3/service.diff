@@ -1,0 +1,66 @@
+--- a/v2/generation/service.mjs
++++ b/v2/generation/service.mjs
+@@ -108,7 +108,7 @@
+ ]);
+ const DP_READ_STAGES = new Set([
+   "base_alarm", "construct", "recover", "drive", "flush",
+-  "complete",
++  "complete", "contained",
+ ]);
+ const DP_READ_FAILURE_STEPS = new Set([
+   "ddl", "serialize", "insert", "prune",
+@@ -1805,6 +1805,46 @@
+         };
+       }
+     } catch { recorderHealth = null; }
++    // CONTAINMENT (Phase B containment design, revised
++    // semantics): the durable containment state rides the drive
++    // read so containment verification stays passive (no command,
++    // no wake). The stored value is projected, never returned
++    // raw: an unrecognized stored state reports state: null with
++    // known: false; the authorization reference is scrubbed like
++    // every other read-side string. A coordinator without the
++    // containment surface (a pre-containment build) reports null.
++    let containment = null;
++    try {
++      if (typeof coord.containmentState === "function") {
++        const cs = coord.containmentState();
++        containment = {
++          state: cs.known ? cs.state : null,
++          known: cs.known === true,
++          absent: cs.absent === true,
++          verified: cs.verified === true,
++          updatedAt: DP_READ_NUM(cs.updatedAt),
++          authorizationRef:
++            typeof cs.authorizationRef === "string"
++              ? dpReadScrub(cs.authorizationRef, 200) : null,
++          // CONTAINMENT v3: the physical-stop record rides the
++          // same projection (design v3 §2.3) — enum, last physical
++          // verification, and stop-verification status as three
++          // separate facts. A pre-v3 coordinator read (no stop
++          // fields) projects them as null/0.
++          stopStatus:
++            typeof cs.stopStatus === "string" ? cs.stopStatus : null,
++          stopVerifiedAt: DP_READ_NUM(cs.stopVerifiedAt),
++          stopVerifyAction:
++            typeof cs.stopVerifyAction === "string"
++              ? dpReadScrub(cs.stopVerifyAction, 64) : null,
++          stopArmedBefore: DP_READ_NUM(cs.stopArmedBefore),
++          stopArmedAfter: DP_READ_NUM(cs.stopArmedAfter),
++          stopVerifyAttempts:
++            typeof cs.stopVerifyAttempts === "number"
++              ? cs.stopVerifyAttempts : 0,
++        };
++      }
++    } catch { containment = null; }
+     return {
+       mode: "drive_passes",
+       found: passes.length > 0,
+@@ -1816,6 +1856,7 @@
+         pendingWatchdog: pendingWd ? pendingWd.n : null,
+       },
+       recorderHealth,
++      containment,
+       asOf: coord._now(),
+     };
+   }

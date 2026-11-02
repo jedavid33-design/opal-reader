@@ -1,0 +1,190 @@
+any
+appeared between gates, are classified, not ignored);
+(3) plan/job reads byte-compared to C1 close; (4) /health.
+
+**STOP behavior:** any contradiction among the reads, any
+unexplained delta from C1's close, or an unavailable read
+= STOP: C2 reports the verification as FAILED/INCONCLUSIVE
+with the specific contradiction; it attempts no repair, no
+retry beyond one repeated read of the same surface, and no
+other gate may open on a failed C2. (An inconclusive C2
+leaves containment "deployed, readability-unverified" —
+Gate R5a-D's precondition is a PASSED C2.)
+
+**Rollback limits:** none applicable and none available —
+C2 changes nothing, so there is nothing to roll back. If
+C2 fails, remediation is a new ruling, not a rollback.
+
+**Postflight evidence:** verification record: the four
+read transcripts with timestamps, the delta table vs C1
+close (all zero), and the verdict (READABILITY VERIFIED /
+FAILED / INCONCLUSIVE) with its basis. The verdict word is
+deliberately not "operational": see the classification
+limit above.
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute Gate C2 as pinned: passive reads only,
+> zero mutations of any kind, ending HELD, and report the
+> deployment/readability verification verdict. I understand
+> a passed C2 is not proof of operational containment
+> effectiveness."
+
+---
+
+## Gate R5a-D — Composed recovery deployment (containment + R5a; deploy only)
+
+**Scope:** deploy the COMPOSED V3 candidate (live + R5a +
+containment v3; coordinator `8ad74a93…`, entry
+`f746c632…`, service `bccda909…` vs the live build — i.e.,
+exactly one part, coordinator, changes vs the C1 tree) and
+verify. **No stimulus:** the deployment changes the
+semantics under which any LATER wake acts; this gate sends
+no wake. Ends HELD.
+
+**Preflight (hard):** Gates C1 and C2 both closed with
+C2's verdict READABILITY VERIFIED. CENSUS re-based to the
+C1 build (build stamp = C1 pin; containment reads show
+NORMAL/absent/verified). Battery re-run on the
+gate-assembled composed tree: parameterized P2 suite +
+R5a suite + containment battery, composed V3 fixture
+identities; own logs recorded. Julie's GO (§ below) naming
+this gate. **Carried limitation (verbatim in the GO):
+permanent production safety is not claimed until the retry
+issue is resolved** — the 3,600,000 ms threshold is a
+provisional candidate value only (correction ruling
+decision 3), and the absence of a traffic-independent rate
+bound remains an unresolved execution risk (decision 4).
+
+**Mutation budget:** forward upload **1**; observability
+PATCH ≤1 (same condition as C1); conditional rollback
+upload ≤1 + PATCH ≤1 (to the C1 containment tree's
+preserved parts). Commands/reports/SubmitJob/hold/queue:
+**0**. Alarm registrations caused by this gate: **0
+expected** (deploy is not a wake; any armedAt change vs
+census is a finding to classify before anything else
+proceeds). Recorder rows: 0 expected. Spend: $0.
+
+**Alarm-mutation accounting (reconciled with the shipped +
+R5a write paths):** the only `setAlarm` sites in the
+composed tree are coordinator `_armAlarm` (one per
+delivered pass, in its `finally`) and `_armAlarmIfEarlier`
+(≤1 per wake operation, ≤2 only with a strictly-earlier
+corrective second; the containment gate precedes it, and
+the v3 re-check follows its `getAlarm()` await). This gate
+performs no wake and delivers no pass, so its expected
+count at both sites is 0; the budget lines above are the
+complete accounting for the gate. The standing per-wake
+bounds govern Gate S1, where wakes occur.
+
+**Observability:** as C1, plus two `drive=1` observation
+reads (~+10 and ~+25 minutes, the P2 cadence) classified
+exactly as in the P2 gate: no rows + unchanged armedAt =
+inconclusive (not proof of non-delivery); rows present =
+classify each pass against the §7.3 pre-classified set;
+armedAt changed without rows = a finding requiring
+classification. This gate ends HELD regardless of
+classification; no classification authorizes a stimulus.
+
+**STOP behavior:** as C1 (census/battery/assembly before
+upload; rollback evaluation on the named post-upload
+triggers). Carries correction 6 as standing context: the
+deploy arms the semantics under which a later wake could
+revive the chain; containment (C1-deployed,
+C2-readability-verified) is the standing answer, and its
+state is a census item at this gate's open and close.
+
+**Rollback limits:** rollback restores the C1
+(containment-only V3) build. It cannot: un-fire an alarm
+or un-issue a grant (none occurs in this gate);
+retroactively change the semantics under which any wake
+between deploy and rollback acted (the observation reads
+bound that window and no wake is sent by the gate; a wake
+from outside traffic during the window would be a
+STOP-and-classify event); or substitute for containment.
+Post-gate rollback needs its own authorization.
+
+**Postflight evidence:** as C1, plus the two
+observation-read transcripts with classifications and the
+closing containment state read.
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute exactly one Gate R5a-D attempt as pinned:
+> census, battery re-run, one upload of the composed V3
+> candidate (+ at most one conditional observability PATCH,
+> and conditionally one rollback upload + at most one
+> conditional PATCH on the gate's named triggers), passive
+> observation reads, NO stimulus of any kind, ending HELD.
+> I understand permanent production safety is not claimed
+> until the retry issue is resolved, the 60-minute
+> threshold is a provisional candidate value, and no
+> traffic-independent alarm rate bound exists."
+
+---
+
+## Gate C3 — Operational containment verification (PARTIAL by construction)
+
+**Scope:** the first live exercise of the containment
+transition path, on the composed build, scoped to what can
+be verified **without provoking an alarm or a command**.
+C3 performs operator transitions only (state writes via
+the operator route + passive read-backs) and the physical
+stop act against the CURRENT stale registration. **C3
+sends no command, induces no wake, delivers no pass, and
+manufactures no traffic of any kind.**
+
+**The boundary, analyzed (ruling item A's hard
+constraint):** an operator containment transition is a
+state-row write plus a route call. It is not an alarm
+wake: it does not deliver a pass, does not evaluate the
+schedule, and does not register anything — `contain_drive`
+and `clear` touch no alarm API at all, and `stop_chain`'s
+only alarm-API acts are the subtractive `deleteAlarm()`
+and `getAlarm()` reads. Exercising the transitions
+therefore does not "provoke an alarm or command" in the
+prohibited sense. **But:** what `DRIVE_CONTAINED` *does* —
+suppressing a drive — can only be OBSERVED at the moment a
+pass would otherwise run. With no pass delivered, there is
+no drive to suppress, and C3 cannot manufacture one
+without becoming a stimulus gate. The same holds for the
+arm gates' suppression under live wake traffic, and for
+the §7 gate re-check under a real racing wake (offline,
+CT13 proves the mechanism at harness strength; live, the
+interleaving cannot be staged without traffic). **Those
+claims are NOT verified by C3 and are returned for
+Rowan's separate ruling (§Unverifiable remainder). C3's
+verdict is PARTIAL, and must be reported with that word.**
+
+What C3 CAN and does verify live, without any stimulus:
+
+1. transition mechanics end-to-end on the production
+   build: `contain_drive` applies, persists across reads,
+   and reads back identically on the state route and the
+   drive=1 projection;
+2. the DRIVE_CONTAINED → NORMAL return under design §5.2
+   (operator `clear` WITH a recorded reason), restoring
+   the gate's own opening state;
+3. **the full physical stop act against the existing
+   registration**: the stale `armedAt` (1793562576104,
+   2026-11-01T19:49:36.104Z) is already there to be read —
+   removing it is subtractive and observable end-to-end
+   (`stopArmedBefore` == the census value, `deleteAlarm`,
+   read-back null, `stopStatus: verified`, drive=1
+   `armedAt: null`) without provoking anything;
+4. stop-record durability: the three recorded facts
+   (design §2) read back consistently on both surfaces.
+
+**Recommendation on the stop act's placement (a Rowan
+ruling item):** the full `stop_chain` act + verification
+belongs in C3 (as scoped above), ending C3 in
+CHAIN_STOPPED/verified. The alternative — C3 stops after
+the mechanics pair and the stop act waits for S1's
+emergency budget — is recorded as considered and NOT
+chosen: it would leave the single most consequential
+physical act unverified until the moment it is needed as
+an emergency measure, and it would make S1 (a stimulus
+gate) the first live test of containment, which item E
+forbids in spirit and this package forbids in text. The
+cost of including it is real and stated: after C3, the
+registration is ABSENT (the chain is stopped, not merely
+contained) until a §5.3 restoration + a later ordinary
+wake re-register it under R5a semantics — which i

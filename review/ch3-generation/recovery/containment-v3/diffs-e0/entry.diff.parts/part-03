@@ -1,0 +1,182 @@
+e one of contain_drive | stop_chain |
++        // verify_chain_stop | clear; authorizationRef is a
++        // required nonblank string bounded at 2000 chars; reason
++        // is optional in the envelope and REQUIRED (nonblank,
++        // <= 2000 chars) for clear — the restoration discipline of
++        // design v3 §5, enforced again inside the coordinator.
++        // The coordinator then enforces the transition table
++        // itself (coordinator.mjs applyContainmentTransition):
++        // refused transitions write nothing; write failures throw
++        // to the class catch (HTTP 500) — never a silent success;
++        // a stop_chain whose physical act cannot be verified
++        // returns outcome "rejected" / containment_stop_unverified
++        // with the state left at CHAIN_STOPPED and the stop record
++        // at 'unverified'. NOT halt-fenced: containment is the
++        // stop that must remain reachable while generation is
++        // halted (and while it is not).
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const reject = (reason) => json(200, { outcome: "rejected", reason });
++        const body = await request.json().catch(() => null);
++        if (!body || typeof body !== "object" || Array.isArray(body))
++          return reject("containment_request_key_not_allowed");
++        const ALLOWED_KEYS = ["action", "authorizationRef", "reason"];
++        for (const key of Object.keys(body)) {
++          if (!ALLOWED_KEYS.includes(key))
++            return reject("containment_request_key_not_allowed");
++        }
++        if (!["contain_drive", "stop_chain", "verify_chain_stop",
++              "clear"].includes(body.action))
++          return reject("containment_action_not_allowed");
++        if (typeof body.authorizationRef !== "string" ||
++            body.authorizationRef.trim().length === 0 ||
++            body.authorizationRef.length > 2000)
++          return reject("authorization_ref_required");
++        if (body.reason !== undefined &&
++            (typeof body.reason !== "string" ||
++             body.reason.length > 2000))
++          return reject("containment_reason_invalid");
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const result = await coord.applyContainmentTransition(
++          body.action, body.authorizationRef.trim(),
++          { reason: typeof body.reason === "string"
++              ? body.reason.trim() : undefined });
++        await cache.flush();
++        return json(200, result);
++      }
+       if (url.pathname === "/internal/d6/seed-storage" && request.method === "POST") {
+         // CORRECTION 2 + G2 HARDENING: the storage seed. Beyond the
+         // class gate above (internal header + production scope),
+@@ -1452,18 +1820,172 @@
+     return json(200, result);
+   }
+ 
++  // The recorder's clock: the coordinator's own seam
++  // (GenerationCoordinator._now(), coordinator.mjs) — env.now()
++  // when a harness provides one, Date.now() in production, where
++  // the platform env carries no now function. Testable, with
++  // production semantics unchanged (Rowan's clock ruling).
++  _drivePassNow() {
++    return typeof this.env.now === "function"
++      ? this.env.now() : Date.now();
++  }
++
++  // One best-effort note on the recorder-health channel (DO
++  // key-value storage, DRIVE_PASS_HEALTH_KEY). Never throws: the
++  // channel is itself best-effort, and its failure is part of the
++  // residual blind spot the spec names (a pass whose SQL write AND
++  // health note both fail leaves no trace of its recording
++  // failure; the handler's absence is still distinguishable from a
++  // recorded failure whenever at least one channel works).
++  async _noteDrivePassHealth({ failure = null, recordedAt = null } = {}) {
++    try {
++      const rawPrev = await this.state.storage.get(DRIVE_PASS_HEALTH_KEY);
++      // Project the previously stored value onto the five known
++      // fields before carrying anything forward: a corrupt or
++      // foreign-written health object must not smuggle extra keys
++      // (or hostile values) into this write.
++      const prev = (rawPrev && typeof rawPrev === "object" &&
++                    !Array.isArray(rawPrev)) ? rawPrev : {};
++      const health = {
++        recordingFailures:
++          typeof prev.recordingFailures === "number" &&
++          prev.recordingFailures >= 0 ? prev.recordingFailures : 0,
++        lastFailureAt:
++          typeof prev.lastFailureAt === "number" ? prev.lastFailureAt : null,
++        lastFailureStep:
++          typeof prev.lastFailureStep === "string" ? prev.lastFailureStep : null,
++        lastFailureName:
++          sanitizeDrivePassName(prev.lastFailureName),
++        lastRecordedAt:
++          typeof prev.lastRecordedAt === "number" ? prev.lastRecordedAt : null };
++      if (failure) {
++        health.recordingFailures += 1;
++        health.lastFailureAt = this._drivePassNow();
++        health.lastFailureStep = failure.step;
++        health.lastFailureName =
++          sanitizeDrivePassName(failure.name);
++      }
++      if (recordedAt !== null) health.lastRecordedAt = recordedAt;
++      await this.state.storage.put(DRIVE_PASS_HEALTH_KEY, health);
++    } catch { /* best-effort by design; see the spec §5 */ }
++  }
++
++  // Record one alarm pass in d6_drive_passes. NEVER throws: any
++  // failure of the recording steps (DDL, serialization, insert,
++  // prune) is noted on the health channel and discarded here, so a
++  // recorder fault can never break the alarm chain, mask the
++  // original drive error, or alter any outcome — the shipped
++  // best-effort noting discipline (driveOnce's noteHaltObservation
++  // call, service.mjs). The getAlarm() readback is defined as
++  // nullable (armed_after), so its failure records NULL and is NOT
++  // counted as a recording failure. The recorder performs no
++  // setAlarm, no schedule read or write, and no wake: it observes
++  // the chain and does not participate in it.
++  async _recordDrivePass(rec) {
++    let step = "ddl";
++    try {
++      const sql = this.state.storage.sql;
++      sql.exec(DRIVE_PASS_SCHEMA);
++      step = "serialize";
++      const ser = serializeDrivePassOutcomes(rec.outcomes);
++      step = "getalarm";
++      let armedAfter = null;
++      try {
++        const armed = await this.state.storage.getAlarm();
++        armedAfter = typeof armed === "number" ? armed : null;
++      } catch { armedAfter = null; }
++      step = "insert";
++      sql.exec(
++        `INSERT INTO d6_drive_passes
++           (at, finished_at, stage, drive_invoked, outcomes_json,
++            outcomes_truncated, error_name, error_message, armed_after)
++         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
++        rec.at, this._drivePassNow(), rec.stage,
++        rec.driveInvoked ? 1 : 0, ser.json, ser.truncated,
++        sanitizeDrivePassName(rec.errorName),
++        scrubDrivePassText(rec.errorMessage, DRIVE_PASS_ERROR_CAP),
++        armedAfter);
++      step = "prune";
++      sql.exec(
++        `DELETE FROM d6_drive_passes
++          WHERE id NOT IN
++            (SELECT id FROM d6_drive_passes
++              ORDER BY id DESC LIMIT ?)`,
++        DRIVE_PASS_RETENTION);
++    } catch (e) {
++      await this._noteDrivePassHealth({ failure: {
++        step, name: e && e.name ? String(e.name) : "Error" } });
++      return;
++    }
++    await this._noteDrivePassHealth(
++      { recordedAt: this._drivePassNow() });
++  }
++
+   async alarm() {
+     // The coordinator's own alarm first (schedule, leases, parks),
+     // then the D6 driver's recovery + continuation. While halted,
+     // d6HostEnv wires no sendGrant, so driveOnce can settle plan
+     // state and re-derive grants but nothing can leave the outbox.
+-    await super.alarm();
+-    const cache = await this._cache();
+-    const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+-    const service = d6Service(coord, d6HostEnv(this.env, cache));
+-    await service.recover();
+-    await service.driveOnce();
+-    await cache.flush();
++    //
++    // PHASE B INSTRUMENTATION (P2): the pass is recorded by
++    // _recordDrivePass — the stage reached, the outcomes array
++    // driveOnce already computes (captured here, at its only
++    // caller, instead of being discarded), any throw, and the
++    // armed value read back. rec.stage names the step IN PROGRESS,
++    // so a throw records the step that threw; "complete" means the
++    // handler ran end to end. Recording is last on both paths; on
++    // a throw the ORIGINAL error is rethrown unchanged after
++    // recording (Rowan's record-then-rethrow requirement), so
++    // platform alarm-retry behavior is identical to the shipped
++    // build.
++    const rec = { at: this._drivePassNow(), stage: "base_alarm",
++      driveInvoked: 0, outcomes: null,
++      errorName: n

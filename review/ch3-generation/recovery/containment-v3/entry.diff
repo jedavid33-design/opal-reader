@@ -1,0 +1,214 @@
+--- a/v2/worker-entry-prod-d6.js
++++ b/v2/worker-entry-prod-d6.js
+@@ -257,7 +257,10 @@
+   OpalReaderCoordinatorProd as ProductionCoordinatorBase,
+   PRODUCTION_SCOPE, PRODUCTION_INSTANCE,
+ } from "./worker-entry-prod.js";
+-import { GenerationCoordinator } from "./coordinator.mjs";
++import {
++  GenerationCoordinator, readContainmentState,
++  containmentDriveSuppressed,
++} from "./coordinator.mjs";
+ import { BUILD_VERSION, BUILD_COMMIT } from "./host/build-identity.mjs";
+ import { handleAudioRequest, isAudioPath, AUDIO_EXPOSE_HEADERS } from "./audio-route.mjs";
+ import {
+@@ -1660,6 +1663,107 @@
+         await cache.flush();
+         return json(200, result);
+       }
++      if (url.pathname === "/internal/d6/containment" && request.method === "GET") {
++        // CONTAINMENT state read (Phase B containment design,
++        // revised semantics). Same operator fence as every
++        // operator surface above (operator-admitted stamp required
++        // at this class gate). Read-only and side-effect-free: the
++        // state read (coordinator.mjs readContainmentState — no
++        // DDL, no writes), one getAlarm() read-back, and the
++        // pending-schedule counts. This is the passive verification
++        // surface for a containment transition: state row +
++        // registration + schedule, without any command or wake.
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const state = coord.containmentState();
++        let armedAt = null;
++        try {
++          const armed = await this.state.storage.getAlarm();
++          armedAt = typeof armed === "number" ? armed : null;
++        } catch { armedAt = null; }
++        const pending = coord._oneOrNull(
++          `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
++        const pendingWd = coord._oneOrNull(
++          `SELECT COUNT(*) AS n FROM schedule
++            WHERE state = 'pending' AND kind = 'watchdog'`);
++        await cache.flush();
++        return json(200, {
++          state: state.known ? state.state : null,
++          known: state.known, absent: state.absent,
++          verified: state.verified,
++          updatedAt: state.updatedAt,
++          authorizationRef: state.authorizationRef,
++          // CONTAINMENT v3: the durable physical-stop record,
++          // projected beside the enum — three facts kept separate
++          // (design v3 §2.3). stopStatus null (or "unverified")
++          // under CHAIN_STOPPED means the physical stop is NOT
++          // verified; never infer it from the enum.
++          stopStatus: state.stopStatus,
++          stopVerifiedAt: state.stopVerifiedAt,
++          stopVerifyAction: state.stopVerifyAction,
++          stopArmedBefore: state.stopArmedBefore,
++          stopArmedAfter: state.stopArmedAfter,
++          stopVerifyAttempts: state.stopVerifyAttempts,
++          alarm: { armedAt,
++            pendingSchedule: pending ? pending.n : null,
++            pendingWatchdog: pendingWd ? pendingWd.n : null },
++        });
++      }
++      if (url.pathname === "/internal/d6/containment" && request.method === "POST") {
++        // CONTAINMENT transitions (Phase B containment design v3):
++        // the ONLY writer of the containment state. Same operator
++        // fence as every operator surface above. The request
++        // contract is a CLOSED ALLOWLIST enforced HERE: permitted
++        // keys are exactly { action, authorizationRef, reason };
++        // action must be one of contain_drive | stop_chain |
++        // verify_chain_stop | clear; authorizationRef is a
++        // required nonblank string bounded at 2000 chars; reason
++        // is optional in the envelope and REQUIRED (nonblank,
++        // <= 2000 chars) for clear — the restoration discipline of
++        // design v3 §5, enforced again inside the coordinator.
++        // The coordinator then enforces the transition table
++        // itself (coordinator.mjs applyContainmentTransition):
++        // refused transitions write nothing; write failures throw
++        // to the class catch (HTTP 500) — never a silent success;
++        // a stop_chain whose physical act cannot be verified
++        // returns outcome "rejected" / containment_stop_unverified
++        // with the state left at CHAIN_STOPPED and the stop record
++        // at 'unverified'. NOT halt-fenced: containment is the
++        // stop that must remain reachable while generation is
++        // halted (and while it is not).
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const reject = (reason) => json(200, { outcome: "rejected", reason });
++        const body = await request.json().catch(() => null);
++        if (!body || typeof body !== "object" || Array.isArray(body))
++          return reject("containment_request_key_not_allowed");
++        const ALLOWED_KEYS = ["action", "authorizationRef", "reason"];
++        for (const key of Object.keys(body)) {
++          if (!ALLOWED_KEYS.includes(key))
++            return reject("containment_request_key_not_allowed");
++        }
++        if (!["contain_drive", "stop_chain", "verify_chain_stop",
++              "clear"].includes(body.action))
++          return reject("containment_action_not_allowed");
++        if (typeof body.authorizationRef !== "string" ||
++            body.authorizationRef.trim().length === 0 ||
++            body.authorizationRef.length > 2000)
++          return reject("authorization_ref_required");
++        if (body.reason !== undefined &&
++            (typeof body.reason !== "string" ||
++             body.reason.length > 2000))
++          return reject("containment_reason_invalid");
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const result = await coord.applyContainmentTransition(
++          body.action, body.authorizationRef.trim(),
++          { reason: typeof body.reason === "string"
++              ? body.reason.trim() : undefined });
++        await cache.flush();
++        return json(200, result);
++      }
+       if (url.pathname === "/internal/d6/seed-storage" && request.method === "POST") {
+         // CORRECTION 2 + G2 HARDENING: the storage seed. Beyond the
+         // class gate above (internal header + production scope),
+@@ -1839,6 +1943,30 @@
+       errorName: null, errorMessage: null };
+     try {
+       await super.alarm();
++      // CONTAINMENT (Phase B containment design, revised state
++      // semantics): after the base alarm's schedule processing —
++      // which continues in EVERY state, so leases still close
++      // in-flight grants — and before recover()/driveOnce(), the
++      // durable containment state gates the DRIVE. In
++      // DRIVE_CONTAINED or CHAIN_STOPPED, and on ANY unverified
++      // state read (fail-closed for drive), the pass is recorded
++      // at stage "contained" with driveInvoked 0 and the handler
++      // returns normally: no new grants, no plan advancement, no
++      // throw (hence no platform retry storm). A pass already
++      // inside driveOnce when a transition lands is NOT
++      // interrupted — it completes; the next pass is contained.
++      const containmentRead =
++        readContainmentState(this.state.storage.sql);
++      if (containmentDriveSuppressed(containmentRead)) {
++        rec.stage = "contained";
++        if (!containmentRead.verified && containmentRead.errorName) {
++          rec.errorName = containmentRead.errorName;
++          rec.errorMessage =
++            "containment state read failed; drive suppressed (fail-closed)";
++        }
++        await this._recordDrivePass(rec);
++        return;
++      }
+       rec.stage = "construct";
+       const cache = await this._cache();
+       const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+@@ -1986,6 +2114,20 @@
+     url.pathname === "/v2/d6-grant-finalization-preview";
+   const isGrantFinalizeRoute = request.method === "POST" &&
+     url.pathname === "/v2/d6-finalize-grant";
++  // CONTAINMENT (Phase B containment design, revised semantics):
++  // the transition write (POST /v2/d6-containment) and the state
++  // read (GET /v2/d6-containment) join the same operator fence
++  // class — the production gate skips the client token for them,
++  // the operator admission block below requires the
++  // migration-operator credential in addition, and the class gate
++  // requires the stamped admission again. The everyday client
++  // token alone is refused on both. The GET is a passive read
++  // (state + getAlarm + schedule counts): it is the verification
++  // surface for containment and performs no wake and no write.
++  const isContainmentRoute = request.method === "POST" &&
++    url.pathname === "/v2/d6-containment";
++  const isContainmentStateRoute = request.method === "GET" &&
++    url.pathname === "/v2/d6-containment";
+   const denied = productionGate(request, env, cors,
+     { skipClientToken: isOperatorRoute || isDiagnosticsRoute
+         || isPhaseBindingRoute || isRetirePlanRoute
+@@ -1994,7 +2136,8 @@
+         || isQuotaDisposeRoute || isQuotaReconcileRoute
+         || isParkReleaseRoute || isParkReleaseRevokeRoute
+         || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+-        || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute });
++        || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
++        || isContainmentRoute || isContainmentStateRoute });
+   if (denied) return denied;
+   const instance = request.headers.get("x-opalreader-instance");
+   if (instance !== PRODUCTION_INSTANCE)
+@@ -2040,7 +2183,8 @@
+       || isQuotaDisposeRoute || isQuotaReconcileRoute
+       || isParkReleaseRoute || isParkReleaseRevokeRoute
+       || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+-      || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute) {
++      || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
++      || isContainmentRoute || isContainmentStateRoute) {
+     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+     if (!operatorToken || !env.OPALREADER_ACCESS_TOKEN ||
+         operatorToken === env.OPALREADER_ACCESS_TOKEN)
+@@ -2329,6 +2473,19 @@
+       body: JSON.stringify(finalizeBody ?? {}),
+     }));
+   }
++  if (isContainmentRoute) {
++    let containmentBody = null;
++    try { containmentBody = await request.json(); } catch { containmentBody = null; }
++    return forward(new Request("https://do.internal/internal/d6/containment", {
++      method: "POST",
++      headers: { "content-type": "application/json" },
++      body: JSON.stringify(containmentBody ?? {}),
++    }));
++  }
++  if (isContainmentStateRoute) {
++    return forward(new Request("https://do.internal/internal/d6/containment",
++      { method: "GET" }));
++  }
+   return forward(new Request(url.toString(), request));
+ }
+ 

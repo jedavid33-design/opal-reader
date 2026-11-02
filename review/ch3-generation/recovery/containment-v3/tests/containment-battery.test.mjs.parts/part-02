@@ -1,0 +1,195 @@
+assert.equal(g[0].state, "voided",
+      "lease-driven closure proceeds while contained");
+    const occ = w.db.prepare(
+      `SELECT * FROM occurrences WHERE job_id = ?`).get(seed.jobId);
+    assert.equal(occ.state, "pending",
+      "the voided occurrence returns to pending (re-advance)");
+    assert.ok(w.alarmAt() !== null && w.alarmAt() > w.clock.now - 16 * MIN,
+      "the base finally re-armed: the chain stays alive");
+    const st = await entryGet(w, "/v2/d6-containment",
+      { operator: true });
+    assert.equal(st.body.state, "DRIVE_CONTAINED");
+    assert.ok(st.body.alarm.armedAt !== null);
+    const ps = w.service.planStatus(seed.planId);
+    assert.equal(ps.state, "active");
+    assert.deepEqual(ps.totals, { eligible: 1, done: 0, failed: 0,
+      blocked: 0, prompts: 0 });
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT3 — Layer 2 (CHAIN_STOPPED): registration removed and cannot resurrect", () => {
+  test("verified stop: deleteAlarm read back null; schedule rows untouched; commands and wakes register nothing; a delivered pass is contained and does not re-arm", async () => {
+    const w = await makeWorld(CAND);
+    const seed = await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    const schedBefore = schedSnapshot(w);
+    const r1 = await entryPost(w, "/v2/d6-containment",
+      { action: "contain_drive", authorizationRef: REF },
+      { operator: true });
+    assert.equal(r1.body.outcome, "applied");
+    const schedMid = schedSnapshot(w);
+    assert.equal(schedMid, schedBefore,
+      "contain_drive touches no schedule rows");
+    const r2 = await entryPost(w, "/v2/d6-containment",
+      { action: "stop_chain", authorizationRef: REF },
+      { operator: true });
+    assert.equal(r2.status, 200);
+    assert.equal(r2.body.outcome, "applied");
+    assert.equal(r2.body.state, "CHAIN_STOPPED");
+    assert.equal(r2.body.stopVerified, true);
+    // v3: the persistent stop record corroborates the response —
+    // three separate facts: enum, physical verification, status.
+    assert.equal(r2.body.stateRead.stopStatus, "verified");
+    assert.equal(r2.body.stateRead.stopVerifyAction, "stop_chain");
+    assert.equal(r2.body.stateRead.stopArmedAfter, null);
+    assert.equal(r2.body.stateRead.stopVerifyAttempts, 1);
+    assert.ok(r2.body.stateRead.stopVerifiedAt !== null);
+    assert.equal(w.alarmDeletes.length, 1);
+    assert.equal(w.alarmAt(), null);
+    assert.equal(schedSnapshot(w), schedBefore,
+      "stop_chain preserves pending schedule rows as evidence");
+    // A command arriving after the stop: recorded, rejected on its
+    // own merits, and — the point — registers NOTHING.
+    const callsBefore = w.alarmCalls.length;
+    const res = await w.coord.handleCommand({
+      command_id: "ct3-cmd", type: "RequestPause",
+      payload: { jobId: "alarm-wake-probe:nonexistent" } });
+    assert.equal(res.outcome, "rejected");
+    assert.equal(res.reason, "job_not_found");
+    assert.equal(w.alarmCalls.length, callsBefore,
+      "no setAlarm after a verified stop");
+    assert.equal(w.alarmAt(), null);
+    await w.coord.wake();
+    assert.equal(w.alarmCalls.length, callsBefore);
+    assert.equal(w.alarmAt(), null);
+    // A pass delivered anyway (in-flight / platform retry): base
+    // processing runs once, drive is contained, and the finally
+    // does NOT re-arm.
+    await w.fireClassAlarm();
+    const rows = driveRows(w);
+    assert.equal(rows[rows.length - 1].stage, "contained");
+    assert.equal(w.alarmAt(), null);
+    const diag = await entryGet(w, "/v2/d6-diagnostics?drive=1",
+      { operator: true });
+    assert.equal(diag.body.containment.state, "CHAIN_STOPPED");
+    assert.equal(diag.body.alarm.armedAt, null);
+    const cmds = w.db.prepare(`SELECT * FROM commands`).all();
+    assert.equal(cmds.filter((c) => c.command_id === "ct3-cmd").length, 1);
+    assert.equal(seed.planId.length > 0, true);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT4 — state READ failures default darker at every consuming path", () => {
+  const readFault = (w) => {
+    const error = new Error("battery containment read fault");
+    error.name = "BatteryContainmentReadError";
+    w.faults.sql = {
+      match: (q) => /FROM d6_containment_state/i.test(q), error };
+    return error;
+  };
+  test("CT4a DRIVE_CONTAINED + read fault: drive stays suppressed (contained row carries the error); arming also suppresses", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const r = await w.coord.applyContainmentTransition(
+      "contain_drive", REF);
+    assert.equal(r.outcome, "applied");
+    readFault(w);
+    w.clearAlarmCalls();
+    await w.fireClassAlarm();
+    const rows = driveRows(w);
+    const last = rows[rows.length - 1];
+    assert.equal(last.stage, "contained");
+    assert.equal(last.drive_invoked, 0);
+    assert.equal(last.error_name, "BatteryContainmentReadError");
+    assert.equal(grants(w).length, 0);
+    await w.coord.wake();
+    assert.equal(w.alarmCalls.length, 0,
+      "an unverified read suppresses arming too (darker default)");
+  });
+  test("CT4b CHAIN_STOPPED + read fault: the verified stop is NOT defeated — wakes register nothing", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    const r = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(r.outcome, "applied");
+    assert.equal(r.stopVerified, true);
+    assert.equal(w.alarmAt(), null);
+    readFault(w);
+    w.clearAlarmCalls();
+    await w.coord.wake();
+    assert.equal(w.alarmCalls.length, 0);
+    assert.equal(w.alarmAt(), null);
+    const res = await w.coord.handleCommand({
+      command_id: "ct4b-cmd", type: "RequestPause",
+      payload: { jobId: "alarm-wake-probe:nonexistent" } });
+    assert.equal(res.outcome, "rejected");
+    assert.equal(w.alarmCalls.length, 0,
+      "with the state unreadable, no path re-registers");
+    assert.equal(w.alarmAt(), null);
+  });
+  test("CT4c NORMAL (table absent) + non-table read error: fail-closed — the pass is contained, nothing issues", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    readFault(w);
+    await w.fireClassAlarm();
+    const rows = driveRows(w);
+    assert.equal(rows[rows.length - 1].stage, "contained");
+    assert.equal(grants(w).length, 0);
+    assert.equal(tableExists(w, "d6_containment_state"), false,
+      "the read path created nothing even under fault");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT5 — state WRITE failures during transitions: no silent success", () => {
+  test("state-row INSERT fault: the route surfaces HTTP 500 and the state is unchanged (still absent/NORMAL)", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const error = new Error("battery containment write fault");
+    w.faults.sql = {
+      match: (q) => /INSERT INTO d6_containment_state/i.test(q),
+      error };
+    const r = await entryPost(w, "/v2/d6-containment",
+      { action: "contain_drive", authorizationRef: REF },
+      { operator: true });
+    assert.equal(r.status, 500,
+      "a failed write is a visible failure, never an applied outcome");
+    w.faults.sql = null;
+    const cs = w.coord.containmentState();
+    assert.equal(cs.state, "NORMAL");
+    assert.equal(cs.absent, true,
+      "the transaction rolled back: no state row stands");
+    const events = tableExists(w, "d6_containment_events")
+      ? w.db.prepare(`SELECT * FROM d6_containment_events`).all() : [];
+    assert.equal(events.filter((e) => e.outcome === "applied").length, 0,
+      "no applied event was recorded for the failed transition");
+    // And behavior is untouched: a pass drives normally.
+    await w.fireClassAlarm();
+    assert.equal(grants(w).length, 1);
+  });
+  test("DDL fault at transition time: HTTP 500, nothing recorded", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const error = new Error("battery containment ddl fault");
+    w.faults.sql = {
+      match: (q) => /CREATE TABLE IF NOT EXISTS d6_containment_state/i.test(q),
+      error };
+    const r = await entryPost(w, "/v2/d6-containment",
+      { action: "contain_drive", authorizationRef: REF },
+      { operator: true });
+    assert.equal(r.status, 500);
+    w.faults.sql = null;
+    assert.equal(w.coord.containmentState().absent, true);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT6 — stop whose deleteAlarm FAILS: reported unverified, never silent, gates hold", () => {
+  test("outcome rejected/containment_stop_unverified; state stands CHAIN_STOPPED; later wakes register nothing despite the surviving registration", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    const armedBefore = w.alarmA

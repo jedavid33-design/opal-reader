@@ -1,0 +1,95 @@
+--- a/v2/worker-entry-prod-d6.js
++++ b/v2/worker-entry-prod-d6.js
+@@ -1695,50 +1695,72 @@
+           verified: state.verified,
+           updatedAt: state.updatedAt,
+           authorizationRef: state.authorizationRef,
++          // CONTAINMENT v3: the durable physical-stop record,
++          // projected beside the enum — three facts kept separate
++          // (design v3 §2.3). stopStatus null (or "unverified")
++          // under CHAIN_STOPPED means the physical stop is NOT
++          // verified; never infer it from the enum.
++          stopStatus: state.stopStatus,
++          stopVerifiedAt: state.stopVerifiedAt,
++          stopVerifyAction: state.stopVerifyAction,
++          stopArmedBefore: state.stopArmedBefore,
++          stopArmedAfter: state.stopArmedAfter,
++          stopVerifyAttempts: state.stopVerifyAttempts,
+           alarm: { armedAt,
+             pendingSchedule: pending ? pending.n : null,
+             pendingWatchdog: pendingWd ? pendingWd.n : null },
+         });
+       }
+       if (url.pathname === "/internal/d6/containment" && request.method === "POST") {
+-        // CONTAINMENT transitions (Phase B containment design,
+-        // revised semantics): the ONLY writer of the containment
+-        // state. Same operator fence as every operator surface
+-        // above. The request contract is a CLOSED ALLOWLIST
+-        // enforced HERE: permitted keys are exactly { action,
+-        // authorizationRef }; action must be one of
+-        // contain_drive | stop_chain | clear; authorizationRef is
+-        // a required nonblank string bounded at 2000 chars. The
+-        // coordinator then enforces the transition table itself
+-        // (coordinator.mjs applyContainmentTransition): refused
+-        // transitions write nothing; write failures throw to the
+-        // class catch (HTTP 500) — never a silent success; a
+-        // stop_chain whose deleteAlarm cannot be verified returns
+-        // outcome "rejected" / containment_stop_unverified with
+-        // the state left at CHAIN_STOPPED. NOT halt-fenced:
+-        // containment is the stop that must remain reachable
+-        // while generation is halted (and while it is not).
++        // CONTAINMENT transitions (Phase B containment design v3):
++        // the ONLY writer of the containment state. Same operator
++        // fence as every operator surface above. The request
++        // contract is a CLOSED ALLOWLIST enforced HERE: permitted
++        // keys are exactly { action, authorizationRef, reason };
++        // action must be one of contain_drive | stop_chain |
++        // verify_chain_stop | clear; authorizationRef is a
++        // required nonblank string bounded at 2000 chars; reason
++        // is optional in the envelope and REQUIRED (nonblank,
++        // <= 2000 chars) for clear — the restoration discipline of
++        // design v3 §5, enforced again inside the coordinator.
++        // The coordinator then enforces the transition table
++        // itself (coordinator.mjs applyContainmentTransition):
++        // refused transitions write nothing; write failures throw
++        // to the class catch (HTTP 500) — never a silent success;
++        // a stop_chain whose physical act cannot be verified
++        // returns outcome "rejected" / containment_stop_unverified
++        // with the state left at CHAIN_STOPPED and the stop record
++        // at 'unverified'. NOT halt-fenced: containment is the
++        // stop that must remain reachable while generation is
++        // halted (and while it is not).
+         if (request.headers.get("x-opalreader-operator-admitted") !== "1")
+           return json(403, { error: "migration_operator_required" });
+         const reject = (reason) => json(200, { outcome: "rejected", reason });
+         const body = await request.json().catch(() => null);
+         if (!body || typeof body !== "object" || Array.isArray(body))
+           return reject("containment_request_key_not_allowed");
+-        const ALLOWED_KEYS = ["action", "authorizationRef"];
++        const ALLOWED_KEYS = ["action", "authorizationRef", "reason"];
+         for (const key of Object.keys(body)) {
+           if (!ALLOWED_KEYS.includes(key))
+             return reject("containment_request_key_not_allowed");
+         }
+-        if (!["contain_drive", "stop_chain", "clear"].includes(body.action))
++        if (!["contain_drive", "stop_chain", "verify_chain_stop",
++              "clear"].includes(body.action))
+           return reject("containment_action_not_allowed");
+         if (typeof body.authorizationRef !== "string" ||
+             body.authorizationRef.trim().length === 0 ||
+             body.authorizationRef.length > 2000)
+           return reject("authorization_ref_required");
++        if (body.reason !== undefined &&
++            (typeof body.reason !== "string" ||
++             body.reason.length > 2000))
++          return reject("containment_reason_invalid");
+         const cache = await this._cache();
+         const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+         const result = await coord.applyContainmentTransition(
+-          body.action, body.authorizationRef.trim());
++          body.action, body.authorizationRef.trim(),
++          { reason: typeof body.reason === "string"
++              ? body.reason.trim() : undefined });
+         await cache.flush();
+         return json(200, result);
+       }

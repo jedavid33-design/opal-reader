@@ -1,0 +1,186 @@
+s
+precisely the state the S1 sequence wants to start from,
+reached deliberately instead of by accident.
+
+**Preflight (hard):** Gates C1, C2 (READABILITY
+VERIFIED), R5a-D all closed. CENSUS re-based to the
+composed build, PLUS: containment reads show state
+NORMAL / absent / verified with the stop record empty;
+the `drive=1` baseline records `armedAt` and it EQUALS
+**1793562576104** (any other value = STOP: the registration
+state has moved since the package was written, and the
+stop act's expectations must be re-derived, not improvised);
+recorder baseline (tableState + health + row count)
+recorded. Battery re-run is NOT repeated here (no code
+changes in this gate; C1/R5a-D records stand).
+
+**The sequence (exactly this):**
+1. `POST /v2/d6-containment {action: "contain_drive",
+   authorizationRef: <gate record ref>}` → expect
+   `applied`, state DRIVE_CONTAINED. Read back on BOTH
+   surfaces (state route + drive=1 projection agree).
+2. `POST … {action: "clear", authorizationRef, reason:
+   "Gate C3 mechanics leg: restore opening state"}` →
+   expect `applied`, state NORMAL. Read back on both
+   surfaces. (This clear is the design §5.2 path; it is
+   inside C3's GO because it reverses C3's own first step
+   and nothing else. It is NOT a precedent for clearing
+   CHAIN_STOPPED — see Restoration rules.)
+3. `POST … {action: "stop_chain", authorizationRef}` →
+   expect `applied` with `stopVerified: true` and the
+   state read showing `stopStatus: "verified"`,
+   `stopArmedBefore: 1793562576104`,
+   `stopArmedAfter: null`, `stopVerifyAttempts: 1`. Read
+   back on both surfaces; drive=1 `armedAt` must now be
+   **null**, pendingSchedule/pendingWatchdog UNCHANGED
+   (the stop preserves schedule rows — design §5.3).
+4. Closing CENSUS repeat (expected deltas, and only
+   these: containment state CHAIN_STOPPED with the stop
+   record above; audit events per the budget; armedAt
+   1793562576104 → null; everything else identical).
+
+**Mutation budget (complete):** state-row writes **≤3**
+(contain, clear, stop — one per step; a rejected or
+idempotency-short-circuited step consumes its write only
+as the design specifies and is a STOP-and-classify event,
+not a retry opportunity). Audit events **≤5** (contain 1,
+clear 1, stop_chain 1, plus on a stop-verification failure
+only: stop_chain_verify 1 and `verify_chain_stop` events
+≤2 within the attempts bound). `deleteAlarm` calls **≤3**
+(the stop's 1, plus ≤1 per `verify_chain_stop` attempt,
+only if a registration is observed). `setAlarm` calls:
+**0** (any registration appearing during C3 is a
+STOP-and-classify event — nothing in C3 arms). Commands /
+reports / SubmitJob / uploads / PATCHes / hold flips /
+queue changes: **0**. Recorder rows: 0 expected (no pass
+is provoked; spontaneous rows are classified, and any row
+at stage `contained` during steps 1–2 would in fact be
+classified as evidence FOR suppression — but C3 does not
+count on one and its verdict does not improve if one
+appears: opportunistic evidence is reported as such, not
+budgeted). Spend: $0.
+
+**STOP behavior:** any census deviation (incl. the
+armedAt expectation); any transition outcome other than
+the expected one at any step; surfaces disagreeing; the
+stop unverified after the bounded verify attempts (the
+state then REMAINS CHAIN_STOPPED/unverified — no clear,
+no restoration attempt, no further act under this gate;
+the package returns for ruling with the CT6 posture live);
+any `setAlarm`, recorder row, or plan/figure/conflict
+delta not caused by C3's own budgeted acts. Per
+correction 6, STOP here has its ordinary meaning: it
+prevents further OPERATOR acts; nothing in C3 can revive
+a chain, so there is no revived-chain edge in this gate.
+
+**Restoration rules (decision 2 + design §5):** C3 ends
+CHAIN_STOPPED **by design**. The step-2 clear is the only
+clear this gate contains, and it applies only to the
+DRIVE_CONTAINED mechanics leg. **Returning from
+CHAIN_STOPPED to NORMAL is NOT in C3's scope, budget, or
+GO.** It requires the standalone restoration authorization
+named below (its own approval, a fresh census at its
+execution, and a demonstrated reason recorded in the
+clear's audit event), executed as a separate step after
+C3's record is written and reviewed. No part of C3's GO
+may be read as covering it.
+
+**Rollback limits:** the mechanics leg is reversed by its
+own step 2. The stop act has NO rollback inside this gate:
+a deleted registration cannot be un-deleted by an
+operator act — re-registration happens only through the
+ordinary wake paths under NORMAL, i.e., only after the
+standalone restoration. That irreversibility-without-
+restoration is accepted as the gate's design (it is the
+point of a stop), and it is why the stop's preconditions
+(the armedAt expectation) are census-hard.
+
+**Postflight evidence:** execution record: preflight
+census (incl. armedAt expectation), each step's request/
+response + both-surface read-backs, the stop record as
+read on both surfaces, audit event listing, closing
+census with the delta table, the PARTIAL verdict with
+its basis, ends-HELD certification (halt "1", queue
+paused, preserved plan and exemption untouched).
+
+**Unverifiable remainder (returned for Rowan's separate
+ruling; NOT claimed by C3):** drive suppression during a
+live chain (observable only when a pass would otherwise
+run); arm-gate suppression under genuine concurrent wake
+traffic; the §7 re-check against a real racing wake; any
+property of a REVIVED chain's behavior under containment.
+S1 may not be proposed for execution until Rowan rules on
+how (or whether) this remainder is to be discharged.
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute exactly one Gate C3 attempt as pinned:
+> preflight census including the armedAt expectation, the
+> contain_drive + reasoned clear mechanics pair, and
+> exactly one stop_chain act against the current
+> registration (with verify_chain_stop retries only within
+> the design's attempts bound if the stop is unverified),
+> passive read-backs only, NO command, NO wake provocation,
+> NO stimulus of any kind, ending HELD in CHAIN_STOPPED.
+> I understand C3's verification is PARTIAL, that the
+> return to NORMAL needs its own separate authorization,
+> and that the deleted registration cannot be restored by
+> this gate."
+
+---
+
+## Standalone restoration authorization (NOT a gate; decision 2)
+
+Between C3 and S1, exactly once in this sequence, the
+return CHAIN_STOPPED → NORMAL is authorized **on its
+own**: a named approval by Julie (after Rowan's review of
+C3's record), a fresh CENSUS executed at its start, and a
+demonstrated reason — what changed / why containment is
+no longer needed — recorded in the `clear` audit event
+(design §5.3, all three preconditions, including the
+stop-record precondition: C3 ended `verified`, so the
+physical stop is proven). The act is exactly one
+`POST /v2/d6-containment {action: "clear",
+authorizationRef: <restoration record ref>, reason:
+<demonstrated reason>}` plus read-backs. **The clear does
+not re-arm**: the registration stays absent; the first
+subsequent wake (which, in this sequence, is S1's stimulus
+command) re-arms per the ordinary composed-build rules.
+Mutation budget: 1 state-row write + 1 audit event; all
+else 0. If the census deviates, the restoration does not
+proceed and the system remains CHAIN_STOPPED.
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute the standalone restoration as pinned:
+> fresh census, then exactly one clear of CHAIN_STOPPED
+> with the recorded reason, read-backs only, ending HELD
+> in NORMAL with the registration still absent."
+
+---
+
+## Gate S1 — Revival stimulus (the R2 stimulus, in sequence)
+
+**Identity (preserved):** this gate IS the R2 stimulus
+gate, sequenced after C1/C2/R5a-D/C3 + the standalone
+restoration. Its diagnostic identity is preserved: the
+stimulus is exactly one `RequestPause` command with a
+fresh `command_id` targeting the reserved nonexistent job
+`alarm-wake-probe:nonexistent` — a wake probe of whether
+the platform reacts, observed through the recorder. A
+negative result is reported ONLY as "**no observed revival
+within the tested window, subject to recorder
+limitations**" and never as proof that B2 is impossible.
+On the composed build, unlike on the shipped build, the
+same command is additionally the natural revival stimulus
+under R5a semantics (at S1 time the registration is absent
+after the restoration; the command's own wake evaluation
+is what re-registers, per the composed build's rules);
+revival, if it occurs, is classified against the §7.3
+pre-classified set. Do not rename or re-scope the probe in
+execution reporting.
+
+**Hard dependency (item E): S1 is NOT the first test of
+containment.** S1 may not be proposed for execution until
+ALL of: Gate C3 complete with its PARTIAL verdict
+recorded; Rowan has reviewed C3's record AND ruled on
+C3's unverifiable remainder; the standalone restoration
+authorization has been executed and read back (stat

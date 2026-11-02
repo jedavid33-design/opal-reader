@@ -1,0 +1,192 @@
+// CONTAINMENT battery (Rowan R5a-revised-package ruling, required
+// work B). Runs against a containment candidate tree (env
+// CONTAINMENT_CAND_DIR; default ../candidate-tree) with the live
+// instrumented tree (env CONTAINMENT_BASE_DIR; default
+// ../baseline-tree) as the identity baseline. The SAME battery runs
+// against the composed tree (R5a + containment) via the env vars.
+// Identity assertions are FIXTURE-DRIVEN (env CONTAINMENT_IDENTITY
+// -> a JSON file naming the changed parts and their SHA-256s), so
+// no candidate identity is hardcoded here.
+// Local scratch only: no network, no production calls.
+// Run: node --test containment-battery.test.mjs
+//
+// Harness caveat (standing): the harness invokes alarm() directly;
+// it cannot prove real platform delivery, real platform retry
+// behavior, or real-DO SQLite behavior beyond its mirrored .one()
+// throw semantics. "Retries" below are simulated by re-invoking
+// the handler, which is all any offline test can do.
+//
+// V3 BATTERY (containment-v3 package; Rowan's containment-
+// correction ruling, items B/C/D/F). Env vars renamed to
+// CONTAINMENT_V3_* so a v3 run can never silently pick up a v2
+// tree. Adaptations from the v2 battery — all disclosed, none a
+// deletion or loosening; each is a contract STRENGTHENING forced
+// by a v3 contract change or an assertion extended over a larger
+// read surface:
+//   * CT1: the drive=1 containment projection carries the six
+//     v3 stop-record fields (design v3 §2.3); the deep-equal
+//     expectation is extended with their empty values.
+//   * CT9/CT10: clear transitions now REQUIRE a recorded reason
+//     (design v3 §5.1); clear calls pass one. CT12 refuses
+//     reason-less clears at method and route.
+//   * CT0: marker set extended with the v3 vocabulary.
+//   * CT3/CT6: stop-record assertions added alongside the
+//     existing ones.
+// New groups: CT11 (verify_chain_stop — ruling item B), CT12
+// (restoration discipline — item D), CT13 (async races — item C;
+// CT13a/CT13b FAIL against the v2 candidate tree, demonstrating
+// the _armAlarmIfEarlier re-arm race defect the v3 gate re-check
+// fixes — see PHASEB-CONTAINMENT-ASYNC-ANALYSIS.md).
+
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  makeWorld, seedAttempt3Shape, snapshotDb, entryGet, entryPost,
+  OPERATOR_TOKEN, T0,
+} from "./harness.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, "..");
+const CAND = process.env.CONTAINMENT_V3_CAND_DIR || join(ROOT, "candidate-tree");
+const BASE = process.env.CONTAINMENT_V3_BASE_DIR || join(ROOT, "baseline-tree");
+const IDENTITY = JSON.parse(readFileSync(
+  process.env.CONTAINMENT_V3_IDENTITY ||
+  join(ROOT, "fixtures", "identity-candidate.json"), "utf8"));
+const shaFile = (p) =>
+  createHash("sha256").update(readFileSync(p)).digest("hex");
+const MIN = 60 * 1000;
+
+function listFiles(dir, prefix = "") {
+  const out = [];
+  for (const name of readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${name.name}` : name.name;
+    if (name.isDirectory()) out.push(...listFiles(join(dir, name.name), rel));
+    else out.push(rel);
+  }
+  return out.sort();
+}
+const tableExists = (w, name) => !!w.db.prepare(
+  `SELECT name FROM sqlite_master WHERE type='table' AND name=?`)
+  .get(name);
+const driveRows = (w) => w.db.prepare(
+  `SELECT * FROM d6_drive_passes ORDER BY id`).all();
+const grants = (w) => w.db.prepare(`SELECT * FROM grants`).all();
+const schedSnapshot = (w) => w.db.prepare(
+  `SELECT * FROM schedule ORDER BY id`).all()
+  .map((r) => JSON.stringify(r, Object.keys(r).sort())).join("\n");
+const REF = "battery:containment";
+// V3 helpers: settle pending work so a fire-and-forget invocation
+// reaches its deferred-getAlarm park; read the audit trail.
+const flush = async (n = 4) => {
+  for (let i = 0; i < n; i++) await new Promise((r) => setImmediate(r));
+};
+const events = (w) => tableExists(w, "d6_containment_events")
+  ? w.db.prepare(`SELECT * FROM d6_containment_events ORDER BY id`).all()
+  : [];
+
+// ----------------------------------------------------------------
+describe("CT0 — assembly & identity (fixture-driven)", () => {
+  test("changed parts are exactly the fixture set; all others byte-identical to the live tree", () => {
+    const cand = listFiles(CAND), base = listFiles(BASE);
+    assert.equal(cand.length, 31);
+    assert.deepEqual(cand, base);
+    const differ = cand.filter(
+      (f) => shaFile(join(CAND, f)) !== shaFile(join(BASE, f)));
+    assert.deepEqual(differ,
+      IDENTITY.changedParts.map((p) => p.rel).sort());
+    for (const p of IDENTITY.changedParts)
+      assert.equal(shaFile(join(CAND, p.rel)), p.sha256,
+        `${p.rel} identity`);
+  });
+  test("node --check passes on every changed part", () => {
+    for (const p of IDENTITY.changedParts) {
+      const r = spawnSync(process.execPath,
+        ["--check", join(CAND, p.rel)], { encoding: "utf8" });
+      assert.equal(r.status, 0, `${p.rel}: ${r.stderr}`);
+    }
+  });
+  test("design markers present in the candidate parts", () => {
+    const coord = readFileSync(join(CAND, "v2/coordinator.mjs"), "utf8");
+    assert.match(coord, /CONTAINMENT_STATES/);
+    assert.match(coord, /applyContainmentTransition/);
+    assert.match(coord, /containmentArmSuppressed/);
+    // v3 vocabulary (design v3 §2/§3/§5):
+    assert.match(coord, /verify_chain_stop/);
+    assert.match(coord, /MAX_STOP_VERIFY_ATTEMPTS/);
+    assert.match(coord, /stop_status/);
+    assert.match(coord, /containment_reason_required/);
+    const entry = readFileSync(
+      join(CAND, "v2/worker-entry-prod-d6.js"), "utf8");
+    assert.match(entry, /"contained"/);
+    assert.match(entry, /internal\/d6\/containment/);
+    assert.match(entry, /verify_chain_stop/);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT1 — NORMAL: ordinary delivery, containment inert and invisible", () => {
+  test("seeded pass issues its grant exactly as shipped; reads report NORMAL-absent; no state table is created by passes or reads", async () => {
+    const w = await makeWorld(CAND);
+    const seed = await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    assert.equal(grants(w).length, 1);
+    const rows = driveRows(w);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].stage, "complete");
+    const cs = w.coord.containmentState();
+    assert.equal(cs.state, "NORMAL");
+    assert.equal(cs.absent, true);
+    assert.equal(cs.verified, true);
+    assert.equal(tableExists(w, "d6_containment_state"), false,
+      "passes and reads never create the containment tables");
+    const diag = await entryGet(w, "/v2/d6-diagnostics?drive=1",
+      { operator: true });
+    assert.equal(diag.status, 200);
+    assert.deepEqual(diag.body.containment, {
+      state: "NORMAL", known: true, absent: true, verified: true,
+      updatedAt: null, authorizationRef: null,
+      // v3: the stop-record fields ride the same projection
+      // (design v3 §2.3); empty before any stop episode.
+      stopStatus: null, stopVerifiedAt: null, stopVerifyAction: null,
+      stopArmedBefore: null, stopArmedAfter: null,
+      stopVerifyAttempts: 0 });
+    const st = await entryGet(w, "/v2/d6-containment",
+      { operator: true });
+    assert.equal(st.status, 200);
+    assert.equal(st.body.state, "NORMAL");
+    assert.equal(st.body.absent, true);
+    assert.equal(tableExists(w, "d6_containment_state"), false);
+    const job = w.db.prepare(
+      `SELECT * FROM jobs WHERE job_id = ?`).get(seed.jobId);
+    assert.equal(job.state, "generating");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT2 — Layer 1 (DRIVE_CONTAINED): drive suppressed, chain alive, leases close", () => {
+  test("contained passes record stage 'contained'; the in-flight grant is voided by the lease path; no new grant; registration continues", async () => {
+    const w = await makeWorld(CAND);
+    const seed = await seedAttempt3Shape(w);
+    await w.fireClassAlarm(); // NORMAL pass: grant issued
+    assert.equal(grants(w).length, 1);
+    const r = await entryPost(w, "/v2/d6-containment",
+      { action: "contain_drive", authorizationRef: REF },
+      { operator: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.outcome, "applied");
+    assert.equal(r.body.state, "DRIVE_CONTAINED");
+    // Advance past the 15-minute lease and deliver a pass.
+    w.advance(16 * MIN);
+    await w.fireClassAlarm();
+    const rows = driveRows(w);
+    const last = rows[rows.length - 1];
+    assert.equal(last.stage, "contained");
+    assert.equal(last.drive_invoked, 0);
+    const g = grants(w);
+    assert.equal(g.length, 1, "no new grant under containment");
+    

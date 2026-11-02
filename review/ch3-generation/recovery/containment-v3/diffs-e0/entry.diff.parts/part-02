@@ -1,0 +1,182 @@
+= "object") {
++      const sweep = {};
++      for (const k of DRIVE_PASS_SWEEP_KEYS)
++        if (typeof entry.bindingProjection[k] === "number")
++          sweep[k] = entry.bindingProjection[k];
++      entries.push({ bindingProjection: sweep });
++      continue;
++    }
++    if ("bindingProjectionError" in entry) {
++      entries.push({ bindingProjectionError: true });
++      continue;
++    }
++    const o = {};
++    for (const k of DRIVE_PASS_OUTCOME_KEYS) {
++      const v = entry[k];
++      if (typeof v === "string")
++        o[k] = sanitizeDrivePassOutcomeString(k, v, flags);
++      else if (typeof v === "number" || typeof v === "boolean")
++        o[k] = v;
++    }
++    entries.push(o);
++  }
++  return { entries, fieldsSliced: flags.fieldsSliced,
++           fieldsScrubbed: flags.fieldsScrubbed };
++}
++
++// Serialize the projected outcomes under the 8,000-char cap with
++// EXPLICIT truncation (Rowan's condition): entries are kept whole,
++// from the front (drive order — the earliest-selected plan's
++// outcome is the most diagnostic); the first entry that would
++// cross the cap and everything after it is dropped, and a terminal
++// marker entry states exactly what was kept, what was dropped, and
++// whether any field was sliced or scrubbed. After the per-field cap
++// a single entry is ~2.3 KB worst case, so at least one whole entry
++// plus the marker always fits; the stored value is always valid JSON.
++function serializeDrivePassOutcomes(outcomes) {
++  const projected = projectDrivePassOutcomes(outcomes);
++  if (projected === null) return { json: null, truncated: 0 };
++  const full = JSON.stringify(projected.entries);
++  if (!projected.fieldsSliced && !projected.fieldsScrubbed &&
++      full.length <= DRIVE_PASS_OUTCOMES_CAP)
++    return { json: full, truncated: 0 };
++  // Entry-granular truncation (spec §5.3), also entered whenever
++  // a field was sliced or scrubbed: the marker is appended so the
++  // invariant holds — outcomes_truncated is 1 exactly when a
++  // marker is present, and the marker discloses kept/dropped
++  // counts plus slicing and scrubbing. The stored form is never
++  // a silently altered copy of the outcomes array.
++  const kept = [];
++  let dropped = 0;
++  for (let i = 0; i < projected.entries.length; i++) {
++    const marker = { truncated: {
++      keptEntries: kept.length,
++      droppedEntries: projected.entries.length - i,
++      fieldsSliced: projected.fieldsSliced,
++      fieldsScrubbed: projected.fieldsScrubbed } };
++    if (JSON.stringify([...kept, projected.entries[i], marker]).length
++        <= DRIVE_PASS_OUTCOMES_CAP) {
++      kept.push(projected.entries[i]);
++    } else {
++      dropped = projected.entries.length - i;
++      break;
++    }
++  }
++  const marker = { truncated: {
++    keptEntries: kept.length, droppedEntries: dropped,
++    fieldsSliced: projected.fieldsSliced,
++    fieldsScrubbed: projected.fieldsScrubbed } };
++  return { json: JSON.stringify([...kept, marker]), truncated: 1 };
++}
++
+ // The D6 production coordinator: the EXISTING production class
+ // (same export name the live script's COORDINATOR binding names),
+ // carrying the D6 overrides. Continuity is the design: this class
+@@ -584,13 +823,41 @@
+         const cache = await this._cache();
+         const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+         const limRaw = url.searchParams.get("limit");
+-        const result = await d6Service(coord, d6HostEnv(this.env, cache))
+-          .attemptDiagnostics({
+-            planId: url.searchParams.get("planId"),
+-            jobId: url.searchParams.get("jobId"),
+-            limit: limRaw === null ? undefined : Number(limRaw),
+-            cursor: url.searchParams.get("cursor"),
+-          });
++        const service = d6Service(coord, d6HostEnv(this.env, cache));
++        // PHASE B INSTRUMENTATION (P2): the presence of a drive
++        // parameter selects the drive-pass read INSTEAD of attempt
++        // diagnostics. The service validates the mode strictly
++        // (drive must be exactly "1", and no attempt target —
++        // planId / jobId / cursor — may ride along) and rejects
++        // every ambiguous combination as diagnostics_mode_ambiguous;
++        // the modes never blend into one response. A repeated
++        // mode parameter is itself ambiguous (searchParams.get
++        // would silently take the first), so the class counts
++        // occurrences and reports them via repeatedModeParam.
++        const repeatedModeParam =
++          url.searchParams.getAll("drive").length > 1 ||
++          url.searchParams.getAll("planId").length > 1 ||
++          url.searchParams.getAll("jobId").length > 1 ||
++          url.searchParams.getAll("cursor").length > 1 ||
++          // The public entry forwards repetition on the public
++          // query explicitly (its per-parameter copy collapses
++          // repeats to the first value; see the forward site).
++          url.searchParams.get("repeated") === "1";
++        const result = url.searchParams.get("drive") !== null
++          ? await service.drivePassDiagnostics({
++              drive: url.searchParams.get("drive"),
++              planId: url.searchParams.get("planId"),
++              jobId: url.searchParams.get("jobId"),
++              limit: limRaw === null ? undefined : Number(limRaw),
++              cursor: url.searchParams.get("cursor"),
++              repeatedModeParam,
++            })
++          : await service.attemptDiagnostics({
++              planId: url.searchParams.get("planId"),
++              jobId: url.searchParams.get("jobId"),
++              limit: limRaw === null ? undefined : Number(limRaw),
++              cursor: url.searchParams.get("cursor"),
++            });
+         await cache.flush();
+         return result && result.outcome === "rejected"
+           ? json(400, result) : json(200, result);
+@@ -1396,6 +1663,107 @@
+         await cache.flush();
+         return json(200, result);
+       }
++      if (url.pathname === "/internal/d6/containment" && request.method === "GET") {
++        // CONTAINMENT state read (Phase B containment design,
++        // revised semantics). Same operator fence as every
++        // operator surface above (operator-admitted stamp required
++        // at this class gate). Read-only and side-effect-free: the
++        // state read (coordinator.mjs readContainmentState — no
++        // DDL, no writes), one getAlarm() read-back, and the
++        // pending-schedule counts. This is the passive verification
++        // surface for a containment transition: state row +
++        // registration + schedule, without any command or wake.
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const state = coord.containmentState();
++        let armedAt = null;
++        try {
++          const armed = await this.state.storage.getAlarm();
++          armedAt = typeof armed === "number" ? armed : null;
++        } catch { armedAt = null; }
++        const pending = coord._oneOrNull(
++          `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
++        const pendingWd = coord._oneOrNull(
++          `SELECT COUNT(*) AS n FROM schedule
++            WHERE state = 'pending' AND kind = 'watchdog'`);
++        await cache.flush();
++        return json(200, {
++          state: state.known ? state.state : null,
++          known: state.known, absent: state.absent,
++          verified: state.verified,
++          updatedAt: state.updatedAt,
++          authorizationRef: state.authorizationRef,
++          // CONTAINMENT v3: the durable physical-stop record,
++          // projected beside the enum — three facts kept separate
++          // (design v3 §2.3). stopStatus null (or "unverified")
++          // under CHAIN_STOPPED means the physical stop is NOT
++          // verified; never infer it from the enum.
++          stopStatus: state.stopStatus,
++          stopVerifiedAt: state.stopVerifiedAt,
++          stopVerifyAction: state.stopVerifyAction,
++          stopArmedBefore: state.stopArmedBefore,
++          stopArmedAfter: state.stopArmedAfter,
++          stopVerifyAttempts: state.stopVerifyAttempts,
++          alarm: { armedAt,
++            pendingSchedule: pending ? pending.n : null,
++            pendingWatchdog: pendingWd ? pendingWd.n : null },
++        });
++      }
++      if (url.pathname === "/internal/d6/containment" && request.method === "POST") {
++        // CONTAINMENT transitions (Phase B containment design v3):
++        // the ONLY writer of the containment state. Same operator
++        // fence as every operator surface above. The request
++        // contract is a CLOSED ALLOWLIST enforced HERE: permitted
++        // keys are exactly { action, authorizationRef, reason };
++        // action must b

@@ -1,0 +1,184 @@
+Micro: 19018, reservedUnverifiedMicro: 5648 });
+    const conflicts = w.db.prepare(
+      `SELECT COUNT(*) AS n FROM binding_conflicts
+        WHERE reason = 'schedule_dead'`).get();
+    assert.equal(conflicts.n, 4);
+    void seed;
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT11 — verify_chain_stop: the auditable re-verification / retry mechanism (ruling item B)", () => {
+  test("CT11a delete failed at the stop: verify retries the delete, lands it, and marks the record re_verified", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    const armedBefore = w.alarmAt();
+    assert.ok(armedBefore !== null);
+    w.faults.deleteAlarm = new Error("battery deleteAlarm fault");
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "rejected");
+    assert.equal(stop.reason, "containment_stop_unverified");
+    assert.equal(w.alarmAt(), armedBefore);
+    w.faults.deleteAlarm = null;
+    const v = await entryPost(w, "/v2/d6-containment",
+      { action: "verify_chain_stop", authorizationRef: REF },
+      { operator: true });
+    assert.equal(v.status, 200);
+    assert.equal(v.body.outcome, "applied");
+    assert.equal(v.body.stopVerified, true);
+    assert.equal(v.body.state, "CHAIN_STOPPED",
+      "verification never moves the enum");
+    assert.equal(v.body.stateRead.stopStatus, "re_verified");
+    assert.equal(v.body.stateRead.stopVerifyAction, "verify_chain_stop");
+    assert.equal(v.body.stateRead.stopVerifyAttempts, 2);
+    assert.equal(v.body.stateRead.stopArmedBefore, armedBefore);
+    assert.equal(v.body.stateRead.stopArmedAfter, null);
+    assert.ok(v.body.stateRead.stopVerifiedAt !== null);
+    assert.equal(w.alarmAt(), null, "the retried delete landed");
+    assert.equal(w.alarmDeletes.length, 1,
+      "exactly one delete ever landed (the verify's)");
+    const evs = events(w).map((e) => `${e.action}:${e.outcome}`);
+    assert.deepEqual(evs, [
+      "stop_chain:applied", "stop_chain_verify:unverified",
+      "verify_chain_stop:verified"]);
+    const detail = JSON.parse(events(w)[2].detail_json);
+    assert.equal(detail.attempt, 2);
+    assert.equal(detail.deleteAttempted, true);
+    assert.equal(detail.armedBefore, armedBefore);
+    assert.equal(detail.armedAfter, null);
+  });
+  test("CT11b the delete landed but the read-back failed: verify confirms from the null read-back WITHOUT re-deleting", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    assert.equal(w.alarmDeletes.length, 0);
+    w.faults.getAlarm = new Error("battery getAlarm fault");
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "rejected");
+    assert.equal(stop.reason, "containment_stop_unverified");
+    assert.equal(w.alarmAt(), null,
+      "the delete physically landed; only the reads failed");
+    assert.equal(w.alarmDeletes.length, 1);
+    w.faults.getAlarm = null;
+    const v = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF);
+    assert.equal(v.outcome, "applied");
+    assert.equal(v.stateRead.stopStatus, "re_verified");
+    assert.equal(v.stateRead.stopArmedBefore, null);
+    assert.equal(w.alarmDeletes.length, 1,
+      "no second delete: the registration was already absent");
+    const detail = JSON.parse(events(w).at(-1).detail_json);
+    assert.equal(detail.deleteAttempted, false);
+  });
+  test("CT11c verify is refused unless the state is CHAIN_STOPPED", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const v1 = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF);
+    assert.equal(v1.outcome, "rejected");
+    assert.equal(v1.reason, "containment_verify_not_stopped");
+    await w.coord.applyContainmentTransition("contain_drive", REF);
+    const v2 = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF);
+    assert.equal(v2.outcome, "rejected");
+    assert.equal(v2.reason, "containment_verify_not_stopped");
+    assert.equal(events(w).filter(
+      (e) => e.action === "verify_chain_stop").length, 0,
+      "a refused verify appends no verification event");
+  });
+  test("CT11d the attempts bound is enforced; a fresh stop episode (after a reasoned clear) resets it", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    w.faults.deleteAlarm = new Error("battery deleteAlarm fault");
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF); // attempt 1
+    assert.equal(stop.outcome, "rejected");
+    const v2 = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF); // attempt 2
+    assert.equal(v2.outcome, "rejected");
+    assert.equal(v2.stateRead.stopVerifyAttempts, 2);
+    const v3 = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF); // attempt 3
+    assert.equal(v3.outcome, "rejected");
+    assert.equal(v3.stateRead.stopVerifyAttempts, 3);
+    w.faults.deleteAlarm = null; // the platform fault clears...
+    const v4 = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF);
+    assert.equal(v4.outcome, "rejected");
+    assert.equal(v4.reason, "containment_verify_attempts_exhausted",
+      "...but the bound still binds: further retries need fresh authorization (a new episode)");
+    assert.equal(w.coord.containmentState().state, "CHAIN_STOPPED",
+      "exhaustion never downgrades or clears");
+    assert.ok(w.alarmAt() !== null,
+      "the registration still physically survives, and the record says so");
+    const clr = await w.coord.applyContainmentTransition("clear", REF,
+      { reason: "battery CT11d: abandon episode 1 for a fresh stop" });
+    assert.equal(clr.outcome, "applied");
+    assert.equal(clr.stateRead.stopVerifyAttempts, 0,
+      "clear resets the stop record (fresh episode bookkeeping)");
+    assert.equal(clr.stateRead.stopStatus, null);
+    const stop2 = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop2.outcome, "applied");
+    assert.equal(stop2.stateRead.stopVerifyAttempts, 1);
+    assert.equal(stop2.stateRead.stopStatus, "verified");
+    assert.equal(w.alarmAt(), null);
+  });
+  test("CT11e a failed verify never downgrades: state, suppression, and the unverified record all stand", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    w.faults.deleteAlarm = new Error("battery deleteAlarm fault");
+    await w.coord.applyContainmentTransition("stop_chain", REF);
+    w.faults.deleteAlarm = null;
+    const gaError = new Error("battery getAlarm fault");
+    gaError.name = "BatteryGetAlarmError";
+    w.faults.getAlarm = gaError;
+    const v = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF);
+    assert.equal(v.outcome, "rejected");
+    assert.equal(v.reason, "containment_stop_unverified");
+    w.faults.getAlarm = null;
+    const cs = w.coord.containmentState();
+    assert.equal(cs.state, "CHAIN_STOPPED");
+    assert.equal(cs.stopStatus, "unverified",
+      "failure leaves the record unverified — never worse, never better");
+    assert.equal(cs.stopVerifyAttempts, 2);
+    w.clearAlarmCalls();
+    await w.coord.wake();
+    await w.fireClassAlarm();
+    assert.equal(w.alarmCalls.length, 0,
+      "suppression is undiminished after a failed verify");
+    assert.equal(driveRows(w).at(-1).stage, "contained");
+    const detail = JSON.parse(events(w).at(-1).detail_json);
+    assert.equal(detail.verifyError, "BatteryGetAlarmError",
+      "the audit detail records the error's name (the codebase's convention at both stop-verification sites)");
+  });
+  test("CT11f verify on an already-verified stop is an idempotent confirmation (status stays 'verified', no delete)", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    const stop = await w.coord.applyContainmentTransition(
+      "stop_chain", REF);
+    assert.equal(stop.outcome, "applied");
+    assert.equal(w.alarmDeletes.length, 1);
+    const v = await w.coord.applyContainmentTransition(
+      "verify_chain_stop", REF);
+    assert.equal(v.outcome, "applied");
+    assert.equal(v.idempotent, true);
+    assert.equal(v.stateRead.stopStatus, "verified",
+      "an already-verified record is confirmed, not relabeled");
+    assert.equal(v.stateRead.stopVerifyAttempts, 2);
+    assert.equal(w.alarmDeletes.length, 1, "no redundant delete");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("CT12 — restoration discipline (ruling item D)", () => {
+  test("CT12a clear without a recorded reason is refused at the method AND the route; with a reason it applies and the reason is audited", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    a

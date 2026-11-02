@@ -1,0 +1,193 @@
+lse, absent: false,
++      verified: false, updatedAt: null, authorizationRef: null,
++      ...NO_STOP,
++      errorName: e && e.name ? String(e.name) : "Error" };
++  }
++  if (!rows || rows.length === 0)
++    return { state: "NORMAL", known: true, absent: true,
++      verified: true, updatedAt: null, authorizationRef: null,
++      ...NO_STOP, errorName: null };
++  const r = rows[0];
++  const known = CONTAINMENT_STATES.includes(r.state);
++  const num = (v) => typeof v === "number" ? v : null;
++  const str = (v) => typeof v === "string" ? v : null;
++  return { state: r.state, known, absent: false, verified: known,
++    updatedAt: num(r.updated_at),
++    authorizationRef: str(r.authorization_ref),
++    stopStatus: CONTAINMENT_STOP_STATUSES.includes(r.stop_status)
++      ? r.stop_status : null,
++    stopVerifiedAt: num(r.stop_verified_at),
++    stopVerifyAction: str(r.stop_verify_action),
++    stopArmedBefore: num(r.stop_armed_before),
++    stopArmedAfter: num(r.stop_armed_after),
++    stopVerifyAttempts:
++      typeof r.stop_verify_attempts === "number"
++        ? r.stop_verify_attempts : 0,
++    errorName: null };
++}
++
++// Drive gate (subclass alarm handler): suppressed in
++// DRIVE_CONTAINED and CHAIN_STOPPED, and on ANY unverified read.
++export function containmentDriveSuppressed(read) {
++  if (!read || !read.verified) return true;
++  return read.state === "DRIVE_CONTAINED" ||
++         read.state === "CHAIN_STOPPED";
++}
++
++// Arm gate (every setAlarm path in this part): suppressed in
++// CHAIN_STOPPED, and on any unverified read that is not a
++// structurally-verified absence (absent reads verify as NORMAL,
++// above, so they never reach this branch).
++export function containmentArmSuppressed(read) {
++  if (!read) return true;
++  if (!read.verified) return true;
++  return read.state === "CHAIN_STOPPED";
++}
++
+ const LEASE_MS = 15 * 60 * 1000;
+ // Option D two-phase constants (design §3.3.7, §3.10): a pending
+ // migration command awaits operator approval for at most 24
+@@ -518,9 +728,10 @@
+       const st = this._migrationChunkState(cmd.payload || {});
+       if (st && st.ok) prepared = await this._prepareMigrationImport(cmd.payload || {});
+     }
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const outcome = this._tx(() => this._recordAndApply(cmd, prepared));
+-    await this._armAlarmIfEarlier(); // the command may have scheduled earlier work
++    await this._armAlarmIfEarlier(armMemo); // the command may have scheduled earlier work
+     return { command_id: cmd.command_id, ...outcome };
+   }
+ 
+@@ -1803,10 +2014,11 @@
+ 
+   // Executor entry point (called by the command API / plan advancer).
+   async requestGrant(jobId, opts = {}) {
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const g = this._issueGrant(jobId, { jobEvent: "grant",
+       cause: opts.cause || "requestGrant", probe: !!opts.probe });
+-    await this._armAlarmIfEarlier(); // the new lease may be the earliest work
++    await this._armAlarmIfEarlier(armMemo); // the new lease may be the earliest work
+     return g;
+   }
+ 
+@@ -2061,7 +2273,8 @@
+   // adoptable through bindings (content-addressed audio is never wasted).
+   async handleReport(report) {
+     if (!report || !report.grantId) return { ok: false, reason: "grant_required" };
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const result = this._tx(() => {
+       const grant = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, report.grantId);
+       if (!grant) return { ok: false, reason: "grant_not_found" };
+@@ -2216,7 +2429,7 @@
+       }
+       return { ok: true, ready, blocked, failed };
+     });
+-    await this._armAlarmIfEarlier(); // a retry/lease from this report may be earliest
++    await this._armAlarmIfEarlier(armMemo); // a retry/lease from this report may be earliest
+     return result;
+   }
+ 
+@@ -2459,31 +2672,369 @@
+     const next = this._one(
+       `SELECT MIN(due_at) AS due FROM schedule WHERE state = 'pending'`);
+     const due = next && next.due !== null ? next.due : this._now() + WATCHDOG_PERIOD_MS;
++    // CONTAINMENT arm gate: in CHAIN_STOPPED (or on an unverified
++    // containment read) the finally re-arm does not register. The
++    // suppression is noted in the transitions ledger best-effort —
++    // a failed note never re-enables registration.
++    // No post-await re-check is needed HERE (contrast
++    // _armAlarmIfEarlier, design v3 / async analysis §3): the due
++    // computation above is synchronous SQL and this gate read and
++    // the setAlarm() initiation below are one synchronous stretch
++    // with no await between them, so no transition can commit
++    // inside the window; a stop committed later lands its
++    // deleteAlarm after this registration and removes it.
++    if (containmentArmSuppressed(readContainmentState(this.sql))) {
++      this._noteContainmentArmSuppressed("_armAlarm");
++      return;
++    }
+     await this.state.storage.setAlarm(due);
+   }
+ 
++  // CONTAINMENT: the state read used by the operator surface and
++  // the service diagnostics (never throws, never writes).
++  containmentState() { return readContainmentState(this.sql); }
++
++  _noteContainmentArmSuppressed(path) {
++    try {
++      this._logTransition("containment", "alarm_chain",
++        "arm_suppressed", null, null, null, { path });
++    } catch { /* best-effort witness; suppression stands regardless */ }
++  }
++
++  // CONTAINMENT transitions — the ONLY writer of the containment
++  // state. Called exclusively from the operator route
++  // (/internal/d6/containment). Actions:
++  //   contain_drive : NORMAL -> DRIVE_CONTAINED
++  //   stop_chain    : NORMAL|DRIVE_CONTAINED -> CHAIN_STOPPED,
++  //                   plus the physical stop act after the state
++  //                   commit (observe getAlarm(), deleteAlarm(),
++  //                   read back), whose outcome is PERSISTED as the
++  //                   row's stop record (design v3 §2).
++  //   verify_chain_stop : CHAIN_STOPPED -> CHAIN_STOPPED (NO enum
++  //                   change). The explicit re-verification / retry
++  //                   of the physical stop (design v3 §3).
++  //   clear         : DRIVE_CONTAINED|CHAIN_STOPPED -> NORMAL.
++  //                   Requires a nonblank restoration `reason`
++  //                   (opts.reason), recorded in the audit event.
++  //                   Clearing never re-arms anything itself, and
++  //                   nothing anywhere clears automatically.
++  // An already-in-target request is an idempotent applied no-op
++  // (audited). A transition from any other state is rejected with
++  // NO writes. A state WRITE failure throws out of the transaction
++  // (the route surfaces HTTP 500): a transition is never reported
++  // applied unless its write committed and was read back. A failed
++  // or unverifiable stop act leaves the row at CHAIN_STOPPED and
++  // reports outcome "rejected" / containment_stop_unverified.
++  async applyContainmentTransition(action, authorizationRef, opts = {}) {
++    if (action === "verify_chain_stop")
++      return this._verifyChainStop(authorizationRef);
++    const TARGETS = {
++      contain_drive: { to: "DRIVE_CONTAINED", from: ["NORMAL"] },
++      stop_chain: { to: "CHAIN_STOPPED",
++        from: ["NORMAL", "DRIVE_CONTAINED"] },
++      clear: { to: "NORMAL",
++        from: ["DRIVE_CONTAINED", "CHAIN_STOPPED"] },
++    };
++    const spec = TARGETS[action];
++    if (!spec) return { outcome: "rejected",
++      reason: "containment_action_not_allowed" };
++    // Restoration discipline (design v3 §5): a clear must carry a
++    // demonstrated reason. Enforced here (method level) as well as
++    // at the route, so no caller can clear without one.
++    const reason = typeof opts.reason === "string"
++      ? opts.reason.trim() : "";
++    if (action === "clear" && reason.length === 0)
++      return { outcome: "rejected",
++        reason: "containment_reason_required" };
++    if (action === "clear" && reason.length > 2000)
++      return { outcome: "rejected",
++        reason: "containment_reason_too_long" };
++    this.sql.exec(CONTAINMENT_SCHEMA);
++    const before = readContainmentState(this.sql);
++    const from = before.known ? before.state : null;
++    if (from === spec.to) {
++      this.sql.exec(
++        `INSERT INTO d6_containment_events
++           (at, action, from_state, to_state, authorization_ref,
++            outcome, detail_json)
++         VALUES (?, ?, ?, ?, ?, 'applied', ?)`,
++        this._now(), action, from, spec.to, authorizationRef,
++        JSON.stringify({ idempotent: true }));
++      return { outcome: "applied", action, state: spec.to,
++        idempotent: true, stopVerified: null,
++        stateRead: readContainmentState(this.sql) };
++    }
++    if (from === null || !spec.from.includes(from))
++ 

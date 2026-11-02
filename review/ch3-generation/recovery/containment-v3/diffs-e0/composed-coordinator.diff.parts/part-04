@@ -1,0 +1,89 @@
+eleteAttempted
++        && before.stopStatus === "verified",
++      stopVerified, stopStatus, stopVerifyAttempts: attempt,
++      stateRead: readContainmentState(this.sql) };
++  }
++
+   // Called on every coordinator wake: if the chain is unarmed (alarm
+   // consumed and handler died, retries exhausted, fresh start), re-arm it.
+   // Recovery never requires a client — any wake (command, report, alarm)
+   // re-establishes the chain, and the chain itself is self-perpetuating.
+-  async wake() {
++  async wake(armMemo) {
+     const wd = this._one(
+       `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending' AND kind = 'watchdog'`);
+     if (!wd || wd.n === 0) this._schedule(this._now() + WATCHDOG_PERIOD_MS, "watchdog", null, {});
+-    await this._armAlarmIfEarlier();
++    await this._armAlarmIfEarlier(armMemo);
+   }
+ 
+   // Arm the alarm at the earliest pending work if it is sooner than the
+   // currently armed time (or nothing is armed) — newly scheduled earlier
+   // work must ADVANCE the alarm, not wait for it (P2 review round 2,
+   // gap 5). Entry points call this after their writes commit.
+-  async _armAlarmIfEarlier() {
+-    const armed = await this.state.storage.getAlarm();
++  // armMemo (R5a revised design): a per-top-level-operation object
++  // created by handleCommand / requestGrant / handleReport and
++  // threaded through wake() and the post-apply call below. It bounds
++  // alarm registrations within one operation: once this operation
++  // has registered, a later evaluation in the SAME operation fires
++  // again ONLY if the operation scheduled work strictly earlier than
++  // the value it already registered (a corrective registration with
++  // a strictly smaller value). The memo carries no state across
++  // operations and is never persisted.
++  async _armAlarmIfEarlier(armMemo) {
++    // CONTAINMENT arm gate (see _armAlarm): in CHAIN_STOPPED, or
++    // on an unverified containment read, a wake registers NOTHING
++    // — this is the fence that keeps a verified chain stop from
++    // being resurrected by any later command or report. The gate
++    // precedes the R5a memo logic: a suppressed evaluation is not
++    // a registration and never touches the memo.
++    if (containmentArmSuppressed(readContainmentState(this.sql))) {
++      this._noteContainmentArmSuppressed("_armAlarmIfEarlier");
++      return;
++    }
++    const now = this._now();
+     const next = this._one(
+       `SELECT MIN(due_at) AS due FROM schedule WHERE state = 'pending'`);
+-    const due = next && next.due !== null ? next.due : this._now() + WATCHDOG_PERIOD_MS;
+-    if (armed === null || armed === undefined || due < armed)
++    const due = next && next.due !== null ? next.due : now + WATCHDOG_PERIOD_MS;
++    if (armMemo && armMemo.registered) {
++      // This operation already registered. Its own fresh registration
++      // is not a stale value and not a retry gap: only genuinely
++      // earlier work scheduled by this operation justifies a second
++      // registration, at the strictly earlier due.
++      if (due < armMemo.armedAfter) {
++        await this.state.storage.setAlarm(due);
++        armMemo.armedAfter = due;
++      }
++      return;
++    }
++    const armed = await this.state.storage.getAlarm();
++    // CONTAINMENT v3 RACE FIX (async analysis §3, centerpiece):
++    // the gate at the top of this method was read BEFORE this
++    // await. A stop committed while the getAlarm was in flight is
++    // invisible to that read — and the condition below would then
++    // re-register (the stale value satisfies the past-due disjunct
++    // or due < armed; even a null value — the just-deleted
++    // registration — satisfies the unarmed branch). RE-CHECK the
++    // gate now: this read and any setAlarm() initiation below are
++    // one synchronous stretch, so no transition can commit in
++    // between, and any stop committed before this read is seen.
++    // (The memo branch above needs no re-check: no await separates
++    // its gate read from its setAlarm initiation.)
++    if (containmentArmSuppressed(readContainmentState(this.sql))) {
++      this._noteContainmentArmSuppressed(
++        "_armAlarmIfEarlier#recheck");
++      return;
++    }
++    if (armed === null || armed === undefined
++        || armed <= now - ALARM_STALE_THRESHOLD_MS
++        || due < armed) {
+       await this.state.storage.setAlarm(due);
++      if (armMemo) { armMemo.registered = true; armMemo.armedAfter = due; }
++    }
+   }
+ 
+   async alarm() {

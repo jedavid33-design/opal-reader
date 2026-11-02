@@ -1,0 +1,25 @@
+--- a/v2/generation/service.mjs
++++ b/v2/generation/service.mjs
+@@ -1826,6 +1826,22 @@
+           authorizationRef:
+             typeof cs.authorizationRef === "string"
+               ? dpReadScrub(cs.authorizationRef, 200) : null,
++          // CONTAINMENT v3: the physical-stop record rides the
++          // same projection (design v3 §2.3) — enum, last physical
++          // verification, and stop-verification status as three
++          // separate facts. A pre-v3 coordinator read (no stop
++          // fields) projects them as null/0.
++          stopStatus:
++            typeof cs.stopStatus === "string" ? cs.stopStatus : null,
++          stopVerifiedAt: DP_READ_NUM(cs.stopVerifiedAt),
++          stopVerifyAction:
++            typeof cs.stopVerifyAction === "string"
++              ? dpReadScrub(cs.stopVerifyAction, 64) : null,
++          stopArmedBefore: DP_READ_NUM(cs.stopArmedBefore),
++          stopArmedAfter: DP_READ_NUM(cs.stopArmedAfter),
++          stopVerifyAttempts:
++            typeof cs.stopVerifyAttempts === "number"
++              ? cs.stopVerifyAttempts : 0,
+         };
+       }
+     } catch { containment = null; }
