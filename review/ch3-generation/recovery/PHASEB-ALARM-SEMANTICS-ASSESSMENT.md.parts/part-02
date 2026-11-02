@@ -1,0 +1,53 @@
+p, retimestamp, or revive** the reported alarm in the observed window.
+
+**Classification:** preserve — **supported** by storage semantics + incident observation; the general across-upload guarantee is **UNSPECIFIED** in the retrieved docs. A deploy also does not, by any documented mechanism, *deliver* an overdue alarm: an inactive object adopts new code "on the next request" (D5), and adoption is a code event, not an alarm event.
+
+### Q3. What platform events re-instantiate a DO and give an overdue alarm a chance to fire?
+
+Re-instantiation events (D4): an incoming request or event routed to the DO (HTTP/RPC stub method invocation, WebSocket message, or **the alarm event itself**); return from hibernation on such an event (constructor runs again); restart after shutdowns caused by code-update adoption, inactivity/eviction transitions, Workers runtime updates, or hosting decisions — after which "new requests are routed to the new instance."
+
+Specific alarm-relevant case (D1): if an unexpected error **terminates the DO during an alarm invocation**, the handler may be re-instantiated on another machine and, after a short delay, runs from the beginning there.
+
+**The crucial distinction:** re-instantiation is not alarm delivery. Every documented re-instantiation path runs the constructor and then *the invoked function* — for a request, the request handler; only an alarm event runs `alarm()`. No retrieved page states that a restart, eviction recovery, or code adoption scans for and fires an overdue alarm. So platform events give an overdue alarm a "chance" only in the weak sense that the DO is alive and addressable again; the only documented trigger of `alarm()` is the platform's alarm delivery itself. For this DO, many re-instantiations have already occurred since A went past due (attempt-3 commands, dozens of reads, the instrumentation deploy and its diagnostics reads) with no recorded pass — empirical evidence that ordinary instantiation does not, at least reliably, produce catch-up delivery. **Classification: GUARANTEED for request/event re-instantiation; UNSPECIFIED for any overdue-alarm catch-up on re-instantiation.**
+
+### Q4. If the alarm handler is never invoked, is there any documented self-healing, or does the stale value persist indefinitely until an external stimulus?
+
+**No documented self-healing for the never-invoked case was found.** The documented recovery mechanisms all presuppose an invocation: at-least-once delivery with ≤6 retries applies when the handler *throws* (D1); re-instantiation on another machine applies when an error *terminates the DO during* an invocation (D1). If delivery itself is lost before any handler code runs, no retrieved documentation describes a reconciliation pass, a watchdog-of-watchdogs, or a deadline after which the platform re-registers or clears the alarm.
+
+**Persistence:** within the application, the stale value persists because the only code that could overwrite it is `_armAlarmIfEarlier()` (which, per §5, is expected to no-op at D = A) and `_armAlarm()` (reachable only from inside an alarm invocation). Within the platform, persistence duration after a lost delivery is UNSPECIFIED. Empirically, the value has persisted ~20 h across commands, reads, and a deploy.
+
+**One refinement:** "external stimulus" must be read narrowly. A stimulus heals this state only if it causes a **`setAlarm` overwrite** (or an actual alarm delivery). Stimuli that merely instantiate the DO — every GET/read, the diagnostics surface, a deploy — have demonstrably not healed it. **Classification: absence of documented self-healing — GUARANTEED as a statement about the retrieved docs; indefinite persistence — UNVERIFIED as a platform guarantee, observed in this incident.**
+
+### Q5. What does the shipped code do on the next command/wake, given `getAlarm()` returns the stale past time A?
+
+Let **D** = minimum `due_at` over pending schedule rows (currently 2 pending, 1 watchdog; the rows' `due_at` values are **not exposed by any read surface** — UNVERIFIED, §9). Let **A** = 1793562576104.
+
+On any path that reaches `wake()` — a fresh (non-replay) valid command via `handleCommand`, a report with a `grantId` via `handleReport`, or `requestGrant`:
+
+1. `wake()` checks pending watchdog rows: count is 1 → **no schedule insert**.
+2. `_armAlarmIfEarlier()`: reads `armed = A`; computes `due = D`.
+   - **D < A →** `setAlarm(D)`. D is in the past → per D2, "scheduled for asynchronous execution in the immediate future." This is the only branch in which a wake changes the platform registration.
+   - **D = A →** **no `setAlarm` call** (the comparison is strict: `due < armed`).
+   - **D > A →** **no `setAlarm` call** (the code never moves an alarm later).
+3. The command/report transaction applies (for the benign stimuli in §7: no target state changes).
+4. The post-apply `_armAlarmIfEarlier()` repeats the same computation against the post-transaction state. For a stimulus that does not alter the schedule, the inputs are unchanged — **at most one effective `setAlarm` per wake path**, and zero in the D ≥ A branches.
+
+Paths that do **nothing** to the alarm: every GET/read (including `drive=1` diagnostics, which only *reads* `getAlarm()`), replayed commands (receipt short-circuit precedes `wake()`), malformed/unknown commands (validation precedes `wake()`), reports without a `grantId`, all existing operator routes (they construct the coordinator/service directly and none calls `wake()`; the finalizer preview is explicitly documented in-source as performing "no wake"), and a Worker deploy (no DO invocation at all).
+
+**Net:** the next wake either re-registers the alarm at a past time (D < A branch — immediate documented delivery) or **leaves the stale registration exactly as it is**. Which branch production is in is UNVERIFIED because D is unobservable; §5 argues D = A is the expected branch.
+
+---
+
+## 5. Reconciling attempt 3: the 01:23:15Z wake vs. armedAt still = A
+
+Attempt 3's SubmitJob (2026-11-02T01:23:15Z) reached `handleCommand` and therefore ran `wake()` + the post-apply `_armAlarmIfEarlier()`. No drive pass followed. The diagnostic report (§5) showed the naive fault hypothesis needs a fifth condition; the source arithmetic now separates the branches cleanly. Exactly one of these held at that wake:
+
+| Branch | Condition at 01:23:15Z | What the wake did | What must also be true to explain no pass |
+|--------|------------------------|-------------------|--------------------------------------------|
+| **B1 — equal (expected)** | D = A: the row whose `due_at` A was set from is still pending and still earliest | Nothing (strict `<` fails) | The platform holds an armed value it reports faithfully but does not deliver — *or* the registration was consumed in the fault while `getAlarm()` continues to report the stale timestamp (a read/registration divergence). Either way the failure is delivery-side; the wake is blameless. |
+| **B2 — earlier row existed** | D < A: some pending row was due before A (e.g., A had been set against a different row that was then earliest) | `setAlarm(D)`, a past time → documented immediate async execution | The fresh `setAlarm` registration was itself silently ineffective for this DO, or its delivery was also lost. Requires a second, stronger platform condition. |
+| **B3 — later row only** | D > A: the row A was set from is gone, earliest pending is later | Nothing (never moves later) | A points at no live schedule row, yet the platform neither delivers nor clears it, and the code has no path to correct a *later*-than-armed discrepancy in the past direction. (How the A-row could disappear without an alarm processing it is itself unexplained on the source — no non-alarm path deletes schedule rows — so B3 is the weakest branch.) |
+
+**Why B1 is expected:** every `setAlarm` this code performs sets A := the then-minimum pending `due_at` (or now + 10 min on an empty schedule). Pending rows are removed or rescheduled only inside alarm processing (`alarm()` marks rows done / backs them off; `_voidDispatch` voids a grant's lease row — itself alarm- or drain-invoked). No alarm processing is recorded after A was set, and all post-A `_schedule` insertions are future-dated relative to their insertion time (lease +15 min, retry +30 s, watchdog +10 min), so none can undercut A. The single platform alarm is not "for" a row in any case (D1: one alarm per DO) — A is simply the timestamp the platform was last told; B1 says the schedule and the platform value still agree, and delivery is what is missing.
+
+**What this assessment does *not* claim:** that B1 is proven. D is unobservable on shipped surfaces; B2/B3 remain open, and the fault-causation question (diagnostic H1 vs H4 — fault-caused vs fault-coincident delivery failure) is untouched by this analysis. The branches matter because they price the options in §7: a wake probe pays off in B2, is a no-op in B1/B3; only an u

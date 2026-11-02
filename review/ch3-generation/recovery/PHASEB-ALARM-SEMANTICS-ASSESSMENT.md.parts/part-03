@@ -1,0 +1,63 @@
+nconditional `setAlarm` (R5) pays off in all three.
+
+---
+
+## 6. If a drive pass finally runs under HELD — the pre-classified transition set
+
+Re-verified against the gate §7.3 text and the shipped source (`driveOnce` grant step, `generation/service.mjs` ~1008–1113; `_issueGrant`, `coordinator.mjs` ~1636–1790; `reserveForGrant`, `generation/quota-budget.mjs` ~544). Under GENERATION_HALT "1" + queue paused, a revived pass that reaches the grant step produces **exactly** this, and nothing else is pre-classified:
+
+- Grants [] → exactly [`grant:plan:19cad189fab54b9c804a74a6:seg:1:full`, `issued`] (job revision as read at issuance).
+- Occurrence `pending` → `granted`; job `queued` rev 1 → `generating` rev 2.
+- Issuance writes: 1 grant row; 1 occurrence transition (+ transition log); 1 `ledger_ops` attempt row; 1 **unsent** outbox dispatch row; 1 pending `lease` schedule row (+15 min); 1 `d6_grant_reservations` row, `slots_total` 12, `open`.
+- Derived reserved for the issuance PT day 0 → **12**. Dispatched stays **0** (no `sendGrant` is wired while halted; the outbox row is never sent; zero provider contact; $0 spend).
+- **All five phase figures frozen**: settled 1,029,420; estimatedUnverified 19,018; reservedUnverified 5,648; unknownOpen 0; remaining 12,464,932. (The earlier draft prediction that `reservedUnverified` would rise was withdrawn in the amended gate — `phaseAccounting` derives it only from adjudication/attempt-log state that grant issuance never writes.)
+- Plan remains `active`, totals {eligible 1 / done 0 / failed 0 / blocked 0}; bindings 1841 and sync watermarks 18/1841 frozen; parked job fingerprint unchanged.
+- **Bounded lease-expiry/re-grant cycle (also pre-classified):** at lease expiry (+15 min) the base alarm finds the outbox row unsent and never attempted and safe-voids it (`_voidDispatch`, "lease_expired_undelivered"): occurrence `granted` → `pending`, grant → `voided`, 1 `ledger_ops` attempt-release row, reservation closes (derived reserved 12 → 0), outbox row deleted, `retry_grant` scheduled +30 s; re-issuance follows under the grant-id grammar at the then-current job revision. Invariants at every instant: **≤ 1 live grant; derived reserved ∈ {0, 12}; dispatched 0; phase figures frozen.**
+
+**Any movement outside this set is unmatched → STOP (§8).**
+
+### 6.1 Per-pass write set (the honest recurring budget of any revival)
+
+Each subclass alarm pass that runs to completion also writes, beyond §6's grant effects:
+
+- Base alarm: 1 update per due schedule row processed (→ `done`; a failing row instead backs off or dies — a new `binding_conflicts` row at death is **unmatched movement → STOP**); ≤ 1 watchdog schedule insert in `finally`; 1 unconditional `setAlarm` (to the earliest pending due).
+- `driveOnce` preamble: halt-observation writes (epoch/meta upserts in `d6_halt_epochs` / `d6_quarantine_meta`); binding-projection sweep (expected no-op — no pending projections are known; any sweep movement is reported, not assumed).
+- Recorder: `CREATE TABLE IF NOT EXISTS d6_drive_passes` (**first pass only** — the table is currently missing), 1 row insert, 1 prune statement (deletes only beyond the newest 288), 1 recorder-health KV `put`.
+- A pass that **throws** after the recorder runs still records its row (record-then-rethrow) and is retried by the platform up to 6 times — each retry is another recorded pass. Error-stage rows are **findings requiring classification, not automatic failures** (gate correction C4).
+
+**Revival is perpetual:** once the chain lives, watchdog passes recur (~10-min cadence interleaved with lease/retry passes), recorder rows accumulate toward the 288 cap (oldest diagnostic evidence is pruned — capture reads promptly), and the §6 grant cycle churns roughly every 15 minutes, indefinitely, until some *separately authorized* disposition changes the plan or the code. No option below includes an "off switch," because none exists on the shipped surfaces.
+
+### 6.2 The live-trigger warning (preservation risk, all options)
+
+While **both** holds stand, a revived drive is grant/void churn only: no dispatch, no spend (§6). The danger is coincidence with any hold change, by anyone, for any purpose:
+
+- **Queue unpause alone** (halt still "1"): the §6 cycle only; nothing reaches the provider.
+- **Halt lift alone** (queue still paused): `sendGrant` becomes wired; a drive pass drains the outbox and **stages a real dispatch message in the paused queue** (retention 86,400 s). Any later unpause inside retention delivers it; the executor re-checks the halt flag at delivery time.
+- **Both lifted, for any reason, including unrelated work:** the preserved plan — the only selectable plan — **executes end-to-end with no further command, submission, or approval touchpoint** (expected cost ≈ $0.008 for the one 569-char segment; modeled occurrence ceiling 153,636 units), and Chapter 3 completes at 27/27.
+
+A recovery GO therefore **expires by its own terms** if either hold changes before or during execution (§8 STOP), and every future gate must be told the chain may be live.
+
+---
+
+## 7. Proposal — candidate recovery stimuli, ascending by durable effect
+
+**Common preflight (every option; any mismatch → STOP before the stimulus):** live build stamp `86ad06ab…`; GENERATION_HALT "1"; queue delivery paused; `drive=1` read returns armedAt = A exactly, pendingSchedule 2, pendingWatchdog 1, tableState "missing", recorderHealth null; preserved plan/job exactly at §1.2 state (grants [], occurrence pending, job queued rev 1, derived reserved 0, dispatched 0); phase figures frozen; conflicts exactly the four baseline `schedule_dead` rows; parked job fingerprint `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`; settings revision 1; quota reconcile `ok: true` with the sole known straddler exception. **If the preflight `drive=1` read shows any recorder row or a changed armedAt, the state has already moved — STOP; no stimulus is needed or permitted; classify and report.**
+
+**Common observation (every option):** `drive=1` + plan/job/quota reads at ≈ +1 min, +6 min, +12 min, +20 min, +35 min after the stimulus; no second stimulus of any kind within the window; all reads captured to the gate evidence folder. Success evidence = a recorder row (stage, `driveInvoked`, outcomes, `armedAfter`); §6 transitions, if any, itemized against the pre-classified set.
+
+**Conditional budget notation:** **PP** = one completed alarm pass's write set (§6.1); **GC** = one §6 grant issuance (+, at +15 min, its void set). These are *conditional* — they occur only if a pass actually runs — and are counted in every option below, not hidden.
+
+### R0 — Passive re-read only (baseline; not a recovery stimulus)
+
+- **Action:** one `drive=1` diagnostics read + passive observation. Reaches the DO (instantiates it) but, per source, calls no `wake()` and no `setAlarm`.
+- **Expected effect:** none. Already performed twice post-deploy (15:42:57Z, 15:58:02Z) with no change — this option is **empirically negative** over a 15-minute span and is listed only as the control and as the preflight/post-stimulus read for the other options.
+- **Mutation budget:** 0 production writes. (Conditional PP/GC only if the platform spontaneously delivers — in which case the option stops being passive and is reported as a spontaneous revival.)
+- **GO wording:** "GO — one read-only drive-diagnostics recheck and a 35-minute passive observation window only. No command, report, deploy, alarm wake, SubmitJob, halt or queue change."
+
+### R1 — Wake via a replayed executor report (smallest durable effect: zero application rows)
+
+- **Action:** one `POST /v2/reports` naming a grant that preflight has verified is already in state `reported`. Source trace: `handleReport` calls `wake()` **before** its transaction; the transaction sees `grant.state === "reported"` and returns `{ ok: true, replayed: true }` with **no state writes**; `_armAlarmIfEarlier()` runs again after. No results array is needed — the reported short-circuit precedes result processing.
+- **Alarm effect:** exactly the §4/Q5 arithmetic — `setAlarm(D)` once **iff D < A** (past time → documented immediate execution); otherwise nothing. Instantiates the DO either way.
+- **Mutation budget:** **0 application-data writes**; 0 commands; conditional ≤ 1 `setAlarm` (platform alarm metadata); conditional PP/GC if a pass runs. Watchdog insert: 0 expected (preflight verifies pendingWatchdog = 1; if it were 0, +1 schedule row — a preflight mismatch → STOP anyway).
+- **Risks:** depends entirely on preflight correctly identifying a `reported` grant — a report against a *live* grant would be a real executor report with real closure effects, which is why the grant's state must be verified in the same preflight, and any ambiguity is a STOP. Semantically borrows the executor's surface for a non-executor purpose.
+- **GO wording:** "GO — exactly one repl

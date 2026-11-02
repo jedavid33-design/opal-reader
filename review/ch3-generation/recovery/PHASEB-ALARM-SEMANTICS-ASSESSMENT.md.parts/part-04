@@ -1,0 +1,49 @@
+ay report for the preflight-verified already-reported grant named in the execution preflight, for alarm-wake diagnosis only, while GENERATION_HALT stays "1" and the queue stays paused. No new command, no SubmitJob, no deploy, no hold change. Stop on any movement outside gate §7.3."
+
+### R2 — Wake via one targetless durable command (one application row; self-auditing)
+
+- **Action:** one `POST /v2/commands`: type `RequestPause`, a **fresh** `command_id` recorded in the execution record, payload naming a reserved **nonexistent** job id (e.g. `alarm-wake-probe:nonexistent`). Source trace: `RequestPause` is not in the halt-refused command set; `handleCommand` runs `wake()` (521), then `_recordAndApply` inserts the `commands` row and applies: `applyJobEvent` finds no such job and returns `job_not_found` **before** any transition log or job write; the row's outcome is updated to `rejected / job_not_found`; `_armAlarmIfEarlier()` runs again (523). The failure mode is bounded by construction — a nonexistent job can never transition, be granted, or be dispatched.
+- **Alarm effect:** identical to R1 (two evaluations of the same arithmetic; at most one effective `setAlarm`, iff D < A).
+- **Mutation budget:** **1 durable `commands` row** (insert + outcome update); 0 job/occurrence/grant/settings/schedule writes (watchdog insert 0 under preflight); conditional ≤ 1 `setAlarm`; conditional PP/GC if a pass runs.
+- **Risks:** one permanent (but truthful and self-describing) receipt row. Otherwise as R1, minus the dependence on any real grant's state.
+- **GO wording:** "GO — exactly one RequestPause command with the fresh command_id recorded in the execution record, naming the reserved nonexistent job `alarm-wake-probe:nonexistent`, for alarm-wake diagnosis only, while GENERATION_HALT stays "1" and the queue stays paused. No other command or report, no SubmitJob, no deploy, no hold change. Stop on any movement outside gate §7.3."
+
+### R3 — Redeploy the identical instrumented build (one script upload; no code change)
+
+- **Action:** one multipart upload of the byte-identical 31-part instrumented envelope (build `86ad06ab…`), followed by the standing post-upload observability check and, **only if** the upload reset it, the settings-only multipart PATCH restoring observability.
+- **Alarm effect — assessed honestly:** a deploy invokes no DO method and calls no alarm API (Q2). Its only alarm-relevant pathway is indirect: code adoption resets an active DO (immediate, or deferred up to `max_delay`), and a later request/event instantiates it on the new code. No documented mechanism delivers an overdue alarm on adoption or restart (Q3). **And the experiment has substantially been run:** the P2 deploy *was* a deploy-while-this-alarm-was-pending; it changed the code rather than redeploying identical bytes, but its adoption/instantiation events produced no delivery and no recorder row in 25.5 minutes. An identical redeploy's incremental value over that datapoint is UNVERIFIED and, on the docs, speculative.
+- **Mutation budget:** **1 script upload**; conditional **+1 observability PATCH** (only if logging is found reset — it was *not* needed after the P2 upload); 0 commands/reports; conditional PP/GC if a pass runs. Side effects: script ETag may change; in-memory DO state is discarded on adoption; adoption timing under the script-API upload path is UNVERIFIED (§9).
+- **Risks:** the broadest blast radius per unit of expected benefit — a whole-script deploy to test a hypothesis the docs do not support, with the standing observability-reset hazard and an uncontrolled adoption moment that could coincide with unrelated traffic.
+- **GO wording:** "GO — exactly one redeploy of the byte-identical instrumented build 86ad06aba6083f7ea84d64b08eac1788d5bf570c (31 parts), plus only the conditional observability settings PATCH if the upload resets logging. No command, report, SubmitJob, halt or queue change."
+
+### R4 — Existing operator actions — CONSIDERED; NONE EXISTS
+
+The shipped operator surfaces were enumerated firsthand: the four Ch 3 operator routes, the two finalizer routes, and the `drive=1` diagnostics mode. **None calls `wake()` or `setAlarm`**; the read-only ones (diagnostics, finalizer preview) are explicitly no-wake, and the mutating ones (exemption apply/revoke, finalizer apply) are substantive production actions that are (a) prohibited under the current disposition, (b) preserved-state changes this proposal must not touch, and (c) still would not re-register the alarm. There is **no operator wake/re-arm endpoint to invoke**. Inventing one is R5, not an existing action. Cloudflare-side, no documented API invokes a specific DO's alarm or restarts a specific DO on demand; PITR/storage restore is a destructive data operation and is **rejected outright** as a stimulus.
+
+### R5 — Code-assisted unconditional re-arm (separate design/spec/gate; NOT built here)
+
+The only option whose mechanism pays off in **all three** §5 branches, because it replaces the conditional arming with an unconditional `setAlarm`, overwriting whatever registration the platform holds:
+
+- **Variant 5a (minimal diff):** in `_armAlarmIfEarlier()`, treat a past-due armed value as unarmed — `if (armed == null || armed <= now || due < armed) setAlarm(due)`. One condition changed; thereafter any ordinary wake (e.g. the R2 command) re-registers at D — in B1/B3, D is past → documented immediate execution. Permanent semantic change: any future stuck-past-due alarm self-heals on the next command/report wake. (That is arguably the actual defect fix; it is also a standing behavior change Rowan must rule on as such.)
+- **Variant 5b (dedicated surface):** a new operator-only wake route that calls the existing unconditional `_armAlarm()` once and returns before/after `getAlarm()` values. No change to command/report semantics; larger surface (route, admission, tests) and a permanent new operator capability.
+- **Either variant requires, before any execution:** its own design + spec + gate under the standing pattern (Rowan source review, executed battery on the exact candidate tree, pinned package, Julie's separate explicit GO naming the pin). **This proposal does not build it and does not ask for its execution.**
+- **Mutation budget (execution, when separately gated):** 1 script upload (+ conditional observability PATCH as R3); stimulus = 1 `commands` row (5a, via the R2 command) or 0 application rows (5b, operator invocation); **exactly 1 unconditional `setAlarm`** by design; conditional PP/GC if a pass runs.
+- **GO wording available now (design phase only):** "GO — draft, test, and pin an alarm-rearm design/spec/gate package for Rowan review only. No production upload, command, report, or hold change is authorized by this GO." An execution GO cannot be worded from this proposal — it must name the future pin.
+
+### Explicitly not proposed
+
+- **Any fresh SubmitJob for idx 26** — prohibited; it would create a duplicate plan for the same occurrence. The preserved plan is the resume vehicle.
+- **A replayed command as a wake** — source-proven non-stimulus (§2.6).
+- **Malformed/unknown commands or reports without a `grantId`** — return before `wake()`; non-stimuli.
+- **`deleteAlarm`** — no surface exists; deleting the registration without a re-arm design would strand the schedule outright.
+- **Any hold change as part of recovery** — halt lift / queue unpause are disposition decisions, not alarm stimuli, and are excluded from every option above.
+
+### Ranking and recommendation
+
+By ascending durable effect: **R0 (0 writes, known-negative) → R1 (0 application rows, ≤1 conditional `setAlarm`) → R2 (1 row, ≤1 conditional `setAlarm`) → R3 (1 upload, speculative) → R5 (1 upload + code change, mechanism certain).**
+
+**Recommendation:**
+
+1. **Execute R2 first** (after Rowan's ruling and Julie's GO in the wording above). R1 is one row smaller, but R2's single row buys a targetless stimulus whose failure mode is bounded by construction and which leaves its own durable audit receipt; R1's zero-row advantage depends on a real grant's replay state and borrows the executor's surface. Either is acceptable; do not do both in one window.
+2. **If the wake probe produces no recorder row and armedAt is unchanged, do not repeat wake probes.** That outcome closes B2's cheap branch and leaves B1/B3, in which no existing surface can re-register the alarm. Escalation is then a fresh decision between R3 (cheap in code risk, speculative in mechanism, partially pre-run by the P2 deploy) and **R5 (recommended)** — the only option that directly overwrites the stale registration. R5's design phase can start on documents alone at any time.
+3. **Whichever option is chosen, the §6.2 warning rides with it:** a successful revival leaves a live, self-perpetuating chain pointed at a preserved, executable plan. The disposition of that plan (resume under a generation gate, or retirement) beco

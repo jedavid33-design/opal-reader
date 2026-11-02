@@ -1,0 +1,52 @@
+rm** (`worker-entry-prod-d6.js:1820`): `super.alarm()` (base entry `worker-entry.js:270` → `coord.alarm()` + cache flush) → construct cache/coordinator/service → `service.recover()` → `service.driveOnce()` → cache flush. The P2 recorder runs **last on both paths**: it lazily creates `d6_drive_passes` (`CREATE TABLE IF NOT EXISTS`, entry line 431), inserts one row (stage reached, `driveInvoked`, allowlisted outcomes JSON, error name/message if thrown, `armedAfter` = post-pass `getAlarm()`), prunes to the newest 288 rows, and writes the recorder-health object to DO key-value storage (`d6DrivePassRecorderHealth`) — then rethrows any original error unchanged, preserving platform retry semantics.
+8. **`driveOnce` has exactly one caller**: the subclass alarm handler. No fetch, command, queue, or report path drives grants.
+9. **No `deleteAlarm` call exists anywhere in the deployed tree.** The only two `setAlarm` call sites are `_armAlarm()` (unconditional, reached only from the base alarm's `finally`) and `_armAlarmIfEarlier()` (conditional, above).
+
+---
+
+## 3. Semantics: guaranteed / unspecified / unverified
+
+### 3.1 What the documentation GUARANTEES (or states as semantics)
+
+- **Single alarm per DO; overwrite semantics.** "Each Durable Object is able to schedule a single alarm at a time by calling `setAlarm()`"; "If you call `setAlarm` when there is already one scheduled, it will override the existing alarm." (D1) There are no per-row alarms: the application's many schedule rows share one platform alarm.
+- **Wake-up purpose.** "Durable Objects alarms allow you to schedule the Durable Object to be woken up at a time in the future. When the alarm's scheduled time comes, the `alarm()` handler method will be called." Alarms "provide a mechanism to guarantee that operations within a Durable Object will complete without relying on incoming requests to keep the Durable Object alive." (D1)
+- **At-least-once + bounded retries on handler failure.** "Alarms have guaranteed at-least-once execution and are retried automatically when the `alarm()` handler throws… exponential backoff starting at a 2 second delay… up to 6 retries." Retries apply "only to the most recent `setAlarm()` call" and only on uncaught exception. (D1)
+- **`getAlarm()` semantics (SQLite).** It returns the current alarm time, or `null`. "The alarm is considered to be set if it has not started, or if it has failed and any retry has not begun." (D2) On the Alarms page: if `getAlarm` is called **while an `alarm` is already running**, it returns `null` unless `setAlarm` has also been called since the handler started. (D1)
+- **Past-time `setAlarm` = immediate asynchronous execution.** "If `setAlarm()` is called with a time equal to or before `Date.now()`, the alarm will be scheduled for asynchronous execution in the immediate future… Alarms… will usually execute within a few milliseconds after the set time, but can be delayed by up to a minute due to maintenance or failures while failover takes place." (D2)
+- **Alarm operations are storage operations.** "Alarms are modified using the Storage API, and alarm operations follow the same rules as other storage operations." (D1) Setting an alarm counts as writing storage: a DO that has set an alarm has non-empty storage and must `deleteAlarm()` to remove it. (D3)
+- **Re-instantiation on unexpected termination.** "If an unexpected error terminates the Durable Object, the `alarm()` handler may be re-instantiated on another machine. Following a short delay, the `alarm()` handler will run from the beginning on the other machine." (D1)
+- **Lifecycle.** Creating a stub does not instantiate the DO; the lifecycle begins when a method is invoked on the stub. "The first incoming request or event (like an alarm) will execute the `constructor()`… then run the corresponding function." An event arriving while hibernated runs the constructor again. Shutdowns occur for code updates (immediate, or deferred reaching `max_delay`), inactivity transitions, runtime updates, and hosting decisions; "the object instance is automatically restarted and new requests are routed to the new instance." (D4)
+- **Code updates.** Deployment itself completes immediately; the strategy controls when each already-active DO adopts the new version. Default is `deferred`, `max_delay` 300 s: an active object may keep running current code until it hibernates; at `max_delay` (or immediately under `immediate`) it resets and adopts the new code, in a fresh isolate, discarding in-memory state. An inactive object "starts on the new version on the next request." Deferral is best-effort. (D5, D3)
+- **Durability rule.** "State that must survive deployments must be persisted to Durable Storage" — in-memory state is preserved only while the DO remains in memory; inactive DOs can be evicted. (D3)
+
+### 3.2 What the documentation leaves UNSPECIFIED (in the retrieved pages)
+
+- **No explicit statement that a pending alarm survives, is dropped by, or is retimestamped by a Worker script upload.** Storage persistence across deploys is documented generally (§3.1), and nothing documents a deploy calling `setAlarm`/`deleteAlarm` — but the pending-alarm-across-deploy proposition itself is not stated.
+- **No catch-up semantics for overdue alarms.** Nothing retrieved states that instantiating a DO (by request, restart, eviction recovery, or code adoption) scans for an overdue alarm and delivers it, nor any bound on how late a "will be woken up" delivery may be outside the D2 failover-delay sentence.
+- **No post-exhaustion state.** Nothing retrieved states what `getAlarm()` returns after an alarm's 6 retries are exhausted, or whether the registration is cleared, retained, or reconciled later.
+- **No periodic reconciliation / dead-letter revival.** No retrieved page describes any platform process that re-delivers an alarm whose delivery was lost without a handler invocation.
+- **No statement that a code deploy or DO restart invokes `alarm()`** absent an incoming request/event routed to that DO.
+
+### 3.3 What remains UNVERIFIED for this DO
+
+Consolidated in §9. The load-bearing items: the exact `due_at`/`kind`/`ref` of the two pending schedule rows (diagnostics returns counts only), hence whether D = A, D < A, or D > A; whether the platform consumed the original alarm, retains a live-but-undelivered registration, or reports a stale value for a dead registration; and whether a fresh `setAlarm` for this DO will now deliver.
+
+---
+
+## 4. The five questions
+
+### Q1. Can `getAlarm()` return a time in the past for an alarm that will still fire? Under what documented conditions?
+
+**Yes — in three documented situations, all transient:**
+
+1. **Set but not yet started.** `getAlarm()` returns the scheduled time while the alarm "has not started" (D2). Between the scheduled instant and handler start, the value is in the past and delivery is still expected. D2 bounds the ordinary version of this gap: execution is usually within milliseconds, "delayed by up to a minute due to maintenance or failures while failover takes place."
+2. **Failed, retry not yet begun.** An alarm that "has failed and any retry has not begun" is still considered set (D2). During a retry gap — backoff starting at 2 s, up to 6 retries (D1) — the reported time is the (past) scheduled time of an alarm that will be invoked again.
+3. **Just set to a past/now time.** A `setAlarm` at or before `Date.now()` schedules "asynchronous execution in the immediate future" (D2); a `getAlarm()` in that interval reads a past time for an alarm about to fire.
+
+**Not this case, on duration alone:** none of these conditions documents a ~20-hour gap. The observed value (19 h 53 m past due at first read, unchanged 15 minutes later, no recorder row) is outside every documented normal condition retrieved. The docs also do **not** license the opposite conclusion — that a long-past value proves the alarm can never fire: post-exhaustion and lost-delivery states are UNSPECIFIED (§3.2). Classification: **anomalous stale armed value; future delivery neither documented nor excluded.**
+
+### Q2. Does a Worker code deploy preserve, drop, or alter a pending DO alarm?
+
+**Documented expectation: preserve — by storage semantics, not by an explicit alarm rule.** Alarm state is storage state (D1, D3); deploys discard only in-memory state and change which code an object runs and when it adopts it (D3, D4, D5). No retrieved page describes a deploy calling `deleteAlarm()` or `setAlarm()`, and the shipped deploy path contains no alarm call of its own — the upload replaces script parts; it does not invoke a DO stub method (stub creation alone "does not send a request to the Durable Object," D4).
+
+**Direct incident evidence:** the instrumentation deploy uploaded at 2026-11-02T15:32:31Z *while this alarm was pending*. At +10.5 min and +25.5 min, `getAlarm()` still returned exactly A and the recorder table was still missing. That deploy therefore **did not dro
