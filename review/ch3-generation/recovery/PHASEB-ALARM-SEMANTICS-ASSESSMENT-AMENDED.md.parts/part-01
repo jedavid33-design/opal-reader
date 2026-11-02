@@ -1,0 +1,47 @@
+-----------------|-----|
+| D1 | Alarms (Durable Objects API) | 2026-04-21 | https://developers.cloudflare.com/durable-objects/api/alarms/ |
+| D2 | SQLite-backed Durable Object Storage — Alarms section | 2026-09-21 | https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/ |
+| D3 | Access Durable Objects Storage | 2026-10-30 | https://developers.cloudflare.com/durable-objects/best-practices/access-durable-objects-storage/ |
+| D4 | Lifecycle of a Durable Object | 2026-10-30 | https://developers.cloudflare.com/durable-objects/concepts/durable-object-lifecycle/ |
+| D5 | Durable Objects code updates | 2026-10-30 | https://developers.cloudflare.com/durable-objects/deployments/durable-objects-code-updates/ |
+
+Every platform claim below is tagged with its source page. Claims are classified **GUARANTEED** (the docs state them as semantics), **UNSPECIFIED** (the retrieved docs do not state them), or **UNVERIFIED** (true or false for *this* DO, not determinable from the available surfaces).
+
+---
+
+## 2. The shipped alarm chain, traced firsthand
+
+Constants (`coordinator.mjs`): `WATCHDOG_PERIOD_MS = 600,000` (10 min, line 133); `LEASE_MS = 900,000` (15 min, line 134); `SCHEDULE_MAX_ATTEMPTS = 8` (line 148).
+
+1. **`_armAlarm()`** (2458–2463): `setAlarm` to the minimum `due_at` over `schedule WHERE state='pending'`, or `now + WATCHDOG_PERIOD_MS` when no row is pending. Unconditional.
+2. **`wake()`** (2469–2474): if no pending `watchdog` schedule row exists, insert one at `now + WATCHDOG_PERIOD_MS`; then call `_armAlarmIfEarlier()`. Comment in source: "Recovery never requires a client — any wake (command, report, alarm) re-establishes the chain."
+3. **`_armAlarmIfEarlier()`** (2480–2488): read `armed = await storage.getAlarm()`; compute `due` exactly as `_armAlarm()` does; **`setAlarm(due)` only if `armed` is null/undefined or `due < armed`**. It never moves an alarm later, never re-sets an equal value, and never verifies delivery.
+4. **Base `alarm()`** (2489–2525): process every pending row with `due_at <= now`, per-row isolated (failure: backoff `min(30 s × 2^attempts, 900 s)`; at 8 attempts the row dies as a visible `schedule_dead` row in `binding_conflicts`); in `finally`, ensure a pending watchdog row exists and call `_armAlarm()` **unconditionally**.
+5. **`wake()` callers — the complete set:** `handleCommand` (`coordinator.mjs:521`, before the command transaction; `_armAlarmIfEarlier()` again at :523 after apply), `requestGrant` (:1806, arm again :1809), `handleReport` (:2064, arm again :2219). **No GET/read path calls `wake()`** — including the `drive=1` diagnostics read (`generation/service.mjs` `drivePassDiagnostics`, ~1725), which performs SELECTs, one `getAlarm()`, and one storage `get`, and is documented in its own header comment as read-only: "no wake, no command, and no mutation is reachable from here."
+6. **Short-circuits that never reach `wake()`:** a command with a missing `command_id` or unknown type returns before `wake()`; a command whose `command_id` already exists returns its stored receipt **before** `wake()` (the replay fence at `handleCommand`, lines 487–494); a report with no `grantId` returns before `wake()`. A *replayed command is therefore not a wake stimulus* on the shipped code.
+7. **Subclass alarm** (`worker-entry-prod-d6.js:1820`): `super.alarm()` (base entry `worker-entry.js:270` → `coord.alarm()` + cache flush) → construct cache/coordinator/service → `service.recover()` → `service.driveOnce()` → cache flush. The P2 recorder runs **last on both paths**: it lazily creates `d6_drive_passes` (`CREATE TABLE IF NOT EXISTS`, entry line 431), inserts one row (stage reached, `driveInvoked`, allowlisted outcomes JSON, error name/message if thrown, `armedAfter` = post-pass `getAlarm()`), prunes to the newest 288 rows, and writes the recorder-health object to DO key-value storage (`d6DrivePassRecorderHealth`) — then rethrows any original error unchanged, preserving platform retry semantics.
+8. **`driveOnce` has exactly one caller**: the subclass alarm handler. No fetch, command, queue, or report path drives grants.
+9. **No `deleteAlarm` call exists anywhere in the deployed tree.** The only two `setAlarm` call sites are `_armAlarm()` (unconditional, reached only from the base alarm's `finally`) and `_armAlarmIfEarlier()` (conditional, above).
+
+---
+
+## 3. Semantics: guaranteed / unspecified / unverified
+
+### 3.1 What the documentation GUARANTEES (or states as semantics)
+
+- **Single alarm per DO; overwrite semantics.** "Each Durable Object is able to schedule a single alarm at a time by calling `setAlarm()`"; "If you call `setAlarm` when there is already one scheduled, it will override the existing alarm." (D1) There are no per-row alarms: the application's many schedule rows share one platform alarm.
+- **Wake-up purpose.** "Durable Objects alarms allow you to schedule the Durable Object to be woken up at a time in the future. When the alarm's scheduled time comes, the `alarm()` handler method will be called." Alarms "provide a mechanism to guarantee that operations within a Durable Object will complete without relying on incoming requests to keep the Durable Object alive." (D1)
+- **At-least-once + bounded retries on handler failure.** "Alarms have guaranteed at-least-once execution and are retried automatically when the `alarm()` handler throws… exponential backoff starting at a 2 second delay… up to 6 retries." Retries apply "only to the most recent `setAlarm()` call" and only on uncaught exception. (D1)
+- **`getAlarm()` semantics (SQLite).** It returns the current alarm time, or `null`. "The alarm is considered to be set if it has not started, or if it has failed and any retry has not begun." (D2) On the Alarms page: if `getAlarm` is called **while an `alarm` is already running**, it returns `null` unless `setAlarm` has also been called since the handler started. (D1)
+- **Past-time `setAlarm` = immediate asynchronous execution.** "If `setAlarm()` is called with a time equal to or before `Date.now()`, the alarm will be scheduled for asynchronous execution in the immediate future… Alarms… will usually execute within a few milliseconds after the set time, but can be delayed by up to a minute due to maintenance or failures while failover takes place." (D2)
+- **Alarm operations are storage operations.** "Alarms are modified using the Storage API, and alarm operations follow the same rules as other storage operations." (D1) Setting an alarm counts as writing storage: a DO that has set an alarm has non-empty storage and must `deleteAlarm()` to remove it. (D3)
+- **Re-instantiation on unexpected termination.** "If an unexpected error terminates the Durable Object, the `alarm()` handler may be re-instantiated on another machine. Following a short delay, the `alarm()` handler will run from the beginning on the other machine." (D1)
+- **Lifecycle.** Creating a stub does not instantiate the DO; the lifecycle begins when a method is invoked on the stub. "The first incoming request or event (like an alarm) will execute the `constructor()`… then run the corresponding function." An event arriving while hibernated runs the constructor again. Shutdowns occur for code updates (immediate, or deferred reaching `max_delay`), inactivity transitions, runtime updates, and hosting decisions; "the object instance is automatically restarted and new requests are routed to the new instance." (D4)
+- **Code updates.** Deployment itself completes immediately; the strategy controls when each already-active DO adopts the new version. Default is `deferred`, `max_delay` 300 s: an active object may keep running current code until it hibernates; at `max_delay` (or immediately under `immediate`) it resets and adopts the new code, in a fresh isolate, discarding in-memory state. An inactive object "starts on the new version on the next request." Deferral is best-effort. (D5, D3)
+- **Durability rule.** "State that must survive deployments must be persisted to Durable Storage" — in-memory state is preserved only while the DO remains in memory; inactive DOs can be evicted. (D3)
+
+### 3.2 What the documentation leaves UNSPECIFIED (in the retrieved pages)
+
+- **No explicit statement that a pending alarm survives, is dropped by, or is retimestamped by a Worker script upload.** Storage persistence across deploys is documented generally (§3.1), and nothing documents a deploy calling `setAlarm`/`deleteAlarm` — but the pending-alarm-across-deploy proposition itself is not stated.
+- **No catch-up semantics for overdue alarms.** Nothing retrieved states that instantiating a DO (by request, restart, eviction recovery, or code adoption) scans for an overdue alarm and delivers it, nor any bound on how late a "will be woken up" delivery may be outside the D2 failover-delay sentence.
+- **No post-exhaustion state.** Nothing retrieved states what `getAlarm()` returns after an alarm's 6 retries are exhausted, or whether the r

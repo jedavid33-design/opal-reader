@@ -1,0 +1,47 @@
+ The live-trigger warning (preservation risk, all options)
+
+While **both** holds stand, a revived drive is grant/void churn only: no dispatch, no spend (§6). The danger is coincidence with any hold change, by anyone, for any purpose:
+
+- **Queue unpause alone** (halt still "1"): the §6 cycle only; nothing reaches the provider.
+- **Halt lift alone** (queue still paused): `sendGrant` becomes wired; a drive pass drains the outbox and **stages a real dispatch message in the paused queue** (retention 86,400 s). Any later unpause inside retention delivers it; the executor re-checks the halt flag at delivery time.
+- **Both lifted, for any reason, including unrelated work:** the preserved plan — the only selectable plan — **executes end-to-end with no further command, submission, or approval touchpoint** (expected cost ≈ $0.008 for the one 569-char segment; modeled occurrence ceiling 153,636 units), and Chapter 3 completes at 27/27.
+
+A recovery GO therefore **expires by its own terms** if either hold changes before or during execution (§8 STOP), and every future gate must be told the chain may be live. **Correction 6 applies here in full:** the STOP that a hold change triggers binds the operator's stimuli only — it does not, and cannot, quiet a chain that has already revived; the revived chain's activity continues under whatever hold state follows, bounded in effect only by the holds themselves (§6).
+
+---
+
+## 7. Proposal — candidate recovery stimuli, ascending by durable effect
+
+**Common preflight (every option; any mismatch → STOP before the stimulus; STOP here and everywhere below carries correction 6 — it binds operator stimuli, never an already-revived chain):** live build stamp `86ad06ab…`; GENERATION_HALT "1"; queue delivery paused; `drive=1` read returns armedAt = A exactly, pendingSchedule 2, pendingWatchdog 1, tableState "missing", recorderHealth null; preserved plan/job exactly at §1.2 state (grants [], occurrence pending, job queued rev 1, derived reserved 0, dispatched 0); phase figures frozen; conflicts exactly the four baseline `schedule_dead` rows; parked job fingerprint `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`; settings revision 1; quota reconcile `ok: true` with the sole known straddler exception. **R2-specific preflight (ruling item 3): verify (i) the target job's nonexistence — the reserved probe job id resolves to no job on the live job/plan reads — and (ii) a fresh `command_id`, never used before, recorded in the execution record before the stimulus.** **If the preflight `drive=1` read shows any recorder row or a changed armedAt, the state has already moved — STOP; no stimulus is needed or permitted; classify and report.**
+
+**Common observation (every option):** `drive=1` + plan/job/quota reads at ≈ +1 min, +6 min, +12 min, +20 min, +35 min after the stimulus; no second stimulus of any kind within the window; all reads captured to the gate evidence folder. Success evidence = a recorder row (stage, `driveInvoked`, outcomes, `armedAfter`); §6 transitions, if any, itemized against the pre-classified set.
+
+**Conditional budget notation:** **PP** = one completed alarm pass's write set (§6.1); **GC** = one §6 grant issuance (+, at +15 min, its void set). These are *conditional* — they occur only if a pass actually runs — and are counted in every option below, not hidden.
+
+### R0 — Passive re-read only (baseline; not a recovery stimulus)
+
+- **Action:** one `drive=1` diagnostics read + passive observation. Reaches the DO (instantiates it) but, per source, calls no `wake()` and no `setAlarm`.
+- **Expected effect:** none. Already performed twice post-deploy (15:42:57Z, 15:58:02Z) with no change — this option is **empirically negative** over a 15-minute span and is listed only as the control and as the preflight/post-stimulus read for the other options.
+- **Mutation budget:** 0 production writes. (Conditional PP/GC only if the platform spontaneously delivers — in which case the option stops being passive and is reported as a spontaneous revival.)
+- **GO wording:** "GO — one read-only drive-diagnostics recheck and a 35-minute passive observation window only. No command, report, deploy, alarm wake, SubmitJob, halt or queue change."
+
+### R1 — Wake via a replayed executor report (smallest durable effect: zero application rows) — RETAINED AS A CONSIDERED ALTERNATIVE; NOT the preferred first stimulus (ruling item 3 prefers R2)
+
+- **Action:** one `POST /v2/reports` naming a grant that preflight has verified is already in state `reported`. Source trace: `handleReport` calls `wake()` **before** its transaction; the transaction sees `grant.state === "reported"` and returns `{ ok: true, replayed: true }` with **no state writes**; `_armAlarmIfEarlier()` runs again after. No results array is needed — the reported short-circuit precedes result processing.
+- **Alarm effect:** exactly the §4/Q5 arithmetic — `setAlarm(D)` once **iff D < A** (past time → documented immediate execution); otherwise nothing. Instantiates the DO either way.
+- **Mutation budget:** **0 application-data writes**; 0 commands; conditional ≤ 1 `setAlarm` (platform alarm metadata); conditional PP/GC if a pass runs. Watchdog insert: 0 expected (preflight verifies pendingWatchdog = 1; if it were 0, +1 schedule row — a preflight mismatch → STOP anyway).
+- **Risks:** depends entirely on preflight correctly identifying a `reported` grant — a report against a *live* grant would be a real executor report with real closure effects, which is why the grant's state must be verified in the same preflight, and any ambiguity is a STOP. Semantically borrows the executor's surface for a non-executor purpose.
+- **GO wording:** "GO — exactly one replay report for the preflight-verified already-reported grant named in the execution preflight, for alarm-wake diagnosis only, while GENERATION_HALT stays "1" and the queue stays paused. No new command, no SubmitJob, no deploy, no hold change. Stop on any movement outside gate §7.3."
+
+### R2 — Wake via one targetless durable command (one application row; self-auditing) — **PREFERRED FIRST DIAGNOSTIC STIMULUS (ruling item 3)**, over R1, subject to a separately approved execution gate. R2's durable receipt and nonexistent target justify its one-row application cost. Its preflight must verify target-job nonexistence and a fresh `command_id` (see common preflight).
+
+- **Action:** one `POST /v2/commands`: type `RequestPause`, a **fresh** `command_id` recorded in the execution record, payload naming a reserved **nonexistent** job id (e.g. `alarm-wake-probe:nonexistent`). Source trace: `RequestPause` is not in the halt-refused command set; `handleCommand` runs `wake()` (521), then `_recordAndApply` inserts the `commands` row and applies: `applyJobEvent` finds no such job and returns `job_not_found` **before** any transition log or job write; the row's outcome is updated to `rejected / job_not_found`; `_armAlarmIfEarlier()` runs again (523). The failure mode is bounded by construction — a nonexistent job can never transition, be granted, or be dispatched.
+- **Alarm effect:** identical to R1 (two evaluations of the same arithmetic; at most one effective `setAlarm`, iff D < A).
+- **Mutation budget:** **1 durable `commands` row** (insert + outcome update); 0 job/occurrence/grant/settings/schedule writes (watchdog insert 0 under preflight); conditional ≤ 1 `setAlarm`; conditional PP/GC if a pass runs.
+- **Risks:** one permanent (but truthful and self-describing) receipt row. Otherwise as R1, minus the dependence on any real grant's state.
+- **GO wording:** "GO — exactly one RequestPause command with the fresh command_id recorded in the execution record, naming the reserved nonexistent job `alarm-wake-probe:nonexistent`, for alarm-wake diagnosis only, while GENERATION_HALT stays "1" and the queue stays paused. No other command or report, no SubmitJob, no deploy, no hold change. Stop on any movement outside gate §7.3."
+
+### R3 — Redeploy the identical instrumented build — **STRUCK FROM THE RECOMMENDED ESCALATION SEQUENCE (ruling item 4)**. Retained ONLY as a considered, speculative alternative in this passage. The P2 deploy has already provided negative evidence for the adoption/restart hypothesis R3 depends on: a deploy occurred while this alarm was pending, with adoption/instantiation events, and produced no delivery and no recorder row. R3 appears in no ranking, ladder, or recommendation in this amended document.
+
+- **Action:** one multipart upload of the byte-identical 31-part instrumented envelope (build `86ad06ab…`), followed by the standing post-upload observability check and, **only if** the upload reset it, the settings-only multipart PATCH restoring observability.
+- **Alarm effect — assessed honestly:** a deploy invokes no DO method and calls no alarm API (Q2). Its only alarm-relevant pathway is indirect: code adoption resets an active DO (im

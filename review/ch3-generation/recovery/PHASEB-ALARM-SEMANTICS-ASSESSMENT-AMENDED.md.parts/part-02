@@ -1,0 +1,59 @@
+egistration is cleared, retained, or reconciled later.
+- **No periodic reconciliation / dead-letter revival.** No retrieved page describes any platform process that re-delivers an alarm whose delivery was lost without a handler invocation.
+- **No statement that a code deploy or DO restart invokes `alarm()`** absent an incoming request/event routed to that DO.
+
+### 3.3 What remains UNVERIFIED for this DO
+
+Consolidated in §9. The load-bearing items: the exact `due_at`/`kind`/`ref` of the two pending schedule rows (diagnostics returns counts only), hence whether D = A, D < A, or D > A; whether the platform consumed the original alarm, retains a live-but-undelivered registration, or reports a stale value for a dead registration; and whether a fresh `setAlarm` for this DO will now deliver.
+
+---
+
+## 4. The five questions
+
+### Q1. Can `getAlarm()` return a time in the past for an alarm that will still fire? Under what documented conditions?
+
+**Yes — in three documented situations, all transient:**
+
+1. **Set but not yet started.** `getAlarm()` returns the scheduled time while the alarm "has not started" (D2). Between the scheduled instant and handler start, the value is in the past and delivery is still expected. D2 bounds the ordinary version of this gap: execution is usually within milliseconds, "delayed by up to a minute due to maintenance or failures while failover takes place."
+2. **Failed, retry not yet begun.** An alarm that "has failed and any retry has not begun" is still considered set (D2). During a retry gap — backoff starting at 2 s, up to 6 retries (D1) — the reported time is the (past) scheduled time of an alarm that will be invoked again.
+3. **Just set to a past/now time.** A `setAlarm` at or before `Date.now()` schedules "asynchronous execution in the immediate future" (D2); a `getAlarm()` in that interval reads a past time for an alarm about to fire.
+
+**Not this case, on duration alone:** none of these conditions documents a ~20-hour gap. The observed value (19 h 53 m past due at first read, unchanged 15 minutes later, no recorder row) is outside every documented normal condition retrieved. The docs also do **not** license the opposite conclusion — that a long-past value proves the alarm can never fire: post-exhaustion and lost-delivery states are UNSPECIFIED (§3.2). Classification: **anomalous stale armed value; future delivery neither documented nor excluded.**
+
+### Q2. Does a Worker code deploy preserve, drop, or alter a pending DO alarm?
+
+**Answer at ruling strength (item 2): the only claim that stands is incident-specific** — in *this* incident, the reported alarm timestamp survived the P2 deploy bit-identical (below). **No general documented guarantee of unchanged alarm registration across deployments is claimed.** An inference from storage semantics points toward preservation — alarm state is storage state (D1, D3); deploys discard only in-memory state and change which code an object runs and when it adopts it (D3, D4, D5); no retrieved page describes a deploy calling `deleteAlarm()` or `setAlarm()`, and the shipped deploy path contains no alarm call of its own (the upload replaces script parts; it does not invoke a DO stub method — stub creation alone "does not send a request to the Durable Object," D4) — but an inference is not a documented guarantee, and the general proposition remains UNSPECIFIED.
+
+**Direct incident evidence:** the instrumentation deploy uploaded at 2026-11-02T15:32:31Z *while this alarm was pending*. At +10.5 min and +25.5 min, `getAlarm()` still returned exactly A and the recorder table was still missing. That deploy therefore **did not drop, retimestamp, or revive** the reported alarm in the observed window.
+
+**Classification:** incident-specific observation — **the timestamp survived the P2 deploy** (observed, bit-identical); general proposition — **UNSPECIFIED** in the retrieved docs; **no documented guarantee is claimed**. A deploy also does not, by any documented mechanism, *deliver* an overdue alarm: an inactive object adopts new code "on the next request" (D5), and adoption is a code event, not an alarm event.
+
+### Q3. What platform events re-instantiate a DO and give an overdue alarm a chance to fire?
+
+Re-instantiation events (D4): an incoming request or event routed to the DO (HTTP/RPC stub method invocation, WebSocket message, or **the alarm event itself**); return from hibernation on such an event (constructor runs again); restart after shutdowns caused by code-update adoption, inactivity/eviction transitions, Workers runtime updates, or hosting decisions — after which "new requests are routed to the new instance."
+
+Specific alarm-relevant case (D1): if an unexpected error **terminates the DO during an alarm invocation**, the handler may be re-instantiated on another machine and, after a short delay, runs from the beginning there.
+
+**The crucial distinction:** re-instantiation is not alarm delivery. Every documented re-instantiation path runs the constructor and then *the invoked function* — for a request, the request handler; only an alarm event runs `alarm()`. No retrieved page states that a restart, eviction recovery, or code adoption scans for and fires an overdue alarm. So platform events give an overdue alarm a "chance" only in the weak sense that the DO is alive and addressable again; the only documented trigger of `alarm()` is the platform's alarm delivery itself. For this DO, many re-instantiations have already occurred since A went past due (attempt-3 commands, dozens of reads, the instrumentation deploy and its diagnostics reads) with no recorded pass — empirical evidence that ordinary instantiation does not, at least reliably, produce catch-up delivery. **Classification: GUARANTEED for request/event re-instantiation; UNSPECIFIED for any overdue-alarm catch-up on re-instantiation.**
+
+### Q4. If the alarm handler is never invoked, is there any documented self-healing, or does the stale value persist indefinitely until an external stimulus?
+
+**No self-healing mechanism was identified in the reviewed documentation for the never-invoked case.** (Ruling item 2 strength: this is a statement about the reviewed documentation, **not** a claim that no such platform mechanism exists.) The documented recovery mechanisms all presuppose an invocation: at-least-once delivery with ≤6 retries applies when the handler *throws* (D1); re-instantiation on another machine applies when an error *terminates the DO during* an invocation (D1). If delivery itself is lost before any handler code runs, no retrieved documentation describes a reconciliation pass, a watchdog-of-watchdogs, or a deadline after which the platform re-registers or clears the alarm.
+
+**Persistence:** within the application, the stale value persists because the only code that could overwrite it is `_armAlarmIfEarlier()` (which, per §5, is expected to no-op at D = A) and `_armAlarm()` (reachable only from inside an alarm invocation). Within the platform, persistence duration after a lost delivery is UNSPECIFIED. Empirically, the value has persisted ~20 h across commands, reads, and a deploy.
+
+**One refinement:** "external stimulus" must be read narrowly. A stimulus heals this state only if it causes a **`setAlarm` overwrite** (or an actual alarm delivery). Stimuli that merely instantiate the DO — every GET/read, the diagnostics surface, a deploy — have demonstrably not healed it. **Classification: no self-healing mechanism identified in the reviewed documentation (a statement about the docs, not about the platform's full behavior); indefinite persistence — UNVERIFIED as a platform guarantee, observed in this incident.**
+
+### Q5. What does the shipped code do on the next command/wake, given `getAlarm()` returns the stale past time A?
+
+Let **D** = minimum `due_at` over pending schedule rows (currently 2 pending, 1 watchdog; the rows' `due_at` values are **not exposed by any read surface** — UNVERIFIED, §9). Let **A** = 1793562576104.
+
+On any path that reaches `wake()` — a fresh (non-replay) valid command via `handleCommand`, a report with a `grantId` via `handleReport`, or `requestGrant`:
+
+1. `wake()` checks pending watchdog rows: count is 1 → **no schedule insert**.
+2. `_armAlarmIfEarlier()`: reads `armed = A`; computes `due = D`.
+   - **D < A →** `setAlarm(D)`. D is in the past → per D2, "scheduled for asynchronous execution in the immediate future." This is the only branch in which a wake changes the platform registration.
+   - **D = A →** **no `setAlarm` call** (the comparison is strict: `due < armed`).
+   - **D > A →** **no `setAlarm` call** (the code never moves an alarm later).
+3. The command/report transaction applies (for the benign stimuli in §7: no target state changes).
+4. The post-apply `_armAlarmIfEarlier()` repeats the same computation against the post-transaction state. For a stimulus that does not alter the schedule, the inputs are unchanged — **at most o

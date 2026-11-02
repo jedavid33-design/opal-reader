@@ -1,0 +1,47 @@
+mediate, or deferred up to `max_delay`), and a later request/event instantiates it on the new code. No documented mechanism delivers an overdue alarm on adoption or restart (Q3). **And the experiment has substantially been run:** the P2 deploy *was* a deploy-while-this-alarm-was-pending; it changed the code rather than redeploying identical bytes, but its adoption/instantiation events produced no delivery and no recorder row in 25.5 minutes. An identical redeploy's incremental value over that datapoint is UNVERIFIED and, on the docs, speculative.
+- **Mutation budget:** **1 script upload**; conditional **+1 observability PATCH** (only if logging is found reset — it was *not* needed after the P2 upload); 0 commands/reports; conditional PP/GC if a pass runs. Side effects: script ETag may change; in-memory DO state is discarded on adoption; adoption timing under the script-API upload path is UNVERIFIED (§9).
+- **Risks:** the broadest blast radius per unit of expected benefit — a whole-script deploy to test a hypothesis the docs do not support, with the standing observability-reset hazard and an uncontrolled adoption moment that could coincide with unrelated traffic.
+- **GO wording:** "GO — exactly one redeploy of the byte-identical instrumented build 86ad06aba6083f7ea84d64b08eac1788d5bf570c (31 parts), plus only the conditional observability settings PATCH if the upload resets logging. No command, report, SubmitJob, halt or queue change."
+
+### R4 — Existing operator actions — CONSIDERED; NONE EXISTS
+
+The shipped operator surfaces were enumerated firsthand: the four Ch 3 operator routes, the two finalizer routes, and the `drive=1` diagnostics mode. **None calls `wake()` or `setAlarm`**; the read-only ones (diagnostics, finalizer preview) are explicitly no-wake, and the mutating ones (exemption apply/revoke, finalizer apply) are substantive production actions that are (a) prohibited under the current disposition, (b) preserved-state changes this proposal must not touch, and (c) still would not re-register the alarm. There is **no operator wake/re-arm endpoint to invoke**. Inventing one is R5, not an existing action. Cloudflare-side, no documented API invokes a specific DO's alarm or restarts a specific DO on demand; PITR/storage restore is a destructive data operation and is **rejected outright** as a stimulus.
+
+### R5 — Code-assisted unconditional re-arm (separate design/spec/gate; NOT built here)
+
+The only option whose mechanism pays off in **all three** §5 branches, because it replaces the conditional arming with an unconditional `setAlarm`, overwriting whatever registration the platform holds:
+
+- **Variant 5a (minimal diff):** in `_armAlarmIfEarlier()`, treat a past-due armed value as unarmed — `if (armed == null || armed <= now || due < armed) setAlarm(due)`. One condition changed; thereafter any ordinary wake (e.g. the R2 command) re-registers at D — in B1/B3, D is past → documented immediate execution. Permanent semantic change: any future stuck-past-due alarm self-heals on the next command/report wake. (That is arguably the actual defect fix; it is also a standing behavior change Rowan must rule on as such.) **Correction 6 applies with full force to R5:** deploying 5a makes re-registration *easier*, and once a chain revives under it, no STOP and no shipped surface stops the chain; containment is the open problem flagged in §6.1/§8.
+- **Variant 5b (dedicated surface):** a new operator-only wake route that calls the existing unconditional `_armAlarm()` once and returns before/after `getAlarm()` values. No change to command/report semantics; larger surface (route, admission, tests) and a permanent new operator capability.
+- **Either variant requires, before any execution:** its own design + spec + gate under the standing pattern (Rowan source review, executed battery on the exact candidate tree, pinned package, Julie's separate explicit GO naming the pin). **This proposal does not build it and does not ask for its execution.**
+- **Mutation budget (execution, when separately gated):** 1 script upload (+ conditional observability PATCH, per the standard deploy mechanics); stimulus = 1 `commands` row (5a, via the R2 command) or 0 application rows (5b, operator invocation); **exactly 1 unconditional `setAlarm`** by design; conditional PP/GC if a pass runs.
+- **GO wording available now (design phase only):** "GO — draft, test, and pin an alarm-rearm design/spec/gate package for Rowan review only. No production upload, command, report, or hold change is authorized by this GO." An execution GO cannot be worded from this proposal — it must name the future pin.
+
+### Explicitly not proposed
+
+- **Any fresh SubmitJob for idx 26** — prohibited; it would create a duplicate plan for the same occurrence. The preserved plan is the resume vehicle.
+- **A replayed command as a wake** — source-proven non-stimulus (§2.6).
+- **Malformed/unknown commands or reports without a `grantId`** — return before `wake()`; non-stimuli.
+- **`deleteAlarm`** — no surface exists; deleting the registration without a re-arm design would strand the schedule outright.
+- **Any hold change as part of recovery** — halt lift / queue unpause are disposition decisions, not alarm stimuli, and are excluded from every option above.
+
+### Ranking and recommendation
+
+By ascending durable effect: **R0 (0 writes, known-negative) → R1 (0 application rows, ≤1 conditional `setAlarm`) → R2 (1 row, ≤1 conditional `setAlarm`) → R5 (1 upload + code change, mechanism certain).** *(R3 is struck from this sequence per ruling item 4 and appears nowhere in it; it survives only as the considered-and-struck passage in §7.)*
+
+**Recommendation:**
+
+1. **Execute R2 first** — Rowan's ruling item 3 prefers R2 over R1 as the first diagnostic stimulus — under a separately approved execution gate with Julie's GO in the wording above, and only after its preflight verifies target-job nonexistence and a fresh `command_id`. R1 is one row smaller, but R2's single row buys a targetless stimulus whose failure mode is bounded by construction and which leaves its own durable audit receipt; R1's zero-row advantage depends on a real grant's replay state and borrows the executor's surface. R1 remains a considered alternative; do not do both in one window.
+2. **If the wake probe produces no recorder row and armedAt is unchanged, do not repeat wake probes.** That outcome closes B2's cheap branch and leaves B1/B3, in which no existing surface can re-register the alarm. The remaining rung in the sequence is **R5** — the only option that directly overwrites the stale registration; Rowan has selected variant **R5a for design review only** (ruling item 5), and its design proceeds on documents alone. **R3 is struck** (ruling item 4): it is not an escalation step; revisiting it would require a fresh ruling, against the P2 deploy's negative evidence.
+3. **Whichever option is chosen, the §6.2 warning rides with it:** a successful revival leaves a live, self-perpetuating chain pointed at a preserved, executable plan. The disposition of that plan (resume under a generation gate, or retirement) becomes the next required decision — it does not make itself.
+
+---
+
+## 8. STOP conditions (all options)
+
+**Correction 6 preamble (ruling item 6) — governs every STOP below:** STOP prevents additional operator stimuli. **It cannot itself stop an already-revived alarm chain.** A successful recovery may continue watchdog and grant/void activity beyond the observation window, indefinitely under the holds; that continuing effect is a known, accepted-or-rejected cost of the stimulus decision itself, not something a later STOP can claw back. Containment of a revived chain is an open problem requiring a separate, independently gated procedure (none exists on shipped surfaces), and it must be explicitly addressed before any production stimulus.
+
+- **Preflight:** any §7 preflight item differs — including armedAt ≠ A, counts ≠ 2/1, tableState ≠ "missing", any recorder row, any §6-invariant already violated. STOP; no stimulus; classify the movement first.
+- **Ambiguous stimulus result:** the stimulus request errors, times out, or returns an unreadable response. STOP; verify by reads whether it landed before even considering (under a fresh GO) any repeat. **One stimulus per GO, ever.**
+- **Unmatched movement:** any state change outside the §6 pre-classified set — any phase-figure movement, dispatched ≠ 0, > 1 live grant, derived reserved ∉ {0, 12}, plan state ≠ `active`, job state/revision outside the §6 cycle shapes, bindings/watermarks moved, conflicts ≠ 4 baseline, parked job fingerprint changed, quota reconcile non-`ok`, any provider contact or spend. STOP; preserve; report; no self-clearing.
+- **Recorder findings:** a row with stage ≠ "complete", `driveInvoked` false on a completed stage path, or non-null error fields; or recorderHealth reporting recording failures. STO

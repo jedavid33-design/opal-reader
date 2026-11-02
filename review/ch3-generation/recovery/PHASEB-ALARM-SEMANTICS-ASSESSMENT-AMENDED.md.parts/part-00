@@ -1,0 +1,60 @@
+# Phase B — Durable Object Alarm-Semantics Assessment and Smallest Safe Recovery-Path Proposal
+
+**Status: PROPOSAL ONLY — INVESTIGATION HOLD. Nothing in this document is executed, built, or authorized by its existence.**
+**Production mutations performed for this document: NONE.** No alarm wake, no command, no report, no deploy, no SubmitJob, no halt/queue change.
+**Basis date: 2026-11-02.** Prepared by Wren at Rowan's direction in her P2 gate execution review (verdict: **DOCUMENTARY PASS ON EXECUTION AND CONTAINMENT; DIAGNOSTIC RESULT INCONCLUSIVE**; recorded verbatim on opal-roundtable issue #15, comment 6581853615, Handoff ID RT-H-20261102-cf451c).
+**AMENDED 2026-11-02** under Rowan's ruling on this assessment (verdict: **DOCUMENTARY ACCEPTANCE WITH REQUIRED CORRECTIONS. PRODUCTION HOLD CONTINUES**; recorded verbatim on opal-roundtable issue #15, comment 6583967424, Handoff ID RT-H-20261102-9289ce). See the Amendment Banner below for every change. The unamended original is preserved at pin `fe224038…` (opal-reader, `ui1-review`).
+
+---
+
+---
+
+## AMENDMENT BANNER — Rowan ruling, 2026-11-02 (comment 6583967424)
+
+This document is the original assessment **amended in place** under Rowan's ruling. Every change:
+
+- **(a) Ruling item 1 — B1 reframed.** B1 (D = A) is the **LEADING** source-grounded explanation of attempt 3, **NOT PROVEN** — it is not proven until the pending schedule due times (D) are established. B2/B3 are preserved, and the recorder dual-failure caveat (§10 item 10) is preserved wherever an inference rests on absent recorder rows. (§0, §5, §10 item 1)
+- **(b) Ruling item 2 — Q2 guarantee language removed.** No general documented guarantee of unchanged alarm registration across deployments is claimed anywhere in this document. Only the **incident-specific observation** stands: in this incident the reported alarm timestamp survived the P2 deploy bit-identical. The general proposition remains UNSPECIFIED. (§0, Q2, §10 item 4)
+- **(c) Ruling item 2 — Q4 reworded to exact strength.** The claim is now: **no self-healing mechanism was identified in the reviewed documentation** — never that no such platform mechanism exists. (Q4, §10-adjacent classification lines)
+- **(d) Ruling item 4 — R3 STRUCK.** R3 is struck from the recommended recovery escalation sequence everywhere it appeared as a rung. It is retained only in a clearly labeled considered-and-struck passage (§7), citing the P2 deploy's negative evidence for the adoption/restart hypothesis. (§7 R3, §7 ranking, §7 recommendation)
+- **(e) Ruling item 3 — R2 confirmed preferred.** R2 is the preferred first diagnostic stimulus over R1, subject to a separately approved execution gate; its preflight must verify target-job nonexistence and a fresh `command_id`. R1 is retained as a considered alternative. (§7 common preflight, §7 R1, §7 R2, §7 recommendation)
+- **(f) Ruling item 6 — STOP correction applied.** Wherever STOP language appears: **STOP prevents additional operator stimuli but cannot itself stop an already-revived alarm chain.** A successful revival continues watchdog and grant/void activity beyond any observation window, indefinitely under the holds; containment of a revived chain is an **open problem** requiring its own independently gated procedure. (§6.1, §6.2, §8 preamble, §7 R5)
+- **(g) Ruling item 7 — Step-0 preserved.** The Phase B step-0 procedural-variance requirement is restated as preserved for any later generation gate. (§9)
+
+No production action was taken or is authorized by this amendment. Production remains INVESTIGATION HELD: GENERATION_HALT "1", queue delivery paused, preserved plan and idx-26 exemption untouched.
+
+
+## 0. Executive answer
+
+The live `getAlarm()` value for the account coordinator Durable Object is **A = 1793562576104 = 2026-11-01T19:49:36.104Z**, first read at 2026-11-02T15:42:57Z (≈19 h 53 m past due) and unchanged at 15:58:02Z, with `pendingSchedule: 2` / `pendingWatchdog: 1` and the drive-pass recorder table still **missing** (no subclass alarm pass has completed a recording since the instrumented build deployed).
+
+The documentation supports this much, and no more:
+
+- A past-due value from `getAlarm()` is **not by itself** proof of a dead alarm: the SQLite storage documentation defines an alarm as still "set" if it "has not started, or if it has failed and any retry has not begun," and describes ordinary delivery delays of up to about a minute during maintenance/failover. A ~20-hour overrun is **outside every documented normal condition** retrieved.
+- Cloudflare documents **at-least-once execution with up to 6 automatic retries on a throwing handler**. That is self-healing for a handler that was *invoked and failed*. **No retrieved documentation describes any catch-up scan, reconciliation, or revival mechanism for an alarm that is never invoked**, and none states what `getAlarm()` returns after retry exhaustion.
+- A Worker code deploy is documented to discard **in-memory** state and adopt new code on a lifecycle schedule; state that must survive must be in Durable Storage, and an alarm is storage state (setting one is a storage write; removing one requires `deleteAlarm()`). **No retrieved page states in so many words that a pending alarm survives a script upload unchanged** — that specific proposition is UNSPECIFIED in the docs and is supported here only by incident observation: the P2 instrumentation deploy (2026-11-02T15:32:31Z) left the reported value bit-identical at both post-deploy reads and produced no recorder row.
+- The shipped code's wake path **cannot correct this state** in the expected arithmetic: `wake()` / `_armAlarmIfEarlier()` call `setAlarm(due)` only when the earliest pending schedule due time **D** is **strictly earlier** than the armed value A. Every alarm this code ever set was set to the then-earliest pending due time, and schedule rows are removed only by alarm processing — so on the source's own invariants the leading case is **D = A**, in which a wake is an alarm no-op. This reconciles attempt 3 without needing a second platform failure at the wake itself (see §5 for the full branch table). **Framing per ruling item 1: D = A (branch B1) is the LEADING source-grounded explanation — it is NOT PROVEN, and cannot be proven until the pending schedule due times are established (D is unobservable on shipped surfaces, §10 item 1). B2 and B3 remain open.**
+
+**Recovery consequence:** no existing read, command, report, operator route, or redeploy *guarantees* a fresh alarm registration. The options in §7 are ranked by ascending durable effect; only the code-assisted option (R5) contains a mechanism — an unconditional `setAlarm` — that directly overwrites a stale registration. Any successful revival is **one-way and perpetual** under the existing surfaces: the watchdog chain self-perpetuates and the preserved plan enters the gate §7.3 grant/void cycle under HELD. There is no existing "stop the alarm again" surface short of a further gated action.
+
+---
+
+## 1. Evidence base and method
+
+### 1.1 Shipped source (firsthand trace)
+
+All source claims are traced in the gate-assembled deployed tree of the **live instrumented build `86ad06aba6083f7ea84d64b08eac1788d5bf570c`**:
+
+- Tree: `~/workspace/ch2-program/ch3-recovery/p2-gate-execution/build/deploy-tree/v2/` (31 parts; manifest `p2-gate-execution/build/deploy-manifest-stamped.json`).
+- Pre-instrumentation basis: `~/workspace/ch2-program/ch3-recovery/phaseb-attempt3/evidence/parts-e0/` (build `1c2d1d0f…`). The alarm machinery (`coordinator.mjs` schedule/alarm section) is byte-identical between the basis and the instrumented tree; instrumentation touched only the entry's subclass alarm wrapper and the diagnostics read.
+- Diagnostic report: `~/workspace/ch2-program/ch3-recovery/PHASEB-STALL-DIAGNOSTIC-REPORT.md` (pin `cccfea62…`, opal-reader `ui1-review`), especially §2/Q1, §5/Q4, §6/Q5.
+- Gate §7.3: `~/workspace/ch2-program/ch3-recovery/PHASEB-INSTRUMENTATION-GATE-PROPOSAL.md` (pin `385debd9…`, opal-reader `ui1-review`).
+
+### 1.2 Live observations relied on
+
+From the P2 gate execution record (pin `0e8f802f…`): `drive=1` diagnostics reads at 2026-11-02T15:42:57Z and 15:58:02Z both returned `tableState: "missing"`, `drivePasses: []`, `recorderHealth: null`, `alarm: { armedAt: 1793562576104, pendingSchedule: 2, pendingWatchdog: 1 }`. System HELD throughout (GENERATION_HALT "1", queue `opalreader-generation-v2` delivery paused). Preserved plan `plan:19cad189fab54b9c804a74a6` `active`; job `plan:19cad189fab54b9c804a74a6:seg` `queued` rev 1, grants []; occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b` `pending`; derived reserved 0; dispatched 0; phase figures frozen at settled 1,029,420 / estimatedUnverified 19,018 / reservedUnverified 5,648 / unknownOpen 0 / remaining 12,464,932.
+
+### 1.3 Platform documentation relied on (official, crawled 2026-11-02)
+
+| # | Page | Updated (per page) | URL |
+|---|------|---

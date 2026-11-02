@@ -1,0 +1,39 @@
+P further stimuli; the row is a finding for classification (per gate correction C4), not an automatic failure and not a success.
+- **Cadence anomaly:** alarm passes arriving materially faster than the schedule arithmetic permits (e.g. sustained > 1 pass/minute) — a spinning chain is unmatched behavior. STOP; report.
+- **Window expiry:** no recorder row by +35 min → the stimulus **failed**; STOP. Escalation to another option requires Rowan's ruling + a fresh Julie GO naming that option. Silence is not consent to climb the ladder.
+- **Hold coincidence:** if GENERATION_HALT or the queue state changes for any reason before or during the window, the GO is **void**; read-only verification and immediate report only. No hold manipulation is authorized by any recovery GO, in either direction.
+
+---
+
+## 9. Step-0 procedural-variance note (required separation)
+
+**Preserved per ruling item 7:** any later generation gate must explicitly resolve this variance — it is not waived, absorbed, or cured by anything in this document or the R5a proposal. Phase B attempt 3 proceeded under a recorded **procedural variance**: the approved procedure's step-0 grant-level verification was unsatisfiable by construction (grants issue only from a drive pass, which the step-0 preceded), and deliverable-set verification was substituted. **This proposal is about alarm revival only. It is not a generation attempt, not an Attempt 4, and does not propose one.** Nothing here resumes, re-plans, or re-prices idx 26 generation; the preserved plan's disposition and any future generation gate — which must resolve the step-0 variance explicitly, per Rowan's standing ruling — remain separate and unproposed. The §6 transition set is cited solely because a revived drive would produce it mechanically under HELD; pre-classifying it is containment accounting, not generation authorization.
+
+---
+
+## 10. UNVERIFIED list
+
+1. The exact `due_at`, `kind`, and `ref` of the 2 pending schedule rows — hence whether D = A (leading, B1), D < A (B2), or D > A (B3). No shipped read surface exposes schedule rows. **Status under the ruling: UNCHANGED and load-bearing — B1 remains UNPROVEN until these due times are established (ruling item 1).**
+2. Whether the platform consumed the original alarm during the 1101 fault, retains a live-but-undelivered registration, or reports a stale timestamp for a dead registration.
+3. Whether a fresh `setAlarm` (same or past timestamp) issued now will be delivered for this DO — i.e., whether the defect was transient (fault-era) or persistent.
+4. The general proposition that a pending alarm survives a Worker script upload unchanged — **not** stated in the retrieved documentation, and **no general documented guarantee is claimed** (ruling item 2). Only the incident-specific observation stands: this incident's reported timestamp survived the P2 deploy bit-identical.
+5. The code-update strategy and adoption timing that applied to the P2 script-API upload, and that would apply to an identical redeploy (R3); whether/when the coordinator instance reset.
+6. Whether the DO was active, hibernated, or inactive at the P2 deploy and at each diagnostics read (no surface reports this).
+7. `getAlarm()`'s value after platform retry exhaustion (undocumented); whether the observed persistence of A implies retries never began, never exhausted, or exhausted without clearing.
+8. The exact number of alarm passes (hence recorder rows) in a 35-minute revival window — schedule alignment and lease/retry interleaving make it variable; §6.1 bounds the per-pass set, not the count.
+9. Causation: whether the 1101 fault caused the alarm condition (diagnostic H1) or merely coincided with it (H4). This assessment changes neither's standing.
+10. The recorder's dual-failure blind spot: a pass whose SQL record **and** KV health note both fail leaves no row (gate C1 caveat) — a future "no row" result retains that ambiguity, narrowed but not eliminated by the health channel.
+11. Whether attempt 3's wake actually called `setAlarm` — branch-dependent on item 1.
+12. Whether ordinary request instantiation can *ever* trigger catch-up delivery of an overdue alarm on this platform — undocumented; incident evidence is negative but not exhaustive.
+
+---
+
+## 11. Sources
+
+**Shipped source** (gate-assembled tree, build `86ad06ab…`): `coordinator.mjs` (constants :133–148; `handleCommand` :475–525; `requestGrant` :1805–1810; `handleReport` :2062–2219; schedule/alarm :2448–2525); `generation/service.mjs` (`driveOnce` :1008–1165; `drivePassDiagnostics` :1725–1822); `worker-entry-prod-d6.js` (recorder :424–470, :1769–1890; subclass `alarm()` :1820); `worker-entry.js` (base `alarm()` :270); `generation/quota-budget.mjs` (`reserveForGrant` :544); `generation/quarantine.mjs` (`noteHaltObservation` :296).
+
+**Records:** P2 gate execution record (pin `0e8f802f…`); amended gate proposal §7.3 (pin `385debd9…`); stall diagnostic report §§2, 5, 6 (pin `cccfea62…`); original assessment (pin `fe224038…`); Rowan's ruling on this assessment (opal-roundtable issue #15, comment 6583967424) — code-repo records all opal-reader, branch `ui1-review`.
+
+**Platform documentation:** D1–D5 as tabled in §1.3 (developers.cloudflare.com, crawled 2026-11-02).
+
+— Wren, 2026-11-02. Documents only; no production action taken or authorized.

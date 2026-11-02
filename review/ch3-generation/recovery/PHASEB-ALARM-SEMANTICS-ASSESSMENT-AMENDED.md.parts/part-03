@@ -1,0 +1,52 @@
+ne effective `setAlarm` per wake path**, and zero in the D ≥ A branches.
+
+Paths that do **nothing** to the alarm: every GET/read (including `drive=1` diagnostics, which only *reads* `getAlarm()`), replayed commands (receipt short-circuit precedes `wake()`), malformed/unknown commands (validation precedes `wake()`), reports without a `grantId`, all existing operator routes (they construct the coordinator/service directly and none calls `wake()`; the finalizer preview is explicitly documented in-source as performing "no wake"), and a Worker deploy (no DO invocation at all).
+
+**Net:** the next wake either re-registers the alarm at a past time (D < A branch — immediate documented delivery) or **leaves the stale registration exactly as it is**. Which branch production is in is UNVERIFIED because D is unobservable; §5 argues D = A is the expected branch.
+
+---
+
+## 5. Reconciling attempt 3: the 01:23:15Z wake vs. armedAt still = A
+
+Attempt 3's SubmitJob (2026-11-02T01:23:15Z) reached `handleCommand` and therefore ran `wake()` + the post-apply `_armAlarmIfEarlier()`. No drive pass followed. The diagnostic report (§5) showed the naive fault hypothesis needs a fifth condition; the source arithmetic now separates the branches cleanly. Exactly one of these held at that wake:
+
+| Branch | Condition at 01:23:15Z | What the wake did | What must also be true to explain no pass |
+|--------|------------------------|-------------------|--------------------------------------------|
+| **B1 — equal (LEADING, not proven)** | D = A: the row whose `due_at` A was set from is still pending and still earliest | Nothing (strict `<` fails) | The platform holds an armed value it reports faithfully but does not deliver — *or* the registration was consumed in the fault while `getAlarm()` continues to report the stale timestamp (a read/registration divergence). Either way the failure is delivery-side; the wake is blameless. |
+| **B2 — earlier row existed** | D < A: some pending row was due before A (e.g., A had been set against a different row that was then earliest) | `setAlarm(D)`, a past time → documented immediate async execution | The fresh `setAlarm` registration was itself silently ineffective for this DO, or its delivery was also lost. Requires a second, stronger platform condition. |
+| **B3 — later row only** | D > A: the row A was set from is gone, earliest pending is later | Nothing (never moves later) | A points at no live schedule row, yet the platform neither delivers nor clears it, and the code has no path to correct a *later*-than-armed discrepancy in the past direction. (How the A-row could disappear without an alarm processing it is itself unexplained on the source — no non-alarm path deletes schedule rows — so B3 is the weakest branch.) |
+
+**Why B1 is the leading explanation (not proven):** every `setAlarm` this code performs sets A := the then-minimum pending `due_at` (or now + 10 min on an empty schedule). Pending rows are removed or rescheduled only inside alarm processing (`alarm()` marks rows done / backs them off; `_voidDispatch` voids a grant's lease row — itself alarm- or drain-invoked). No alarm processing is recorded after A was set, and all post-A `_schedule` insertions are future-dated relative to their insertion time (lease +15 min, retry +30 s, watchdog +10 min), so none can undercut A. The single platform alarm is not "for" a row in any case (D1: one alarm per DO) — A is simply the timestamp the platform was last told; B1 says the schedule and the platform value still agree, and delivery is what is missing.
+
+**What this assessment does *not* claim:** that B1 is proven. **Per ruling item 1, B1 is not proven until the pending schedule due times are established.** D is unobservable on shipped surfaces; B2/B3 remain open, and the fault-causation question (diagnostic H1 vs H4 — fault-caused vs fault-coincident delivery failure) is untouched by this analysis. **Recorder dual-failure caveat (preserved per ruling item 1):** every inference in this section that rests on the absence of recorder rows carries the §10 item 10 caveat — a pass whose SQL record *and* KV health note both fail leaves no row, so absent rows narrow, but do not eliminate, the space of unrecorded passes. The branches matter because they price the options in §7: a wake probe pays off in B2, is a no-op in B1/B3; only an unconditional `setAlarm` (R5) pays off in all three.
+
+---
+
+## 6. If a drive pass finally runs under HELD — the pre-classified transition set
+
+Re-verified against the gate §7.3 text and the shipped source (`driveOnce` grant step, `generation/service.mjs` ~1008–1113; `_issueGrant`, `coordinator.mjs` ~1636–1790; `reserveForGrant`, `generation/quota-budget.mjs` ~544). Under GENERATION_HALT "1" + queue paused, a revived pass that reaches the grant step produces **exactly** this, and nothing else is pre-classified:
+
+- Grants [] → exactly [`grant:plan:19cad189fab54b9c804a74a6:seg:1:full`, `issued`] (job revision as read at issuance).
+- Occurrence `pending` → `granted`; job `queued` rev 1 → `generating` rev 2.
+- Issuance writes: 1 grant row; 1 occurrence transition (+ transition log); 1 `ledger_ops` attempt row; 1 **unsent** outbox dispatch row; 1 pending `lease` schedule row (+15 min); 1 `d6_grant_reservations` row, `slots_total` 12, `open`.
+- Derived reserved for the issuance PT day 0 → **12**. Dispatched stays **0** (no `sendGrant` is wired while halted; the outbox row is never sent; zero provider contact; $0 spend).
+- **All five phase figures frozen**: settled 1,029,420; estimatedUnverified 19,018; reservedUnverified 5,648; unknownOpen 0; remaining 12,464,932. (The earlier draft prediction that `reservedUnverified` would rise was withdrawn in the amended gate — `phaseAccounting` derives it only from adjudication/attempt-log state that grant issuance never writes.)
+- Plan remains `active`, totals {eligible 1 / done 0 / failed 0 / blocked 0}; bindings 1841 and sync watermarks 18/1841 frozen; parked job fingerprint unchanged.
+- **Bounded lease-expiry/re-grant cycle (also pre-classified):** at lease expiry (+15 min) the base alarm finds the outbox row unsent and never attempted and safe-voids it (`_voidDispatch`, "lease_expired_undelivered"): occurrence `granted` → `pending`, grant → `voided`, 1 `ledger_ops` attempt-release row, reservation closes (derived reserved 12 → 0), outbox row deleted, `retry_grant` scheduled +30 s; re-issuance follows under the grant-id grammar at the then-current job revision. Invariants at every instant: **≤ 1 live grant; derived reserved ∈ {0, 12}; dispatched 0; phase figures frozen.**
+
+**Any movement outside this set is unmatched → STOP (§8).**
+
+### 6.1 Per-pass write set (the honest recurring budget of any revival)
+
+Each subclass alarm pass that runs to completion also writes, beyond §6's grant effects:
+
+- Base alarm: 1 update per due schedule row processed (→ `done`; a failing row instead backs off or dies — a new `binding_conflicts` row at death is **unmatched movement → STOP**); ≤ 1 watchdog schedule insert in `finally`; 1 unconditional `setAlarm` (to the earliest pending due).
+- `driveOnce` preamble: halt-observation writes (epoch/meta upserts in `d6_halt_epochs` / `d6_quarantine_meta`); binding-projection sweep (expected no-op — no pending projections are known; any sweep movement is reported, not assumed).
+- Recorder: `CREATE TABLE IF NOT EXISTS d6_drive_passes` (**first pass only** — the table is currently missing), 1 row insert, 1 prune statement (deletes only beyond the newest 288), 1 recorder-health KV `put`.
+- A pass that **throws** after the recorder runs still records its row (record-then-rethrow) and is retried by the platform up to 6 times — each retry is another recorded pass. Error-stage rows are **findings requiring classification, not automatic failures** (gate correction C4).
+
+**Revival is perpetual:** once the chain lives, watchdog passes recur (~10-min cadence interleaved with lease/retry passes), recorder rows accumulate toward the 288 cap (oldest diagnostic evidence is pruned — capture reads promptly), and the §6 grant cycle churns roughly every 15 minutes, indefinitely, until some *separately authorized* disposition changes the plan or the code. No option below includes an "off switch," because none exists on the shipped surfaces.
+
+**Correction 6 (ruling item 6) — read with every STOP in this document:** STOP prevents additional operator stimuli; it **cannot itself stop an already-revived alarm chain**. A successful recovery may continue watchdog and grant/void activity **beyond the observation window, indefinitely under the holds**. Containment of a revived chain is an **open problem requiring its own independently gated procedure** — none exists on shipped surfaces — and this continuing effect must be explicitly addressed before any production stimulus (the R5a proposal's §7 carries the full containment analysis).
+
+### 6.2

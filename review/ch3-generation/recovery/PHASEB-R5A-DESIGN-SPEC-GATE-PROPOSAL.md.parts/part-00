@@ -1,0 +1,69 @@
+# Phase B — R5a Design / Specification / Gate Proposal (DESIGN REVIEW ONLY)
+
+**Status: DESIGN REVIEW ONLY. This document authorizes nothing.** Execution would require (1) Rowan's approval of this design, (2) a built, tested, pinned candidate package, and (3) Julie's separate explicit GO naming that pin, under the gate skeleton in §9. No production code change, deploy, command, report, alarm stimulus, halt change, queue change, or generation is authorized by this document.
+**Production mutations performed for this document: NONE.**
+**Basis date: 2026-11-02.** Prepared by Wren under Rowan's ruling on the alarm-semantics assessment (verdict: **DOCUMENTARY ACCEPTANCE WITH REQUIRED CORRECTIONS**; opal-roundtable issue #15, comment 6583967424), item 5: **SELECT R5a for DESIGN REVIEW ONLY** — analyze repeated overdue re-arming, idempotency, schedule churn, test coverage, and an independently gated stopping/containment procedure. R5b remains a fallback (§11).
+
+---
+
+## 1. Scope and non-authorization
+
+R5a is the code-assisted recovery option from the amended alarm-semantics assessment (`PHASEB-ALARM-SEMANTICS-ASSESSMENT-AMENDED.md`): a **one-condition change** to the coordinator's conditional alarm-arming function so that a **past-due armed value is treated as unarmed** and the alarm is re-registered at the earliest pending due time. It is the only recovery mechanism that pays off in all three assessment branches (B1 D = A, B2 D < A, B3 D > A), because `setAlarm` overwrites the platform registration whatever state it is in.
+
+In scope for this document: the exact change (§2), its repeated-firing behavior (§3), idempotency (§4), schedule churn (§5), a test-coverage plan (§6), the stopping/containment analysis Rowan required (§7), sequencing against R2 (§8), a gate skeleton for a future execution (§9), and unverified items and open questions (§10).
+
+Out of scope: building the candidate (no code is written by this document), any deploy, any stimulus, any generation. The Phase B step-0 procedural-variance requirement is **preserved** for any later generation gate (ruling item 7); nothing here touches it. Production remains INVESTIGATION HELD: GENERATION_HALT "1", queue `opalreader-generation-v2` delivery paused, plan `plan:19cad189fab54b9c804a74a6` and the idx-26 exemption preserved.
+
+## 2. The change, precisely
+
+### 2.1 Current condition (verified firsthand, deployed source)
+
+From the live instrumented build's tree (`p2-gate-execution/build/deploy-tree/v2/coordinator.mjs`, 276,256 B, SHA-256 `bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a`; this part is byte-identical to the pre-instrumentation basis in `phaseb-attempt3/evidence/parts-e0/` — diff 0 lines — because the P2 instrumentation touched only the entry and service parts), lines 2480–2488:
+
+```js
+  async _armAlarmIfEarlier() {
+    const armed = await this.state.storage.getAlarm();
+    const next = this._one(
+      `SELECT MIN(due_at) AS due FROM schedule WHERE state = 'pending'`);
+    const due = next && next.due !== null ? next.due : this._now() + WATCHDOG_PERIOD_MS;
+    if (armed === null || armed === undefined || due < armed)
+      await this.state.storage.setAlarm(due);
+  }
+```
+
+The current guard fires `setAlarm(due)` only when **nothing is armed** or the earliest pending due time is **strictly earlier** than the armed value. A past-due armed value (our A = 1793562576104) with D = A therefore never re-registers — the attempt-3 stall arithmetic (assessment §5, branch B1, the leading explanation).
+
+### 2.2 The R5a condition
+
+One condition changes; nothing else in the function changes:
+
+```js
+    const now = this._now();
+    if (armed === null || armed === undefined || armed <= now || due < armed)
+      await this.state.storage.setAlarm(due);
+```
+
+That is: `setAlarm(due)` when `armed == null || armed <= now || due < armed` (with the source's explicit null/undefined pair retained, and `now` bound once from the coordinator's existing `this._now()` clock — the same clock the rest of the schedule machinery uses; no new clock seam is introduced). The added disjunct is `armed <= now`: **an armed value at or in the past is treated as unarmed**, and the registration is overwritten with `due`, computed exactly as today.
+
+### 2.3 Which paths gain the new behavior
+
+- `_armAlarmIfEarlier()` has exactly six call sites, all in `coordinator.mjs`: via `wake()` at `handleCommand` (:521), `requestGrant` (:1806), `handleReport` (:2064); and directly post-apply at :523, :1809, :2219. **All six gain the past-due branch.** In practice: any fresh (non-replay) valid command, any report carrying a `grantId`, and any internal `requestGrant` (executor/plan advancer, and the `retry_grant` schedule handler at :2636) becomes a potential re-registration event while a past-due armed value persists.
+- The base alarm's `finally` calls the **unconditional** `_armAlarm()` (:2458–2463, called at :2520) — **unchanged**; it already overwrites unconditionally from inside a pass.
+- `wake()`'s watchdog insertion (:2469–2474) — unchanged. `driveOnce` (`generation/service.mjs:1008` in the instrumented tree) — unchanged. Reads and operator routes — unchanged; the `drive=1` diagnostics read still performs no wake and no arming, exactly as its in-source header states.
+- The P2 instrumentation recorder (entry part) — **stays, untouched**. A 5a-triggered revival is precisely what the recorder exists to observe.
+
+### 2.4 Footprint and estimate method
+
+The candidate, when built under a future gate, is assembled from the **current live build's tree** (build `86ad06ab…`, the instrumented 31-part tree) — **not** from `parts-e0` alone. (For this one part the distinction is provably moot — `coordinator.mjs` is byte-identical between the two bases — but the build basis is the live tree, per standing practice.) Estimate method, to be measured exactly at build time by `diff -u` against that tree and asserted in the gate's T0: **one part differs by the condition change** — expected +2/−1 lines in `coordinator.mjs` (one added `const now` line, one modified condition line) — plus, per the standing build-stamp convention observed in the P2 gate, the deployed tree additionally stamps `build-identity.mjs` with the gate's build pin, so **2 parts differ from the pre-gate live tree at deploy time** (candidate + stamp) and 29 are byte-identical. No other part changes. These are estimates by stated method, not measured figures; the gate's T0 must produce the measured diff and STOP on any excess.
+
+## 3. Repeated overdue re-arming (ruling item 5)
+
+Question: if the re-armed alarm *also* fails to deliver, what happens on each subsequent wake? Is it bounded? Can the alarm time move later than D?
+
+**Per-wake behavior.** While the armed value remains past-due, *every* wake evaluates the new disjunct as true and calls `setAlarm(due)`. A single command/report path evaluates `_armAlarmIfEarlier()` **twice** (pre- and post-apply, §2.3): the first call sets `armed := due` (a past value in branches B1/B3-past), so the second call reads a still-past armed value and **fires again** — up to **2 identical `setAlarm(due)` writes per wake event** under persistent non-delivery. There is no counter, backoff, or suppression in the proposed condition.
+
+**What bounds it.** The churn is **proportional to wake traffic, never self-generating**: `setAlarm` produces no wake; wakes arrive only from external commands/reports and internal `requestGrant` calls. With no traffic, a 5a build sitting on an undeliverable registration does exactly nothing more than today's build — it does not spin on its own. The moment delivery *does* work, the behavior self-terminates: a delivered pass ends in the base alarm's `finally`, which calls the unconditional `_armAlarm()` and leaves the armed value at a **future** due time, after which `armed <= now` is false and ordinary wakes go back to today's arithmetic.
+
+**Can the armed time move later than D? No — with one disclosed sub-case.** The value written is always `due` = the minimum pending `due_at` (or `now + WATCHDOG_PERIOD_MS` when no row is pending). 5a never writes a value later than `due`, and never later than what a delivered pass's own `finally` would write. The disclosed sub-case: in the B3-future shape (the stale armed value A is past, but the earliest pending row D is **later than A and in the future**), today's code leaves A untouched, while 5a writes `setAlarm(D)` — moving the *registration* later than the stale A. That is not a delay of any real work: A is a dead timestamp pointing at no live row, and D is the true earliest pending work — the same value `_armAlarm()` would set. It is disclosed here because "5a can move the alarm later" is literally true in this sub-case and Rowan should rule on it with eyes open.
+
+**Empty-schedule sub-case.** On a post-apply direct call with **no pending rows**, `due` computes to `now + WATCHDOG_PERIOD_MS`; if the armed v
