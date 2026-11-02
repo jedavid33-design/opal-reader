@@ -1,0 +1,104 @@
+ched totals changed in any amount not in the set);
+(T4) a second grant, a second plan/job movement, or any
+movement in the conflicts baseline, watermarks, or parked
+job outside the set. Trigger evaluation uses the same
+reads S1 already takes; S1-X adds no stimulus and no
+extra reads of its own before the stop act.
+
+**Scope and budget (when fired):** exactly one
+`stop_chain` act (against whatever registration the
+pre-act read observes) + `verify_chain_stop` attempts
+within the episode bound (≤3 total; design v4 §4 — if
+the episode EXHAUSTS unverified, S1-X is spent: the state
+remains CHAIN_STOPPED/unverified, the exhaustion is
+recorded, and any further verification requires the R3-V
+micro-scope under a fresh Rowan ruling + Julie
+authorization). State writes ≤4, audit rows ≤5,
+`deleteAlarm` ≤3, `setAlarm` 0, commands 0, all else 0.
+Ends HELD in CHAIN_STOPPED; immediate report to Julie
+with the trigger, the reads that fired it, and the stop
+record incl. `stopConfidence`.
+
+**Binding (V4-4 — the standing authorization is valid
+ONLY under all five of these).** The v4 text left the
+standing conditional authorization floating: it named
+triggers and a budget but was not tied to a specific
+pinned text, window, or evidence standard. As revised,
+a standing S1-X authorization under shape (i):
+
+- **(a) is bound to ONE pinned package.** It exists only
+  as part of the package pinned at the commit recorded
+  here — PACKAGE PIN: «PIN — inserted at filing; the
+  authoritative value is the pin named in this package's
+  board filing comment and in the corrections cp as
+  delivered via Dropbox» — on branch `ui1-review` of
+  `jedavid33-design/opal-reader`, and only for the gates
+  text whose SHA-256 is quoted in that same filing. An
+  authorization that quotes no pin, a different pin, or a
+  superseded gates text arms nothing. If this gates
+  document is superseded by a later pin, any standing
+  authorization under the old pin lapses with it.
+- **(b) is bound to ONE specific observation window: the
+  S1 observation window it attaches to** — defined as the
+  interval that OPENS at the dispatch of S1's single
+  stimulus command and CLOSES at the completion of S1's
+  closing census read (the final read of S1's
+  observability sequence: the ≈ +37-minute reads plus the
+  closing census). The authorization is armed only inside
+  that window, for that one S1 execution. It does not
+  attach to any other window, any re-run, or any later S1
+  attempt.
+- **(c) fires only on VERIFIED trigger evidence.** A
+  T1–T4 trigger counts as verified only when ALL of the
+  following hold: (i) the observation was made by one of
+  S1's scheduled reads (the `drive=1` projection, the
+  containment state route, and the plan/job reads S1's
+  classification already takes — S1-X adds no reads of its
+  own); (ii) the raw observed values and the read
+  timestamps are written into the S1 execution record
+  BEFORE the stop act fires, so the firing is auditable
+  against the evidence that caused it; (iii) the movement
+  is outside the §7.3 pre-classified set under the same
+  classification standard S1 itself reports under — where
+  the paired surfaces disagree, or a value cannot be
+  freshly read, the trigger is NOT verified: the executor
+  reports and STOPs under S1's ordinary contingency (Layer
+  1 + report), and S1-X does not fire. An executor
+  impression, an unrecorded observation, or a single
+  uncorroborated surface reading never arms S1-X.
+- **(d) is SINGLE USE.** It is consumed by exactly one
+  `stop_chain` invocation (with its in-bound verifies).
+  Whether it fires or not, it cannot fire twice; a second
+  chain-stop response requires a new authorization under
+  a then-current pin.
+- **(e) EXPIRES at window close.** At the closing census
+  read's completion the authorization lapses, fired or
+  unfired. There is NO carry-over: not to a later window,
+  not to a different gate, not to a superseding package.
+  If it never fired, nothing about it survives to be
+  reused, and its lapse is recorded in S1's execution
+  record.
+
+**Exact Julie GO scope — standing conditional shape (i),
+for a future authorization (V4-4 bound form):**
+> "GO — standing conditional authorization for Gate S1-X
+> under the V4-corrections gates package, pin «PIN —
+> inserted at filing», armed only during the single S1
+> observation window defined in §S1-X (from the stimulus
+> dispatch to the closing census read): if any S1-X
+> trigger (T1–T4) is observed AND verified to the §S1-X
+> evidence standard (scheduled reads, recorded verbatim
+> in the execution record before firing, outside the
+> §7.3 set), execute exactly one stop_chain with in-bound
+> verify attempts, report immediately, and end HELD in
+> CHAIN_STOPPED. This authorization is single-use, expires
+> at window close whether or not it fires, carries over
+> to no other window or package, covers no other act, and
+> does not extend Gate S1's GO."
+
+**Exact Julie GO scope — at-trigger-time shape (ii), for
+a future authorization:**
+> "GO — execute Gate S1-X now, as pinned: exactly one
+> stop_chain with in-bound verify attempts against the
+> revived chain, read-backs only, ending HELD in
+> CHAIN_STOPPED."

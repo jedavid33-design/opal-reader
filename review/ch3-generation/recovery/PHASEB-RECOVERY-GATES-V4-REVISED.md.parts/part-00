@@ -1,0 +1,176 @@
+# Phase B — recovery gates v4 REVISED (five independently scoped proposals + standalone restoration + R3 micro-scope + S1-X companion)
+
+**Status: PROPOSALS ONLY — NONE APPROVED, NONE TO BE EXECUTED.**
+
+**REVISED EDITION (Nov 2, 2026)** — this edition answers
+Rowan's ruling on the V4 package (verdict: REVISE BEFORE
+GATE APPROVAL; record `ROWAN-CONTAINMENT-V4-RULING.md`).
+R3 and R4 were CONDITIONALLY ACCEPTED subject to the
+corrections below; R5's S1-X design was ACCEPTED subject
+to V4-4 (an acceptance of the design shape, NOT an
+execution authorization). The corrections applied in THIS
+document are:
+
+- **V4-1 (standalone restoration; micro-scope R3-V):**
+  a **historical audit review** of the full append-only
+  containment audit history is now a MANDATORY precondition
+  for both restoration authorization and R3-V
+  post-exhaustion authorization. The `prevEpisode*` summary
+  alone is explicitly insufficient: it holds only the most
+  recent closed episode and can have been overwritten
+  (design v4 revised §4.2/§6).
+- **V4-2 (C3 ledger, §R, restoration):** RECORDED LOGICAL
+  COMPLETION is separated from PHYSICAL VERIFICATION
+  throughout C3 re-entry. An audit row or a stop-record
+  field proves only that a step was RECORDED; a physical
+  step is credited as physically complete only when a fresh
+  live read at re-entry re-establishes the physical fact.
+  Ambiguous responses remain UNRESOLVED until a physical
+  read resolves them. §R is rewritten in these terms, and
+  the ledger cells and restoration text that treated a
+  record as physical proof are corrected.
+- **V4-4 (§S1-X):** the standing conditional S1-X
+  authorization is now BOUND — to this pinned package
+  (named below by document hash and package pin), to a
+  specific observation window (defined in §S1-X), to a
+  verified-trigger-evidence standard, to SINGLE USE, and
+  to EXPIRATION at window close with no carry-over.
+
+The unrevised V4 text is `PHASEB-RECOVERY-GATES-V4.md`
+(SHA-256 `cc935d53…`, V4 package pin `b818f5b3…`); this
+edition supersedes it for proposal purposes and is
+otherwise identical except where a correction above names
+a change.
+Prepared under Rowan's V3 ruling (verdict: REVISE BEFORE GATE
+APPROVAL; relayed verbatim by Julie in chat Nov 2, 2026;
+record `ROWAN-CONTAINMENT-V3-RULING.md`), corrections
+**R4** (C3 accounting), **R5** (S1 containment), **R3**
+(exhaustion authorization), and **R6** (census discipline).
+This file **supersedes** `PHASEB-RECOVERY-GATES-V3.md`
+(SHA-256 `e2a0663e…`, pin `89dca999…`) for proposal purposes;
+the v3 file is retained as history. Changes from v3:
+
+1. **C3 carries an exact action-by-action mutation ledger**
+   (R4): every act with its durable writes counted, failure
+   modes, ambiguous-response handling, verification retries
+   counted against `MAX_STOP_VERIFY_ATTEMPTS = 3`, worst-case
+   totals, and a STOP/re-entry procedure that cannot
+   duplicate a physical act. The exact accounting RAISES two
+   of v3's prose bounds (state-row writes ≤3 → ≤6; audit
+   rows ≤5 → ≤7): v3 undercounted the stop act, which is TWO
+   transactions (the commit, then the stop-record write after
+   the physical act), and each verify is a further
+   transaction. The physical-act bound is unchanged
+   (`deleteAlarm` ≤3, `setAlarm` 0).
+2. **S1's contingency is redesigned** (R5): `contain_drive`
+   alone does not stop a chain, and the gates now say so in
+   S1's own text. A separately authorized companion scope,
+   **S1-X** (emergency chain stop), is added with its own GO
+   wording; S1's GO explicitly does NOT include it (§S1-X).
+3. **A new micro-scope, R3-V** (post-exhaustion verification
+   authorization), names the ONLY path to further stop
+   verification after an episode is exhausted (R3).
+4. **Every census expectation carries its observation date**
+   (R6): all values in CENSUS were observed **Nov 2, 2026**.
+   They are hard preflight expectations to be RE-READ at
+   execution — never presumed current facts.
+5. Identities are the containment **V4** candidates
+   (`containment-v4/CANDIDATE-IDENTITIES.md`); design
+   references are to `PHASEB-CONTAINMENT-DESIGN-V4.md`;
+   C3's read-backs now include `stopConfidence` and the
+   episode fields (design v4 §2/§4).
+
+**Sequence, if all are eventually approved: C1 → C2 →
+R5a-D → C3 → standalone restoration authorization → S1,
+with S1-X authorized separately alongside S1 (before S1
+executes) if Julie adopts the recommended shape.** Execution
+of ANY scope requires (a) Rowan's approval of THAT scope as
+a separate ruling and (b) a fresh explicit Julie GO in that
+scope's exact GO wording. Approval of one scope approves no
+other. Production remains under INVESTIGATION HOLD:
+GENERATION_HALT "1", queue delivery paused, preserved plan
+and idx-26 exemption untouched.
+
+**Common census (referenced as CENSUS below; any deviation
+= STOP before any mutation, executor STOP law).** *R6
+dating: every value in this block was observed on **Nov 2,
+2026** by live read during package preparation. At any
+gate's execution they must be re-read fresh; a value that
+differs is a deviation, and a value that matches is a fact
+of the execution day, not of Nov 2.* /health build stamp as
+expected for the gate; script etag exact; 31/31 parts vs the
+operative manifest; observability enabled + persisted; 10
+bindings; GENERATION_HALT "1"; policy enforce; settings
+revision 1; queue paused, 1 consumer; standard admitted /
+Batch not armed; registry FP ↔
+`5c589095-f812-48a2-8ab2-03ba2791f2b2`; phase figures exact
+(settled 1,029,420 / estimatedUnverified 19,018 /
+reservedUnverified 5,648 / unknownOpen 0 / remaining
+12,464,932); reconcile `ok: true` with the sole straddler
+(`att-37d63768-db4b-447d-8150-580b7c6ee257`,
+estimated_unverified); current PT day dispatched 0;
+exactly 5 plans with the preserved plan
+`plan:19cad189fab54b9c804a74a6` active {eligible 1, done 0,
+failed 0, blocked 0}, entry pending, job queued rev 1,
+quarantine unheld, grants []; eligibility digests
+consistent at `cdef2c7e…`; conflicts exactly the 4-row
+`schedule_dead` baseline; parked fingerprint
+`b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`;
+watermarks content 18 / bindings 1841; idx-26 R2 key FREE;
+and a `drive=1` read recording armedAt, pendingSchedule,
+pendingWatchdog, tableState, recorderHealth (and, on a
+containment-capable build, the containment projection) as
+the gate's baseline. *The Nov 2, 2026 `drive=1` observation
+specifically recorded: armedAt **1793562576104** =
+2026-11-01T19:49:36.104Z; pendingSchedule **2**;
+pendingWatchdog **1**; recorder table `missing`, zero rows,
+`recorderHealth: null`.*
+
+**Correction 6 (standing, governs every STOP in every scope
+below):** STOP prevents additional operator stimuli but
+cannot itself stop an already-revived alarm chain. A
+successful recovery may continue watchdog and grant/void
+activity beyond the observation window, indefinitely under
+the holds; containment of a revived chain is an
+independently gated procedure, and that continuing effect
+must be explicitly addressed before any production
+stimulus.
+
+---
+
+## Gate C1 — Containment deployment (code only; ends inert)
+
+**Scope:** deploy the containment V4 candidate (live build
+`86ad06ab…` + containment v4; 3 changed parts: coordinator
+`6c19a50e…`, entry `2bb0608b…`, service `5c5183e6…`;
+identities in `containment-v4/CANDIDATE-IDENTITIES.md`) and
+verify the deploy. The gate ends with containment **INERT**:
+no transition is performed; the containment state remains
+absent/NORMAL. **No stimulus of any kind** — no command,
+report, wake provocation, SubmitJob, hold or queue change.
+
+**Preflight:** CENSUS re-based to build `86ad06ab…` / etag
+`ba80e81f…` (both observed Nov 2, 2026; re-read fresh).
+Battery re-run on the gate-assembled tree is mandatory
+(parameterized P2 suite + containment battery v4 against
+the containment V4 fixture identities; the pinned logs are
+evidence about the pinned tree, the gate records its own).
+Build pin of the assembled tree before upload.
+
+**Mutation budget — ledger-lite (named write classes):**
+
+| Write class | Bound | Notes |
+|---|---|---|
+| Worker script uploads (forward) | 1 | 31 parts, byte-identical to the stamped manifest |
+| Script-settings PATCH | ≤1 | ONLY if the post-upload read shows observability reset |
+| Rollback uploads | ≤1 | Only on the rollback triggers below; + ≤1 conditional PATCH |
+| Containment transitions / commands / reports / SubmitJob | 0 | — |
+| Hold flips / queue changes | 0 | — |
+| Alarm registrations caused by this gate | 0 expected | A deploy is not a wake; both prior deploys left the armed value bit-identical — any change is a finding to classify, not a budget item |
+| Recorder rows | 0 expected | — |
+| Spend | $0 | — |
+
+**Observability required during the gate:** post-upload
+script-settings read (observability enabled + persisted);
+`drive=1` read (the `containment` projection present,
+state NORMAL / absent / verifie

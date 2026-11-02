@@ -1,0 +1,195 @@
+also exhausts, R3-V is spent:
+a further continuation needs a NEW R3-V authorization
+under a new Rowan ruling.
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute micro-scope R3-V as pinned for exhausted
+> episode <id>: fresh census, then exactly one new
+> stop_chain (new episode) with in-bound verify attempts
+> only, read-backs only, NO other stimulus, ending HELD
+> in CHAIN_STOPPED."
+
+---
+
+## Gate S1 — Revival stimulus (the R2 stimulus, in sequence)
+
+**Identity (preserved verbatim from v3):** this gate IS
+the R2 stimulus gate, sequenced after
+C1/C2/R5a-D/C3 + the standalone restoration. The stimulus
+is exactly one `RequestPause` command with a fresh
+`command_id` targeting the reserved nonexistent job
+`alarm-wake-probe:nonexistent` — a wake probe of whether
+the platform reacts, observed through the recorder. A
+negative result is reported ONLY as "**no observed
+revival within the tested window, subject to recorder
+limitations**" and never as proof that B2 is impossible.
+Do not rename or re-scope the probe in execution
+reporting. R2-identity negative wording is unchanged.
+
+**Hard dependency (item E): S1 is NOT the first test of
+containment.** S1 may not be proposed for execution until
+ALL of: Gate C3 complete with its PARTIAL verdict
+recorded; Rowan has reviewed C3's record AND ruled on
+C3's unverifiable remainder; the standalone restoration
+executed and read back (state NORMAL, episode closed,
+registration absent). S1 contains no containment
+transition in its preflight at all.
+
+**Preflight (hard):** as v3 (gates closed; remainder
+ruling + restoration on record; CENSUS re-based to the
+composed build with containment NORMAL; target
+nonexistence verified on live job/plan reads; fresh
+command_id generated and recorded BEFORE the stimulus;
+recorder state known — any recorder row or armedAt
+different from the restoration's closing read = STOP).
+
+**The stimulus (exactly this, once):** one
+`POST /v2/commands` `{command_id: <fresh>, type:
+"RequestPause", payload: {jobId:
+"alarm-wake-probe:nonexistent"}}`. Expected response:
+outcome `rejected`, reason `job_not_found`. **No re-send**
+under any circumstance — a timeout or ambiguous response
+is a STOP-and-classify event.
+
+**Mutation budget (complete, S1 proper):** commands rows
+**exactly 1** (the stimulus); `setAlarm` registrations
+≤1 from the stimulus command's own wake evaluation
+(composed build, R5a memo bound), plus per-pass `finally`
+registrations ONLY if passes are delivered (shipped
+behavior, recorded and classified — not operator
+stimuli); schedule rows 0 expected from the stimulus;
+containment transitions in preflight **0**; uploads /
+PATCHes / hold flips / queue changes / SubmitJob **0**.
+Spend: $0 in every branch while the holds stand.
+
+**Contingency — REVISED (R5).** V3's contingency was a
+single executor-applied `contain_drive`. The ruling is
+correct that this is insufficient, and S1 now says so in
+its own text: **`contain_drive` suppresses future drive
+passes; it does NOT stop an alarm chain** — a revived
+chain keeps registering (watchdog), and grant/void churn
+continues between passes. S1's contingency is therefore
+TWO-LAYERED and separately authorized:
+
+- **Layer 1 (inside S1's GO):** if any post-stimulus
+  movement falls OUTSIDE the §7.3 pre-classified set, the
+  executor applies `contain_drive` once (+1 state write,
+  +1 audit row) to bound drive accumulation while
+  reporting immediately. This layer bounds; it does not
+  stop.
+- **Layer 2 (NOT in S1's GO):** the chain-stop response is
+  **Gate S1-X** (§S1-X below) — a separate scope with its
+  own GO, which Julie authorizes separately (recommended:
+  in advance, as a standing conditional authorization that
+  S1-X's triggers arm — BOUND to the pinned package, the
+  S1 observation window, verified trigger evidence,
+  single use, and expiration at window close, per §S1-X
+  as revised under V4-4). **S1's GO does not include
+  `stop_chain` in any form.** If S1-X has not been
+  authorized when a Layer-1 trigger fires, the executor's
+  complete contingency is: `contain_drive` once, immediate
+  report to Julie, and STOP — with the record stating
+  plainly that the chain remains live under the holds
+  (bounded churn, $0 spend) until S1-X or an equivalent
+  scope is authorized.
+
+**Observability:** `drive=1` + state-route + plan/job
+reads at ≈ +2, +12, and +37 minutes, then a closing
+census. No further stimulus during the window, whatever
+the reads show.
+
+**Result classification:** as v3 (revival → classify every
+movement against the §7.3 pre-classified set; anything
+outside = STOP + report + the contingency above; no
+revival → the mandated wording and nothing stronger).
+
+**STOP behavior:** correction 6 governs, verbatim: once
+the single command is sent, there is nothing left for a
+STOP to prevent — the remaining steps are reads, the
+contingency, and reporting; if the chain revives, STOP
+does not quiet it. STOP before the stimulus on any
+preflight failure (v3 list, unchanged).
+
+**Rollback limits:** there is no rollback for a sent
+command — the commands row stands as the audit record of
+the probe. A revived chain is not "rolled back"; it is
+contained (Layer 1) and, if authorized, stopped (S1-X).
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute exactly one Gate S1 attempt as pinned:
+> preflight, exactly one RequestPause stimulus command
+> against the reserved nonexistent job, the observation
+> reads, classification against the §7.3 set, and — only
+> on out-of-set movement — one contain_drive as the
+> Layer-1 contingency. NO stop_chain: the chain-stop
+> response is Gate S1-X, which this GO does not include."
+
+---
+
+## Gate S1-X — Emergency chain stop (companion to S1; NEW; R5)
+
+**Purpose:** the separately authorized chain-stop response
+for a chain revived by S1's stimulus (or observed live at
+S1's reads). It is the C3-verified stop procedure
+(`stop_chain` + in-bound `verify_chain_stop`) executed as
+an emergency measure, under its own authorization —
+structurally and textually separate from S1: **S1's GO
+does not include S1-X; S1-X's GO does not include S1; the
+two are approved, or not, independently.**
+
+**The authorization-shape decision (for Rowan's ruling
+and Julie's choice).** Two shapes were considered:
+
+- **(i) Standing conditional pre-authorization
+  (RECOMMENDED):** Julie authorizes S1-X in advance,
+  conditioned on enumerated, mechanically checkable
+  triggers (§Triggers) AND bound per §Binding (V4-4):
+  pinned package, the one S1 observation window, the
+  verified-trigger-evidence standard, single use, and
+  expiration at window close. When a trigger is observed
+  at an S1 read and verified to that standard, the
+  executor performs the stop act without waiting for a
+  further GO, reports immediately, and the system ends
+  CHAIN_STOPPED (return to NORMAL then needs the
+  standalone restoration, as always).
+- **(ii) At-trigger-time authorization:** S1-X is
+  authorized only when a trigger has fired and Julie gives
+  a fresh GO then. Honest cost: between the trigger and
+  Julie's GO — she may be asleep or unreachable for hours —
+  the revived chain keeps running under the holds. The
+  exposure during that window is bounded (Layer-1
+  `contain_drive` bounds drive accumulation; the holds
+  keep spend at $0; the churn is grant/void cycling
+  against the preserved plan plus watchdog registrations),
+  but it is UNBOUNDED IN DURATION, and correction 6
+  requires the continuing effect to be addressed by the
+  plan, not merely observed. Shape (ii) leaves the
+  addressing to a future, possibly delayed, human action.
+
+**Why (i) is recommended:** the stop act is the procedure
+C3 verifies live beforehand; its outcome space is small
+and fully recorded; its end state (CHAIN_STOPPED) is the
+safest state the system has and is itself gated on the
+way back (standalone restoration); the triggers are
+checkable against reads, not judgment calls; and the
+standing authorization is SINGLE-USE (one stop act; see
+budget), EXPIRES at the S1 window's close whether or not
+it fires, and is revocable by Julie at any time before it
+fires (§Binding, V4-4). The residual risk of (i) — a physical stop executed
+on a trigger that later classification would have called
+benign — is accepted knowingly: every trigger below is
+defined as movement already outside the §7.3
+pre-classified set, i.e., movement S1's own rules treat as
+STOP-and-report; stopping the chain in that circumstance
+is the conservative direction, and the cost of a
+false-positive stop is a restoration cycle, not spend or
+data.
+
+**Triggers (any ONE, observed at a scheduled S1 read or
+the closing census, arms S1-X under shape (i)):** (T1) a
+recorder row or plan/job read showing grant activity
+beyond the §7.3 pre-classified set; (T2) any dispatch
+observed while GENERATION_HALT is "1" (a drive row or
+dispatch evidence under the halt); (T3) phase or quota
+movement beyond the §7.3 predictions (settled / reserved /
+dispat

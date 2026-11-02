@@ -1,0 +1,90 @@
+e) → NO writes occur; STOP and classify. Response shows non-applied → read back both surfaces before any next step | Response lost: re-entry (§R) reads state + audit; the `contain_drive` audit row is the idempotency key — if present AND the state reads back DRIVE_CONTAINED consistently on both surfaces, the step is RECORDED-complete and is not re-sent (a state-write step has no separate physical fact; its completion criterion is the recorded state itself, §R step 3). Audit row present but surfaces disagree → UNRESOLVED, STOP |
+| C3-2 | Read back both surfaces | none | `getAlarm` reads (passive) | Surfaces disagree → STOP | n/a |
+| C3-3 | `POST … {action:"clear", reason:"Gate C3 mechanics leg: restore opening state"}` | state write ×1; audit row ×1 (`clear:applied`, reason recorded). NO episode event: no stop episode is open (design v4 §4.2 fires the close only when a stop record exists) | 0 | Reason missing/blank → rejected `containment_reason_required`, NO writes; STOP. Other rejection → STOP and classify | Response lost: re-entry reads state + audit; if the `clear` audit row is present AND the state reads back NORMAL consistently on both surfaces, the step is RECORDED-complete, not re-sent (state-write step; §R step 3). Surfaces disagree → UNRESOLVED, STOP |
+| C3-4 | Read back both surfaces (state NORMAL, opening state restored) | none | passive reads | Disagreement → STOP | n/a |
+| C3-5 | `POST … {action:"stop_chain"}` — the physical stop act | state write ×1 (commit: enum + audit row ×1 `stop_chain:applied`; this commit MINTS the episode, id = that audit row's id); THEN the physical act; THEN, only if the act's outcome must be recorded (always): state write ×1 (stop record) + audit row ×1 (`stop_chain_verify:verified` or `:unverified`) | observe `getAlarm` ×1; `deleteAlarm` ×1 (a registration is expected — the C3-0 expectation); read-back `getAlarm` ×1 | Delete throws → nothing deleted; record written `unverified`, outcome `rejected/containment_stop_unverified`; state REMAINS CHAIN_STOPPED; proceed ONLY to C3-6 within the bound. Read-back throws or non-null → same unverified recording. Commit succeeds but the executor dies before the record write → record absent/stale; re-entry classifies from state + audit + a fresh read (the design's §4.6 posture) | The act's own read-back resolves the physical truth (a delete that landed reads null). Whole-response loss: re-entry reads the stop record + audit AND makes a fresh `getAlarm()` read (V4-2: the record alone is never physical proof). If `stopStatus` is recorded, the step is RECORDED-complete; it is credited PHYSICALLY complete only if the fresh read CORROBORATES the recorded outcome (fresh null against a recorded verified outcome). If the fresh read CONTRADICTS the record (e.g. recorded verified, registration present), or no fresh read can be obtained, the step is UNRESOLVED — STOP and classify; the only resumption act is `verify_chain_stop` (C3-6). If `stopStatus` is not recorded, re-entry classifies per the death-between-commit-and-record posture and the ONLY permitted resumption act is `verify_chain_stop` (C3-6) — `stop_chain` is never re-sent |
+| C3-6 | `POST … {action:"verify_chain_stop"}` — ONLY if C3-5 ended unverified; ≤2 calls (attempts 2 and 3 of the episode) | per call: state write ×1 (record) + audit row ×1 (`verify_chain_stop:verified` or the verify outcome event); PLUS, on the call that reaches attempt 3 unverified: audit row ×1 more (`stop_episode_exhausted`) and the state write carries `stopEpisodeExhausted: 1` | per call: observe `getAlarm` ×1; `deleteAlarm` ≤1 (ONLY if a registration is observed); read-back ×1 if a delete was attempted | Each failure leaves CHAIN_STOPPED, record `unverified`, attempts incremented — no other state change. At attempt 3 unverified: the episode is EXHAUSTED (durable flag + audit event); further calls are refused BEFORE any physical act and write nothing; C3 ends STOPPED-unverified and the package returns for ruling (the R3-V micro-scope is the only path onward) | Response lost on a verify call: the attempt WAS consumed if its audit row exists (re-entry counts attempts from the record, never from the executor's memory — attempt counting is a RECORD fact and counting a possibly-unlanded attempt as consumed errs in the conservative direction). But the attempt's PHYSICAL effect is not established by its audit row (V4-2): whether its delete landed is re-established at re-entry only by a fresh `getAlarm()` read; a fresh read showing a surviving registration means the stop remains physically incomplete whatever the recorded attempt count says. A re-sent verify that the code refuses as exhausted is the expected, safe outcome — never an error to retry around |
+| C3-7 | Closing CENSUS repeat + both-surface stop-record read-back | none | passive reads | Any delta beyond the ledger's own = STOP and classify | n/a |
+
+**Worst-case totals for C3 (all steps, all failure
+branches):** state writes **≤6** (C3-1 ×1, C3-3 ×1, C3-5
+×2, C3-6 ×2); audit rows **≤7** (C3-1 ×1, C3-3 ×1, C3-5
+×2, C3-6 ×3 incl. the exhaustion event); `deleteAlarm`
+**≤3** (C3-5 ×1 + C3-6 ≤2); `setAlarm` **0** (any
+registration appearing during C3 that C3 did not delete
+is a STOP-and-classify event — nothing in C3 arms);
+commands / reports / SubmitJob / uploads / PATCHes / hold
+flips / queue changes: **0**. Recorder rows: 0 expected
+(no pass is provoked; a spontaneous row is classified and
+reported as opportunistic evidence, never budgeted).
+Spend: $0. Expected (no-failure) totals: state writes 4,
+audit rows 4, `deleteAlarm` 1.
+
+**Expected closing state (no-failure path):** containment
+CHAIN_STOPPED, `stopStatus: "verified"`,
+`stopArmedBefore: 1793562576104`, `stopArmedAfter: null`,
+`stopVerifyAttempts: 1`, episode open (not exhausted),
+`stopConfidence: "verified_current"` on both surfaces;
+`armedAt` null; pendingSchedule/pendingWatchdog UNCHANGED
+from the Nov-2-observed baseline as re-read at C3-0 (the
+stop preserves schedule rows); every other census value
+identical.
+
+### §R — C3 STOP and re-entry procedure (no duplicate physical acts)
+
+**Rewritten in the corrections round (V4-2).** The v4 text
+marked a step DONE from its audit row / stop-record fields
+alone. That conflated two different facts, and this
+procedure now keeps them separate at every step:
+
+- **RECORDED LOGICAL COMPLETION** — the record (audit rows,
+  stop-record fields) shows the code path ran and committed
+  its account of the step. A record proves a step was
+  RECORDED. It never, by itself, proves a physical act
+  landed.
+- **PHYSICAL VERIFICATION** — a fresh live read, made at
+  re-entry, re-establishes the physical fact the step
+  exists to produce: for the stop act and the verifies,
+  a `getAlarm()` observation (present/absent), read against
+  the stop record's verification fields (`stopStatus`,
+  `stopArmedBefore`, `stopArmedAfter`, `stopVerifiedAt`).
+  A physical step is credited as physically complete ONLY
+  when the fresh read corroborates the recorded outcome.
+- **UNRESOLVED** — any step whose record and fresh physical
+  read disagree, or whose physical state cannot be freshly
+  read, is UNRESOLVED. An ambiguous response (a request
+  whose reply was lost) leaves its step UNRESOLVED until a
+  physical read resolves it — never resolved by the
+  executor's memory of what it sent, and never by the
+  audit row alone.
+
+On any STOP mid-ledger, or before resuming after ANY
+interruption (including an executor restart):
+
+1. STOP all further acts. Preserve the gate record as-is.
+2. Re-read, in this order: the containment state route,
+   the `drive=1` projection, and the audit event listing.
+   These three reads — never the executor's memory of what
+   it sent — determine what has been RECORDED. (They do not
+   yet determine what has physically happened; that is
+   step 4.)
+3. Mark each ledger step RECORDED-complete iff its
+   idempotency key is present in the record: the step's
+   audit row (`contain_drive`, `clear`, `stop_chain`,
+   `verify_chain_stop`) and, for C3-5/C3-6, the stop
+   record fields (`stopVerifyAttempts` is the authoritative
+   RECORDED attempt count — counting is a record fact, and
+   counting a possibly-unlanded attempt as consumed errs
+   conservatively). Pure state-write steps (C3-1, C3-3)
+   have no separate physical fact beyond the state the
+   record itself holds: for them, recorded completion read
+   back consistently on both surfaces IS their completion
+   criterion.
+4. For each physical step (C3-5, each C3-6 call), make a
+   FRESH `getAlarm()` read at re-entry and classify:
+   (a) fresh read corroborates the recorded outcome (a
+   recorded verified stop and a fresh null; a recorded
+   unverified outcome and the stop's physical incompleteness
+   already priced into the ledger) → the step is PHYSICALLY
+   VERIFIED to the recorded extent; (b) fresh read
+   CONTRADICTS the record (a reco

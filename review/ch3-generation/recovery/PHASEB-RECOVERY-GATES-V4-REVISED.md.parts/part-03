@@ -1,0 +1,184 @@
+rded verified stop with a
+   registration now present; a recorded outcome whose
+   `stopArmedAfter` the fresh read cannot reproduce) → the
+   step is UNRESOLVED: STOP and classify — the physical
+   truth, not the record, governs what remains to be done,
+   and the only permitted resumption act for the stop is
+   `verify_chain_stop` within the episode bound; (c) no
+   fresh read can be obtained → UNRESOLVED; the gate does
+   not resume on the record's word.
+5. Resume ONLY at the first step that is neither
+   RECORDED-complete nor PHYSICALLY VERIFIED to the extent
+   its ledger row requires, with two hard rules: a
+   `stop_chain` whose audit row exists is NEVER re-sent
+   (an unverified or unresolved stop resumes exclusively
+   through `verify_chain_stop`); a `deleteAlarm` is only
+   ever issued by the code paths that first observe a
+   registration in the same act, so a resume cannot delete
+   blindly or twice (harness-proven: CT16b/CT16c assert the
+   landed-delete count across stop + resume).
+6. If the reads cannot establish what was recorded
+   (surfaces disagree, record unreadable), or a physical
+   step remains UNRESOLVED after step 4, the gate does NOT
+   resume: it returns for ruling with the reads attached.
+
+**Rollback limits:** the mechanics leg is reversed by its
+own C3-3 step. The stop act has NO rollback inside this
+gate: a deleted registration cannot be un-deleted by an
+operator act — re-registration happens only through the
+ordinary wake paths under NORMAL, i.e., only after the
+standalone restoration. That irreversibility-without-
+restoration is accepted as the gate's design (it is the
+point of a stop), and it is why the stop's preconditions
+(the armedAt expectation) are census-hard.
+
+**Restoration rules (decision 2 + design v4 §6):** C3
+ends CHAIN_STOPPED **by design**. The C3-3 clear is the
+only clear this gate contains, and it applies only to the
+DRIVE_CONTAINED mechanics leg. **Returning from
+CHAIN_STOPPED to NORMAL is NOT in C3's scope, budget, or
+GO** — it requires the standalone restoration
+authorization below, which must additionally disclose the
+episode summary (design v4 §6).
+
+**Postflight evidence:** execution record: preflight
+census (incl. the armedAt expectation and its observation
+date), each ledger step's request/response + both-surface
+read-backs, the stop record and `stopConfidence` as read
+on both surfaces, the audit event listing, closing census
+with the delta table checked against the ledger's
+worst-case totals, the PARTIAL verdict with its basis,
+ends-HELD certification (halt "1", queue paused, preserved
+plan and exemption untouched).
+
+**Unverifiable remainder (returned for Rowan's separate
+ruling; NOT claimed by C3):** drive suppression during a
+live chain (observable only when a pass would otherwise
+run); arm-gate suppression under genuine concurrent wake
+traffic; the re-check against a real racing wake; any
+property of a REVIVED chain's behavior under containment.
+S1 may not be proposed for execution until Rowan rules on
+how (or whether) this remainder is to be discharged.
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute exactly one Gate C3 attempt as pinned:
+> preflight census including the armedAt expectation, the
+> contain_drive + reasoned clear mechanics pair, and
+> exactly one stop_chain act against the current
+> registration (with verify_chain_stop retries only within
+> the design's attempts bound if the stop is unverified),
+> passive read-backs only, NO command, NO wake provocation,
+> NO stimulus of any kind, ending HELD in CHAIN_STOPPED.
+> I understand C3's verification is PARTIAL, that the
+> return to NORMAL needs its own separate authorization,
+> and that the deleted registration cannot be restored by
+> this gate."
+
+---
+
+## Standalone restoration authorization (NOT a gate; decision 2)
+
+Between C3 and S1, exactly once in this sequence, the
+return CHAIN_STOPPED → NORMAL is authorized **on its
+own**: a named approval by Julie (after Rowan's review of
+C3's record), a fresh CENSUS executed at its start, and a
+demonstrated reason — what changed / why containment is
+no longer needed — recorded in the `clear` audit event
+(design §5.3 preconditions, including the stop-record
+precondition: C3 ended `verified`). **V4-2 correction:**
+that precondition is satisfied by the restoration's fresh
+census — its `drive=1`/state-route reads re-observe the
+registration (`armedAt` absent) and derive
+`stopConfidence` fresh — CORROBORATING the record at
+execution time. The C3 record alone does not carry the
+physical stop into this authorization; if the fresh census
+read contradicts the record (a registration present, or
+confidence below `verified_current`), the restoration does
+not proceed on the record's word: STOP and classify.
+**V4 addition (design v4 §6): the restoration
+request must disclose the episode summary — current
+episode id + exhausted flag, and the previous-episode
+summary if any. If either is exhausted, the restoration
+must name the R3-V authorization (below) under which any
+later stop/verify work would proceed; a restoration that
+omits an exhausted episode is incomplete on its face.**
+**V4-1 strengthening (this revision): the episode
+disclosure is NOT sufficient on its own.** Because the
+previous-episode summary holds only the most recent closed
+episode and can have been overwritten by a later clear
+(design v4 revised §4.2), the restoration authorization
+additionally REQUIRES a **historical audit review**: the
+full append-only audit history (`d6_containment_events`)
+is read and attached to the authorization request, EVERY
+stop episode in that history (open or closed) is
+enumerated with its exhaustion status taken from the
+history, and the R3-V naming requirement applies to any
+exhausted episode the HISTORY contains — whether or not
+it still appears in the summary. A restoration request
+that discloses only the summary is incomplete on its face.
+
+The act is exactly one `POST /v2/d6-containment
+{action: "clear", authorizationRef: <restoration record
+ref>, reason: <demonstrated reason>}` plus read-backs.
+V4 note: that clear also CLOSES C3's episode inside its
+own transaction (summary preserved to `prevEpisode*` +
+`stop_episode_closed` audit row — design v4 §4.2); the
+budget below counts it. **The clear does not re-arm**:
+the registration stays absent; the first subsequent wake
+(which, in this sequence, is S1's stimulus command)
+re-arms per the ordinary composed-build rules. Mutation
+budget: state writes 1, audit rows 2 (the clear + the
+episode close), all else 0. If the census deviates, the
+restoration does not proceed and the system remains
+CHAIN_STOPPED.
+
+**Exact Julie GO scope for a future execution:**
+> "GO — execute the standalone restoration as pinned:
+> fresh census including the episode disclosure and the
+> historical audit review of the full containment audit
+> history, then exactly one clear of CHAIN_STOPPED with
+> the recorded reason, read-backs only, ending HELD in
+> NORMAL with the registration still absent."
+
+---
+
+## Micro-scope R3-V — Post-exhaustion verification authorization (NEW; R3)
+
+**Purpose:** the ONLY path to further stop-verification
+work after a stop episode has been recorded EXHAUSTED
+(design v4 §4). It exists so that exhaustion is a hard
+stop with a named, separately authorized continuation —
+never an informal retry, and never a fresh budget smuggled
+through a clear.
+
+**Preconditions (all required):** (i) an exhausted episode
+on record, named by episode id in the authorization
+request, with its `stop_episode_exhausted` audit event and
+the episode's full audit trail attached — **established by
+a historical audit review of the FULL append-only audit
+history (V4-1)**: the review enumerates every stop episode
+the history contains with its exhaustion status, because
+the exhausted episode's presence CANNOT be established
+from the `prevEpisode*` summary (a later clear may have
+overwritten the summary with a newer episode's, leaving
+the exhausted episode visible only in the history); an
+R3-V request grounded in the summary alone is incomplete;
+(ii) a Rowan
+ruling on that exhaustion record; (iii) a fresh CENSUS at
+execution; (iv) the standalone restoration executed first
+if the state is still CHAIN_STOPPED (the code refuses
+`verify_chain_stop` on an exhausted episode even after
+the physical fault clears — CT15c — so the executable
+path is: restoration clear (separately authorized, with
+the §6 disclosure and its own historical audit review),
+THEN one new `stop_chain` minting a
+new episode under THIS scope).
+
+**Scope of the authorization:** exactly one new
+`stop_chain` act against the then-current registration
+(whose value the fresh census records as the expectation)
+plus its in-bound `verify_chain_stop` attempts (≤3 total
+for the new episode, the same law). Mutation budget:
+state writes ≤4, audit rows ≤5 (incl. a possible new
+exhaustion event), `deleteAlarm` ≤3, `setAlarm` 0, all
+else 0. If the new episode 
