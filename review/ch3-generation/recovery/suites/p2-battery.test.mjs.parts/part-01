@@ -1,0 +1,219 @@
+// T0–T10 battery for the Phase B instrumentation candidate
+// (spec §9; Rowan correction 6) — PARAMETERIZED EDITION (Rowan
+// R5a-revised-package ruling, required work C). The candidate
+// IDENTITY assertions in T0 are fixture-driven: the fixture (env
+// P2_IDENTITY, JSON) names the parts that differ from the deployed
+// parts, their expected SHA-256s, the round-trip diffs, and the
+// node --check parts, for WHATEVER tree the suite is run against.
+// Every behavioral test (T1–T10) is textually unchanged from the
+// original battery; only the tree locations (env P2_CAND_DIR /
+// P2_BASE_DIR / P2_PARTS_DIR) and T0's identity data moved.
+// Local scratch only: no network, no production calls.
+// Run: node --test p2-battery.test.mjs
+
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import {
+  readFileSync, readdirSync, mkdirSync, cpSync, rmSync, existsSync,
+  mkdtempSync,
+} from "node:fs";
+import { join, dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
+import {
+  makeWorld, seedAttempt3Shape, snapshotDb, entryGet,
+  BOOK, PHASE, OCC26, PARKED_JOB, T0,
+} from "./harness.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, "..");
+const RECOVERY = ROOT;
+const CAND = process.env.P2_CAND_DIR ||
+  join(RECOVERY, "instrumentation-spec", "scratch", "candidate-tree");
+const BASE = process.env.P2_BASE_DIR ||
+  join(RECOVERY, "instrumentation-spec", "scratch", "baseline-tree");
+const PARTS = process.env.P2_PARTS_DIR ||
+  join(RECOVERY, "phaseb-attempt3", "evidence", "parts-e0");
+const IDENTITY = JSON.parse(readFileSync(
+  process.env.P2_IDENTITY ||
+  join(HERE, "fixtures", "p2-identity-original.json"), "utf8"));
+const CHANGED = new Map(IDENTITY.changedParts.map((p) => [p.rel, p.sha256]));
+const sha = (buf) =>
+  createHash("sha256").update(buf).digest("hex");
+const shaFile = (p) => sha(readFileSync(p));
+
+function listFiles(dir, prefix = "") {
+  const out = [];
+  for (const name of readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${name.name}` : name.name;
+    if (name.isDirectory()) out.push(...listFiles(join(dir, name.name), rel));
+    else out.push(rel);
+  }
+  return out.sort();
+}
+
+// The spec §5.2 projection, implemented independently in the test
+// from the spec text (allowlist order, sweep tallies numeric
+// only, sweep-error presence flag). Used by T2 to check the
+// recorded outcomes against driveOnce's actual return value.
+const OUTCOME_KEYS = [
+  "planId", "state", "stopReason", "grantId", "grantRefused",
+  "skipped", "quarantined", "approvalRequired",
+  "quarantineCheckFailed", "advanced",
+];
+const SWEEP_KEYS = ["scanned", "published", "noop", "conflicts", "pending"];
+function projectOutcomes(outcomes) {
+  const entries = [];
+  for (const entry of outcomes) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      continue;
+    if (entry.bindingProjection &&
+        typeof entry.bindingProjection === "object") {
+      const sweep = {};
+      for (const k of SWEEP_KEYS)
+        if (typeof entry.bindingProjection[k] === "number")
+          sweep[k] = entry.bindingProjection[k];
+      entries.push({ bindingProjection: sweep });
+      continue;
+    }
+    if ("bindingProjectionError" in entry) {
+      entries.push({ bindingProjectionError: true });
+      continue;
+    }
+    const o = {};
+    for (const k of OUTCOME_KEYS) {
+      const v = entry[k];
+      if (typeof v === "string" || typeof v === "number" ||
+          typeof v === "boolean") o[k] = v;
+    }
+    entries.push(o);
+  }
+  return entries;
+}
+
+const driveRows = (w) => w.db.prepare(
+  `SELECT * FROM d6_drive_passes ORDER BY id`).all();
+const tableExists = (w, name) => !!w.db.prepare(
+  `SELECT name FROM sqlite_master WHERE type='table' AND name=?`)
+  .get(name);
+const stripVolatile = (v) => {
+  if (Array.isArray(v)) return v.map(stripVolatile);
+  if (v && typeof v === "object") {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) {
+      if (k === "asOf" || k === "quotedAt") continue;
+      o[k] = stripVolatile(x);
+    }
+    return o;
+  }
+  return v;
+};
+
+// ----------------------------------------------------------------
+describe("T0 — assembly & identity (fixture-parameterized)", () => {
+  test("candidate tree: 31 parts; fixture changed parts differ from deployed and match fixture identities; every other part byte-identical", () => {
+    const candFiles = listFiles(join(CAND, "v2"));
+    const partFiles = listFiles(join(PARTS, "v2"));
+    assert.equal(candFiles.length, 31);
+    assert.deepEqual(candFiles, partFiles);
+    let identical = 0;
+    for (const rel of partFiles) {
+      const a = shaFile(join(PARTS, "v2", rel));
+      const b = shaFile(join(CAND, "v2", rel));
+      if (CHANGED.has(rel)) {
+        assert.notEqual(a, b, `${rel} must differ from deployed`);
+        assert.equal(b, CHANGED.get(rel),
+          `${rel} must equal the fixture identity for this tree`);
+      } else {
+        assert.equal(a, b, `${rel} must be byte-identical`);
+        identical++;
+      }
+    }
+    assert.equal(identical, 31 - CHANGED.size);
+  });
+
+  test("patch round-trip: each fixture diff applied to pristine parts reproduces the candidate parts byte-for-byte", () => {
+    for (const rt of IDENTITY.roundTrips) {
+      const tmp = mkdtempSync(join(tmpdir(), "p2-roundtrip-"));
+      for (const rel of rt.files) {
+        mkdirSync(join(tmp, "v2", dirname(rel)), { recursive: true });
+        cpSync(join(PARTS, "v2", rel), join(tmp, "v2", rel));
+      }
+      execFileSync("patch", ["-s", "-p1",
+        "-i", resolve(RECOVERY, rt.diff)], { cwd: tmp });
+      for (const rel of rt.files)
+        assert.equal(shaFile(join(tmp, "v2", rel)), CHANGED.get(rel),
+          `${rel} round-trip via ${rt.diff}`);
+    }
+  });
+
+  test("node --check passes on every fixture changed part (candidate tree)", () => {
+    for (const rel of IDENTITY.nodeCheckParts)
+      execFileSync("node", ["--check", join(CAND, "v2", rel)]);
+  });
+
+  test("baseline tree is the pristine deployed tree (31/31 byte-identical)", () => {
+    for (const rel of listFiles(join(PARTS, "v2")))
+      assert.equal(shaFile(join(BASE, "v2", rel)),
+        shaFile(join(PARTS, "v2", rel)), rel);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T1 — harness bring-up", () => {
+  test("T1(a) empty store: class construction + first alarm resolve; no .one() bootstrap deadlock", async () => {
+    const w = await makeWorld(CAND);
+    await w.fireClassAlarm();
+    assert.equal(tableExists(w, "d6_drive_passes"), true,
+      "the recorder's lazy DDL creates the table on the first pass");
+    const rows = driveRows(w);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].stage, "complete");
+    assert.equal(rows[0].drive_invoked, 1);
+    const diag = await w.service.drivePassDiagnostics({ drive: "1" });
+    assert.equal(diag.tableState, "populated");
+    assert.equal(diag.drivePasses.length, 1);
+  });
+
+  test("T1(b) seeded attempt-3 shape: plan/job/parked/conflicts/phase figures exact", async () => {
+    const w = await makeWorld(CAND);
+    const seed = await seedAttempt3Shape(w);
+    const ps = w.service.planStatus(seed.planId);
+    assert.equal(ps.state, "active");
+    assert.deepEqual(ps.totals, { eligible: 1, done: 0, failed: 0,
+      blocked: 0, prompts: 0 });
+    assert.equal(ps.entries.length, 1);
+    assert.equal(ps.entries[0].charCount, 569);
+    assert.equal(ps.entries[0].disposition, "eligible");
+    const job = w.db.prepare(
+      `SELECT * FROM jobs WHERE job_id = ?`).get(seed.jobId);
+    assert.equal(job.state, "queued");
+    assert.equal(job.revision, 1);
+    const occ = w.db.prepare(
+      `SELECT state FROM occurrences WHERE job_id = ?`).get(seed.jobId);
+    assert.equal(occ.state, "pending");
+    const q = w.service.getQuarantine({ planId: seed.planId });
+    assert.equal(q.held, false);
+    const parked = w.db.prepare(
+      `SELECT state, revision FROM jobs WHERE job_id = ?`)
+      .get(PARKED_JOB);
+    assert.deepEqual({ state: parked.state, revision: parked.revision },
+      { state: "parked_policy", revision: 1 });
+    const conflicts = w.db.prepare(
+      `SELECT COUNT(*) AS n FROM binding_conflicts
+        WHERE reason = 'schedule_dead'`).get();
+    assert.equal(conflicts.n, 4);
+    const pa = w.store.phaseAccounting(PHASE);
+    assert.deepEqual(pa, { settledMicro: 1029420,
+      inFlightUpperMicro: 0, unknownOpen: 0,
+      estimatedUnverifiedMicro: 19018, reservedUnverifiedMicro: 5648 });
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T2 — normal recording (twin equivalence)", () => {
+  test("six alarm passes: candidate records each; all non-recorder state identical to the unmodified build", async () => {
+    const a = await makeWorld(CAND);
+    const b = 

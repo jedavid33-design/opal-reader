@@ -1,0 +1,190 @@
+ge.includes(SECRET));
+    assert.ok(!/[\u0000-\u001f]/.test(row.error_message),
+      "control characters are flattened");
+    assert.ok(row.error_message.length <= 500);
+  });
+
+  test("T5 write: an oversized grammatical identifier is sliced, and the slice is disclosed", async () => {
+    const w = await makeWorld(CAND);
+    await w.inst._recordDrivePass({
+      at: T0, stage: "complete", driveInvoked: true,
+      outcomes: [{ planId: `plan:${"a".repeat(500)}`, state: "active" }],
+      errorName: null, errorMessage: null });
+    const row = driveRows(w)[0];
+    const parsed = JSON.parse(row.outcomes_json);
+    assert.equal(parsed[0].planId.length, 200);
+    assert.ok(parsed[0].planId.startsWith("plan:"));
+    const marker = parsed[parsed.length - 1];
+    assert.ok(marker.truncated && marker.truncated.fieldsSliced === true);
+    assert.equal(row.outcomes_truncated, 1);
+  });
+
+  test("T5 read: hostile stored rows and a hostile health object never escape raw", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    await w.fireClassAlarm(); // creates the table (one clean row)
+    const ins = w.db.prepare(`INSERT INTO d6_drive_passes
+      (at, finished_at, stage, drive_invoked, outcomes_json,
+       outcomes_truncated, error_name, error_message, armed_after)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    ins.run(T0 + 1, T0 + 1, "complete", 1,
+      `NOT-JSON https://evil.example/${SECRET}`, 0, null, null, null);
+    ins.run(T0 + 2, T0 + 2, "complete", 1,
+      JSON.stringify([{ planId: `https://evil.example/${SECRET}`,
+        hacker: "yes", state: "active" },
+        { bindingProjection: { scanned: 1, evil: 2 } }]),
+      0, null, null, null);
+    ins.run(T0 + 3, T0 + 3, "complete", 1, '{"x":1}', 0, null, null, null);
+    ins.run(T0 + 4, T0 + 4, "weird stage!", 1, null, 0,
+      `Err https://evil.example/${SECRET}`,
+      `msg ${SECRET} https://evil.example/x`, null);
+    w.kv.set("d6DrivePassRecorderHealth", {
+      recordingFailures: "lots", lastFailureAt: "whenever",
+      lastFailureStep: "evil-step",
+      lastFailureName: `https://evil.example/${SECRET}`,
+      lastRecordedAt: 123, smuggled: "SMUGGLED-VALUE-9" });
+    const diag = await w.service.drivePassDiagnostics({ drive: "1" });
+    const whole = JSON.stringify(diag);
+    assert.ok(!whole.includes("evil.example"), "no URL escapes");
+    assert.ok(!whole.includes(SECRET), "no token-shaped run escapes");
+    assert.ok(!whole.includes("SMUGGLED-VALUE-9"), "no smuggled key");
+    assert.ok(!whole.includes("hacker"), "no non-allowlisted key");
+    const byAt = new Map(diag.drivePasses.map((p) => [p.at, p]));
+    const h1 = byAt.get(T0 + 1);
+    assert.equal(h1.outcomes, null);
+    assert.equal(h1.outcomesMalformed, true);
+    assert.ok(!("outcomesRaw" in h1),
+      "the response shape has no raw fallback field");
+    const h2 = byAt.get(T0 + 2);
+    assert.equal(h2.outcomesMalformed, false);
+    assert.equal(h2.outcomesRevalidated, true,
+      "re-projection changed the stored value and says so");
+    assert.deepEqual(h2.outcomes[1], { bindingProjection: { scanned: 1 } });
+    assert.ok(!("hacker" in h2.outcomes[0]));
+    const h3 = byAt.get(T0 + 3);
+    assert.equal(h3.outcomes, null);
+    assert.equal(h3.outcomesMalformed, true,
+      "valid JSON that is not an array is malformed for this shape");
+    const h4 = byAt.get(T0 + 4);
+    assert.equal(h4.stage, "unrecognized",
+      "an out-of-vocabulary stage is reported as unrecognized");
+    assert.ok(!h4.errorName.includes("evil.example"));
+    assert.ok(!h4.errorMessage.includes(SECRET));
+    assert.deepEqual(diag.recorderHealth, {
+      recordingFailures: null, lastFailureAt: null,
+      lastFailureStep: null, lastFailureName: "[url]",
+      lastRecordedAt: 123 },
+      "the health object is projected onto its five known fields");
+  });
+});
+
+describe("T5b — identifier fidelity (real id shapes survive sanitization exactly)", () => {
+  test("plan/grant ids and code tokens are stored byte-exact, with no marker", async () => {
+    const w = await makeWorld(CAND);
+    const planId = "plan:19cad189fab54b9c804a74a6";
+    const grantId = `grant:${planId}:seg:1:full`;
+    await w.inst._recordDrivePass({
+      at: T0, stage: "complete", driveInvoked: true,
+      outcomes: [{ planId, grantId, state: "active",
+        stopReason: "phase_halted_unknown_billing",
+        skipped: "execution_in_flight", advanced: true }],
+      errorName: null, errorMessage: null });
+    const row = driveRows(w)[0];
+    assert.equal(row.outcomes_truncated, 0,
+      "clean identifier outcomes need no marker");
+    assert.deepEqual(JSON.parse(row.outcomes_json),
+      [{ planId, grantId, state: "active",
+         stopReason: "phase_halted_unknown_billing",
+         skipped: "execution_in_flight", advanced: true }]);
+    // And the read path returns them identically (no revalidation
+    // churn on clean rows).
+    const diag = await w.service.drivePassDiagnostics({ drive: "1" });
+    assert.deepEqual(diag.drivePasses[0].outcomes,
+      JSON.parse(row.outcomes_json));
+    assert.equal(diag.drivePasses[0].outcomesRevalidated, false);
+    assert.equal(diag.drivePasses[0].outcomesMalformed, false);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T6 — truncation at the 8,000-char cap", () => {
+  const entry = (i) => ({
+    planId: `plan:${String(i).padStart(24, "0")}`,
+    grantId: `grant:plan:${String(i).padStart(24, "0")}:seg:1:full`,
+    grantRefused: "r".repeat(150),
+    state: "active", advanced: true });
+
+  test("T6 over-cap: whole entries only, terminal marker, kept+dropped = submitted", async () => {
+    const w = await makeWorld(CAND);
+    const outcomes = Array.from({ length: 60 }, (_, i) => entry(i));
+    await w.inst._recordDrivePass({
+      at: T0, stage: "complete", driveInvoked: true, outcomes,
+      errorName: null, errorMessage: null });
+    const row = driveRows(w)[0];
+    assert.ok(row.outcomes_json.length <= 8000,
+      `stored length ${row.outcomes_json.length} <= 8000`);
+    assert.equal(row.outcomes_truncated, 1);
+    const parsed = JSON.parse(row.outcomes_json); // always valid JSON
+    const marker = parsed[parsed.length - 1];
+    assert.ok(marker.truncated, "terminal entry is the marker");
+    assert.equal(marker.truncated.keptEntries, parsed.length - 1);
+    assert.equal(
+      marker.truncated.keptEntries + marker.truncated.droppedEntries,
+      60);
+    assert.ok(marker.truncated.keptEntries >= 1,
+      "at least one whole entry always fits");
+    assert.deepEqual(parsed[0], entry(0),
+      "kept entries are whole and unaltered");
+  });
+
+  test("T6 under-cap: no marker, no flag, entries unaltered", async () => {
+    const w = await makeWorld(CAND);
+    const outcomes = [entry(1), entry(2), entry(3)];
+    await w.inst._recordDrivePass({
+      at: T0, stage: "complete", driveInvoked: true, outcomes,
+      errorName: null, errorMessage: null });
+    const row = driveRows(w)[0];
+    assert.equal(row.outcomes_truncated, 0);
+    assert.deepEqual(JSON.parse(row.outcomes_json), outcomes);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T7 — mode rejection (the read that can never blend modes)", () => {
+  test("T7 ambiguous drive modes -> 400 diagnostics_mode_ambiguous; attempt mode unchanged; 403 without the operator stamp", async () => {
+    const w = await makeWorld(CAND);
+    const seed = await seedAttempt3Shape(w);
+    await w.fireClassAlarm();
+    const bad = [
+      `/v2/d6-diagnostics?drive=1&planId=${seed.planId}`,
+      `/v2/d6-diagnostics?drive=1&jobId=${seed.jobId}`,
+      "/v2/d6-diagnostics?drive=1&cursor=abc",
+      "/v2/d6-diagnostics?drive=1&drive=1",
+      "/v2/d6-diagnostics?drive=2",
+      "/v2/d6-diagnostics?drive=0",
+      "/v2/d6-diagnostics?drive=true",
+      "/v2/d6-diagnostics?drive=",
+    ];
+    for (const path of bad) {
+      const r = await entryGet(w, path, { operator: true });
+      assert.equal(r.status, 400, path);
+      assert.equal(r.body?.reason, "diagnostics_mode_ambiguous", path);
+      assert.ok(!("drivePasses" in (r.body ?? {})),
+        "a rejected read carries no blended payload");
+    }
+    const noOperator = await entryGet(w, "/v2/d6-diagnostics?drive=1",
+      { operator: false });
+    assert.equal(noOperator.status, 403,
+      "client credential alone never reaches the drive read");
+    const noOperatorAttempt = await entryGet(w,
+      `/v2/d6-diagnostics?planId=${seed.planId}`, { operator: false });
+    assert.equal(noOperatorAttempt.status, 403,
+      "attempt mode carries the same operator fence");
+    const ok = await entryGet(w, "/v2/d6-diagnostics?drive=1",
+      { operator: true });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.body.mode, "drive_passes");
+    // Attempt mode is byte-shape unchanged: same keys as the
+    // unmodified build serves for the same store state.
+    const a = await entryGet(w,
+      `/v2/d6-diagnostics?planId=${seed.planId}`, { operat

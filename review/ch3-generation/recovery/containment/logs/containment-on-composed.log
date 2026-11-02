@@ -1,0 +1,48 @@
+▶ CT0 — assembly & identity (fixture-driven)
+  ✔ changed parts are exactly the fixture set; all others byte-identical to the live tree (100.171087ms)
+  ✔ node --check passes on every changed part (264.217282ms)
+  ✔ design markers present in the candidate parts (2.808014ms)
+✔ CT0 — assembly & identity (fixture-driven) (368.957246ms)
+▶ CT1 — NORMAL: ordinary delivery, containment inert and invisible
+  ✔ seeded pass issues its grant exactly as shipped; reads report NORMAL-absent; no state table is created by passes or reads (142.556535ms)
+✔ CT1 — NORMAL: ordinary delivery, containment inert and invisible (142.860231ms)
+▶ CT2 — Layer 1 (DRIVE_CONTAINED): drive suppressed, chain alive, leases close
+  ✔ contained passes record stage 'contained'; the in-flight grant is voided by the lease path; no new grant; registration continues (16.542325ms)
+✔ CT2 — Layer 1 (DRIVE_CONTAINED): drive suppressed, chain alive, leases close (16.756577ms)
+▶ CT3 — Layer 2 (CHAIN_STOPPED): registration removed and cannot resurrect
+  ✔ verified stop: deleteAlarm read back null; schedule rows untouched; commands and wakes register nothing; a delivered pass is contained and does not re-arm (16.444459ms)
+✔ CT3 — Layer 2 (CHAIN_STOPPED): registration removed and cannot resurrect (16.776306ms)
+▶ CT4 — state READ failures default darker at every consuming path
+  ✔ CT4a DRIVE_CONTAINED + read fault: drive stays suppressed (contained row carries the error); arming also suppresses (6.669269ms)
+  ✔ CT4b CHAIN_STOPPED + read fault: the verified stop is NOT defeated — wakes register nothing (11.939688ms)
+  ✔ CT4c NORMAL (table absent) + non-table read error: fail-closed — the pass is contained, nothing issues (7.890431ms)
+✔ CT4 — state READ failures default darker at every consuming path (26.964997ms)
+▶ CT5 — state WRITE failures during transitions: no silent success
+  ✔ state-row INSERT fault: the route surfaces HTTP 500 and the state is unchanged (still absent/NORMAL) (12.561161ms)
+  ✔ DDL fault at transition time: HTTP 500, nothing recorded (5.745842ms)
+✔ CT5 — state WRITE failures during transitions: no silent success (18.611009ms)
+▶ CT6 — stop whose deleteAlarm FAILS: reported unverified, never silent, gates hold
+  ✔ outcome rejected/containment_stop_unverified; state stands CHAIN_STOPPED; later wakes register nothing despite the surviving registration (10.061299ms)
+✔ CT6 — stop whose deleteAlarm FAILS: reported unverified, never silent, gates hold (10.20192ms)
+▶ CT7 — alarm-handler retries under containment (simulated re-invocation)
+  ✔ a throwing base alarm under DRIVE_CONTAINED rejects identically on re-invocation; containment state and chain survive; the next healthy pass is contained (7.798093ms)
+✔ CT7 — alarm-handler retries under containment (simulated re-invocation) (7.944041ms)
+▶ CT8 — in-flight grant activity at the moment of the stop
+  ✔ the stop does not interrupt anything retroactively; a later delivered pass closes the in-flight grant by lease and issues nothing new (10.801731ms)
+✔ CT8 — in-flight grant activity at the moment of the stop (10.949762ms)
+▶ CT9 — transition discipline, route fences, and the return path
+  ✔ transition table enforced; idempotent re-apply audited; downgrade refused with no writes; clear restores ordinary arming (5.149177ms)
+  ✔ route fences: closed allowlist, operator-only admission, client token alone refused (10.850294ms)
+✔ CT9 — transition discipline, route fences, and the return path (16.241093ms)
+▶ CT10 — preserved-plan integrity across the full containment sweep
+  ✔ contain -> passes -> stop -> command -> clear leaves plan, job, occurrence, figures, parked job, and conflicts byte-identical (9.44272ms)
+✔ CT10 — preserved-plan integrity across the full containment sweep (9.572946ms)
+ℹ tests 17
+ℹ suites 11
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 798.316708
+EXIT_CODE=0

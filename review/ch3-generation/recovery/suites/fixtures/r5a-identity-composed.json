@@ -1,0 +1,28 @@
+{
+  "note": "Composed tree vs live baseline tree (R5a suite view)",
+  "changedParts": [
+    {
+      "rel": "v2/coordinator.mjs",
+      "sha256": "c097061a3712b3a21058b5d7b790b9cf5314463a664d4fbc3d01bf27f33542ae"
+    },
+    {
+      "rel": "v2/worker-entry-prod-d6.js",
+      "sha256": "0183aabfcb8b57312c97102da021f0925a2fabb47c78fa65d333224e2337bc81"
+    },
+    {
+      "rel": "v2/generation/service.mjs",
+      "sha256": "ebed452a83cfa4ef0f2b0d5c31b1f77cf69f12a455dc6c32f8f661cba9227f3d"
+    }
+  ],
+  "roundTrips": [
+    {
+      "diff": "containment/composed-coordinator.diff",
+      "files": [
+        "v2/coordinator.mjs"
+      ]
+    }
+  ],
+  "nodeCheckParts": [
+    "v2/coordinator.mjs"
+  ]
+}

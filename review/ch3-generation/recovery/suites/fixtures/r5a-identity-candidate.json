@@ -1,0 +1,20 @@
+{
+  "note": "R5a candidate vs live baseline tree",
+  "changedParts": [
+    {
+      "rel": "v2/coordinator.mjs",
+      "sha256": "d3d9005b9c2f83cd9a47ef7012b7cea5ed21d73886626d6e24bb655ee90389a3"
+    }
+  ],
+  "roundTrips": [
+    {
+      "diff": "r5a-revision/coordinator.diff",
+      "files": [
+        "v2/coordinator.mjs"
+      ]
+    }
+  ],
+  "nodeCheckParts": [
+    "v2/coordinator.mjs"
+  ]
+}

@@ -1,0 +1,207 @@
+await makeWorld(BASE);
+    const seedA = await seedAttempt3Shape(a);
+    const seedB = await seedAttempt3Shape(b);
+    assert.equal(seedA.planId, seedB.planId,
+      "intent-derived plan ids are deterministic across twins");
+    assert.equal(
+      snapshotDb(a.db, { exclude: ["d6_drive_passes"] }),
+      snapshotDb(b.db, { exclude: ["d6_drive_passes"] }),
+      "seeded twins start identical");
+    // Shadow world for the pass-1 outcome comparison: base alarm
+    // + recover + driveOnce composed manually (the class alarm's
+    // own composition), capturing driveOnce's actual return.
+    const s = await makeWorld(CAND);
+    await seedAttempt3Shape(s);
+    s.advance(10 * 60 * 1000);
+    await s.coord.alarm();
+    await s.service.recover();
+    const returned = await s.service.driveOnce();
+    for (let i = 1; i <= 6; i++) {
+      a.advance(10 * 60 * 1000);
+      b.advance(10 * 60 * 1000);
+      await a.fireClassAlarm();
+      await b.fireClassAlarm();
+      assert.equal(
+        snapshotDb(a.db, { exclude: ["d6_drive_passes"] }),
+        snapshotDb(b.db, { exclude: ["d6_drive_passes"] }),
+        `state diverged after pass ${i}`);
+      const rows = driveRows(a);
+      assert.equal(rows.length, i, `row count after pass ${i}`);
+      const row = rows[i - 1];
+      assert.equal(row.stage, "complete");
+      assert.equal(row.drive_invoked, 1);
+      assert.equal(row.error_name, null);
+      assert.equal(row.error_message, null);
+      assert.equal(row.outcomes_truncated, 0);
+      assert.equal(typeof row.armed_after, "number");
+      assert.equal(row.armed_after, a.alarmAt(),
+        "armed_after is the post-pass getAlarm() readback");
+      if (i === 1) {
+        assert.deepEqual(JSON.parse(row.outcomes_json),
+          projectOutcomes(returned),
+          "recorded outcomes equal driveOnce's actual return, projected");
+        const first = JSON.parse(row.outcomes_json)[0];
+        assert.equal(first.grantId,
+          `grant:${seedA.jobId}:1:full`,
+          "pass 1 issues the grant under halt (the live trigger), recorded");
+      }
+    }
+    const health = await a.storage.get("d6DrivePassRecorderHealth");
+    assert.equal(health.recordingFailures, 0);
+    assert.equal(typeof health.lastRecordedAt, "number");
+    assert.equal(await b.storage.get("d6DrivePassRecorderHealth"),
+      null, "the unmodified build has no health channel");
+    assert.equal(tableExists(b, "d6_drive_passes"), false,
+      "the unmodified build never creates the recorder table");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T2b — clock seam fallback (R-4)", () => {
+  test("without env.now, recorded times track wall Date.now()", async () => {
+    const w = await makeWorld(CAND, { envOverrides: { now: undefined } });
+    const before = Date.now();
+    await w.fireClassAlarm();
+    const after = Date.now();
+    const rows = driveRows(w);
+    assert.equal(rows.length, 1);
+    assert.ok(rows[0].at >= before && rows[0].at <= after,
+      `at=${rows[0].at} within [${before}, ${after}]`);
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T3 — stage capture & record-then-rethrow", () => {
+  const named = (name, msg) => {
+    const e = new Error(msg); e.name = name; return e;
+  };
+  async function faultCase({ fault, envOverrides, expectStage,
+      expectName, identity, expectDriveInvoked = 0 }) {
+    const w = await makeWorld(CAND, { envOverrides });
+    await seedAttempt3Shape(w);
+    if (fault) w.faults.sql = fault;
+    let caught = null;
+    try { await w.fireClassAlarm(); } catch (e) { caught = e; }
+    assert.ok(caught, "the alarm must reject (record-then-rethrow)");
+    if (identity) assert.equal(caught, fault.error,
+      "the rethrown error is the identical object that was thrown");
+    assert.equal(caught.name, expectName);
+    const rows = driveRows(w);
+    assert.equal(rows.length, 1);
+    const row = rows[0];
+    assert.equal(row.stage, expectStage);
+    assert.equal(row.drive_invoked, expectDriveInvoked);
+    // Twin equivalence: the SAME fault on the unmodified build
+    // rejects identically and leaves identical durable state
+    // (the instrumentation changes no fault behavior).
+    const bw = await makeWorld(BASE, { envOverrides });
+    await seedAttempt3Shape(bw);
+    if (fault) bw.faults.sql = fault;
+    let bCaught = null;
+    try { await bw.fireClassAlarm(); } catch (e) { bCaught = e; }
+    assert.ok(bCaught, "the unmodified build also rejects");
+    assert.equal(bCaught.name, expectName);
+    assert.equal(
+      snapshotDb(w.db, { exclude: ["d6_drive_passes"] }),
+      snapshotDb(bw.db, { exclude: ["d6_drive_passes"] }),
+      "fault-pass state identical to the unmodified build");
+    assert.equal(w.alarmAt(), bw.alarmAt(),
+      "the base chain's re-arm behavior is unchanged");
+    assert.equal(row.outcomes_json, null);
+    assert.equal(row.error_name, expectName);
+    assert.ok(row.error_message &&
+      !/https?:\/\//.test(row.error_message),
+      "the recorded message is scrubbed");
+    // The recorder is not wedged: the next healthy pass records.
+    w.faults.sql = null;
+    w.advance(10 * 60 * 1000);
+    if (!envOverrides) await w.fireClassAlarm();
+    if (!envOverrides) {
+      const rows2 = driveRows(w);
+      assert.equal(rows2.length, 2);
+      assert.equal(rows2[1].stage, "complete");
+    }
+    return w;
+  }
+
+  test("T3(i) throw in the base alarm's schedule processing -> stage base_alarm, identical object rethrown", async () => {
+    const error = named("BatteryBaseError", "battery base fault");
+    await faultCase({
+      fault: { match: (q) => /FROM schedule/i.test(q), error },
+      expectStage: "base_alarm", expectName: "BatteryBaseError",
+      identity: true });
+  });
+
+  test("T3(ii) throw at cache construction -> stage construct", async () => {
+    // The base alarm (OpalReaderCoordinator.alarm, worker-entry.js)
+    // constructs the cache FIRST, inside super.alarm(); the
+    // subclass's own construction step is the second construction.
+    // A namespace fault present from the start therefore lands at
+    // base_alarm (asserted in T3(iib)); the construct stage is
+    // exercised by a fault that ARRIVES between the two
+    // constructions — a counting env getter: first read (the base
+    // alarm's) is clean, the second (the subclass's) throws.
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    let reads = 0;
+    Object.defineProperty(w.inst.env, "R2_KEY_PREFIX", {
+      configurable: true,
+      get() { reads++; return reads <= 1 ? "" : "bogus/"; },
+    });
+    let caught = null;
+    try { await w.fireClassAlarm(); } catch (e) { caught = e; }
+    assert.ok(caught, "the alarm must reject");
+    assert.equal(caught.name, "ProductionR2NamespaceError");
+    const rows = driveRows(w);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].stage, "construct");
+    assert.equal(rows[0].drive_invoked, 0);
+    assert.equal(rows[0].error_name, "ProductionR2NamespaceError");
+  });
+
+  test("T3(iib) a cache-namespace fault present from the start is recorded at base_alarm (the base alarm constructs the cache first)", async () => {
+    await faultCase({
+      fault: null,
+      envOverrides: { R2_KEY_PREFIX: "bogus/" },
+      expectStage: "base_alarm",
+      expectName: "ProductionR2NamespaceError",
+      identity: false });
+  });
+
+  test("T3(iii) throw in recover() -> stage recover, identical object rethrown", async () => {
+    const error = named("BatteryRecoverError", "battery recover fault");
+    await faultCase({
+      fault: { match: (q) => /FROM d6_execution_records/i.test(q),
+               error },
+      expectStage: "recover", expectName: "BatteryRecoverError",
+      identity: true });
+  });
+
+  test("T3(iv) throw in driveOnce -> stage drive, identical object rethrown", async () => {
+    const error = named("BatteryDriveError", "battery drive fault");
+    await faultCase({
+      fault: { match: (q) => /FROM d6_plans/i.test(q), error },
+      expectStage: "drive", expectName: "BatteryDriveError",
+      identity: true, expectDriveInvoked: 1 });
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T4 — recorder-fault injection (the recorder may never break the alarm)", () => {
+  async function baseWorld() {
+    const w = await makeWorld(CAND);
+    const seed = await seedAttempt3Shape(w);
+    return { w, seed };
+  }
+  const grantCount = (w, jobId) => w.db.prepare(
+    `SELECT COUNT(*) AS n FROM grants WHERE job_id = ?`).get(jobId).n;
+  const healthOf = (w) => w.kv.get("d6DrivePassRecorderHealth");
+
+  test("T4 DDL fault: alarm resolves, drive effects happen, health notes step 'ddl', no row", async () => {
+    const { w, seed } = await baseWorld();
+    const error = new Error("battery ddl fault");
+    w.faults.sql = {
+      match: (q) => /CREATE TABLE IF NOT EXISTS d6_drive_passes/i.test(q),
+      error };
+    await w.fireClassAlarm(); // must resolve
+    assert.equal(grantCount

@@ -1,0 +1,188 @@
+(w, seed.jobId), 1,
+      "the drive pass still issued its grant");
+    assert.equal(tableExists(w, "d6_drive_passes"), false);
+    const health = healthOf(w);
+    assert.equal(health.recordingFailures, 1);
+    assert.equal(health.lastFailureStep, "ddl");
+  });
+
+  test("T4 INSERT fault: alarm resolves, health notes step 'insert', zero rows", async () => {
+    const { w, seed } = await baseWorld();
+    const error = new Error("battery insert fault");
+    w.faults.sql = {
+      match: (q) => /INSERT INTO d6_drive_passes/i.test(q), error };
+    await w.fireClassAlarm();
+    assert.equal(grantCount(w, seed.jobId), 1);
+    assert.equal(tableExists(w, "d6_drive_passes"), true);
+    assert.equal(driveRows(w).length, 0);
+    const health = healthOf(w);
+    assert.equal(health.recordingFailures, 1);
+    assert.equal(health.lastFailureStep, "insert");
+  });
+
+  test("T4 PRUNE fault: count exceeds the cap for exactly one pass, then recovers to <= cap", async () => {
+    const { w } = await baseWorld();
+    for (let i = 0; i < 288; i++)
+      await w.inst._recordDrivePass({
+        at: T0 + i, stage: "complete", driveInvoked: true,
+        outcomes: [], errorName: null, errorMessage: null });
+    assert.equal(driveRows(w).length, 288);
+    const error = new Error("battery prune fault");
+    w.faults.sql = {
+      match: (q) => /DELETE FROM d6_drive_passes/i.test(q), error };
+    await w.fireClassAlarm();
+    assert.equal(driveRows(w).length, 289,
+      "one un-pruned pass above the cap");
+    const health = healthOf(w);
+    assert.equal(health.recordingFailures, 1);
+    assert.equal(health.lastFailureStep, "prune");
+    w.faults.sql = null;
+    w.advance(10 * 60 * 1000);
+    await w.fireClassAlarm();
+    assert.equal(driveRows(w).length, 288,
+      "the next healthy pass prunes back to the cap");
+  });
+
+  test("T4 getAlarm fault: row written with armed_after NULL and NO health increment (the shipped coordinator itself reads getAlarm, so the base chain — not the recorder — is what fails)", async () => {
+    const { w, seed } = await baseWorld();
+    const error = new Error("battery getalarm fault");
+    w.faults.getAlarm = error;
+    // GenerationCoordinator._armAlarmIfEarlier (coordinator.mjs)
+    // reads storage.getAlarm() — and requestGrant's wake() calls
+    // it on the grant path, inside driveOnce. The fault therefore
+    // surfaces as a DRIVE-stage error row (the grant step's wake
+    // throws before issuance) and the alarm rejects with the
+    // identical object. The RECORDER's guarantees are what this
+    // case pins: the row is still written, its armed_after is
+    // NULL (the recorder's own isolated read), no recording
+    // failure is counted, and no grant issued (zero spend).
+    await assert.rejects(w.fireClassAlarm(), (e) => e === error);
+    const rows = driveRows(w);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].stage, "drive");
+    assert.equal(rows[0].drive_invoked, 1);
+    assert.equal(rows[0].armed_after, null);
+    assert.equal(grantCount(w, seed.jobId), 0,
+      "the wake threw before grant issuance");
+    const health = healthOf(w);
+    assert.ok(health && health.recordingFailures === 0,
+      "a getAlarm failure is not a recording failure");
+  });
+
+  test("T4 KV get fault (health read): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass", async () => {
+    const { w, seed } = await baseWorld();
+    w.faults.kvGet = new Error("battery kv get fault");
+    await w.fireClassAlarm();
+    assert.equal(grantCount(w, seed.jobId), 1);
+    assert.equal(driveRows(w).length, 1);
+    assert.equal(driveRows(w)[0].stage, "complete");
+    assert.equal(healthOf(w), undefined,
+      "the health note could not complete; nothing was written");
+    w.faults.kvGet = null;
+    w.advance(10 * 60 * 1000);
+    await w.fireClassAlarm();
+    const health = healthOf(w);
+    assert.ok(health && typeof health.lastRecordedAt === "number",
+      "the next healthy pass's health note lands");
+  });
+
+  test("T4 KV put fault (health write): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass", async () => {
+    const { w, seed } = await baseWorld();
+    w.faults.kvPut = new Error("battery kv put fault");
+    await w.fireClassAlarm();
+    assert.equal(grantCount(w, seed.jobId), 1);
+    assert.equal(driveRows(w).length, 1);
+    assert.equal(driveRows(w)[0].stage, "complete");
+    assert.equal(healthOf(w), undefined);
+    w.faults.kvPut = null;
+    w.advance(10 * 60 * 1000);
+    await w.fireClassAlarm();
+    const health = healthOf(w);
+    assert.ok(health && typeof health.lastRecordedAt === "number",
+      "the next healthy pass's health note lands");
+  });
+
+  test("T4 serialize-step fault (wrapper level): the catch discipline names the step 'serialize'", async () => {
+    const { w } = await baseWorld();
+    // The projected structure is plain scalars by construction,
+    // so serialization has no production failure mode; the step
+    // is fault-injected at the wrapper level via a throwing
+    // outcomes getter, proving a throw inside the serialize step
+    // is caught and named, and never reaches the alarm.
+    const error = new Error("battery serialize fault");
+    const rec = { at: T0, stage: "complete", driveInvoked: true,
+                  errorName: null, errorMessage: null };
+    Object.defineProperty(rec, "outcomes", {
+      get() { throw error; } });
+    await w.inst._recordDrivePass(rec); // must not throw
+    const health = healthOf(w);
+    assert.equal(health.recordingFailures, 1);
+    assert.equal(health.lastFailureStep, "serialize");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T5 — sanitization (write-time discipline + hostile storage on read)", () => {
+  const SECRET = "S3cr3tT0kenValue0123456789abcdef";
+  test("T5 write: hostile outcome values are grammar-checked or scrubbed; nothing raw is stored", async () => {
+    const w = await makeWorld(CAND);
+    await w.inst._recordDrivePass({
+      at: T0, stage: "complete", driveInvoked: true,
+      outcomes: [
+        { planId: `https://evil.example/${SECRET}`,
+          state: "active now",
+          stopReason: `see https://x.example/${SECRET}`,
+          grantId: "grant:job-battery:1:full",
+          grantRefused: "quota_denied",
+          jobId: "drop-me", grants: 5,
+          nested: { a: 1 }, list: [1, 2],
+          advanced: true, quarantined: false },
+        { bindingProjection: { scanned: 3, published: "x", bogus: 9 } },
+        { bindingProjectionError: `RAW ${SECRET}` },
+        "not-an-object", 42, null,
+      ],
+      errorName: null, errorMessage: null });
+    const row = driveRows(w)[0];
+    const raw = row.outcomes_json;
+    assert.ok(!raw.includes("evil.example"), "no URL survives");
+    assert.ok(!raw.includes(SECRET), "no token-shaped run survives");
+    assert.ok(!raw.includes("drop-me"), "non-allowlisted key dropped");
+    assert.ok(!raw.includes("bogus"), "non-allowlisted sweep key dropped");
+    assert.ok(!/[\u0000-\u001f]/.test(raw.replace(/\\./g, "")),
+      "no control characters in the stored JSON");
+    const parsed = JSON.parse(raw);
+    assert.equal(parsed[0].grantId, "grant:job-battery:1:full",
+      "a grammatical grantId is stored exactly");
+    assert.equal(parsed[0].advanced, true);
+    assert.equal(parsed[0].quarantined, false);
+    assert.equal(parsed[0].grantRefused, "quota_denied",
+      "a grammatical code token is stored exactly");
+    assert.ok(!("jobId" in parsed[0]) && !("grants" in parsed[0]) &&
+      !("nested" in parsed[0]) && !("list" in parsed[0]),
+      "only scalar allowlisted values survive");
+    assert.ok(parsed[0].planId.length <= 200);
+    assert.deepEqual(parsed[1], { bindingProjection: { scanned: 3 } },
+      "sweep entry: numeric allowlisted tallies only");
+    assert.deepEqual(parsed[2], { bindingProjectionError: true },
+      "the sweep error is a presence flag, never the raw string");
+    const marker = parsed[parsed.length - 1];
+    assert.ok(marker.truncated && marker.truncated.fieldsScrubbed === true,
+      "scrubbing is disclosed by the terminal marker");
+    assert.equal(row.outcomes_truncated, 1);
+  });
+
+  test("T5 write: error name/message scrubbed (URL, token run, control chars, caps)", async () => {
+    const w = await makeWorld(CAND);
+    await w.inst._recordDrivePass({
+      at: T0, stage: "drive", driveInvoked: true, outcomes: null,
+      errorName: `Error https://evil.example/x ${SECRET}`,
+      errorMessage: (`boom ${SECRET} https://evil.example/leak` +
+        " and\nnewline\ttab").repeat(6) });
+    const row = driveRows(w)[0];
+    assert.ok(!row.error_name.includes("evil.example"));
+    assert.ok(!row.error_name.includes(SECRET));
+    assert.ok(row.error_name.includes("[url]"));
+    assert.ok(row.error_name.includes("[redacted]"));
+    assert.ok(row.error_name.length <= 100);
+    assert.ok(!row.error_message.includes("evil.example"));
+    assert.ok(!row.error_messa

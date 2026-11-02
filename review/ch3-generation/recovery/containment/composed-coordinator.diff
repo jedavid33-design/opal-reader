@@ -1,0 +1,380 @@
+--- a/v2/coordinator.mjs
++++ b/v2/coordinator.mjs
+@@ -131,6 +131,136 @@
+ export const SYNC_FAMILIES = ["content", "bindings", "position", "settings"];
+ 
+ const WATCHDOG_PERIOD_MS = 10 * 60 * 1000;
++// R5a (revised design): a past-due armed value is treated as unarmed
++// ONLY once it has been past due for longer than this threshold.
++// Inside the window the value may be a legitimate platform retry gap:
++// an alarm that "has failed and any retry has not begun" still reads
++// as set, platform retries (at most 6, exponential backoff starting
++// at 2 s) apply only to the most recent setAlarm call, and a fresh
++// setAlarm in the gap would supersede the pending retry. The
++// threshold is set far beyond the documented retry envelope (see
++// PHASEB-R5A-RETRY-SUPERSESSION.md for the derivation); it is a
++// design constant, not a platform guarantee.
++const ALARM_STALE_THRESHOLD_MS = 60 * 60 * 1000;
++// ------------------------------------------------------------------
++// CONTAINMENT (Phase B containment design, REVISED state semantics;
++// PHASEB-CONTAINMENT-DESIGN-REVISED.md). A durable operational
++// state for the alarm chain, stored in the coordinator's own SQLite
++// as a SINGLETON ROW with an ENUMERATED state value — the contained
++// vs chain-stopped distinction is structural (three distinct
++// values), not prose over one boolean.
++//
++//   NORMAL          — shipped behavior, unchanged.
++//   DRIVE_CONTAINED — alarm passes run (base schedule processing,
++//                     lease-driven grant closure, the finally
++//                     re-arm) but the subclass handler skips
++//                     recover()/driveOnce(): no new grants, no
++//                     plan advancement. The chain stays alive.
++//   CHAIN_STOPPED   — DRIVE_CONTAINED, plus: every setAlarm path
++//                     in this part is gated off, and the stop
++//                     transition itself performs deleteAlarm().
++//                     No registration, no passes, no resurrection
++//                     via wake(). Pending schedule rows are left
++//                     untouched (evidence).
++//
++// Read discipline (the fail-closed core):
++//   * Reads NEVER write and NEVER create the tables. The tables
++//     are created ONLY by a transition (applyContainmentTransition
++//     below), so an ABSENT table is a structurally verified NORMAL:
++//     no transition has ever been recorded, hence no stop exists
++//     that a read failure could defeat.
++//   * Any OTHER read failure (or an unrecognized stored value)
++//     yields verified=false, and every consuming path defaults
++//     DARKER: drive is treated as contained, arming is treated as
++//     stopped. A read failure can therefore never silently defeat
++//     a recorded stop: with the table present and a stop recorded,
++//     a failed read suppresses registration instead of permitting
++//     it, and the suppression is itself recorded (transitions
++//     ledger, best-effort; the recorder's armed_after on the next
++//     pass is the second witness).
++//   * A stop is VERIFIED only by evidence after the act: the
++//     transition reads the state row back AND reads getAlarm()
++//     (must be null). An unverified stop is reported as such —
++//     outcome "rejected", reason containment_stop_unverified —
++//     with the state row left at CHAIN_STOPPED (darker), never as
++//     a silent success.
++// ------------------------------------------------------------------
++export const CONTAINMENT_STATES = Object.freeze([
++  "NORMAL", "DRIVE_CONTAINED", "CHAIN_STOPPED",
++]);
++const CONTAINMENT_SCHEMA = `
++CREATE TABLE IF NOT EXISTS d6_containment_state (
++  id INTEGER PRIMARY KEY CHECK (id = 1),
++  state TEXT NOT NULL,
++  updated_at INTEGER NOT NULL,
++  authorization_ref TEXT
++);
++CREATE TABLE IF NOT EXISTS d6_containment_events (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  at INTEGER NOT NULL,
++  action TEXT NOT NULL,
++  from_state TEXT,
++  to_state TEXT,
++  authorization_ref TEXT,
++  outcome TEXT NOT NULL,
++  detail_json TEXT
++);
++`;
++
++// Read the containment state. Never throws, never writes.
++// Returns { state, known, absent, verified, updatedAt,
++// authorizationRef, errorName }:
++//   absent=true            -> no table / no row: verified NORMAL.
++//   known=true             -> stored value is one of the enum.
++//   verified=false         -> a read failure or an unrecognized
++//                             value: consumers must default darker.
++export function readContainmentState(sql) {
++  let rows;
++  try {
++    rows = sql.exec(
++      `SELECT state, updated_at, authorization_ref
++         FROM d6_containment_state WHERE id = 1`).toArray();
++  } catch (e) {
++    const msg = String((e && e.message) || e);
++    if (/no such table/i.test(msg))
++      return { state: "NORMAL", known: true, absent: true,
++        verified: true, updatedAt: null, authorizationRef: null,
++        errorName: null };
++    return { state: null, known: false, absent: false,
++      verified: false, updatedAt: null, authorizationRef: null,
++      errorName: e && e.name ? String(e.name) : "Error" };
++  }
++  if (!rows || rows.length === 0)
++    return { state: "NORMAL", known: true, absent: true,
++      verified: true, updatedAt: null, authorizationRef: null,
++      errorName: null };
++  const r = rows[0];
++  const known = CONTAINMENT_STATES.includes(r.state);
++  return { state: r.state, known, absent: false, verified: known,
++    updatedAt: typeof r.updated_at === "number" ? r.updated_at : null,
++    authorizationRef:
++      typeof r.authorization_ref === "string" ? r.authorization_ref : null,
++    errorName: null };
++}
++
++// Drive gate (subclass alarm handler): suppressed in
++// DRIVE_CONTAINED and CHAIN_STOPPED, and on ANY unverified read.
++export function containmentDriveSuppressed(read) {
++  if (!read || !read.verified) return true;
++  return read.state === "DRIVE_CONTAINED" ||
++         read.state === "CHAIN_STOPPED";
++}
++
++// Arm gate (every setAlarm path in this part): suppressed in
++// CHAIN_STOPPED, and on any unverified read that is not a
++// structurally-verified absence (absent reads verify as NORMAL,
++// above, so they never reach this branch).
++export function containmentArmSuppressed(read) {
++  if (!read) return true;
++  if (!read.verified) return true;
++  return read.state === "CHAIN_STOPPED";
++}
++
+ const LEASE_MS = 15 * 60 * 1000;
+ // Option D two-phase constants (design §3.3.7, §3.10): a pending
+ // migration command awaits operator approval for at most 24
+@@ -518,9 +648,10 @@
+       const st = this._migrationChunkState(cmd.payload || {});
+       if (st && st.ok) prepared = await this._prepareMigrationImport(cmd.payload || {});
+     }
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const outcome = this._tx(() => this._recordAndApply(cmd, prepared));
+-    await this._armAlarmIfEarlier(); // the command may have scheduled earlier work
++    await this._armAlarmIfEarlier(armMemo); // the command may have scheduled earlier work
+     return { command_id: cmd.command_id, ...outcome };
+   }
+ 
+@@ -1803,10 +1934,11 @@
+ 
+   // Executor entry point (called by the command API / plan advancer).
+   async requestGrant(jobId, opts = {}) {
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const g = this._issueGrant(jobId, { jobEvent: "grant",
+       cause: opts.cause || "requestGrant", probe: !!opts.probe });
+-    await this._armAlarmIfEarlier(); // the new lease may be the earliest work
++    await this._armAlarmIfEarlier(armMemo); // the new lease may be the earliest work
+     return g;
+   }
+ 
+@@ -2061,7 +2193,8 @@
+   // adoptable through bindings (content-addressed audio is never wasted).
+   async handleReport(report) {
+     if (!report || !report.grantId) return { ok: false, reason: "grant_required" };
+-    await this.wake();
++    const armMemo = { registered: false, armedAfter: null };
++    await this.wake(armMemo);
+     const result = this._tx(() => {
+       const grant = this._oneOrNull(`SELECT * FROM grants WHERE grant_id = ?`, report.grantId);
+       if (!grant) return { ok: false, reason: "grant_not_found" };
+@@ -2216,7 +2349,7 @@
+       }
+       return { ok: true, ready, blocked, failed };
+     });
+-    await this._armAlarmIfEarlier(); // a retry/lease from this report may be earliest
++    await this._armAlarmIfEarlier(armMemo); // a retry/lease from this report may be earliest
+     return result;
+   }
+ 
+@@ -2459,31 +2592,188 @@
+     const next = this._one(
+       `SELECT MIN(due_at) AS due FROM schedule WHERE state = 'pending'`);
+     const due = next && next.due !== null ? next.due : this._now() + WATCHDOG_PERIOD_MS;
++    // CONTAINMENT arm gate: in CHAIN_STOPPED (or on an unverified
++    // containment read) the finally re-arm does not register. The
++    // suppression is noted in the transitions ledger best-effort —
++    // a failed note never re-enables registration.
++    if (containmentArmSuppressed(readContainmentState(this.sql))) {
++      this._noteContainmentArmSuppressed("_armAlarm");
++      return;
++    }
+     await this.state.storage.setAlarm(due);
+   }
+ 
++  // CONTAINMENT: the state read used by the operator surface and
++  // the service diagnostics (never throws, never writes).
++  containmentState() { return readContainmentState(this.sql); }
++
++  _noteContainmentArmSuppressed(path) {
++    try {
++      this._logTransition("containment", "alarm_chain",
++        "arm_suppressed", null, null, null, { path });
++    } catch { /* best-effort witness; suppression stands regardless */ }
++  }
++
++  // CONTAINMENT transitions — the ONLY writer of the containment
++  // state. Called exclusively from the operator route
++  // (/internal/d6/containment). Actions:
++  //   contain_drive : NORMAL -> DRIVE_CONTAINED
++  //   stop_chain    : NORMAL|DRIVE_CONTAINED -> CHAIN_STOPPED,
++  //                   plus deleteAlarm() after the state commit,
++  //                   verified by a getAlarm() read-back (null).
++  //   clear         : DRIVE_CONTAINED|CHAIN_STOPPED -> NORMAL.
++  //                   Clearing never re-arms anything itself.
++  // An already-in-target request is an idempotent applied no-op
++  // (audited). A transition from any other state is rejected with
++  // NO writes. A state WRITE failure throws out of the transaction
++  // (the route surfaces HTTP 500): a transition is never reported
++  // applied unless its write committed and was read back. A failed
++  // or unverifiable deleteAlarm leaves the row at CHAIN_STOPPED
++  // and reports outcome "rejected" / containment_stop_unverified.
++  async applyContainmentTransition(action, authorizationRef) {
++    const TARGETS = {
++      contain_drive: { to: "DRIVE_CONTAINED", from: ["NORMAL"] },
++      stop_chain: { to: "CHAIN_STOPPED",
++        from: ["NORMAL", "DRIVE_CONTAINED"] },
++      clear: { to: "NORMAL",
++        from: ["DRIVE_CONTAINED", "CHAIN_STOPPED"] },
++    };
++    const spec = TARGETS[action];
++    if (!spec) return { outcome: "rejected",
++      reason: "containment_action_not_allowed" };
++    this.sql.exec(CONTAINMENT_SCHEMA);
++    const before = readContainmentState(this.sql);
++    const from = before.known ? before.state : null;
++    if (from === spec.to) {
++      this.sql.exec(
++        `INSERT INTO d6_containment_events
++           (at, action, from_state, to_state, authorization_ref,
++            outcome, detail_json)
++         VALUES (?, ?, ?, ?, ?, 'applied', ?)`,
++        this._now(), action, from, spec.to, authorizationRef,
++        JSON.stringify({ idempotent: true }));
++      return { outcome: "applied", action, state: spec.to,
++        idempotent: true, stopVerified: null,
++        stateRead: readContainmentState(this.sql) };
++    }
++    if (from === null || !spec.from.includes(from))
++      return { outcome: "rejected",
++        reason: "containment_transition_refused",
++        state: before.state, verified: before.verified };
++    this._tx(() => {
++      this.sql.exec(
++        `INSERT INTO d6_containment_state
++           (id, state, updated_at, authorization_ref)
++         VALUES (1, ?, ?, ?)
++         ON CONFLICT(id) DO UPDATE SET state = excluded.state,
++           updated_at = excluded.updated_at,
++           authorization_ref = excluded.authorization_ref`,
++        spec.to, this._now(), authorizationRef);
++      this.sql.exec(
++        `INSERT INTO d6_containment_events
++           (at, action, from_state, to_state, authorization_ref,
++            outcome, detail_json)
++         VALUES (?, ?, ?, ?, ?, 'applied', NULL)`,
++        this._now(), action, from, spec.to, authorizationRef);
++    });
++    if (action !== "stop_chain")
++      return { outcome: "applied", action, state: spec.to,
++        idempotent: false, stopVerified: null,
++        stateRead: readContainmentState(this.sql) };
++    // stop_chain's physical act: remove the registration, then
++    // VERIFY by reading it back. Failure of either step is
++    // reported, never laundered: the state row stands at
++    // CHAIN_STOPPED (the arm gates keep every later wake from
++    // re-registering), and the outcome says the stop is
++    // UNVERIFIED.
++    let stopVerified = false;
++    let verifyError = null;
++    try {
++      await this.state.storage.deleteAlarm();
++      const armed = await this.state.storage.getAlarm();
++      stopVerified = armed === null || armed === undefined;
++      if (!stopVerified) verifyError = "alarm_still_armed";
++    } catch (e) {
++      verifyError = e && e.name ? String(e.name) : "Error";
++    }
++    if (!stopVerified) {
++      try {
++        this.sql.exec(
++          `INSERT INTO d6_containment_events
++             (at, action, from_state, to_state, authorization_ref,
++              outcome, detail_json)
++           VALUES (?, 'stop_chain_verify', ?, 'CHAIN_STOPPED', ?,
++                   'unverified', ?)`,
++          this._now(), from, authorizationRef,
++          JSON.stringify({ verifyError }));
++      } catch { /* the response below is itself the report */ }
++      return { outcome: "rejected",
++        reason: "containment_stop_unverified",
++        action, state: "CHAIN_STOPPED", stopVerified: false,
++        stateRead: readContainmentState(this.sql) };
++    }
++    return { outcome: "applied", action, state: "CHAIN_STOPPED",
++      idempotent: false, stopVerified: true,
++      stateRead: readContainmentState(this.sql) };
++  }
++
+   // Called on every coordinator wake: if the chain is unarmed (alarm
+   // consumed and handler died, retries exhausted, fresh start), re-arm it.
+   // Recovery never requires a client — any wake (command, report, alarm)
+   // re-establishes the chain, and the chain itself is self-perpetuating.
+-  async wake() {
++  async wake(armMemo) {
+     const wd = this._one(
+       `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending' AND kind = 'watchdog'`);
+     if (!wd || wd.n === 0) this._schedule(this._now() + WATCHDOG_PERIOD_MS, "watchdog", null, {});
+-    await this._armAlarmIfEarlier();
++    await this._armAlarmIfEarlier(armMemo);
+   }
+ 
+   // Arm the alarm at the earliest pending work if it is sooner than the
+   // currently armed time (or nothing is armed) — newly scheduled earlier
+   // work must ADVANCE the alarm, not wait for it (P2 review round 2,
+   // gap 5). Entry points call this after their writes commit.
+-  async _armAlarmIfEarlier() {
+-    const armed = await this.state.storage.getAlarm();
++  // armMemo (R5a revised design): a per-top-level-operation object
++  // created by handleCommand / requestGrant / handleReport and
++  // threaded through wake() and the post-apply call below. It bounds
++  // alarm registrations within one operation: once this operation
++  // has registered, a later evaluation in the SAME operation fires
++  // again ONLY if the operation scheduled work strictly earlier than
++  // the value it already registered (a corrective registration with
++  // a strictly smaller value). The memo carries no state across
++  // operations and is never persisted.
++  async _armAlarmIfEarlier(armMemo) {
++    // CONTAINMENT arm gate (see _armAlarm): in CHAIN_STOPPED, or
++    // on an unverified containment read, a wake registers NOTHING
++    // — this is the fence that keeps a verified chain stop from
++    // being resurrected by any later command or report. The gate
++    // precedes the R5a memo logic: a suppressed evaluation is not
++    // a registration and never touches the memo.
++    if (containmentArmSuppressed(readContainmentState(this.sql))) {
++      this._noteContainmentArmSuppressed("_armAlarmIfEarlier");
++      return;
++    }
++    const now = this._now();
+     const next = this._one(
+       `SELECT MIN(due_at) AS due FROM schedule WHERE state = 'pending'`);
+-    const due = next && next.due !== null ? next.due : this._now() + WATCHDOG_PERIOD_MS;
+-    if (armed === null || armed === undefined || due < armed)
++    const due = next && next.due !== null ? next.due : now + WATCHDOG_PERIOD_MS;
++    if (armMemo && armMemo.registered) {
++      // This operation already registered. Its own fresh registration
++      // is not a stale value and not a retry gap: only genuinely
++      // earlier work scheduled by this operation justifies a second
++      // registration, at the strictly earlier due.
++      if (due < armMemo.armedAfter) {
++        await this.state.storage.setAlarm(due);
++        armMemo.armedAfter = due;
++      }
++      return;
++    }
++    const armed = await this.state.storage.getAlarm();
++    if (armed === null || armed === undefined
++        || armed <= now - ALARM_STALE_THRESHOLD_MS
++        || due < armed) {
+       await this.state.storage.setAlarm(due);
++      if (armMemo) { armMemo.registered = true; armMemo.armedAfter = due; }
++    }
+   }
+ 
+   async alarm() {

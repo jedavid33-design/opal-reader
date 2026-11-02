@@ -1,0 +1,653 @@
+--- a/v2/worker-entry-prod-d6.js
++++ b/v2/worker-entry-prod-d6.js
+@@ -257,7 +257,10 @@
+   OpalReaderCoordinatorProd as ProductionCoordinatorBase,
+   PRODUCTION_SCOPE, PRODUCTION_INSTANCE,
+ } from "./worker-entry-prod.js";
+-import { GenerationCoordinator } from "./coordinator.mjs";
++import {
++  GenerationCoordinator, readContainmentState,
++  containmentDriveSuppressed,
++} from "./coordinator.mjs";
+ import { BUILD_VERSION, BUILD_COMMIT } from "./host/build-identity.mjs";
+ import { handleAudioRequest, isAudioPath, AUDIO_EXPOSE_HEADERS } from "./audio-route.mjs";
+ import {
+@@ -413,6 +416,242 @@
+   });
+ }
+ 
++// PHASE B INSTRUMENTATION (P2; design
++// PHASEB-INSTRUMENTATION-DESIGN.md as approved with refinements,
++// spec PHASEB-INSTRUMENTATION-SPEC.md): one durable row per
++// subclass alarm pass, written by the recorder below, so a drive
++// stall can be told apart from a silent alarm chain. The recorder
++// is the table's ONLY writer and sanitizes at write time
++// (allowlist projection + grammar-or-scrub discipline, spec
++// §5.1–§5.2); the read surface (service.mjs
++// drivePassDiagnostics) trusts nothing it reads back and
++// re-validates every stored value before returning it (spec
++// §5.5). Nothing here changes what a pass DOES: recording is
++// last, best-effort, and a drive error is rethrown unchanged by
++// alarm() after recording, so platform alarm-retry semantics are
++// exactly the shipped ones.
++const DRIVE_PASS_SCHEMA = `
++CREATE TABLE IF NOT EXISTS d6_drive_passes (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  at INTEGER NOT NULL,
++  finished_at INTEGER,
++  stage TEXT NOT NULL,
++  drive_invoked INTEGER NOT NULL,
++  outcomes_json TEXT,
++  outcomes_truncated INTEGER NOT NULL DEFAULT 0,
++  error_name TEXT,
++  error_message TEXT,
++  armed_after INTEGER
++);
++`;
++// The recorder-health channel: the one record of recording ITSELF
++// failing, kept in DO key-value storage under this key — a storage
++// facet the SQL table does not share, so a SQL-layer fault cannot
++// hide its own trace. service.mjs drivePassDiagnostics reads the
++// same literal key (a cross-part contract, pinned by the spec's
++// round-trip test). Shape:
++// { recordingFailures, lastFailureAt, lastFailureStep,
++//   lastFailureName, lastRecordedAt }.
++const DRIVE_PASS_HEALTH_KEY = "d6DrivePassRecorderHealth";
++// Retention is a COUNT cap (Rowan's ruling): the newest 288 rows
++// are kept; at the 10-minute watchdog cadence that is an ESTIMATE
++// of ~2 days, never a guaranteed duration.
++const DRIVE_PASS_RETENTION = 288;
++const DRIVE_PASS_OUTCOMES_CAP = 8000; // chars, on outcomes_json
++const DRIVE_PASS_FIELD_CAP = 200;     // chars, per outcome string field
++const DRIVE_PASS_ERROR_CAP = 500;     // chars, on error_message
++const DRIVE_PASS_NAME_CAP = 100;      // chars, on error_name
++// The outcomes allowlist: exactly the scalar fields driveOnce
++// writes on its per-plan outcome objects (service.mjs driveOnce),
++// plus the binding-projection sweep's numeric tallies. Anything
++// else a future outcome grows is dropped at record time, never
++// stored — segment text, detail payloads, and provider data have
++// no path into this table.
++const DRIVE_PASS_OUTCOME_KEYS = Object.freeze([
++  "planId", "state", "stopReason", "grantId", "grantRefused",
++  "skipped", "quarantined", "approvalRequired",
++  "quarantineCheckFailed", "advanced",
++]);
++const DRIVE_PASS_SWEEP_KEYS = Object.freeze([
++  "scanned", "published", "noop", "conflicts", "pending",
++]);
++
++// Scrub one free-text field (an error name or message) for durable
++// storage: non-strings and empties become NULL; control characters
++// are flattened; URL-shaped and long identifier-shaped runs are
++// redacted (an error message in this codebase can embed a provider
++// request id or a storage detail); the result is length-bounded.
++// The diagnostic shape survives — the error's name and its prose —
++// never the raw string, and never a stack trace (only .name and
++// .message are ever passed here).
++function scrubDrivePassText(value, cap) {
++  if (typeof value !== "string" || value.length === 0) return null;
++  let s = value.replace(/[\x00-\x1f\x7f]+/g, " ");
++  s = s.replace(/https?:\/\/\S+/g, "[url]");
++  s = s.replace(/\b[A-Za-z0-9_\-]{24,}\b/g, "[redacted]");
++  s = s.trim();
++  if (s.length === 0) return null;
++  return s.length > cap ? s.slice(0, cap) : s;
++}
++
++// Write-time discipline for allowlisted outcome strings (Rowan
++// correction 5 — hostile-input coverage): a stored string is safe
++// BY CONSTRUCTION, via exactly one of two paths.
++//   * GRAMMAR path: planId / grantId are machine
++//     identifiers from closed alphabets the shipped code itself
++//     generates (`plan:<hex>`,
++//     `grant:<jobId>:<revision>:full|probe` — coordinator.mjs
++//     grant issuance). A value matching the field's
++//     grammar cannot contain whitespace, control characters, or a
++//     URL (the alphabet excludes '/', ' ', and every control), so
++//     it is stored as-is, length-capped. A value NOT matching its
++//     grammar is not an identifier at all — it is hostile or
++//     corrupt free text and takes the scrub path.
++//   * TOKEN path: state / stopReason are code vocabulary
++//     (lowercase snake_case constants from the shipped stop maps
++//     and state writes). A value matching /^[a-z0-9_]+$/ is such a
++//     token by shape and is stored as-is, length-capped; anything
++//     else takes the scrub path.
++//   * NAME path: error names (the row's error_name, the health
++//     channel's lastFailureName) are bare class identifiers
++//     (Error, SqliteError, ProductionR2NamespaceError). A value
++//     matching the identifier grammar cannot contain a URL,
++//     whitespace, or control characters, so it is stored as-is,
++//     length-capped — the prose scrub's >=24-char redaction would
++//     otherwise destroy exactly the long class names this
++//     recorder exists to surface (a battery finding: the prose
++//     scrub reduced ProductionR2NamespaceError to "[redacted]").
++//     A non-identifier name takes the scrub path.
++//   * SCRUB path: the full prose scrub (scrubDrivePassText) —
++//     control characters flattened, URL-shaped runs replaced,
++//     >=24-char identifier-shaped runs redacted, capped. Any value
++//     changed by scrubbing (or by the length cap) is reported via
++//     fieldsScrubbed / fieldsSliced so the record never pretends
++//     to be a naive copy.
++const DRIVE_PASS_PLAN_ID_GRAMMAR = /^plan:[A-Za-z0-9_-]+$/;
++const DRIVE_PASS_GRANT_ID_GRAMMAR = /^grant:[A-Za-z0-9_:\-.]+$/;
++const DRIVE_PASS_TOKEN_GRAMMAR = /^[a-z0-9_]+$/;
++
++const DRIVE_PASS_NAME_GRAMMAR = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
++
++// The NAME path for error names (see the discipline comment
++// above): identifier-grammar values are stored as-is
++// (length-capped); anything else takes the full prose scrub.
++function sanitizeDrivePassName(value) {
++  if (typeof value !== "string" || value.length === 0) return null;
++  if (DRIVE_PASS_NAME_GRAMMAR.test(value))
++    return value.length > DRIVE_PASS_NAME_CAP
++      ? value.slice(0, DRIVE_PASS_NAME_CAP) : value;
++  return scrubDrivePassText(value, DRIVE_PASS_NAME_CAP);
++}
++
++function sanitizeDrivePassOutcomeString(key, value, flags) {
++  if (value.length > DRIVE_PASS_FIELD_CAP) flags.fieldsSliced = true;
++  const grammar = key === "planId" ? DRIVE_PASS_PLAN_ID_GRAMMAR
++    : key === "grantId" ? DRIVE_PASS_GRANT_ID_GRAMMAR
++    : DRIVE_PASS_TOKEN_GRAMMAR;
++  if (grammar.test(value) && value.length <= DRIVE_PASS_FIELD_CAP)
++    return value;
++  if (grammar.test(value)) { // grammatical but oversized: cap only
++    flags.fieldsSliced = true;
++    return value.slice(0, DRIVE_PASS_FIELD_CAP);
++  }
++  const scrubbed = scrubDrivePassText(value, DRIVE_PASS_FIELD_CAP);
++  flags.fieldsScrubbed = true;
++  // scrubDrivePassText returns null only for empty-after-scrub;
++  // the stored form is the empty string in that case (the field
++  // was present; its content did not survive sanitization).
++  return scrubbed === null ? "" : scrubbed;
++}
++
++// Project driveOnce's outcomes array onto the recording allowlist.
++// Only scalar values survive; string fields pass through
++// sanitizeDrivePassOutcomeString (grammar-or-scrub, above — any
++// slicing is reported via fieldsSliced, any scrubbing via
++// fieldsScrubbed); the binding-projection entry keeps only its
++// numeric tallies, and its error variant keeps only a presence
++// flag — the raw sweep error string is NOT recorded (the row's
++// error fields are the exception channel, and they belong to the
++// handler's own throw).
++function projectDrivePassOutcomes(outcomes) {
++  if (!Array.isArray(outcomes)) return null;
++  const entries = [];
++  const flags = { fieldsSliced: false, fieldsScrubbed: false };
++  for (const entry of outcomes) {
++    if (!entry || typeof entry !== "object" || Array.isArray(entry))
++      continue;
++    if (entry.bindingProjection &&
++        typeof entry.bindingProjection === "object") {
++      const sweep = {};
++      for (const k of DRIVE_PASS_SWEEP_KEYS)
++        if (typeof entry.bindingProjection[k] === "number")
++          sweep[k] = entry.bindingProjection[k];
++      entries.push({ bindingProjection: sweep });
++      continue;
++    }
++    if ("bindingProjectionError" in entry) {
++      entries.push({ bindingProjectionError: true });
++      continue;
++    }
++    const o = {};
++    for (const k of DRIVE_PASS_OUTCOME_KEYS) {
++      const v = entry[k];
++      if (typeof v === "string")
++        o[k] = sanitizeDrivePassOutcomeString(k, v, flags);
++      else if (typeof v === "number" || typeof v === "boolean")
++        o[k] = v;
++    }
++    entries.push(o);
++  }
++  return { entries, fieldsSliced: flags.fieldsSliced,
++           fieldsScrubbed: flags.fieldsScrubbed };
++}
++
++// Serialize the projected outcomes under the 8,000-char cap with
++// EXPLICIT truncation (Rowan's condition): entries are kept whole,
++// from the front (drive order — the earliest-selected plan's
++// outcome is the most diagnostic); the first entry that would
++// cross the cap and everything after it is dropped, and a terminal
++// marker entry states exactly what was kept, what was dropped, and
++// whether any field was sliced or scrubbed. After the per-field cap
++// a single entry is ~2.3 KB worst case, so at least one whole entry
++// plus the marker always fits; the stored value is always valid JSON.
++function serializeDrivePassOutcomes(outcomes) {
++  const projected = projectDrivePassOutcomes(outcomes);
++  if (projected === null) return { json: null, truncated: 0 };
++  const full = JSON.stringify(projected.entries);
++  if (!projected.fieldsSliced && !projected.fieldsScrubbed &&
++      full.length <= DRIVE_PASS_OUTCOMES_CAP)
++    return { json: full, truncated: 0 };
++  // Entry-granular truncation (spec §5.3), also entered whenever
++  // a field was sliced or scrubbed: the marker is appended so the
++  // invariant holds — outcomes_truncated is 1 exactly when a
++  // marker is present, and the marker discloses kept/dropped
++  // counts plus slicing and scrubbing. The stored form is never
++  // a silently altered copy of the outcomes array.
++  const kept = [];
++  let dropped = 0;
++  for (let i = 0; i < projected.entries.length; i++) {
++    const marker = { truncated: {
++      keptEntries: kept.length,
++      droppedEntries: projected.entries.length - i,
++      fieldsSliced: projected.fieldsSliced,
++      fieldsScrubbed: projected.fieldsScrubbed } };
++    if (JSON.stringify([...kept, projected.entries[i], marker]).length
++        <= DRIVE_PASS_OUTCOMES_CAP) {
++      kept.push(projected.entries[i]);
++    } else {
++      dropped = projected.entries.length - i;
++      break;
++    }
++  }
++  const marker = { truncated: {
++    keptEntries: kept.length, droppedEntries: dropped,
++    fieldsSliced: projected.fieldsSliced,
++    fieldsScrubbed: projected.fieldsScrubbed } };
++  return { json: JSON.stringify([...kept, marker]), truncated: 1 };
++}
++
+ // The D6 production coordinator: the EXISTING production class
+ // (same export name the live script's COORDINATOR binding names),
+ // carrying the D6 overrides. Continuity is the design: this class
+@@ -584,13 +823,41 @@
+         const cache = await this._cache();
+         const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+         const limRaw = url.searchParams.get("limit");
+-        const result = await d6Service(coord, d6HostEnv(this.env, cache))
+-          .attemptDiagnostics({
+-            planId: url.searchParams.get("planId"),
+-            jobId: url.searchParams.get("jobId"),
+-            limit: limRaw === null ? undefined : Number(limRaw),
+-            cursor: url.searchParams.get("cursor"),
+-          });
++        const service = d6Service(coord, d6HostEnv(this.env, cache));
++        // PHASE B INSTRUMENTATION (P2): the presence of a drive
++        // parameter selects the drive-pass read INSTEAD of attempt
++        // diagnostics. The service validates the mode strictly
++        // (drive must be exactly "1", and no attempt target —
++        // planId / jobId / cursor — may ride along) and rejects
++        // every ambiguous combination as diagnostics_mode_ambiguous;
++        // the modes never blend into one response. A repeated
++        // mode parameter is itself ambiguous (searchParams.get
++        // would silently take the first), so the class counts
++        // occurrences and reports them via repeatedModeParam.
++        const repeatedModeParam =
++          url.searchParams.getAll("drive").length > 1 ||
++          url.searchParams.getAll("planId").length > 1 ||
++          url.searchParams.getAll("jobId").length > 1 ||
++          url.searchParams.getAll("cursor").length > 1 ||
++          // The public entry forwards repetition on the public
++          // query explicitly (its per-parameter copy collapses
++          // repeats to the first value; see the forward site).
++          url.searchParams.get("repeated") === "1";
++        const result = url.searchParams.get("drive") !== null
++          ? await service.drivePassDiagnostics({
++              drive: url.searchParams.get("drive"),
++              planId: url.searchParams.get("planId"),
++              jobId: url.searchParams.get("jobId"),
++              limit: limRaw === null ? undefined : Number(limRaw),
++              cursor: url.searchParams.get("cursor"),
++              repeatedModeParam,
++            })
++          : await service.attemptDiagnostics({
++              planId: url.searchParams.get("planId"),
++              jobId: url.searchParams.get("jobId"),
++              limit: limRaw === null ? undefined : Number(limRaw),
++              cursor: url.searchParams.get("cursor"),
++            });
+         await cache.flush();
+         return result && result.outcome === "rejected"
+           ? json(400, result) : json(200, result);
+@@ -1396,6 +1663,85 @@
+         await cache.flush();
+         return json(200, result);
+       }
++      if (url.pathname === "/internal/d6/containment" && request.method === "GET") {
++        // CONTAINMENT state read (Phase B containment design,
++        // revised semantics). Same operator fence as every
++        // operator surface above (operator-admitted stamp required
++        // at this class gate). Read-only and side-effect-free: the
++        // state read (coordinator.mjs readContainmentState — no
++        // DDL, no writes), one getAlarm() read-back, and the
++        // pending-schedule counts. This is the passive verification
++        // surface for a containment transition: state row +
++        // registration + schedule, without any command or wake.
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const state = coord.containmentState();
++        let armedAt = null;
++        try {
++          const armed = await this.state.storage.getAlarm();
++          armedAt = typeof armed === "number" ? armed : null;
++        } catch { armedAt = null; }
++        const pending = coord._oneOrNull(
++          `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
++        const pendingWd = coord._oneOrNull(
++          `SELECT COUNT(*) AS n FROM schedule
++            WHERE state = 'pending' AND kind = 'watchdog'`);
++        await cache.flush();
++        return json(200, {
++          state: state.known ? state.state : null,
++          known: state.known, absent: state.absent,
++          verified: state.verified,
++          updatedAt: state.updatedAt,
++          authorizationRef: state.authorizationRef,
++          alarm: { armedAt,
++            pendingSchedule: pending ? pending.n : null,
++            pendingWatchdog: pendingWd ? pendingWd.n : null },
++        });
++      }
++      if (url.pathname === "/internal/d6/containment" && request.method === "POST") {
++        // CONTAINMENT transitions (Phase B containment design,
++        // revised semantics): the ONLY writer of the containment
++        // state. Same operator fence as every operator surface
++        // above. The request contract is a CLOSED ALLOWLIST
++        // enforced HERE: permitted keys are exactly { action,
++        // authorizationRef }; action must be one of
++        // contain_drive | stop_chain | clear; authorizationRef is
++        // a required nonblank string bounded at 2000 chars. The
++        // coordinator then enforces the transition table itself
++        // (coordinator.mjs applyContainmentTransition): refused
++        // transitions write nothing; write failures throw to the
++        // class catch (HTTP 500) — never a silent success; a
++        // stop_chain whose deleteAlarm cannot be verified returns
++        // outcome "rejected" / containment_stop_unverified with
++        // the state left at CHAIN_STOPPED. NOT halt-fenced:
++        // containment is the stop that must remain reachable
++        // while generation is halted (and while it is not).
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const reject = (reason) => json(200, { outcome: "rejected", reason });
++        const body = await request.json().catch(() => null);
++        if (!body || typeof body !== "object" || Array.isArray(body))
++          return reject("containment_request_key_not_allowed");
++        const ALLOWED_KEYS = ["action", "authorizationRef"];
++        for (const key of Object.keys(body)) {
++          if (!ALLOWED_KEYS.includes(key))
++            return reject("containment_request_key_not_allowed");
++        }
++        if (!["contain_drive", "stop_chain", "clear"].includes(body.action))
++          return reject("containment_action_not_allowed");
++        if (typeof body.authorizationRef !== "string" ||
++            body.authorizationRef.trim().length === 0 ||
++            body.authorizationRef.length > 2000)
++          return reject("authorization_ref_required");
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const result = await coord.applyContainmentTransition(
++          body.action, body.authorizationRef.trim());
++        await cache.flush();
++        return json(200, result);
++      }
+       if (url.pathname === "/internal/d6/seed-storage" && request.method === "POST") {
+         // CORRECTION 2 + G2 HARDENING: the storage seed. Beyond the
+         // class gate above (internal header + production scope),
+@@ -1452,18 +1798,172 @@
+     return json(200, result);
+   }
+ 
++  // The recorder's clock: the coordinator's own seam
++  // (GenerationCoordinator._now(), coordinator.mjs) — env.now()
++  // when a harness provides one, Date.now() in production, where
++  // the platform env carries no now function. Testable, with
++  // production semantics unchanged (Rowan's clock ruling).
++  _drivePassNow() {
++    return typeof this.env.now === "function"
++      ? this.env.now() : Date.now();
++  }
++
++  // One best-effort note on the recorder-health channel (DO
++  // key-value storage, DRIVE_PASS_HEALTH_KEY). Never throws: the
++  // channel is itself best-effort, and its failure is part of the
++  // residual blind spot the spec names (a pass whose SQL write AND
++  // health note both fail leaves no trace of its recording
++  // failure; the handler's absence is still distinguishable from a
++  // recorded failure whenever at least one channel works).
++  async _noteDrivePassHealth({ failure = null, recordedAt = null } = {}) {
++    try {
++      const rawPrev = await this.state.storage.get(DRIVE_PASS_HEALTH_KEY);
++      // Project the previously stored value onto the five known
++      // fields before carrying anything forward: a corrupt or
++      // foreign-written health object must not smuggle extra keys
++      // (or hostile values) into this write.
++      const prev = (rawPrev && typeof rawPrev === "object" &&
++                    !Array.isArray(rawPrev)) ? rawPrev : {};
++      const health = {
++        recordingFailures:
++          typeof prev.recordingFailures === "number" &&
++          prev.recordingFailures >= 0 ? prev.recordingFailures : 0,
++        lastFailureAt:
++          typeof prev.lastFailureAt === "number" ? prev.lastFailureAt : null,
++        lastFailureStep:
++          typeof prev.lastFailureStep === "string" ? prev.lastFailureStep : null,
++        lastFailureName:
++          sanitizeDrivePassName(prev.lastFailureName),
++        lastRecordedAt:
++          typeof prev.lastRecordedAt === "number" ? prev.lastRecordedAt : null };
++      if (failure) {
++        health.recordingFailures += 1;
++        health.lastFailureAt = this._drivePassNow();
++        health.lastFailureStep = failure.step;
++        health.lastFailureName =
++          sanitizeDrivePassName(failure.name);
++      }
++      if (recordedAt !== null) health.lastRecordedAt = recordedAt;
++      await this.state.storage.put(DRIVE_PASS_HEALTH_KEY, health);
++    } catch { /* best-effort by design; see the spec §5 */ }
++  }
++
++  // Record one alarm pass in d6_drive_passes. NEVER throws: any
++  // failure of the recording steps (DDL, serialization, insert,
++  // prune) is noted on the health channel and discarded here, so a
++  // recorder fault can never break the alarm chain, mask the
++  // original drive error, or alter any outcome — the shipped
++  // best-effort noting discipline (driveOnce's noteHaltObservation
++  // call, service.mjs). The getAlarm() readback is defined as
++  // nullable (armed_after), so its failure records NULL and is NOT
++  // counted as a recording failure. The recorder performs no
++  // setAlarm, no schedule read or write, and no wake: it observes
++  // the chain and does not participate in it.
++  async _recordDrivePass(rec) {
++    let step = "ddl";
++    try {
++      const sql = this.state.storage.sql;
++      sql.exec(DRIVE_PASS_SCHEMA);
++      step = "serialize";
++      const ser = serializeDrivePassOutcomes(rec.outcomes);
++      step = "getalarm";
++      let armedAfter = null;
++      try {
++        const armed = await this.state.storage.getAlarm();
++        armedAfter = typeof armed === "number" ? armed : null;
++      } catch { armedAfter = null; }
++      step = "insert";
++      sql.exec(
++        `INSERT INTO d6_drive_passes
++           (at, finished_at, stage, drive_invoked, outcomes_json,
++            outcomes_truncated, error_name, error_message, armed_after)
++         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
++        rec.at, this._drivePassNow(), rec.stage,
++        rec.driveInvoked ? 1 : 0, ser.json, ser.truncated,
++        sanitizeDrivePassName(rec.errorName),
++        scrubDrivePassText(rec.errorMessage, DRIVE_PASS_ERROR_CAP),
++        armedAfter);
++      step = "prune";
++      sql.exec(
++        `DELETE FROM d6_drive_passes
++          WHERE id NOT IN
++            (SELECT id FROM d6_drive_passes
++              ORDER BY id DESC LIMIT ?)`,
++        DRIVE_PASS_RETENTION);
++    } catch (e) {
++      await this._noteDrivePassHealth({ failure: {
++        step, name: e && e.name ? String(e.name) : "Error" } });
++      return;
++    }
++    await this._noteDrivePassHealth(
++      { recordedAt: this._drivePassNow() });
++  }
++
+   async alarm() {
+     // The coordinator's own alarm first (schedule, leases, parks),
+     // then the D6 driver's recovery + continuation. While halted,
+     // d6HostEnv wires no sendGrant, so driveOnce can settle plan
+     // state and re-derive grants but nothing can leave the outbox.
+-    await super.alarm();
+-    const cache = await this._cache();
+-    const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
+-    const service = d6Service(coord, d6HostEnv(this.env, cache));
+-    await service.recover();
+-    await service.driveOnce();
+-    await cache.flush();
++    //
++    // PHASE B INSTRUMENTATION (P2): the pass is recorded by
++    // _recordDrivePass — the stage reached, the outcomes array
++    // driveOnce already computes (captured here, at its only
++    // caller, instead of being discarded), any throw, and the
++    // armed value read back. rec.stage names the step IN PROGRESS,
++    // so a throw records the step that threw; "complete" means the
++    // handler ran end to end. Recording is last on both paths; on
++    // a throw the ORIGINAL error is rethrown unchanged after
++    // recording (Rowan's record-then-rethrow requirement), so
++    // platform alarm-retry behavior is identical to the shipped
++    // build.
++    const rec = { at: this._drivePassNow(), stage: "base_alarm",
++      driveInvoked: 0, outcomes: null,
++      errorName: null, errorMessage: null };
++    try {
++      await super.alarm();
++      // CONTAINMENT (Phase B containment design, revised state
++      // semantics): after the base alarm's schedule processing —
++      // which continues in EVERY state, so leases still close
++      // in-flight grants — and before recover()/driveOnce(), the
++      // durable containment state gates the DRIVE. In
++      // DRIVE_CONTAINED or CHAIN_STOPPED, and on ANY unverified
++      // state read (fail-closed for drive), the pass is recorded
++      // at stage "contained" with driveInvoked 0 and the handler
++      // returns normally: no new grants, no plan advancement, no
++      // throw (hence no platform retry storm). A pass already
++      // inside driveOnce when a transition lands is NOT
++      // interrupted — it completes; the next pass is contained.
++      const containmentRead =
++        readContainmentState(this.state.storage.sql);
++      if (containmentDriveSuppressed(containmentRead)) {
++        rec.stage = "contained";
++        if (!containmentRead.verified && containmentRead.errorName) {
++          rec.errorName = containmentRead.errorName;
++          rec.errorMessage =
++            "containment state read failed; drive suppressed (fail-closed)";
++        }
++        await this._recordDrivePass(rec);
++        return;
++      }
++      rec.stage = "construct";
++      const cache = await this._cache();
++      const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++      const service = d6Service(coord, d6HostEnv(this.env, cache));
++      rec.stage = "recover";
++      await service.recover();
++      rec.stage = "drive";
++      rec.driveInvoked = 1;
++      rec.outcomes = await service.driveOnce();
++      rec.stage = "flush";
++      await cache.flush();
++      rec.stage = "complete";
++    } catch (e) {
++      rec.errorName = e && e.name ? String(e.name) : "Error";
++      rec.errorMessage = e && e.message ? String(e.message) : String(e);
++      await this._recordDrivePass(rec);
++      throw e;
++    }
++    await this._recordDrivePass(rec);
+   }
+ }
+ 
+@@ -1592,6 +2092,20 @@
+     url.pathname === "/v2/d6-grant-finalization-preview";
+   const isGrantFinalizeRoute = request.method === "POST" &&
+     url.pathname === "/v2/d6-finalize-grant";
++  // CONTAINMENT (Phase B containment design, revised semantics):
++  // the transition write (POST /v2/d6-containment) and the state
++  // read (GET /v2/d6-containment) join the same operator fence
++  // class — the production gate skips the client token for them,
++  // the operator admission block below requires the
++  // migration-operator credential in addition, and the class gate
++  // requires the stamped admission again. The everyday client
++  // token alone is refused on both. The GET is a passive read
++  // (state + getAlarm + schedule counts): it is the verification
++  // surface for containment and performs no wake and no write.
++  const isContainmentRoute = request.method === "POST" &&
++    url.pathname === "/v2/d6-containment";
++  const isContainmentStateRoute = request.method === "GET" &&
++    url.pathname === "/v2/d6-containment";
+   const denied = productionGate(request, env, cors,
+     { skipClientToken: isOperatorRoute || isDiagnosticsRoute
+         || isPhaseBindingRoute || isRetirePlanRoute
+@@ -1600,7 +2114,8 @@
+         || isQuotaDisposeRoute || isQuotaReconcileRoute
+         || isParkReleaseRoute || isParkReleaseRevokeRoute
+         || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+-        || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute });
++        || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
++        || isContainmentRoute || isContainmentStateRoute });
+   if (denied) return denied;
+   const instance = request.headers.get("x-opalreader-instance");
+   if (instance !== PRODUCTION_INSTANCE)
+@@ -1646,7 +2161,8 @@
+       || isQuotaDisposeRoute || isQuotaReconcileRoute
+       || isParkReleaseRoute || isParkReleaseRevokeRoute
+       || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+-      || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute) {
++      || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
++      || isContainmentRoute || isContainmentStateRoute) {
+     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+     if (!operatorToken || !env.OPALREADER_ACCESS_TOKEN ||
+         operatorToken === env.OPALREADER_ACCESS_TOKEN)
+@@ -1713,9 +2229,18 @@
+   // above; forward() stamps the admission the class gate checks).
+   if (isDiagnosticsRoute) {
+     const dUrl = new URL("https://do.internal/internal/d6/diagnostics");
+-    for (const k of ["planId", "jobId", "limit", "cursor"])
++    for (const k of ["planId", "jobId", "limit", "cursor", "drive"])
+       if (url.searchParams.get(k) !== null)
+         dUrl.searchParams.set(k, url.searchParams.get(k));
++    // PHASE B INSTRUMENTATION (P2): the copy above takes each
++    // parameter singly, which would silently collapse a REPEATED
++    // parameter to its first value before the class gate could
++    // see it. Repetition of any diagnostics parameter is
++    // forwarded explicitly so the drive-mode ambiguity rejection
++    // (diagnostics_mode_ambiguous) can fire on it.
++    if (["planId", "jobId", "limit", "cursor", "drive"]
++        .some((k) => url.searchParams.getAll(k).length > 1))
++      dUrl.searchParams.set("repeated", "1");
+     return forward(new Request(dUrl.toString(), { method: "GET" }));
+   }
+   if (request.method === "GET" && url.pathname === "/v2/d6-eligibility") {
+@@ -1926,6 +2451,19 @@
+       body: JSON.stringify(finalizeBody ?? {}),
+     }));
+   }
++  if (isContainmentRoute) {
++    let containmentBody = null;
++    try { containmentBody = await request.json(); } catch { containmentBody = null; }
++    return forward(new Request("https://do.internal/internal/d6/containment", {
++      method: "POST",
++      headers: { "content-type": "application/json" },
++      body: JSON.stringify(containmentBody ?? {}),
++    }));
++  }
++  if (isContainmentStateRoute) {
++    return forward(new Request("https://do.internal/internal/d6/containment",
++      { method: "GET" }));
++  }
+   return forward(new Request(url.toString(), request));
+ }
+ 

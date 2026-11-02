@@ -1,0 +1,108 @@
+ suppressed (fail-closed)";
++        }
++        await this._recordDrivePass(rec);
++        return;
++      }
++      rec.stage = "construct";
++      const cache = await this._cache();
++      const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++      const service = d6Service(coord, d6HostEnv(this.env, cache));
++      rec.stage = "recover";
++      await service.recover();
++      rec.stage = "drive";
++      rec.driveInvoked = 1;
++      rec.outcomes = await service.driveOnce();
++      rec.stage = "flush";
++      await cache.flush();
++      rec.stage = "complete";
++    } catch (e) {
++      rec.errorName = e && e.name ? String(e.name) : "Error";
++      rec.errorMessage = e && e.message ? String(e.message) : String(e);
++      await this._recordDrivePass(rec);
++      throw e;
++    }
++    await this._recordDrivePass(rec);
+   }
+ }
+ 
+@@ -1592,6 +2092,20 @@
+     url.pathname === "/v2/d6-grant-finalization-preview";
+   const isGrantFinalizeRoute = request.method === "POST" &&
+     url.pathname === "/v2/d6-finalize-grant";
++  // CONTAINMENT (Phase B containment design, revised semantics):
++  // the transition write (POST /v2/d6-containment) and the state
++  // read (GET /v2/d6-containment) join the same operator fence
++  // class — the production gate skips the client token for them,
++  // the operator admission block below requires the
++  // migration-operator credential in addition, and the class gate
++  // requires the stamped admission again. The everyday client
++  // token alone is refused on both. The GET is a passive read
++  // (state + getAlarm + schedule counts): it is the verification
++  // surface for containment and performs no wake and no write.
++  const isContainmentRoute = request.method === "POST" &&
++    url.pathname === "/v2/d6-containment";
++  const isContainmentStateRoute = request.method === "GET" &&
++    url.pathname === "/v2/d6-containment";
+   const denied = productionGate(request, env, cors,
+     { skipClientToken: isOperatorRoute || isDiagnosticsRoute
+         || isPhaseBindingRoute || isRetirePlanRoute
+@@ -1600,7 +2114,8 @@
+         || isQuotaDisposeRoute || isQuotaReconcileRoute
+         || isParkReleaseRoute || isParkReleaseRevokeRoute
+         || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+-        || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute });
++        || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
++        || isContainmentRoute || isContainmentStateRoute });
+   if (denied) return denied;
+   const instance = request.headers.get("x-opalreader-instance");
+   if (instance !== PRODUCTION_INSTANCE)
+@@ -1646,7 +2161,8 @@
+       || isQuotaDisposeRoute || isQuotaReconcileRoute
+       || isParkReleaseRoute || isParkReleaseRevokeRoute
+       || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+-      || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute) {
++      || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
++      || isContainmentRoute || isContainmentStateRoute) {
+     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+     if (!operatorToken || !env.OPALREADER_ACCESS_TOKEN ||
+         operatorToken === env.OPALREADER_ACCESS_TOKEN)
+@@ -1713,9 +2229,18 @@
+   // above; forward() stamps the admission the class gate checks).
+   if (isDiagnosticsRoute) {
+     const dUrl = new URL("https://do.internal/internal/d6/diagnostics");
+-    for (const k of ["planId", "jobId", "limit", "cursor"])
++    for (const k of ["planId", "jobId", "limit", "cursor", "drive"])
+       if (url.searchParams.get(k) !== null)
+         dUrl.searchParams.set(k, url.searchParams.get(k));
++    // PHASE B INSTRUMENTATION (P2): the copy above takes each
++    // parameter singly, which would silently collapse a REPEATED
++    // parameter to its first value before the class gate could
++    // see it. Repetition of any diagnostics parameter is
++    // forwarded explicitly so the drive-mode ambiguity rejection
++    // (diagnostics_mode_ambiguous) can fire on it.
++    if (["planId", "jobId", "limit", "cursor", "drive"]
++        .some((k) => url.searchParams.getAll(k).length > 1))
++      dUrl.searchParams.set("repeated", "1");
+     return forward(new Request(dUrl.toString(), { method: "GET" }));
+   }
+   if (request.method === "GET" && url.pathname === "/v2/d6-eligibility") {
+@@ -1926,6 +2451,19 @@
+       body: JSON.stringify(finalizeBody ?? {}),
+     }));
+   }
++  if (isContainmentRoute) {
++    let containmentBody = null;
++    try { containmentBody = await request.json(); } catch { containmentBody = null; }
++    return forward(new Request("https://do.internal/internal/d6/containment", {
++      method: "POST",
++      headers: { "content-type": "application/json" },
++      body: JSON.stringify(containmentBody ?? {}),
++    }));
++  }
++  if (isContainmentStateRoute) {
++    return forward(new Request("https://do.internal/internal/d6/containment",
++      { method: "GET" }));
++  }
+   return forward(new Request(url.toString(), request));
+ }
+ 

@@ -1,0 +1,26 @@
+{
+  "note": "P2 instrumentation candidate (original suite tree)",
+  "changedParts": [
+    {
+      "rel": "worker-entry-prod-d6.js",
+      "sha256": "45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab"
+    },
+    {
+      "rel": "generation/service.mjs",
+      "sha256": "41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda"
+    }
+  ],
+  "roundTrips": [
+    {
+      "diff": "instrumentation-spec/scratch/combined.diff",
+      "files": [
+        "worker-entry-prod-d6.js",
+        "generation/service.mjs"
+      ]
+    }
+  ],
+  "nodeCheckParts": [
+    "worker-entry-prod-d6.js",
+    "generation/service.mjs"
+  ]
+}

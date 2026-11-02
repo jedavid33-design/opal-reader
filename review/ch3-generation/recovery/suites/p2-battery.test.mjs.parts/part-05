@@ -1,0 +1,173 @@
+or: true });
+    assert.equal(a.status, 200);
+    const bw = await makeWorld(BASE);
+    const bseed = await seedAttempt3Shape(bw);
+    assert.equal(bseed.planId, seed.planId);
+    const b = await entryGet(bw,
+      `/v2/d6-diagnostics?planId=${bseed.planId}`, { operator: true });
+    assert.equal(b.status, 200);
+    assert.deepEqual(Object.keys(a.body).sort(),
+      Object.keys(b.body).sort(),
+      "attempt-mode response keys identical to the unmodified build");
+    // The unmodified build has no drive mode at all.
+    const bb = await entryGet(bw, "/v2/d6-diagnostics?drive=1",
+      { operator: true });
+    assert.ok(!("drivePasses" in (bb.body ?? {})));
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T8 — retention & bursts", () => {
+  test("T8 300 records prune to exactly the newest 288", async () => {
+    const w = await makeWorld(CAND);
+    for (let i = 0; i < 300; i++)
+      await w.inst._recordDrivePass({
+        at: T0 + i, stage: "complete", driveInvoked: true,
+        outcomes: [], errorName: null, errorMessage: null });
+    const rows = driveRows(w);
+    assert.equal(rows.length, 288);
+    assert.equal(rows[0].at, T0 + 12, "the oldest retained is #13");
+    assert.equal(rows[rows.length - 1].at, T0 + 299,
+      "the newest record is retained");
+  });
+
+  test("T8 burst of seven throwing passes: every pass recorded, cap holds throughout", async () => {
+    const w = await makeWorld(CAND);
+    await seedAttempt3Shape(w);
+    for (let i = 0; i < 288; i++)
+      await w.inst._recordDrivePass({
+        at: T0 + i, stage: "complete", driveInvoked: true,
+        outcomes: [], errorName: null, errorMessage: null });
+    assert.equal(driveRows(w).length, 288);
+    const error = new Error("battery burst fault");
+    w.faults.sql = {
+      match: (q) => /FROM d6_plans/i.test(q), error };
+    for (let i = 0; i < 7; i++) {
+      w.advance(60 * 1000);
+      await assert.rejects(w.fireClassAlarm(),
+        (e) => e === error);
+      assert.equal(driveRows(w).length, 288,
+        `cap holds after throwing pass ${i + 1}`);
+    }
+    const newest = w.db.prepare(
+      `SELECT stage, error_name FROM d6_drive_passes
+        ORDER BY id DESC LIMIT 7`).all();
+    assert.ok(newest.every((r) => r.stage === "drive" &&
+      r.error_name === "Error"),
+      "all seven throwing passes are the newest records");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding)", () => {
+  test("T9 route read returns exactly the recorded rows; health key contract holds; crash-instance records", async () => {
+    const w = await makeWorld(CAND);
+    // Before any pass: the table is missing, honestly reported.
+    const before = await entryGet(w, "/v2/d6-diagnostics?drive=1",
+      { operator: true });
+    assert.equal(before.status, 200);
+    assert.equal(before.body.tableState, "missing");
+    assert.equal(before.body.found, false);
+    assert.equal(before.body.recorderHealth, null);
+    await seedAttempt3Shape(w);
+    w.advance(10 * 60 * 1000);
+    await w.fireClassAlarm();
+    // One throwing pass (drive fault) for an error row.
+    const error = new Error("battery t9 drive fault");
+    w.faults.sql = {
+      match: (q) => /FROM d6_plans/i.test(q), error };
+    w.advance(10 * 60 * 1000);
+    await assert.rejects(w.fireClassAlarm(), (e) => e === error);
+    w.faults.sql = null;
+    // A fresh instance over the same storage (crash/restart)
+    // records the next pass.
+    const inst2 = w.crash();
+    w.advance(10 * 60 * 1000);
+    await inst2.alarm();
+    const stored = w.db.prepare(
+      `SELECT * FROM d6_drive_passes ORDER BY id DESC`).all();
+    assert.equal(stored.length, 3);
+    assert.equal(stored[1].stage, "drive");
+    const r = await entryGet(w, "/v2/d6-diagnostics?drive=1",
+      { operator: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.mode, "drive_passes");
+    assert.equal(r.body.tableState, "populated");
+    assert.equal(r.body.found, true);
+    assert.equal(r.body.drivePasses.length, 3);
+    for (let i = 0; i < 3; i++) {
+      const p = r.body.drivePasses[i];
+      const s = stored[i];
+      assert.equal(p.id, s.id);
+      assert.equal(p.at, s.at);
+      assert.equal(p.stage, s.stage);
+      assert.equal(p.driveInvoked, s.drive_invoked === 1);
+      assert.deepEqual(p.outcomes,
+        s.outcomes_json === null ? null : JSON.parse(s.outcomes_json),
+        "clean stored rows round-trip exactly");
+      assert.equal(p.outcomesMalformed, false);
+      assert.equal(p.outcomesRevalidated, false);
+      assert.equal(p.outcomesTruncated, s.outcomes_truncated === 1);
+      assert.equal(p.armedAfter, s.armed_after);
+    }
+    // Alarm block agrees with the harness's own state.
+    assert.equal(r.body.alarm.armedAt, w.alarmAt());
+    const pending = w.db.prepare(
+      `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`)
+      .get().n;
+    assert.equal(r.body.alarm.pendingSchedule, pending);
+    // Health round-trips exactly, and the key literal in the
+    // entry part is the key the service reads (cross-part
+    // contract, pinned by source inspection + behavior).
+    const health = await w.storage.get("d6DrivePassRecorderHealth");
+    assert.deepEqual(r.body.recorderHealth, health);
+    const entrySrc = readFileSync(
+      join(CAND, "v2", "worker-entry-prod-d6.js"), "utf8");
+    const m = entrySrc.match(/DRIVE_PASS_HEALTH_KEY = "([^"]+)"/);
+    assert.ok(m, "health key constant present in the entry part");
+    assert.equal(m[1], "d6DrivePassRecorderHealth");
+    assert.ok(w.kv.has(m[1]), "the recorder wrote under that key");
+    const serviceSrc = readFileSync(
+      join(CAND, "v2", "generation", "service.mjs"), "utf8");
+    assert.ok(serviceSrc.includes(`"d6DrivePassRecorderHealth"`),
+      "the service reads the same literal key");
+  });
+});
+
+// ----------------------------------------------------------------
+describe("T10 — shipped-surface equivalence smoke", () => {
+  test("twin stores: every shipped read surface answers field-for-field identically", async () => {
+    const a = await makeWorld(CAND);
+    const b = await makeWorld(BASE);
+    const seedA = await seedAttempt3Shape(a);
+    const seedB = await seedAttempt3Shape(b);
+    a.advance(10 * 60 * 1000);
+    b.advance(10 * 60 * 1000);
+    await a.fireClassAlarm();
+    await b.fireClassAlarm();
+    const paths = [
+      "/v2/generation/capabilities",
+      "/v2/d6-plans",
+      `/v2/d6-plans/${seedA.planId}`,
+      `/v2/d6-eligibility?bookId=${BOOK}&scope=chapter&chapterIndex=2`,
+      `/v2/d6-eligibility?bookId=${BOOK}&scope=segment&occurrenceId=${OCC26}`,
+      `/v2/d6-eligibility?bookId=${BOOK}&scope=book`,
+      "/v2/quota",
+      "/v2/conflicts",
+    ];
+    for (const path of paths) {
+      const ra = await entryGet(a, path);
+      const rb = await entryGet(b, path);
+      assert.equal(ra.status, rb.status, `${path} status`);
+      assert.deepEqual(stripVolatile(ra.body), stripVolatile(rb.body),
+        `${path} body`);
+    }
+    const da = await entryGet(a,
+      `/v2/d6-diagnostics?planId=${seedA.planId}`, { operator: true });
+    const db2 = await entryGet(b,
+      `/v2/d6-diagnostics?planId=${seedB.planId}`, { operator: true });
+    assert.equal(da.status, db2.status);
+    assert.deepEqual(stripVolatile(da.body), stripVolatile(db2.body),
+      "attempt-mode diagnostics body");
+  });
+});

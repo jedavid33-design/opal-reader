@@ -1,0 +1,41 @@
+{
+  "note": "R5a candidate tree (live + R5a coordinator) vs deployed parts-e0 host/build-identity.mjs carries the live build's stamp (86ad06ab) in every live-derived tree vs parts-e0's 1c2d1d0f stamp \u2014 pinned as identity data.",
+  "changedParts": [
+    {
+      "rel": "worker-entry-prod-d6.js",
+      "sha256": "45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab"
+    },
+    {
+      "rel": "generation/service.mjs",
+      "sha256": "41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda"
+    },
+    {
+      "rel": "coordinator.mjs",
+      "sha256": "d3d9005b9c2f83cd9a47ef7012b7cea5ed21d73886626d6e24bb655ee90389a3"
+    },
+    {
+      "rel": "host/build-identity.mjs",
+      "sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c"
+    }
+  ],
+  "roundTrips": [
+    {
+      "diff": "instrumentation-spec/scratch/combined.diff",
+      "files": [
+        "worker-entry-prod-d6.js",
+        "generation/service.mjs"
+      ]
+    },
+    {
+      "diff": "r5a-revision/coordinator.diff",
+      "files": [
+        "coordinator.mjs"
+      ]
+    }
+  ],
+  "nodeCheckParts": [
+    "worker-entry-prod-d6.js",
+    "generation/service.mjs",
+    "coordinator.mjs"
+  ]
+}
