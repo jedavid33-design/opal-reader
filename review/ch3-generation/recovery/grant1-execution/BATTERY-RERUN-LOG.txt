@@ -1,0 +1,211 @@
+Grant 1 / Gate R5a-D — battery re-run on the gate-assembled tree (fresh census assembly: live C1 parts + coordinator-composed-vs-containment.diff)
+Run: 2026-11-02T23:24:17Z
+
+Gate identity fixtures: fixtures/containment-identity-gate.json, fixtures/r5a-identity-gate.json, fixtures/p2-identity-gate.json (composed fixtures parameterized with the assembled tree's live-C1 build-identity part 873d6cb9 as fixture data; no behavioral assertion changed). P2 BASE + parts at suite defaults (pre-instrumentation build / parts-e0).
+
+===== containment battery v4 incl CT14d — exit 0 — 42/42 =====
+▶ CT0 — assembly & identity (fixture-driven)
+  ✔ changed parts are exactly the fixture set; all others byte-identical to the live tree (163.282469ms)
+  ✔ node --check passes on every changed part (349.146546ms)
+  ✔ design markers present in the candidate parts (3.02538ms)
+✔ CT0 — assembly & identity (fixture-driven) (517.371583ms)
+▶ CT1 — NORMAL: ordinary delivery, containment inert and invisible
+  ✔ seeded pass issues its grant exactly as shipped; reads report NORMAL-absent; no state table is created by passes or reads (123.587699ms)
+✔ CT1 — NORMAL: ordinary delivery, containment inert and invisible (123.931444ms)
+▶ CT2 — Layer 1 (DRIVE_CONTAINED): drive suppressed, chain alive, leases close
+  ✔ contained passes record stage 'contained'; the in-flight grant is voided by the lease path; no new grant; registration continues (16.354263ms)
+✔ CT2 — Layer 1 (DRIVE_CONTAINED): drive suppressed, chain alive, leases close (16.607934ms)
+▶ CT3 — Layer 2 (CHAIN_STOPPED): registration removed and cannot resurrect
+  ✔ verified stop: deleteAlarm read back null; schedule rows untouched; commands and wakes register nothing; a delivered pass is contained and does not re-arm (16.153392ms)
+✔ CT3 — Layer 2 (CHAIN_STOPPED): registration removed and cannot resurrect (16.499231ms)
+▶ CT4 — state READ failures default darker at every consuming path
+  ✔ CT4a DRIVE_CONTAINED + read fault: drive stays suppressed (contained row carries the error); arming also suppresses (6.651242ms)
+  ✔ CT4b CHAIN_STOPPED + read fault: the verified stop is NOT defeated — wakes register nothing (16.824088ms)
+  ✔ CT4c NORMAL (table absent) + non-table read error: fail-closed — the pass is contained, nothing issues (7.414226ms)
+✔ CT4 — state READ failures default darker at every consuming path (31.481815ms)
+▶ CT5 — state WRITE failures during transitions: no silent success
+  ✔ state-row INSERT fault: the route surfaces HTTP 500 and the state is unchanged (still absent/NORMAL) (13.049223ms)
+  ✔ DDL fault at transition time: HTTP 500, nothing recorded (7.308338ms)
+✔ CT5 — state WRITE failures during transitions: no silent success (20.826094ms)
+▶ CT6 — stop whose deleteAlarm FAILS: reported unverified, never silent, gates hold
+  ✔ outcome rejected/containment_stop_unverified; state stands CHAIN_STOPPED; later wakes register nothing despite the surviving registration (14.752679ms)
+✔ CT6 — stop whose deleteAlarm FAILS: reported unverified, never silent, gates hold (14.931969ms)
+▶ CT7 — alarm-handler retries under containment (simulated re-invocation)
+  ✔ a throwing base alarm under DRIVE_CONTAINED rejects identically on re-invocation; containment state and chain survive; the next healthy pass is contained (10.087579ms)
+✔ CT7 — alarm-handler retries under containment (simulated re-invocation) (10.241019ms)
+▶ CT8 — in-flight grant activity at the moment of the stop
+  ✔ the stop does not interrupt anything retroactively; a later delivered pass closes the in-flight grant by lease and issues nothing new (15.009625ms)
+✔ CT8 — in-flight grant activity at the moment of the stop (15.223866ms)
+▶ CT9 — transition discipline, route fences, and the return path
+  ✔ transition table enforced; idempotent re-apply audited; downgrade refused with no writes; clear restores ordinary arming (7.872624ms)
+  ✔ route fences: closed allowlist, operator-only admission, client token alone refused (14.622293ms)
+✔ CT9 — transition discipline, route fences, and the return path (22.80217ms)
+▶ CT10 — preserved-plan integrity across the full containment sweep
+  ✔ contain -> passes -> stop -> command -> clear leaves plan, job, occurrence, figures, parked job, and conflicts byte-identical (11.51459ms)
+✔ CT10 — preserved-plan integrity across the full containment sweep (11.662512ms)
+▶ CT11 — verify_chain_stop: the auditable re-verification / retry mechanism (ruling item B)
+  ✔ CT11a delete failed at the stop: verify retries the delete, lands it, and marks the record re_verified (14.585569ms)
+  ✔ CT11b the delete landed but the read-back failed: verify confirms from the null read-back WITHOUT re-deleting (10.242341ms)
+  ✔ CT11c verify is refused unless the state is CHAIN_STOPPED (4.485542ms)
+  ✔ CT11d the attempts bound is enforced; a fresh stop episode (after a reasoned clear) resets it (8.859386ms)
+  ✔ CT11e a failed verify never downgrades: state, suppression, and the unverified record all stand (9.118013ms)
+  ✔ CT11f verify on an already-verified stop is an idempotent confirmation (status stays 'verified', no delete) (4.862968ms)
+✔ CT11 — verify_chain_stop: the auditable re-verification / retry mechanism (ruling item B) (52.66872ms)
+▶ CT12 — restoration discipline (ruling item D)
+  ✔ CT12a clear without a recorded reason is refused at the method AND the route; with a reason it applies and the reason is audited (7.693726ms)
+  ✔ CT12b clearing CHAIN_STOPPED never re-arms: the registration stays absent until an ordinary wake under NORMAL (8.851874ms)
+  ✔ CT12c NO automatic clear anywhere: an unverified stop persists across time, passes, wakes, commands, and reads (12.018817ms)
+✔ CT12 — restoration discipline (ruling item D) (29.123736ms)
+▶ CT13 — async races at the await boundaries (ruling item C)
+  ✔ CT13a a wake parked at getAlarm() cannot resurrect the chain after a stop lands mid-wake (stale-value branch) (18.432232ms)
+  ✔ CT13b the same race, null branch: the parked read resolves after the delete and STILL cannot re-arm (11.203593ms)
+  ✔ CT13c a verify_chain_stop landing while a wake is parked: the last physical act wins and the record stays truthful (9.094529ms)
+  ✔ CT13d contain_drive lands mid-pass: the running pass completes under its gate-time state; the NEXT pass is contained (8.523401ms)
+  ✔ CT13e stop_chain lands mid-pass: the pass completes, its post-grant arm is suppressed, and the stop record survives (8.412024ms)
+  ✔ CT13f state-read failure at the parked wake's re-check: unverified means suppressed (darker branch at the new boundary too) (4.802337ms)
+✔ CT13 — async races at the await boundaries (ruling item C) (62.101576ms)
+▶ CT14 — R1: stop-record truth — derived CURRENT PHYSICAL CONFIDENCE (design v4 §2)
+  ✔ CT14a the exported derivation: the full truth table, cell by cell (0.897617ms)
+  ✔ CT14b surfaces: verified stop shows verified_current; enum and last-verified fact are immutable under degradation (12.719348ms)
+  ✔ CT14c surfaces: a failed registration read degrades confidence to unknown; an unverified stop never displays verified (12.411906ms)
+  ✔ CT14d truth-table row 1's READABLE-RECORD precondition (Rowan V4 ruling, V4-3): an unreadable record never yields row 1's not_applicable, whatever the enum (0.722775ms)
+✔ CT14 — R1: stop-record truth — derived CURRENT PHYSICAL CONFIDENCE (design v4 §2) (27.5203ms)
+▶ CT15 — R3: retry-exhaustion law — episodes persist across clear (design v4 §4)
+  ✔ CT15a exhaustion is recorded in the audit + state at the moment the bound is reached; refusal writes nothing further (8.880848ms)
+  ✔ CT15b clear CLOSES the episode (summary persists); a new stop mints a NEW episode; the exhausted history stays disclosed (9.739116ms)
+  ✔ CT15c verify on the SAME episode still refuses after exhaustion even when the physical fault clears (code-enforced half of the law) (7.913836ms)
+✔ CT15 — R3: retry-exhaustion law — episodes persist across clear (design v4 §4) (27.195462ms)
+▶ CT16 — R4: the C3 ledger, dry-run in the harness (gates v4, C3)
+  ✔ CT16a the C3 sequence end-to-end: contain (read-only gate) → stop against the stale registration → verified; ledger writes match the audit (6.44376ms)
+  ✔ CT16b partial failure at the delete step + ambiguous re-entry: resume uses verify_chain_stop, never a second stop_chain; deletes never duplicate (5.054576ms)
+  ✔ CT16c ambiguous delete (landed, response lost): the read-back resolves it; resume confirms without re-deleting (5.271882ms)
+✔ CT16 — R4: the C3 ledger, dry-run in the harness (gates v4, C3) (17.456197ms)
+ℹ tests 42
+ℹ suites 17
+ℹ pass 42
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1029.855109
+
+===== R5a suite — exit 0 — 23/23 =====
+▶ R5A-T0 — assembly & identity (fixture-parameterized)
+  ✔ changed parts vs the baseline tree are exactly the fixture set, each matching its fixture identity (65.984994ms)
+  ✔ candidate coordinator identity + design markers (3.322486ms)
+  ✔ patch round-trip: each fixture diff applied to the pristine baseline part reproduces the candidate byte-for-byte (9.839065ms)
+  ✔ node --check passes on the candidate coordinator (86.045389ms)
+✔ R5A-T0 — assembly & identity (fixture-parameterized) (167.108581ms)
+▶ R5A-T1 — normal future alarms (legacy behavior preserved)
+  ✔ armed == due (future): wake registers nothing; earlier due advances once; then quiet (52.334839ms)
+  ✔ armed null: wake registers at due exactly as shipped (5.065161ms)
+✔ R5A-T1 — normal future alarms (legacy behavior preserved) (57.801043ms)
+▶ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command
+  ✔ exactly one setAlarm for the whole command wake; exactly one commands row; no other movement (5.889478ms)
+✔ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command (6.212854ms)
+▶ R5A-T3 — retry-gap safeguard (stale-age threshold)
+  ✔ armed 5 minutes past due (inside a plausible retry gap): NO re-registration (4.873104ms)
+  ✔ armed 59 minutes past due: still NO re-registration (4.705782ms)
+  ✔ armed exactly at the threshold boundary (60 min): re-registers (boundary is inclusive) (4.775036ms)
+  ✔ armed 61 minutes past due: re-registers at D (4.443629ms)
+  ✔ baseline twin at 61 minutes: shipped condition does NOT re-register (the delta is exactly the new disjunct) (62.450339ms)
+✔ R5A-T3 — retry-gap safeguard (stale-age threshold) (81.852287ms)
+▶ R5A-T4 — dedupe within a single wake operation
+  ✔ wake + post-apply evaluation with unchanged schedule: 1 registration total (16.47922ms)
+  ✔ corrective second registration ONLY when the operation schedules strictly earlier work (5.87074ms)
+  ✔ handleReport path also dedupes (replayed report on a reported grant) (6.064751ms)
+✔ R5A-T4 — dedupe within a single wake operation (28.858948ms)
+▶ R5A-T5 — B3 schedule ordering
+  ✔ B3-future beyond threshold: stale A is moved to the actual earliest future D (board ruling decision 2) (4.977039ms)
+  ✔ B3-future inside the retry-gap threshold: shipped behavior — no registration, future D stands untouched (4.35109ms)
+  ✔ D computation uses ALL pending kinds: an earlier retry_grant row, not the watchdog, sets the registration (4.639423ms)
+✔ R5A-T5 — B3 schedule ordering (14.317456ms)
+▶ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape)
+  ✔ stimulus registers once; the delivered pass issues exactly the pre-classified grant set; the chain then self-terminates the 5a branch (40.731346ms)
+✔ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape) (40.954461ms)
+▶ R5A-T7 — repeated wakes, delivery never happens (churn bound)
+  ✔ 10 wakes -> exactly 10 registrations, all at D, zero schedule growth, zero watchdog duplication (5.752463ms)
+✔ R5A-T7 — repeated wakes, delivery never happens (churn bound) (5.972012ms)
+▶ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery)
+  ✔ after the R2-form stimulus and no alarm firing: only the commands row changed; plan, job, occurrence, figures byte-identical (8.565685ms)
+✔ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery) (8.723851ms)
+▶ R5A-T9 — shipped-surface equivalence spot checks
+  ✔ drive=1 diagnostics read performs no wake and no registration (candidate) (16.188464ms)
+  ✔ future-alarm behavior identical on baseline and candidate (call sequences match) (9.653096ms)
+✔ R5A-T9 — shipped-surface equivalence spot checks (26.143203ms)
+ℹ tests 23
+ℹ suites 10
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 465.539548
+
+===== P2 parameterized regression — exit 0 — 32/32 =====
+▶ T0 — assembly & identity (fixture-parameterized)
+  ✔ candidate tree: 31 parts; fixture changed parts differ from deployed and match fixture identities; every other part byte-identical (63.673655ms)
+  ✔ patch round-trip: each fixture diff applied to pristine parts reproduces the candidate parts byte-for-byte (22.107808ms)
+  ✔ node --check passes on every fixture changed part (candidate tree) (272.726152ms)
+  ✔ baseline tree is the pristine deployed tree (31/31 byte-identical) (64.837522ms)
+✔ T0 — assembly & identity (fixture-parameterized) (425.345778ms)
+▶ T1 — harness bring-up
+  ✔ T1(a) empty store: class construction + first alarm resolve; no .one() bootstrap deadlock (49.766605ms)
+  ✔ T1(b) seeded attempt-3 shape: plan/job/parked/conflicts/phase figures exact (10.355381ms)
+✔ T1 — harness bring-up (60.590729ms)
+▶ T2 — normal recording (twin equivalence)
+  ✔ six alarm passes: candidate records each; all non-recorder state identical to the unmodified build (160.632713ms)
+✔ T2 — normal recording (twin equivalence) (160.968346ms)
+▶ T2b — clock seam fallback (R-4)
+  ✔ without env.now, recorded times track wall Date.now() (6.33029ms)
+✔ T2b — clock seam fallback (R-4) (6.636489ms)
+▶ T3 — stage capture & record-then-rethrow
+  ✔ T3(i) throw in the base alarm's schedule processing -> stage base_alarm, identical object rethrown (26.863053ms)
+  ✔ T3(ii) throw at cache construction -> stage construct (6.509859ms)
+  ✔ T3(iib) a cache-namespace fault present from the start is recorded at base_alarm (the base alarm constructs the cache first) (11.8345ms)
+  ✔ T3(iii) throw in recover() -> stage recover, identical object rethrown (17.309296ms)
+  ✔ T3(iv) throw in driveOnce -> stage drive, identical object rethrown (20.101516ms)
+✔ T3 — stage capture & record-then-rethrow (83.228071ms)
+▶ T4 — recorder-fault injection (the recorder may never break the alarm)
+  ✔ T4 DDL fault: alarm resolves, drive effects happen, health notes step 'ddl', no row (8.7619ms)
+  ✔ T4 INSERT fault: alarm resolves, health notes step 'insert', zero rows (8.647097ms)
+  ✔ T4 PRUNE fault: count exceeds the cap for exactly one pass, then recovers to <= cap (41.034551ms)
+  ✔ T4 getAlarm fault: row written with armed_after NULL and NO health increment (the shipped coordinator itself reads getAlarm, so the base chain — not the recorder — is what fails) (7.901788ms)
+  ✔ T4 KV get fault (health read): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (19.311962ms)
+  ✔ T4 KV put fault (health write): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (10.063822ms)
+  ✔ T4 serialize-step fault (wrapper level): the catch discipline names the step 'serialize' (4.648576ms)
+✔ T4 — recorder-fault injection (the recorder may never break the alarm) (101.109646ms)
+▶ T5 — sanitization (write-time discipline + hostile storage on read)
+  ✔ T5 write: hostile outcome values are grammar-checked or scrubbed; nothing raw is stored (3.63162ms)
+  ✔ T5 write: error name/message scrubbed (URL, token run, control chars, caps) (3.294615ms)
+  ✔ T5 write: an oversized grammatical identifier is sliced, and the slice is disclosed (3.014124ms)
+  ✔ T5 read: hostile stored rows and a hostile health object never escape raw (8.853126ms)
+✔ T5 — sanitization (write-time discipline + hostile storage on read) (19.211721ms)
+▶ T5b — identifier fidelity (real id shapes survive sanitization exactly)
+  ✔ plan/grant ids and code tokens are stored byte-exact, with no marker (3.806383ms)
+✔ T5b — identifier fidelity (real id shapes survive sanitization exactly) (3.941105ms)
+▶ T6 — truncation at the 8,000-char cap
+  ✔ T6 over-cap: whole entries only, terminal marker, kept+dropped = submitted (4.272912ms)
+  ✔ T6 under-cap: no marker, no flag, entries unaltered (3.123207ms)
+✔ T6 — truncation at the 8,000-char cap (7.601167ms)
+▶ T7 — mode rejection (the read that can never blend modes)
+  ✔ T7 ambiguous drive modes -> 400 diagnostics_mode_ambiguous; attempt mode unchanged; 403 without the operator stamp (46.932683ms)
+✔ T7 — mode rejection (the read that can never blend modes) (47.174264ms)
+▶ T8 — retention & bursts
+  ✔ T8 300 records prune to exactly the newest 288 (27.748833ms)
+  ✔ T8 burst of seven throwing passes: every pass recorded, cap holds throughout (46.746342ms)
+✔ T8 — retention & bursts (74.760243ms)
+▶ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding)
+  ✔ T9 route read returns exactly the recorded rows; health key contract holds; crash-instance records (16.656987ms)
+✔ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding) (16.863187ms)
+▶ T10 — shipped-surface equivalence smoke
+  ✔ twin stores: every shipped read surface answers field-for-field identically (56.118868ms)
+✔ T10 — shipped-surface equivalence smoke (56.285949ms)
+ℹ tests 32
+ℹ suites 13
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1098.792944
