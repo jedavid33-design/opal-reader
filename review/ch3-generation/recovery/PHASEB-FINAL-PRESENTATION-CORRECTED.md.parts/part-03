@@ -1,0 +1,167 @@
+7. **No live grant; no active plan.** Plan `plan:e377a5559961b294154276b6`
+   `complete` 23/23, failed 0, its grants all `reported`. Any live
+   grant or non-terminal plan = deviation.
+8. Chapter quote (chapterIndex 2): bound **26** / parked **1** /
+   eligible **0** / voice_prompt **0**; digest **`b4d824871f922e104392f3feb0152e2b201d8760a1753efc5f4ef09c1b7e00d2`**.
+   Segment quote (idx 26): eligible **0**, exclusions parked **1**,
+   same digest. (A live exemption from any prior act breaks item
+   8's figures — §1.5 substitute (a).)
+9. Content watermark **18** (the §1.1 voice derivation's input —
+   any other value STOPS the gate until the derivation is re-run);
+   bindings watermark **1841**; no bindings row for idx 26.
+10. Conflicts: **exact match** to the pinned four-row
+    `schedule_dead` baseline (ids 1–4 with their recorded
+    occurrence ids and timestamps). No row cleared, none added.
+11. Parked job: `parked_policy` rev 1, job-view body byte-identical
+    to the Gate 3 closing capture (fingerprint basis `b991f18a…`);
+    its live park release still names exactly the 23 ids of
+    idx 3–25, state `live`.
+12. R2: idx 26's storage key (§1.3) still FREE (re-LIST).
+
+**STOP law (standing, verbatim in effect):** if any census item,
+binding, plan state, grant state, or hard-stop figure differs from
+the paperwork expectation — even by one item, even if it looks like
+harmless known bookkeeping — STOP before any further mutation,
+preserve the current state (apply containment holds if the gate has
+already moved: re-pause first, then re-halt), and report the exact
+deviation + proposed explanation to Julie and Rowan. The executor's
+own tracing never clears its own stop. **The GO is consumed by a
+STOP; no retry.** One GO = one execution attempt.
+
+## 6. Execution sequence
+
+### 6.1 E1 — Exemption (mutation 1)
+
+Exactly ONE `POST /v2/d6-exempt-chapter-occurrence` (operator
+fence) with body `{jobId: 1832c21f…, occurrenceId: 2a85f74f…,
+authorizationRef: <Julie's recorded Phase B GO>, source, note}`.
+No halt fence applies; the system is still HELD and paused, and
+the call creates no work. Required response: `outcome: "applied"`,
+**`alreadyExempted: false`**, and the returned exemption view
+naming exactly idx 26 / the parked job / FP / chapterIndex 2,
+`tombstoned: false`. **Any `rejected` outcome, any refusal reason,
+or `alreadyExempted: true` = STOP** (§§1.5, 10) — refusals write
+nothing, so a STOP here leaves the system byte-identical to census.
+
+### 6.2 Voice checkpoint — HARD GATE (design §6 E1b read-back)
+
+Immediately after E1, re-read the segment eligibility quote
+(`scope=segment&occurrenceId=2a85f74f…`). Required: **eligible 1 /
+569 chars / expected 8,022**, exclusions all zero, and the chapter
+quote now bound 26 / parked **0** / eligible **1**. This read-back
+is the binding quote for the gate.
+
+- If the segment instead reads **`voice_prompt`** = **STOP**: no
+  submission, no re-arm. A voice-mapping choice is Julie's separate
+  decision and is not part of this gate. Under the same GO the
+  exemption may be tombstoned (§8.1 — this STOP sits squarely inside
+  §8.1's verified window: no plan exists, no binding exists) to
+  restore the pre-state, and that fact is reported before anything
+  else happens (design §6 E1b). The GO is consumed.
+- Any other mismatch (chars, counts, digest movement beyond the
+  single disposition flip) = STOP under the STOP law.
+
+### 6.3 R1 — re-arm: halt lift (mutation 2)
+
+Lift GENERATION_HALT "1" → "0" FIRST, by the proven settings-only
+mechanism (the operative-envelope flip used at Gate 4: the envelope
+differs by exactly the halt value; code bytes otherwise identical).
+Read-backs: `/health` generation `enabled`; script etag unchanged
+(`f15fb1ae…`); parts inventory byte-identical apart from the halt
+value; observability intact (no settings PATCH spent); queue still
+paused; dispatched still at the census figure (nothing can deliver
+while the queue is paused).
+
+### 6.4 E2 — Submission (exactly ONE SubmitJob command — production-state-changing)
+
+Exactly ONE `SubmitJob` via `POST /v2/commands`, command_id
+`fresh-ch3-<yyyymmdd>-fp-chapter3-idx26-v1` (execution date),
+envelope `{command_id, type: "SubmitJob", payload: {bookId,
+lane: "standard", data: {d6Intent: {scope: "segment",
+occurrenceId: "2a85f74f…", phase: "forever-pucked",
+keepGoing: false}}}}` — the intent nested at `payload.data.d6Intent`
+(the shipped shape; an intent placed directly under `payload` is
+rejected `job_shape` pre-write, Phase A's lesson). Submitted only
+after R1, so the plan is born unmarked (§3.5). **This command
+changes production state** (it creates the plan and its job); §12's
+disclosure names it as such — it is counted separately, as in
+Phase A, but never described as a non-event.
+
+Immediate plan read-back required: plan `active`; totals eligible
+**1**; the single entry is idx 26 at **569 chars** with upper
+**153,636**; a job created for exactly that entry. Ambiguous
+submission response = read the plan inventory first; a byte-identical
+retry converges on the same plan (shipped intent-key semantics) and
+is the only permitted re-send; **no second intent with altered
+semantics, ever, under this GO.** A `plan_overlap_conflict`,
+`nothing_eligible` outcome, or any entry mismatch = STOP +
+containment (re-halt; the queue was never unpaused).
+
+### 6.5 Step 0 — delivery-safety verification
+
+Before unpausing, verify from live reads that the grant the queue
+will deliver belongs **exclusively** to the Phase B plan and its
+single-occurrence cohort: grant id names the new plan and its
+segment scope; the granted set is exactly {idx 26}; reservation
+arithmetic closes (12 slots reserved against the live day, inside
+the §5 headroom test); dispatched still at the census figure. Any
+successor grant appearing during the gate receives the same
+verification (Gate 4 R4 rule). An unverifiable or non-exclusive
+deliverable grant = STOP + containment (re-halt).
+
+### 6.6 R2 — queue unpause (mutation 3; last opening move)
+
+PUT the queue `delivery_paused: false`; cf-api read-back proves it.
+Generation is autonomous from here; the executor submits nothing
+further and calls nothing manually.
+
+### 6.7 G — monitored generation
+
+Poll at Gate 4's standard (plan view, job view, quota, reconcile,
+phase accounting, bindings watermark, conflicts) until the plan
+leaves `active`. Expected shape: one grant, one cohort of one
+occurrence; 1 first-pass dispatch; the grant closes `reported`
+(the executor's end-of-message report — the Phase A stuck-grant
+shape is watched for, §7.3); plan `complete` 1/1. POLICY_BLOCK
+handling is the shipped machinery's: recursive splitting without
+voice substitution, server-owned repair chains, all inside the
+occurrence's 12-dispatch budget. A terminal POLICY_BLOCK (plan
+ends `partial` / blocked) = STOP outcome, reported plainly: the
+chapter is then **not** finished until a separate gated program
+resolves it. An `unknown` billing outcome halts the phase itself
+and = STOP + containment; no figure is ever written as a known
+charge on a model's say-so (the Chapter 2 law).
+
+## 7. Monitoring rules
+
+### 7.1 Detection figures (Approach 2 labeling — detection-only, never a cap)
+
+- **Forecast line: 12,808 units** (the m = 1 modeled bound, §4).
+  Cumulative gate settled-delta crossing it = **STOP + containment**.
+  A crossing is a **forecast deviation** — evidence that realized
+  durations departed from the model — and nothing more. It is
+  **not**, by itself, evidence or proof of foreign generation:
+  foreign generation is established only by the identity/ownership
+  checks of §7.2 (a grant, plan, binding, or record that does not
+  belong to this gate), never by a cost figure alone. (Correction 5;
+  the proposal §7.1's "treated as evidence of unmodeled work"
+  phrasing is superseded by this paragraph, which governs.)
+- **Detection threshold: 25,000 units (≈ $0.025)** — proposed in
+  the proposal, **accepted by Rowan's review** — cumulative across
+  the gate. It is a **detection threshold, not a guaranteed cap**
+  (Rowan's R1 ruling, carried forward): polls observe the running
+  settled total; crossing = STOP + containment (re-pause →
+  re-halt). The figure sits at 3.1× the expected cost and ≈ 1.95×
+  the m = 1 bound; it is crossed only at realized m ≈ 1.95 — audio
+  at ~5.1 chars/sec against a model floor of 10 and a realized
+  Chapter 3 ratio of ≈ 0.63 (≈ 16 chars/sec). Even the m = 5
+  scenario (≈ $0.064) is bounded by the phase fence (§4) and the
+  prepay backstop.
+- Inter-poll exposure is bounded by the single in-flight cohort:
+  one occurrence, ≤ 12 dispatches, ≤ the §4 m-parameterized bound.
+
+### 7.2 Foreign generation = STOP (identity-based, unchanged)
+
+Foreign generation is established **only** by identity/ownership
+evidence: any movement not belonging to the Phase B plan — another
+plan/job changing state, a grant not naming the Phase B plan,

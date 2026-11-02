@@ -1,0 +1,166 @@
+1. Phase B plan `complete`, totals eligible 1 / done 1 / failed 0 /
+   blocked 0; its grant(s) all `reported`.
+2. **Chapter quote: bound_already 27 / parked 0 / eligible 0 /
+   voice_prompt 0** — every segment of the chapter as it exists
+   live has audio (design §10C.1). A bindings row for idx 26
+   exists; the chapter delta from census is exactly that one
+   occurrence moving parked → bound (design §10B.2).
+3. Bindings watermark **1842** (= 1841 + exactly 1); content
+   watermark **18** unchanged.
+4. Phase accounting: settled increased by this plan's recorded
+   settlement only (expected ≈ +8,022); estimatedUnverified /
+   reservedUnverified unchanged; unknownOpen **0**; reconcile
+   `ok: true`, no new exceptions.
+5. PT day totals consistent with §§1.4/7.4 (expected: +1 dispatch;
+   bound: ≤ +12).
+6. Conflicts exact-match to the pinned four-row baseline; settings
+   revision 1; parked job byte-identical to census (still
+   `parked_policy` rev 1 — by design it keeps its 24 pending rows;
+   the release record unchanged). **The exemption's closing state
+   is evidenced exactly as §9.2A prescribes — and in no stronger
+   terms.**
+7. End state HELD certified: queue paused + halt "1" + build
+   `1c2d1d0f…` + etag `f15fb1ae…` + observability on + Batch
+   unarmed + nothing in flight.
+
+### 9.2A Exemption evidence — three classes, never blended (Correction 3)
+
+No read surface projects `d6_chapter_exemptions` or
+`d6_chapter_exemption_events` (§1.5, source-audited). The execution
+record therefore reports the exemption's state from exactly two
+evidence classes and names the third as unavailable:
+
+- **(a) Operator-response evidence** — the exemption call's own
+  response at E1 (`outcome: "applied"`, `alreadyExempted: false`,
+  the returned exemption view naming idx 26 with
+  `tombstoned: false`), and, only if the contingency revoke is
+  used, the revoke call's own response (`applied`,
+  `alreadyRevoked: false`, the view with `tombstoned: true`).
+  This evidences what the operator routes returned at the moments
+  they were called — nothing about later reads.
+- **(b) Eligibility-projection inference** — the plane's observable
+  effects: the §6.2 post-exemption quote (eligible 1 / parked 0,
+  the single disposition flip), and at E4 the chapter quote of
+  item 2 (idx 26 `bound_already`, parked 0). This evidences the
+  exemption's *effects* on eligibility, from which its live state
+  during the gate is inferred — it is inference about effects,
+  not a read of the exemption record.
+- **(c) Independently verified journal state — UNAVAILABLE.**
+  There is no GET route, view, or other read surface for the
+  singleton row or the append-only events journal; the store's
+  `chapterExemptionEvents` reader has no route consumer. The
+  record must state this absence plainly. It must **not** claim —
+  as the proposal §9.2 item 6's earlier wording ("the exemption
+  record reads `live` … with exactly one `exempted` event in its
+  journal") implied — that the journal or the row was read back,
+  counted, or independently verified. That wording is superseded
+  by this section, which governs.
+
+### 9.3 Julie's playback check — the acceptance step (hers, outside the executor's verdict)
+
+Julie opens Chapter 3 in the app. Expected header: **"Complete
+27/27"** — the shipped client projection's full-completion form
+(`projection.js`: label `Complete` renders `Complete ${total}/${total}`;
+the `Partial n/27` form appears only while segments are missing).
+Caveat: the label is computed from device-verified audio, so an
+"Uncertain" reading on a device that has not yet verified the new
+segment's bytes is a device-verification state, not a generation
+failure (Gate 4 precedent). Acceptance = the chapter plays **in
+sequence through its end**: idx 26's audio present and audible as
+the chapter's final segment (design §10C.3). Only with §§9.2 +
+9.3 both holding is Chapter 3 called **finished**.
+
+### 9.4 Record
+
+The executor writes the execution record (every census line —
+including the §5.0 read-availability confirmations — the exemption
+response quoted as §9.2A(a) evidence, the checkpoint quote, each
+mutation with timestamps and read-backs, the generation timeline,
+closing figures, ends-HELD certification, and §9.2A(c)'s absence
+stated, not smoothed over), pins it as a child of this
+presentation's pin, and files the summary on the board (issue #15)
+with a fresh RT-H ID. Julie's playback result is recorded when she
+gives it, as at Gate 4.
+
+## 10. STOP law and GO semantics
+
+The §5 STOP law governs every stage. Stage-specific containment:
+before E1 — nothing to contain (system untouched); after E1,
+before E2 — the §8 contingency revoke is available under the same
+GO **only inside §8.1's verified window** (unbound, no plan
+created) to restore the pre-state, and is reported first; after
+R1, before R2 — re-halt; after R2 — re-pause, then re-halt; after
+a binding exists — the revoke plays no part (§8.1). **One GO = one
+execution attempt.** A STOP consumes the GO at every stage,
+including the §6.2 voice checkpoint. No stage is retried, re-run,
+or repaired under the same GO.
+
+## 11. NOT authorized by this gate
+
+Phase B execution itself (until Julie's separate GO, on this
+presentation); any use of the exemption for any other occurrence or
+job; any release-route call; the rest of Forever Pucked; Batch;
+any deploy, merge, or code change; Issue #16; legacy snapshot
+retirement; clearing any conflicts row; the winner-provenance read.
+
+## 12. Disclosure block — for Julie's GO presentation (Correction 2; quote verbatim)
+
+> **What this GO authorizes, counted exactly.** The executor will
+> make **FIVE production mutations**:
+> (1) grant the chapter exemption for the final Chapter 3 segment
+> (idx 26) — the operator call that lifts this one segment's parked
+> fence;
+> (2) lift the generation halt;
+> (3) unpause the generation queue;
+> (4) re-pause the queue (closing);
+> (5) restore the generation halt (closing).
+> **PLUS one production-state-changing SubmitJob command** — counted
+> separately from the five, as in Phase A, but named plainly: it
+> creates a real plan and job in the production system for this one
+> segment; it is not a read and not a no-op.
+> **PLUS a possible SIXTH executor mutation** — the contingency
+> revocation of the exemption — which occurs **only** if the gate
+> stops after the exemption and before any generation (the voice
+> checkpoint, or a stop in that same window), while the segment is
+> still ungenerated and unbound; in that window it restores the
+> segment's parked fence exactly. It is never a general rollback:
+> once the segment has been generated and bound, revocation would
+> undo nothing, and this gate does not use it there.
+> Nothing else changes production state. The system ends HELD
+> (queue paused, halt restored), as it began.
+
+## 13. Corrections inventory (Rowan, PASS WITH CONDITIONS — applied in this presentation)
+
+1. **Census read-availability hard precondition** — §5.0 (new):
+   every required gated read named explicitly; any unavailable
+   required read = STOP before any mutation. The §1.0 fault is
+   carried as an open disclosure (§1.0), not claimed understood or
+   fixed.
+2. **Mutation accounting disclosure** — §12 (new, standalone,
+   quotable verbatim): five executor mutations **plus** the
+   production-state-changing SubmitJob named as such **plus** the
+   possible sixth (contingency revocation). Consistent restatements
+   at §0 and §8/§6.4.
+3. **E4 exemption evidence corrected** — §9.2 item 6 + §9.2A (new):
+   evidence classes (a) operator-response and (b)
+   eligibility-projection inference reported as what they are;
+   class (c), independently verified journal state, labeled
+   **unavailable** (no read surface exists). The proposal §9.2
+   item 6's journal read-back wording is superseded.
+4. **Contingency revocation bounded to its verified safe
+   conditions** — §8.1 (new, code-derived, with citations): the
+   revoke's exhaustive fence set; its entire mechanical effect
+   (the `tombstoned` flag + one journal event); the verified
+   window (unbound + no plan created: after E1, before E2); and
+   what it never does (unbind, cancel a plan, refund, erase
+   history), including the post-generation state, where the code
+   would return `applied` while restoring nothing. Consistent
+   restatements at §3.7, §6.2, §10. **Discrepancy against the
+   proposal, stated plainly:** the proposal §8's "never after
+   successful generation" read as though the mechanism itself
+   confined the revoke; the shipped code imposes no such fence —
+   the confinement is this gate's paperwork, and §8.1 says so.
+5. **Forecast-crossing semantics corrected** — location inventory:
+   exactly **one** location in the proposal carried the superseded
+   semantics — **proposal §7.1, first bullet** ("treated as
+   evidence of unmodeled work"). Corrected at §7.1 here: crossing

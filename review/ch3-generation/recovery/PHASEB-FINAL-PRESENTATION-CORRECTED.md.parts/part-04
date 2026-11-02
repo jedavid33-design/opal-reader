@@ -1,0 +1,177 @@
+phase settled delta beyond this plan's own settlements as shown by
+the plan's own records, bindings watermark advancing by anything
+other than this segment's single binding, the parked job or its
+release record changing in any way, Batch arming — = STOP +
+containment (re-pause → re-halt), no repair, GO consumed. A cost
+figure crossing §7.1's lines triggers the same STOP but is reported
+as what it is (§7.1): a forecast deviation or a threshold crossing,
+with foreign generation asserted only where this section's checks
+establish it. The Generate button is live from R1 until the closing
+holds; Julie's hands-off understanding from Gate 4 applies unchanged.
+
+### 7.3 Stall, scaled to one segment
+
+Healthy completion is expected in minutes (Gate 4's cohorts of 8
+closed in ≈ 6 minutes). Stall test = Gate 4's sliding window
+applied to the single grant: observations **≥ 35 minutes apart**,
+with all intervening observations checked, showing no progress —
+where *progress* means any of: grant state change, attempt
+recorded, plan totals change, grant voided-and-replaced (a lease
+expiry + successor grant is continuation, not stall, provided the
+successor passes §6.5 verification). The Phase A signature —
+grant still `issued` past its 15-minute lease with its reservation
+unclosed and no successor issuable — is a stall if it persists
+across the window. A declared stall = STOP + containment; the GO
+is consumed; the finalizer is **not** invoked under this GO under
+any circumstance.
+
+### 7.4 Rollover
+
+Execution is expected to complete inside one PT day. If the run
+crosses 07:00Z mid-generation, rollover is normal continuation:
+before/after day snapshots are taken (Gate 4 A5 protocol), the
+§7.1 figures remain cumulative across the rollover, and the new
+day's dispatches count against the new day's fence.
+
+## 8. Executor mutation budget — exactly 5, plus the named acts in §12
+
+| # | mutation | mechanism |
+|---|---|---|
+| 1 | **Exemption grant** | `POST /v2/d6-exempt-chapter-occurrence` (§6.1) |
+| 2 | **Halt flip** (lift) | settings-only envelope flip (§6.3) |
+| 3 | **Queue unpause** | cf-api queue PUT (§6.6) |
+| 4 | **Queue re-pause** | cf-api queue PUT (§9.1) — first closing move |
+| 5 | **Halt restore** | settings-only envelope flip (§9.1) |
+
+Named acts that are **not** executor mutations in the table's
+sense, each counted and limited separately: **exactly ONE SubmitJob
+command** (§6.4 — **production-state-changing**: it creates the
+Phase B plan and its job; counted separately as in Phase A, and
+named as state-changing in §12, never hidden), and the board
+filings (GO record + execution record — record-keeping, not
+production state).
+
+**Possible sixth executor mutation — contingency only:** ONE
+`POST /v2/d6-revoke-chapter-exemption`, only under §8.1's verified
+conditions, with its own authorizationRef under the same GO,
+journaled by the shipped append-only events table. If used, it is
+reported as a sixth mutation with its reason before anything else
+is claimed about the gate.
+
+No other mutation is authorized: no second exemption call (the
+route's idempotent duplicate is a no-op success but is still not
+called twice), no release-route call, no quarantine release, no
+finalizer call, no settings write, no code upload.
+
+### 8.1 The contingency revocation — verified safe conditions, from the shipped code (Correction 4)
+
+Citations are to the live tree (build `1c2d1d0f`):
+`worker/generation/park-release.mjs` (the store),
+`worker/generation/content-plane-adapter.mjs` and
+`worker/generation/eligible-set.mjs` (fence consumption), and
+`worker/worker-entry-prod-d6.js` (route registration:
+`/v2/d6-revoke-chapter-exemption`, entry line 1580, forwarding to
+the internal handler at line 1279).
+
+**What the revoke call is.** `revokeChapterExemption`
+(park-release.mjs:646), operator fence, body allowlist
+`{jobId, occurrenceId, authorizationRef, source, note}`. In one
+transaction it: (i) reads the singleton exemption row for the
+occurrence; (ii) appends ONE immutable event to
+`d6_chapter_exemption_events` — action `revoked`, resulting_state
+`tombstoned` — *before* the projection write; (iii) sets the
+projection row's `tombstoned = 1` with `tombstoned_at` and the
+tombstone authorization/source/note fields. Success returns
+`{outcome: "applied", alreadyRevoked: false, exemption: {…,
+tombstoned: true}}`.
+
+**Its complete fence set (exhaustive — from the code):**
+
+- Nonblank `jobId` / `occurrenceId`, else
+  `chapter_exemption_job_required` / `chapter_exemption_occurrence_required`.
+- No exemption row for the occurrence, **or** a row whose `job_id`
+  differs from the caller's → `{outcome: "rejected",
+  reason: "chapter_exemption_not_found"}`, writing nothing.
+- Row already tombstoned → idempotent no-op success
+  `{outcome: "applied", alreadyRevoked: true}` — no state change,
+  **no journal event**.
+
+That is all. Unlike the grant (`exemptChapterOccurrence`,
+park-release.mjs:551), the revoke does **not** invoke
+`parkedJobAndDefinition`: it never re-derives the definition,
+never verifies the job is still `parked_policy`, and never checks
+whether the occurrence is bound, planned, granted, attempted, or
+generated. **The shipped code permits this call in every one of
+those states.** The conditions below are therefore this gate's
+paperwork discipline, stated against exactly what the code would
+do — not code fences, and never described as code fences.
+
+**What revocation does, mechanically.** The exemption's only
+effect channel is `liveParkFenceRecords` (park-release.mjs:262),
+which selects exemption rows `WHERE tombstoned = 0` (:277) into
+the plane's `exemptIds`. Tombstoning removes idx 26 from
+`exemptIds`; on the next plane build its disposition is recomputed
+without the exemption. That flag flip, plus the journal event, is
+the revoke's **entire** effect. It issues no write against the
+occurrences table, bindings, plans, grants, attempts, quota
+ledgers, phase accounting, or R2.
+
+**The verified safe window (the only states in which revocation
+restores the pre-exemption state exactly):** the occurrence is
+still **unbound** AND **no plan has been created from the
+exemption** — in this gate's sequence: after E1 and before E2,
+which is exactly where its two contemplated uses sit (§6.2's
+`voice_prompt` STOP; a §10 STOP after E1 and before submission).
+In that window the exemption's sole effect was the plane
+disposition flip, so tombstoning restores the fenced dispositions
+exactly, spends nothing, and un-does nothing else because there is
+nothing else. A post-E2 state in which the submission was refused
+pre-write and verifiably created no plan stands in the same
+window; the executor must verify "no plan exists" from the plans
+surface before treating it as such.
+
+**What revocation does NOT do — in any state, and specifically
+after generation:**
+
+- **It never unbinds.** `buildEligibleSet` evaluates `bound_already`
+  BEFORE both parked fences (eligible-set.mjs disposition order:
+  bound → parked → ch3 → voice/eligible). Once a bindings row
+  exists for idx 26, its disposition is `bound_already` with or
+  without the exemption — tombstoning changes the segment's
+  disposition **not at all**. The bindings row, the R2 audio object,
+  and the segment's playability are untouched.
+- **It never cancels a plan.** The module contains no plan, grant,
+  or attempt interaction; a created plan is a durable record whose
+  life the revoke does not reach. After E2, containment is the
+  closing holds (§9.1), never the revoke.
+- **It never refunds or un-settles.** No write touches phase
+  accounting, quota ledgers, or attempt records; settled cost and
+  consumed dispatches stand.
+- **It never erases history.** The journal is append-only: the
+  `exempted` event remains; the revoke *adds* a `revoked` event.
+  Nor is the tombstone itself final — a later grant call against
+  the tombstoned row reactivates it (journaling `reactivated`),
+  which is precisely why no act in this gate may treat the revoke
+  as an undo of record.
+
+**Standing wording rule for this gate:** the revocation is a
+**fence restoration within the §8.1 window**, nothing more. It is
+never a "rollback", never a reversal of generation or binding, and
+it is never used after a binding exists for idx 26 — not because
+the code would refuse (it would not; it would return `applied`
+and flip a flag that no longer governs anything), but because in
+that state it restores nothing and describing it as containment
+would be false.
+
+## 9. Closing, read-backs, acceptance
+
+### 9.1 Closing holds
+
+On plan completion (or on any §7 STOP after R2): **re-pause the
+queue FIRST** (mutation 4; cf-api read-back `delivery_paused:
+true`), **then restore the halt** (mutation 5; read-back
+GENERATION_HALT "1", `/health` `halted`, etag unchanged,
+observability intact).
+
+### 9.2 E4 — closing read-backs (all required), with the exemption evidence classes (Correction 3)
+

@@ -1,0 +1,24 @@
+   12,808 is a **forecast deviation + STOP trigger**, never by
+   itself proof of foreign generation. Proposal §7.2 was checked
+   and already identity-based; it is carried unchanged (§7.2) and
+   is the sole basis on which foreign generation may be asserted.
+   The 25,000 figure remains the detection threshold,
+   detection-only, never a cap (§7.1).
+
+**Standing terms unchanged from the proposal:** STOP law (§5);
+one GO = one attempt (§10); conflicts exact-match (§§5.1.10,
+9.2.6); quota headroom ≥ 12 test (§§1.4, 5.1.6); execution order
+E0 → E1 → voice checkpoint → R1 → E2 → step 0 → R2 → generation →
+closing holds → E4; end state HELD (§9.2.7).
+
+## 14. Decision point
+
+- **Julie:** the execution GO — on this presentation, naming idx 26,
+  its quote (569 chars; expected 8,022 ≈ $0.008), the §7.1
+  detection-only figures, and the §12 accounting. Scheduling note
+  (arithmetic only, §1.4): the gate fits today's remaining headroom
+  in full, or a fresh PT day after 07:00Z. Rowan's review is
+  complete (PASS WITH CONDITIONS, corrections applied here); no
+  further review stands between this presentation and her decision.
+
+— Wren (preparation; no production state touched)

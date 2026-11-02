@@ -1,0 +1,164 @@
+  expected `round(569 / 15.96 × 225)` = **8,022 units ≈ $0.008**;
+  single-attempt upper `round(569 / 10 × 225)` = **12,803**;
+  per-occurrence guard ceiling `12 × 12,803` = **153,636**.
+- **Live quote expectation (from Gate 4's closing census — see
+  §1.0):** with no exemption in force, the segment-scope quote
+  (`scope=segment&occurrenceId=2a85f74f…`) reads eligible **0**,
+  exclusions **parked 1**; the chapter-scope quote reads bound **26**
+  / parked **1** / eligible **0**, eligibility digest **`b4d824871f922e104392f3feb0152e2b201d8760a1753efc5f4ef09c1b7e00d2`**.
+  These are §5 census expectations, verified live by the executor
+  before any mutation.
+- **The binding quote is the post-exemption read-back (§6.2):**
+  segment quote must show **eligible 1 / 569 chars / expected 8,022**
+  — any char or cost mismatch = STOP (design §6 E1b).
+
+### 1.3 Storage-key occupancy — FREE (verified fresh in the proposal run)
+
+- Idx 26's first-pass fingerprint is **identical on both text
+  bases**: its `text` and `speechText` are the same string (the
+  Oct 31 preflight's Set A whole-26 and Set B flush-26 rows carry
+  the same fingerprint), so the standing two-text-bases caveat
+  collapses to a single key for this segment:
+  `audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590`
+  (the executor's flush key; format `.wav`).
+- **Fresh check (proposal run, via the Cloudflare API, post-Gate 4):**
+  R2 LIST on prefix `audio/07d145f7…` in `opalreader-storage`
+  returned **zero objects — the key is FREE.** Mechanism validated
+  in the same run against a known-occupied key: idx 0's prefix
+  returned its object at 2,171,878 bytes, byte-equal to its binding
+  record's size (and carrying the Charon/gemini metadata cited in
+  §1.1).
+- What this proves and does not: no pre-existing object sits at the
+  one key this generation will write, so the Chapter 2
+  adoption/collision shape has no foothold here. A key free at
+  check time is free *then*; nothing else writes `audio/` keys
+  absent an authorized generation run (§9 of the Oct 31 preflight,
+  carried forward). §5 item 12 re-LISTs the key at execution.
+
+### 1.4 Day-headroom arithmetic — fits today in full; rollover also available
+
+- PT 2026-11-01 dispatches stand at **76** (Gate 4's closing census:
+  dispatched 76 / reserved 0 / consumed 76) of the 100/day fence →
+  **24 slots of headroom remain today**. The system has been HELD
+  with the queue paused since, so no further dispatch has occurred.
+- This segment's demand: **1** first-pass dispatch expected (569
+  chars is under the 1,200-char pre-split ceiling — no pre-split);
+  the per-occurrence worst case is **12** dispatches total (split
+  tree + repair chain combined, the shipped attempt budget). Cohort
+  bounding reserves against the same 12-slot figure at grant
+  issuance.
+- **Verdict: 24 ≥ 12 — Phase B fits today with its entire worst
+  case inside the day's remaining headroom**, leaving 12 slots
+  unspent even at the bound. Executing after the next PT rollover
+  (07:00Z) starts from a fresh 100. Both are arithmetically sound;
+  this presentation takes no position beyond the arithmetic — the
+  GO names the attempt, and §5's census re-reads the day totals
+  live and applies the same ≥ 12 test to whatever day execution
+  lands on (a day with < 12 headroom = STOP, never a partial fit).
+
+### 1.5 Exemption journal state — no exemption exists; no read surface (named substitutes)
+
+- **No read surface exposes the exemption records.** Source audit of
+  the live build: the only routes touching `d6_chapter_exemptions` /
+  `d6_chapter_exemption_events` are the POST operator routes (grant
+  / revoke). No GET route projects the singleton row or the journal.
+  The store function `chapterExemptionEvents` exists in
+  `park-release.mjs` but no route or entry handler calls it. The
+  records' only read-side consumer is `liveParkFenceRecords` → the
+  plane's `exemptIds`, which surfaces only as eligibility
+  dispositions/digest. (This absence is load-bearing for §9.2's
+  evidence classes — Correction 3.)
+- **Evidence that no exemption is live for idx 26 today:** (i) the
+  chapter quote at Gate 4's census (19:01Z, Nov 1) showed idx 26
+  still fenced (parked 1, digest `9453ab5d…`) — a live exemption
+  flips it to `eligible` and changes the digest; (ii) the exemption
+  route has never been called in production except the
+  credential-less probes at the Ch 3 deploy, which the operator
+  fence refused (403 `migration_operator_required`) and which write
+  nothing; (iii) Gate 4's mutation budget was exactly 4 and did not
+  include any exemption call.
+- **Execution-time substitutes (§§5–6):** (a) E0 census re-reads the
+  chapter digest + parked count — any live exemption breaks the
+  expected digest and STOPS the gate; (b) the exemption call's own
+  response is a fence: the executor requires `outcome: "applied"`
+  with **`alreadyExempted: false`** — `alreadyExempted: true` means
+  a live row pre-existed the gate = STOP (contingency revoke only
+  under §8.1's conditions and Julie's further word where §10
+  requires it); (c) the post-exemption quote must show exactly the
+  §6.2 figures.
+
+### 1.6 Opening state — verified items (proposal run) and census-carried items
+
+Verified fresh in the proposal run through surfaces that answered:
+`/health` — build **`1c2d1d0fa7ebb769f68cfb327fb9fde7d4d30867`**,
+coordinator `armed`, generation `halted`; queue
+`opalreader-generation-v2` `delivery_paused: true` (cf-api; last
+modified 19:40:22Z = Gate 4's re-pause); R2 occupancy (§1.3);
+ui1-review head `97a32aed…` (gh-api).
+
+Carried from Gate 4's closing census (19:40Z, Nov 1, 2026; §5
+re-verifies every item live): plan `plan:e377a5559961b294154276b6`
+`complete` 23/23, failed 0, all grants `reported`, **no live grant,
+reserved 0** — with no active plan, the halted-state grant churn
+does not run; phase settled **1,029,420** / estimatedUnverified
+19,018 / reservedUnverified 5,648 / unknownOpen **0** / remaining
+12,464,932 of 13,500,000; bindings watermark **1841**; content
+watermark **18**; conflicts exactly the pinned four `schedule_dead`
+rows; parked job
+`1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a`
+`parked_policy` rev 1, fingerprint basis `b991f18a…` unchanged, its
+live park release (the 23 ids of idx 3–25) unchanged; settings
+revision **1**; Batch unarmed; worker etag `f15fb1ae…`,
+observability enabled + persisted.
+
+---
+
+## 2. Scope and identity
+
+**In scope — exactly this:**
+
+- **Book:** Forever Pucked, bookId
+  `5c589095-f812-48a2-8ab2-03ba2791f2b2`; phase `forever-pucked`;
+  lane `standard`; `keepGoing: false`.
+- **The one occurrence:** Chapter 3 (chapterIndex 2), position
+  idx 26 — the chapter's final segment — occurrenceId
+  **`2a85f74f-353d-4c25-a86a-4a4db392868b`**, **569 chars**,
+  currently `excluded_parked` on the live plane (a row of the
+  parked job, beyond its definition set), unbound.
+- **The parked job (context, never touched):**
+  `1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a`,
+  `parked_policy` rev 1; its definition set is idx 0–25
+  (definitionDigest `b90c3cb3…`); idx 26 is the beyond-definition
+  singleton.
+
+**Explicitly out of scope:** every definition member of the parked
+job (idx 0–25 — the exemption refuses them by name and this gate
+never calls the release route); the completed Gate 4 plan and any
+other plan; any other chapter or book, including the rest of
+Forever Pucked (its own later gate — idx 26 does not ride along
+with it; it is handled here or not at all, per design §11); Batch
+arming or any Batch lane use; any change to the parked job's state
+or rows; any settings change; any code upload or deploy; any
+rollback; quarantine releases of any subject; the finalizer routes;
+clearing any conflicts row; a second exemption, second submission,
+or retry beyond §10's convergence rule. The Generate button is
+live between re-arm and the closing holds — foreign generation =
+STOP (§7.2).
+
+## 3. Design basis and shipped-code conformance
+
+The gate executes the DESIGN-PASSed Phase B (§6 E1b–E4b) on the
+shipped build `1c2d1d0f`. Conformance notes — read before citing
+the design against the code:
+
+1. **The mechanism as shipped** (`worker/generation/park-release.mjs`,
+   live tree): `POST /v2/d6-exempt-chapter-occurrence`, operator
+   fence only, **no halt fence** (an execution-time fence adjustment
+   that creates no work by itself — it may be called while HELD).
+   Closed body allowlist `{jobId, occurrenceId, authorizationRef,
+   source, note}` — a singleton by construction; one call can exempt
+   exactly one occurrence. Fences, all before any write, in one
+   transaction: job exists and is `parked_policy`; definition
+   re-derived mechanically from the pinned records and cross-checked
+   against the job's live identity and rows (any disagreement
+   refuses pre-write); the occurrence is a row of THIS job; it is
