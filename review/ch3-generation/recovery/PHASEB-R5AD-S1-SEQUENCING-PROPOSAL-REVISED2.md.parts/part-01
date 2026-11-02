@@ -1,0 +1,215 @@
+census items change form.**
+  Extended by DV-9 (eligibility forms).
+
+New in this revision:
+
+- **DV-7 — Part D leaves the combined
+  authorization.** Under Item A as conditioned and
+  RS-3, the +24 h fallback stimulus is **not** a
+  part of the combined grant: it is a separate,
+  single-use authorization (Grant 2, §6.3) that
+  Julie gives — or does not — at or before the
+  +24 h read, on a clean preflight reported to her.
+  The prior proposal's part (D) text is withdrawn.
+- **DV-8 — A post-window ownership regime exists**
+  (§3.7), including a Part B **tail** of read-only
+  checks after window close. The prior proposal
+  named the continuing chain honestly but left its
+  post-window observation to C3's arrival; RS-1
+  requires a named owner and cadence for every
+  interval, so the tail is new, named, and inside
+  Part B's authorization (§6.2).
+- **DV-9 — C3's S1-disposition forms are
+  refined** (§4.3): STOPPED-BY-S1X splits into
+  VERIFIED (a disposition) and EXHAUSTED/UNVERIFIED
+  (not a disposition — R3-V first), and
+  EXPECTED-REVIVED gains the post-window form
+  REVIVED-UNSTOPPED. This refines DV-6/§4.3 of the
+  prior proposal under RS-5; the two-part
+  dependency itself is settled (Item C) and does
+  not change.
+- **DV-10 — WINDOW-FAILED is a named window
+  outcome** (§3.2): a coverage failure state with
+  its own disposition (or non-disposition)
+  consequences for S1 and C3. The prior proposal's
+  cadence had no failure semantics.
+
+New in REVISED-2 (RM-1 round):
+
+- **DV-11 — The monitoring vehicle is specified
+  (RM-1).** The REVISED §3.2 described
+  "agent-executed check-ins" under "a local
+  schedule" without establishing the mechanism —
+  Rowan's D′ point, and she was right on the text.
+  The corrected §3.2 names it: **dedicated
+  scheduled agent tasks (cron jobs) on Wren's
+  runtime scheduler**, the mechanism demonstrated
+  by `fp-ch2-generation-monitor` and Julie's other
+  standing monitors — implemented as two window
+  jobs + supervised tightened checks + a tail job,
+  with a Stage-1 smoke test as job-specific proof,
+  a two-record (window log × scheduler run history)
+  cross-check distinguishing LOG-FAILURE from
+  SCHEDULER-GAP, an escalate-only boundary (a watch
+  job never performs a containment transition),
+  a +10-minute jitter tolerance, stated run counts,
+  and six named limitations (L-1..L-6). No
+  unattended coverage is claimed beyond verified
+  intervals.
+- **DV-12 — B′ condition recorded; completion
+  discipline proposed.** §3.6 now carries Rowan's
+  B′ condition at verbatim strength and applies it
+  to the vehicle: the firing decision is recorded
+  by the performing check; the stop act is
+  performed in session under a **proposed**
+  completion discipline (first in-session
+  opportunity + fresh-confirmation guard at act
+  time; no fixed clock bar). The discipline is a
+  strengthening proposed for Rowan's confirmation
+  (Item RM-1-c), not settled law; the alternative —
+  a hard completion bound imposed by ruling — is
+  named in §3.6 and §7.
+
+**Layer-1 discipline (Item E), applied globally:**
+every mention of `contain_drive` in this proposal
+carries its limit with it — `contain_drive`
+suppresses future drive passes; **it is not a chain
+stop and is never represented as one**:
+registrations continue while it is applied, and the
+chain is stopped only by a verified `stop_chain`
+(S1-X or C3) or not at all.
+
+Nothing else in the accepted basis changes (§5).
+
+---
+
+## 1. The problem, restated at ruling strength
+
+Unchanged from the prior proposal §1, at the same
+strength: deployment itself performs no alarm
+action; the deployed R5a semantic changes what the
+**next wake** does; a wake is **expected** in
+ordinary operations while HELD (`POST
+/v2/sync/position` constructs a fresh
+`PushPositionEvents` command per push and reaches
+`wake()`); on the first wake the past-due disjunct
+fires (the live registration `armedAt`
+**1793562576104** = 2026-11-01T19:49:36.104Z is ~26×
+beyond the provisional 3,600,000 ms threshold) →
+exactly one `setAlarm(D)` (memo-bounded); D
+unobservable until that moment (B1 leading, **not
+proven**; B2/B3 open); under B1/B2 the past-due
+registration delivers promptly → a drive pass under
+the holds → exactly the pre-classified §7.3 set
+(grant `grant:plan:19cad189fab54b9c804a74a6:seg:1:full`
+issued; occurrence `pending` → `granted`; job
+`queued` rev 1 → `generating` rev 2; derived
+reserved 0 → 12; **dispatched 0, attempts 0, $0,
+all five phase figures frozen**) — and the watchdog
+re-arms, so the chain **revives** into the bounded
+grant/void churn indefinitely (≤1 live grant;
+reserved ∈ {0, 12}) until a stop act or another
+authorized disposition. Under B3, registration
+re-bases to a future D and the chain revives when D
+arrives.
+
+Rowan's Option (ii) ruling assigns ownership of
+that event to **S1's scope**, and her sequencing
+ruling adds the condition this revision implements:
+the event's safety arrangements are not complete
+until their **coverage, expiry, monitoring, and
+post-window ownership** are defined to the standard
+of §§3.2, 3.6, 3.7. The first-wake consequence
+remains a **one-incident phenomenon** (this stale
+registration, this first wake); the disjunct remains
+a permanent semantic for any future registration
+that itself goes stale (R-03/R-05 residuals stand).
+
+---
+
+## 2. R5AD-1 — The sequence (authorization structure revised per RS-3)
+
+Five stages. No stage begins until the prior
+stage's exit condition is met. Holds are invariant
+throughout (GENERATION_HALT `"1"`, queue paused,
+containment NORMAL until and unless S1-X fires;
+§4.2).
+
+### Stage 0 — Paperwork and rulings (now)
+
+This REVISED-2 proposal is reviewed by Rowan. B′
+was **ACCEPTED WITH CONDITION** (recorded and
+applied, §3.6); D′'s controls were accepted but its
+vehicle was not established — correction **RM-1**,
+answered in §3.2 as replaced. The remaining
+confirmation items are §7's RM-1-a/b/c. Items A, C,
+E are settled (§0.1). **No production step of any
+kind occurs in Stage 0**, and no GO is requested
+until Rowan's rulings are on record.
+
+### Stage 1 — Arrangements authorized (no production step)
+
+Julie grants **Grant 1** (§6.2): parts (A) R5a-D
+execution, (B) window arrangements (including the
+(B2) Layer-1 contingency and the §3.7 post-window
+tail), and (C) S1-X standing chain stop — one
+decision, three separately named parts, under the
+§6.1 dependency law: **(A) is void unless (B) and
+(C) are granted with it.** Granting performs
+nothing: it arms the arrangements so deployment and
+event are never separated by an unowned interval.
+Part (D) is **not** in Grant 1 (DV-7): the fallback
+stimulus is authorized separately, later, under
+**Grant 2** (§6.3), if at all. As part of Stage 1,
+Wren creates the window's watch jobs (dedicated
+scheduled agent tasks under Part B; no production
+effect; §3.2) and **smoke-tests the hourly job as
+§3.2 requires** — one manual run against the
+pre-window state, its window-log entry and the
+scheduler's run record both verified and reported.
+**If the smoke test fails, Part B's vehicle is
+unproven and Stage 2 does not begin** — so the
+§3.2 cadence demonstrably exists before the window
+can open.
+
+### Stage 2 — R5a-D executes and CLOSES (deployment only)
+
+Exactly the accepted readiness package: GO recorded
+on the board before census → 16-item fresh census
+→ fresh assembly → battery re-run (containment 42
++ R5a 23 + P2 32 on the gate-assembled tree) →
+build pin → **exactly one upload** → observability
+check (≤1 conditional PATCH) → V1–V8 verification →
+execution record → Rowan's independent execution
+review → **CLOSED**. R5a-D's close is **documentary
+and independent of the wake** (unchanged). DV-4
+stands: a T5/T6 wake signature during verification
+STOPs the gate and is simultaneously an early S1
+event inside the already-open window; class-B
+rollback discipline unchanged — **no rollback
+answers a wake**.
+
+**The S1 window opens at the completion of the
+upload's D2 read-back.** The gate's own V-reads are
+the window's first scheduled checks (§3.2 coverage
+accounting starts there).
+
+### Stage 3 — The S1 observation window (72 hours from window open)
+
+The window is the S1 scope under Option (ii): the
+first-wake event — natural or, under a separately
+granted Part D, deliberately completed — is
+detected, classified, and dispositioned inside it,
+under the §3 arrangements and the §6 authorizations.
+S1-X is armed for the window's duration under the
+§3.6 coverage law (part (C)). Layer-1
+`contain_drive` is available exactly as part (B2)
+provides — a drive-pass suppressor, **not a chain
+stop** (§0.3). Observation mechanics and failure
+law are §3.2; taxonomy §3.3; responses §3.4.
+
+**Stage 3a — natural event.** Ordinary traffic
+wakes the coordinator; §3 detects and classifies;
+an EXPECTED event (W-2) is recorded and reported,
+and observation continues to window close (the
+revived chain i

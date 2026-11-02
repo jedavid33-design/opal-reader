@@ -1,0 +1,71 @@
+nd delay all change the regime's terms,
+never its existence.
+
+---
+
+## 4. R5AD-3 — Boundary reconciliation (C3 dependency refined per RS-5)
+
+### 4.1 Boundary map
+
+| Scope | Owns | Begins | Ends | Explicitly does NOT include |
+|---|---|---|---|---|
+| **R5a-D** | The deployment: census, assembly, battery, one upload, verification | Julie's Grant 1 (Part A), recorded before census | Rowan's acceptance of the execution record (**CLOSED**) | Any wake, command, transition, or the event. Its close never depends on the wake |
+| **S1 (this sequence)** | The first-wake **event**: the window, detection, classification, disposition (§§2–3), and the §3.7 post-window regime until its tail exit | Window open = the upload's D2 read-back completion | Window close + Rowan's review of the window record; the §3.7 tail then runs to its own named exit | The deployment; the stop (S1-X's, or C3's); any generation. The fallback stimulus is **not** S1's to self-grant — it is Julie's Grant 2 (§6.3) |
+| **S1-X** | The emergency chain stop, if a verified T1–T4 trigger is covered under §3.6 | Armed at window open (Grant 1 Part C) | Fired (once), spent, or **DEAD at window expiry** (§3.6 (iv)) | The event itself; any second firing; any use outside this window and pin; any post-expiry coverage |
+| **C3** | Operational containment verification against the composed build: the mechanics pair + the physical stop act, PARTIAL verdict | Its own revised readiness + its own Julie GO, after §4.3's eligibility is met | CHAIN_STOPPED/verified (or STOPPED-unverified), record accepted | The first-wake event (dispositioned before it starts, or owned under §3.7 Branch 1 with C3 as its stop vehicle); restoration; any stimulus |
+| **Standalone restoration** | CHAIN_STOPPED → NORMAL, once, on its own authorization (fresh census + demonstrated reason + episode disclosure + **historical audit review**, gates v4 text unchanged) | After C3, on Rowan's review of C3's record and Julie's separate GO | NORMAL, registration still absent, episode closed | Re-arming; any verification work (R3-V's); any place inside Grant 1, Grant 2, or C3's GO |
+| **R3-V** | Post-exhaustion verification continuation, per exhausted episode (gates v4 text unchanged) | A Rowan ruling on an exhaustion record + Julie's authorization | One new episode's stop attempts, bounded as pinned | Any informal retry; any reset via `clear`; any scope beyond the named episode; any substitution by C3 |
+
+No scope's authorization includes another scope.
+Grant 1 contains three named parts for two scopes
+(R5a-D; S1 incl. its S1-X companion) because Option
+(ii) forbids separating them in time; Grant 2 is a
+later, separate decision for the single fallback
+act (RS-3). Parts remain individually strikable in
+drafting, under §6.1's dependency law.
+
+### 4.2 State sequence (holds invariant throughout)
+
+| State | Description | Reached by |
+|---|---|---|
+| **S-0 HELD-STALE** (today) | C1 build live; containment NORMAL/inert; stale registration 1793562576104 in place; chain not delivering (causation unproven, R-09) | — |
+| **S-1 HELD-DEPLOYED-STALE** | Composed build live and verified; semantic armed; no wake yet; window running | R5a-D upload + read-back |
+| **S-1n HELD-DEPLOYED-STALE, TESTED** | As S-1, but the Grant-2 stimulus has evaluated the wake with **no observed revival** within the tested window, subject to recorder limitations; coverage verified (§3.2) | Grant-2 stimulus + clean observation to close |
+| **S-2 HELD-REVIVED-CHURNING** | Chain live: ~10-min passes, §7.3 churn, recorder rows accruing; dispatched 0, $0; event dispositioned EXPECTED | W-2 inside the window |
+| **S-2p REVIVED-UNSTOPPED / OWNED** | As S-2 at and after window close: chain live, S1-X expired, §3.7 Branch 1 owns the interval; C3 is the standing stop vehicle | Window close over S-2 |
+| **S-2s DEPLOYED-STALE / OWNED** | As S-1 at and after window close with no event: semantic live, registration in place, §3.7 Branch 2 owns the interval | Window close over S-1 |
+| **S-2x HELD-STOPPED-BY-S1X** | S1-X fired on a covered verified trigger: CHAIN_STOPPED — **VERIFIED** or **EXHAUSTED/UNVERIFIED** as the stop record + fresh reads establish (§4.3) | W-3 + covered verified T1–T4 |
+| **S-WF WINDOW-FAILED** | Coverage failure declared under §3.2: event undispositioned; C3 blocked; resumption only on Rowan's ruling + fresh authorization | §3.2 decision rule |
+| **S-3 HELD-CHAIN_STOPPED/VERIFIED** | C3's stop act performed and verified against the then-current registration | C3 (its own GO) |
+| **S-4 HELD-NORMAL, REGISTRATION ABSENT** | Restoration's clear executed; episode closed; no registration in place | Standalone restoration (its own GO) |
+
+From S-4, the first subsequent wake arms a **fresh**
+registration by the ordinary rules — S-0's stale
+condition does not recur from the restoration
+itself. What follows S-4 is outside this proposal.
+
+### 4.3 C3 dependency and eligibility (RS-5)
+
+**Dependency (settled — Item C; refined by RS-5):**
+C3's preflight may open only when **all** hold:
+
+1. R5a-D is CLOSED (Rowan's execution acceptance) —
+   unchanged.
+2. The S1 event stands **dispositioned** in exactly
+   one of the **eligible forms** in the table
+   below, on the window record (and, where named,
+   the tail log) as reviewed by Rowan.
+3. Rowan has reviewed the window record.
+
+| S1 disposition form | System state | C3 eligible? | C3's shape on this basis |
+|---|---|---|---|
+| **EXPECTED-REVIVED** | S-2 (window closed over a live chain, or the chain stopped since by a separate authorized act Rowan has accepted) | **Yes** | Stop act targets a **live chain**. `armedAt` expectation changes **form**: fixed value → **consistency expectation** (the value read at C3-0, identical across paired reads, recorded as `stopArmedBefore`). Baselines = the window closing census (churn state). Ledger/budget unchanged; passes may occur during C3 within the churn invariants (outside = C3 STOP); the C3-1 `contain_drive` leg gains live meaning — drive suppression only; **not a chain stop** and not staged evidence; verdict remains **PARTIAL** unless Rowan rules otherwise on C3's record |
+| **EXPECTED-REVIVED (POST-WINDOW)** | S-2p (REVIVED-UNSTOPPED / OWNED under §3.7 Branch 1) | **Yes** | As EXPECTED-REVIVED, with baselines = the tail log's latest completed check and the tail record as evidence. C3 is this state's standing stop vehicle — its stop act needs no further S1-side disposition |
+| **NEGATIVE** | S-1n | **Yes** | Stop act targets the stale registration exactly as C3's current package designs. Census adopts the window closing census (`armedAt` = its recorded stimulus-observed value; recorder as observed). Requires **verified coverage** (§3.2): gapped coverage makes NEGATIVE unavailable unless Rowan dispositions the gaps expressly |
+| **STOPPED-BY-S1X-VERIFIED** | S-2x, stop record's physical verification stands: last successful verification recorded **and** current physical confidence `verified` on fresh corroborating reads (`getAlarm()` null) at the C3 preflight census — recorded completion alone is never physical proof (V4-2 discipline) | **Yes** | The physical stop is **not re-performed**. C3 re-scopes (its revised package, Rowan's ruling) to verification of the existing stop record against fresh reads plus the mechanics legs that remain meaningful |
+| **STOPPED-BY-S1X-EXHAUSTED/UNVERIFIED** | S-2x, episode EXHAUSTED (attempts = 3, durable flag + audit event) or verification failed/unresolved | **NO — not a disposition for C3** | **R3-V first**: further verification runs only under the R3-V micro-scope (fresh Rowan ruling + Julie authorization, per exhausted episode, historical audit review required — never the `prevEpisode*` summary alone). C3's dependency leg (2) is met on this branch only when R3-V has resolved the episode to verified, or Rowan expressly dispositions the exhaustion record otherwise. **Clearing CHAIN_STOPPED is not a retry reset and never substitutes for R3-V** (design paperwork rule; an exhausted episode may not be circumvented by clear + re-stop) |
+| **UNRESOLVED-AT-EXPIRY** (§3.6 (ii)) | A trigger candidate stood unverified at expiry | **No** | Rowan dispositions the record (fresh at-trigger authorization, or an express ruling feeding one of the forms above); C3 blocked meanwhile |
+| **W-1f-pending** (§3.5) | Registration re-based to a known future D | **No** | Rowan dispositions the end-state (observation extended to D under fresh authorization, or C3 re-derived against the future registration); §3.7 Branch 2 owns the interval meanwhile |
+| **W-4 undispositioned** | Wake observed, delivery not observed | **No** | Rowan's disposition required; hourly/tail observation continues meanwhile |
+| **WINDOW-FAILED** (§3.2) | Coverage failure declared | **No** | Rowan's ruling + fresh Julie authorization before any onward step |
+| **No event; no disposition** (incl. S-2s standing alone) | DEPLOYED-STALE / OWNED | *

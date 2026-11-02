@@ -1,0 +1,199 @@
+cheduled
+> window check AND verified to the proposal's
+> evidence standard (scheduled reads; raw values
+> and timestamps recorded in the window log before
+> firing; paired surfaces in agreement; movement
+> outside the §7.3 pre-classified set) AND the
+> firing decision is recorded in the window log
+> before window expiry (recorded by the performing
+> check under §3.6; the act performed by Wren in
+> session on that recorded decision, under §3.6's
+> completion discipline — the watch jobs never
+> perform a containment transition), execute exactly
+> one `stop_chain` with in-bound `verify_chain_stop`
+> attempts (≤3), report immediately, and end HELD
+> in CHAIN_STOPPED. A firing decision completed on
+> complete in-window evidence is covered even if
+> the act lands after expiry; evidence incomplete
+> at expiry is not verified, does not fire, and is
+> dispositioned UNRESOLVED-AT-EXPIRY. This
+> authorization is single-use, **expires at window
+> close whether or not it fires and is thereafter
+> DEAD** — it carries over to no other window,
+> package, gate, or the post-window tail — is
+> revocable by me at any time before it fires,
+> covers no other act, and does not extend part
+> (A)'s GO."
+
+### 6.3 Grant 2 — Part (D), the fallback stimulus (separate authorization)
+
+**Authorization moment.** At the +24-hour scheduled
+check, if no natural wake has been observed, Wren
+performs the **Part D preflight** and reports it to
+Julie. The preflight is **clean** only if all hold
+on fresh reads at that moment: (1) every scheduled
+check from window open to +24 h is logged and
+completed — no missed or failed check outstanding
+(unobserved intervals, if any, are named in the
+report and make the preflight **not clean** unless
+Rowan has expressly accepted them); (2) the current
+classification is W-0 on completed reads; (3) the
+recorder baseline is re-read (table state, rows,
+`recorderHealth`) and matches the window-open
+baseline in substance; (4) the stimulus target
+`alarm-wake-probe:nonexistent` is re-verified
+nonexistent on fresh reads; (5) the holds verify
+(HALT `"1"`, queue paused, containment NORMAL).
+**If the preflight is not clean, Grant 2 may not
+be requested or granted** until the anomaly is
+dispositioned (by classification completing,
+Rowan's ruling, or a renewed preflight on a later
+check that Rowan accepts as the D point for this
+window — the +24 h point moves only by her ruling,
+never by the executor's convenience).
+
+**Draft GO text (Grant 2 — given separately, at or
+before the +24 h read, on the clean preflight
+report):**
+
+> "GO — S1 fallback stimulus (single use): on the
+> clean Part D preflight reported to me at the
+> +24-hour window check under the R5a-D/S1
+> sequencing proposal, REVISED-2 (pin `<PIN>`), Wren
+> may send exactly one `RequestPause` command with
+> a fresh `command_id` (generated and recorded
+> before sending) targeting the reserved
+> nonexistent job `alarm-wake-probe:nonexistent`.
+> Expected response: `rejected` / `job_not_found`.
+> NO re-send under any circumstance — an ambiguous
+> response is a STOP-and-classify event.
+> Post-stimulus reads follow §3.2's cadence. A
+> no-revival outcome is reported only as 'no
+> observed revival within the tested window,
+> subject to recorder limitations.' This grant
+> expires unexercised if not given by the +24-hour
+> check or, on a renewed-preflight ruling, at the
+> point Rowan names; it authorizes no other act."
+
+**Lapse.** Grant 2 ungiven by its point lapses for
+this window; the window continues on natural
+traffic and §3.7 Branch 2 owns the tail. A later
+stimulus is a fresh Grant 2 under a fresh window
+authorization — never a revival of this one.
+
+### 6.4 What the grants spend (worst case)
+
+R5a-D — 1 upload (+ ≤1 conditional PATCH; + ≤1
+class-A rollback upload and ≤1 conditional PATCH);
+window + tail — reads, 0 writes; (B2) ≤1 state
+write + ≤1 audit row; (C) if fired: state writes
+≤4, audit rows ≤5, `deleteAlarm` ≤3, `setAlarm` 0;
+(D) if granted and used: 1 commands row, `setAlarm`
+≤1 from the stimulus's own wake evaluation, plus
+per-pass `finally` registrations only if passes
+are delivered (system behavior, classified — not
+operator stimuli). Plus the event's own §7.3
+system effects (consequences under the holds, not
+operator writes). Spend **$0** in every branch
+while the holds stand.
+
+### 6.5 NOT authorized by either grant, in any combination
+
+C3 (any part of it); the standalone restoration;
+R3-V (incl. any post-exhaustion verification for
+an S1-X episode); a second stimulus; a second S1-X
+firing; any S1-X act after window expiry other
+than §3.6 case (i)'s completion; window renewal or
+extension; the §3.7 tail beyond its named exit; any
+SubmitJob or generation; any hold flip or queue
+change; any rollback for a class-B finding; any
+command other than Grant 2's one; any containment
+transition other than (B2)'s single `contain_drive`
+and (C)'s single `stop_chain` with its in-bound
+verifies.
+
+---
+
+## 7. Ruling items for Rowan
+
+Settled by the sequencing rulings and **not**
+re-presented: **Item A** (Variant D, conditional —
+implemented as Grant 2, §6.3), **Item C** (DV-2
+supersession + two-part C3 dependency — accepted;
+§4.3's refinement under RS-5 is noted there, not
+re-opened), **Item E** (Layer-1 retained, optional,
+single-use, not-a-chain-stop discipline applied),
+**Item B′** (§3.6's coverage/expiry law —
+**ACCEPTED WITH CONDITION**; the condition is
+recorded in §3.6 and applied there; the only new
+element is the completion discipline, Item RM-1-c
+below), and **Item D′'s controls** (cadence, gap
+accounting, WINDOW-FAILED rules, post-window
+ownership model — accepted as proposed; their
+implementation parameters ride with Item RM-1-b).
+
+Confirmation requested on the RM-1 correction:
+
+- **Item RM-1-a — Vehicle form (§3.2).** Confirm
+  the vehicle as specified: dedicated scheduled
+  agent tasks on the runtime scheduler (the
+  demonstrated `fp-ch2-generation-monitor`
+  mechanism), implemented as two window jobs +
+  supervised tightened checks + a tail job, with
+  the Stage-1 smoke test as a Stage-2 precondition,
+  the +12 h handoff, the two-record cross-check, and
+  the escalate-only boundary (a watch job never
+  performs a containment transition; the S1-X act is
+  performed in session on the recorded decision).
+  Or amend the implementation.
+- **Item RM-1-b — Vehicle parameters.** Confirm:
+  the +10-minute jitter tolerance in the gap bounds;
+  the expected run counts (≈22 scheduled window
+  checks + 1 smoke run; tail counts as tabled in
+  §3.2); and acceptance of the L-1 detection latency
+  inherent in the 6-hourly phase (a failure may go
+  undetected until the next performed check).
+- **Item RM-1-c — S1-X completion discipline
+  (§3.6).** Confirm the proposed strengthening —
+  act at the first in-session opportunity, guarded
+  by fresh confirmation reads at act time (a
+  decision whose condition no longer stands is NOT
+  completed and is escalated), with **no fixed clock
+  bar** — or impose a hard completion bound by
+  ruling. The residual latency (L-3: escalation
+  reaches Julie only when she views the chat) is
+  stated in §3.2 and §3.6 either way.
+
+No other decisions are outstanding from this
+proposal. If RM-1-a/b/c are confirmed, the proposal
+stands ready for Julie's Grant 1 decision (Stage
+1) — which this document does not request.
+
+---
+
+## 8. Package contents and turn
+
+This REVISED-2 proposal is a single consolidated
+document, pinned with the second ruling record
+(`ROWAN-R5AD-S1-SEQUENCING-RULING-2.md`) and the
+companion cp
+(`PHASEB-R5AD-S1-SEQUENCING-REVISED2-ROWAN-CP.md`).
+It supersedes
+`PHASEB-R5AD-S1-SEQUENCING-PROPOSAL-REVISED.md`
+(pin `f85fcf08d0a75585ef919c17e991650a3c7ea63b`) as
+the operative sequencing proposal, which itself
+superseded `PHASEB-R5AD-S1-SEQUENCING-PROPOSAL.md`
+(pin `5325cb56c9741ce0318d1a1e53ea5e141dcfa3a5`); the
+superseded texts remain in the archive. The
+documents carried forward in §5 are cited by pin
+and hash and remain in the GitHub archive; the
+Dropbox review folder carries this REVISED-2
+proposal and its cp only (plus the standing
+instructions file), per the rotation.
+
+**Production remains under INVESTIGATION HOLD.
+Nothing in this proposal deploys, transitions,
+wakes, stimulates, or mutates anything, and no GO
+is requested by it. Turn: Rowan's — review of this
+RM-1-corrected sequencing/readiness proposal,
+including confirmation Items RM-1-a/b/c (§7).**

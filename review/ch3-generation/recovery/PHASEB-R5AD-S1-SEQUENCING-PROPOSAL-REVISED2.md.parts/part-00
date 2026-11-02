@@ -1,0 +1,111 @@
+# Phase B — REVISED R5a-D/S1 sequencing and readiness proposal (Option (ii)) — REVISED-2 per Rowan's RM-1 ruling
+
+**Status: READINESS PAPERWORK ONLY. Nothing in this
+proposal is executed by it, and no GO is requested by
+it.** Rowan's review of this proposal is not a GO; a
+production GO remains a separate future step (Julie's
+explicit authorization, in the §6 forms, after Rowan's
+review). Production is under INVESTIGATION HOLD and
+ends HELD. This proposal authorizes nothing.
+
+**Assignment:** Rowan's second ruling on the
+R5a-D/S1 sequencing proposal (Nov 2, 2026; pin
+reviewed `f85fcf08d0a75585ef919c17e991650a3c7ea63b`;
+recorded at `ROWAN-R5AD-S1-SEQUENCING-RULING-2.md`):
+verdict **REVISE — PRODUCTION HOLD CONTINUES**. The
+RS-1..RS-5 corrections are **substantively addressed
+at documentary level**. **B′ is ACCEPTED WITH
+CONDITION** — the condition is recorded in §3.6 and
+applied there. **D′ is REVISED on one point**: the
+cadence, gap accounting, WINDOW-FAILED rules, and
+post-window ownership model are acceptable as
+proposed controls, but the **monitoring vehicle was
+not established** — correction **RM-1** (§0.2).
+This REVISED-2 answers RM-1 and records B′: **§3.2
+is replaced** with the vehicle section (the named
+scheduler mechanism, its operational evidence, its
+lifecycle and boundary, and its limitations);
+**§3.6 is extended** (B′ condition recorded;
+decision-recording locus; a proposed completion
+discipline); §3.4 gains the who-performs-the-acts
+boundary. Everything else in the REVISED proposal
+carries forward unchanged — sequencing,
+authorization, disposition law, the candidate
+identity, census requirements, test batteries,
+mutation budgets, STOP discipline, rollback
+classification, and runtime-adoption caveats (§5).
+It does not execute the plan.
+
+**Gate structure (unchanged):** C1 (CLOSED) → C2
+(CLOSED, readability verified) → **R5a-D + S1 (this
+proposal: one deployment, one observation window, one
+owned first-wake event, one owned post-window tail)**
+→ C3 (readiness held; census re-based after R5a-D
+closes AND the S1 event is dispositioned, §4.3) →
+standalone restoration (separate, unchanged) → R3-V
+micro-scope (unchanged).
+
+---
+
+## 0.1 Ruling Items A–E — dispositions applied
+
+| Item | Rowan's ruling | Where applied | Status |
+|---|---|---|---|
+| **A** | Variant D selected **CONDITIONALLY**: the +24-hour fallback stimulus is a **separately authorized, single-use act**, subject to a clean preflight and the revised safety arrangements | §2 Stage 3b; §6.1 dependency law; **§6.3 Grant 2** (the separate Part D authorization) | **SETTLED by ruling** — implemented as a separate grant, not a folded-in consequence (RS-3) |
+| **B** | S1-X re-binding structure accepted **in principle**; correct its **operational coverage and expiry consequences** before approval | **§3.6** (coverage/expiry law, cases (i)–(v)) | **ACCEPTED WITH CONDITION** (second ruling): the condition is recorded verbatim in strength in §3.6 and applied there; one completion discipline is **proposed** for confirmation (§7 Item RM-1-c) |
+| **C** | DV-2 sequencing supersession and the two-part C3 dependency **ACCEPTED** | §4.1, §4.3 — recorded as settled law of this sequence | **SETTLED** — removed from ruling items |
+| **D** | Revise the 72-hour observation arrangements: enforceable check coverage, missed-check handling, post-window disposition | **§3.2** (monitoring mechanics, RS-2) and **§3.7** (post-window ownership, RS-1) | Controls **accepted as proposed** (second ruling); the **vehicle** was not established → corrected under **RM-1** (§3.2 as replaced); implementation confirmation requested (§7 Items RM-1-a/b) |
+| **E** | Layer-1 `contain_drive` retained as **optional, single-use** contingency for natural or deliberate events; **not a chain stop, never represented as one** | §3.4, §6.2 Part (B2) — strikable; not-a-chain-stop discipline applied at every mention (§0.3) | **SETTLED** |
+
+## 0.2 Corrections banner — where RS-1..RS-5 are answered
+
+| Correction | Requirement | Answered in |
+|---|---|---|
+| **RS-1** | Address indefinite expected chain activity after window expiry: continued observation, authorized stop sequencing, or another explicit safety disposition — **no silent unowned interval** | **§3.7** — the post-window ownership regime (REVIVED-UNSTOPPED / OWNED and DEPLOYED-STALE / OWNED branches): named owner, named cadence, named next decision for every interval; expiry changes the regime, never ends ownership |
+| **RS-2** | Establish how scheduled monitoring is actually performed and verified: missed checks, unavailable reads, escalation, a stop/hold decision rule | **§3.2** — logged check-ins performed by the named scheduler watch jobs (as corrected under RM-1); a check with no log entry is MISSED by definition; verified-vs-unobserved coverage accounting; failed checks; the escalation ladder; the WINDOW-FAILED decision rule and its effects |
+| **RS-3** | Correct the authorization dependency: Part A **requires** Parts B and C; Part D is conditional and **separately authorized** under Variant D | **§6** — §6.1 dependency law (A is **void** without B and C together); §6.2 Grant 1 (combined A+B+C, drafted); **§6.3 Grant 2** (Part D alone: its own authorization moment at/before the +24 h read, on a clean preflight reported to Julie) |
+| **RS-4** | Resolve W-3/W-4 uncertainty handling, recorder errors, failed reads, unverified trigger cases — the strict S1-X evidence standard preserved | **§3.3** (taxonomy revised: W-3e recorder-error class, W-3u unverified-trigger class) and **§3.4** (per-case handling table: unverified **never** fires S1-X; unverified = tighten + escalate + preserve; classification stays UNRESOLVED until verification or window disposition) |
+| **RS-5** | Distinguish verified S1-X stop from exhausted/unverified stop in C3 eligibility; preserve R3-V's exclusive post-exhaustion role | **§4.3** — the eligibility table: STOPPED-BY-S1X-VERIFIED vs STOPPED-BY-S1X-EXHAUSTED/UNVERIFIED (not a C3 disposition; R3-V first; `clear` never substitutes), plus the REVIVED-UNSTOPPED post-window path into C3 |
+
+**Second-ruling items (this revision):**
+
+| Item | Requirement | Answered in |
+|---|---|---|
+| **B′ (condition)** | §3.6's coverage/expiry law accepted **with condition**: a firing decision must be fully supported and recorded before expiry; completion after expiry allowed only for that valid in-window decision; incomplete evidence never authorizes firing; no retroactive coverage | **§3.6** — the condition recorded at the head of the cases and applied: decision-recording locus (the performing check records; Wren acts in session) and the completion discipline (proposed; §7 Item RM-1-c) |
+| **RM-1** | Identify an actually available, verifiable mechanism for executing the scheduled reads, logging them, detecting missed checks, and escalating failures — with operational evidence; do not claim unattended coverage without it | **§3.2 as replaced** — dedicated scheduled agent tasks (cron jobs) on Wren's runtime scheduler: the demonstrated `fp-ch2-generation-monitor` record (enabled; 20-minute cadence; 285 logged run sections; zero consecutive failures at the Nov 2, 2026 read), two-job cadence implementation + supervised tightenings, Stage-1 smoke test as job-specific proof, window-log × scheduler-run-history cross-check, escalate-only boundary, +10-minute jitter tolerance, stated run counts, limitations L-1..L-6 |
+
+**Carried corrections (prior round, unchanged):**
+R5AD-1 → §2 (sequence); R5AD-2 → §3
+(detection/observation/classification/response);
+R5AD-3 → §4 (boundaries); R5AD-4 → §6 (the §11
+replacement, now restructured by RS-3).
+
+## 0.3 Deviations — identified explicitly
+
+Carried from the prior proposal (status updated):
+
+- **DV-1 — Readiness §11 GO wording replaced in
+  full;** the Option-(i) acceptance paragraph
+  removed. **Superseded in form by DV-7**: §6 is now
+  two grants, not one four-part decision.
+- **DV-2 — Gates-v4 S1 hard dependency superseded
+  in order** (S1's event precedes C3). **SETTLED —
+  accepted by Rowan (Item C).** No longer a ruling
+  item; stated as the sequence's law.
+- **DV-3 — S1-X re-bound** to this sequence's pin
+  and window. Structure accepted in principle
+  (Item B); coverage/expiry law corrected in §3.6
+  and **ACCEPTED WITH CONDITION** (second ruling);
+  the condition is recorded and applied in §3.6,
+  extended by DV-12.
+- **DV-4 — T5/T6 wake-signature disposition**
+  (early S1 event inside the armed window; class-B
+  rollback discipline unchanged). Unchanged.
+- **DV-5 — Scheduled observation reads as a named
+  activity.** Extended by RS-2: the checks are now
+  logged, coverage-accounted, and failure-ruled
+  (§3.2), and by DV-8's post-window tail. Further
+  specified by DV-11 (RM-1): the activity is
+  performed by named scheduler jobs on an
+  operational-evidence basis.
+- **DV-6 — Two C3 

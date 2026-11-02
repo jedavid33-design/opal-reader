@@ -1,0 +1,203 @@
+piry is allowed only
+for that valid in-window decision; incomplete
+evidence never authorizes firing; no retroactive
+coverage.** The Coverage paragraph and cases below
+are that law's operative form and are unchanged by
+the ruling; the two paragraphs following the cases
+apply the condition to the §3.2 vehicle's mechanics
+(decision-recording locus; completion discipline).
+
+**Coverage.** S1-X covers a trigger when **all**
+of the following hold: (1) the trigger's verifying
+observations are made by scheduled §3.1 checks
+**performed before window expiry** (expiry = the
+closing census's scheduled time, +72 h from window
+open; the closing census itself is an in-window
+check); (2) the paired surfaces agree and every
+needed value was freshly read (§3.4 standard); (3)
+the raw values and timestamps are **written into
+the window log before expiry**; (4) the firing
+decision is **recorded in the log before expiry**.
+Coverage attaches to the **decision on complete
+in-window evidence**, not to the wall-clock moment
+the stop act's request happens to land.
+
+**Cases:**
+
+- **(i) Firing decision complete before expiry;
+  act lands after.** The `stop_chain` act (and its
+  in-bound verifies) may execute after expiry as
+  the completion of an in-window firing. The
+  authorization covers the act, not merely the
+  decision. The window record and the S1-X report
+  record both timestamps (decision; act) and the
+  straddle expressly.
+- **(ii) Evidence incomplete at expiry.** A needed
+  corroborating read is outstanding, paired
+  surfaces disagree, or a W-3u stands unresolved at
+  the closing census: the trigger is **NOT
+  verified at expiry**. The candidate is
+  dispositioned **UNRESOLVED-AT-EXPIRY** in the
+  window record, escalated to Rowan with the raw
+  values. **S1-X does not fire.** Any later stop
+  requires a fresh authorization (an at-trigger
+  S1-X grant, Rowan ruling + Julie GO) or proceeds
+  as C3's stop act if §4.3 eligibility is otherwise
+  met by Rowan's express disposition of this
+  record.
+- **(iii) Expiry mid-verification** — verification
+  begun in-window, incomplete at expiry — **is
+  case (ii)** by definition. There is no
+  "substantially verified" state.
+- **(iv) After expiry, S1-X is DEAD.** Fired or
+  unfired, spent or unspent: no carry-over to any
+  later window, package, gate, or the §3.7 tail.
+  A later chain stop needs its own authorization.
+  Renewal of observation (§3.7) never revives S1-X;
+  a new standing authorization would be a fresh
+  binding under a fresh ruling + grant.
+- **(v) An event first observed after expiry** is
+  not an S1 event and cannot be retroactively
+  covered: it is observed under the §3.7 regime,
+  classified on its values, and escalated; its
+  disposition is Rowan's (or C3's, per §4.3's
+  post-window form) — never S1-X's.
+
+**Decision-recording locus (B′ applied to the
+vehicle).** The firing decision is recorded in the
+window log **by the performing check** (a §3.2
+watch-job run or a supervised tightened check) at
+the moment of verification, carrying the trigger,
+the firing reads, and their timestamps. Recording
+the decision is a logging act inside the vehicle's
+boundary (§3.2); **the watch job performs no
+transition**. The stop act is performed **by Wren
+in session** on that recorded decision, after the
+check's immediate escalation to Julie in the Coding
+Projects chat. This is what makes B′'s "recorded
+before expiry" mechanically satisfiable: the record
+does not wait for a human to read the chat.
+
+**Completion discipline (proposed strengthening —
+Item RM-1-c, §7).** The act is performed at the
+**first in-session opportunity** after the decision
+is recorded. Immediately before the act, Wren
+re-reads the trigger surfaces fresh: if the trigger
+condition no longer stands on fresh reads, the act
+does **not** proceed on the recorded decision — the
+movement is reclassified, the decision is recorded
+as **NOT COMPLETED — CONDITION NOT CONFIRMED AT ACT
+TIME**, and the matter escalates to Rowan + Julie.
+If it stands, the act proceeds (after expiry, as
+case (i)'s completion) and the straddle — decision
+time, act time, and any delay — is reported
+expressly. **No fixed clock bar is proposed**: the
+fresh-confirmation guard, not a deadline, is the
+staleness protection, because a hard bar interacts
+with the §3.2 L-3 limitation (escalation reaches
+Julie only when she views the chat) to void
+otherwise-valid in-window decisions for
+response-time reasons alone. The residual exposure
+is stated plainly: between a recorded decision and
+the in-session act, elapsed time is **unbounded by
+this design** — bounded in effect only (§7.3 churn
+under the holds). If Rowan requires a hard
+completion bound, she may impose one by ruling;
+this proposal does not invent one.
+
+**In-flight decisions at expiry, stated plainly:**
+the only in-flight state the authorization
+recognizes is case (i) — a decision fully made and
+logged on complete evidence before expiry. Every
+other in-flight state collapses to case (ii) at
+expiry. The executor does not race the clock: a
+verification that cannot complete on performed
+checks before expiry is reported as incomplete,
+not hurried.
+
+### 3.7 Post-window ownership regime (RS-1 — no silent unowned interval)
+
+Window expiry changes the regime; it never ends
+ownership. Every post-window interval has a named
+**owner** (Wren), a named **cadence**, and a named
+**next decision**. The regime is authorized as the
+**tail of Part B** (§6.2): read-only §3.1 checks
+performed by the §3.2 **tail watch job**, logged to
+the **post-window log** (appended to the
+window record's evidence), under the same
+logging/coverage discipline as §3.2 (a tail check
+with no log entry is missed; gaps are named
+unobserved intervals in the tail log and reported
+on detection). The tail runs from the closing
+census until the **earliest** of: C3's execution
+under its own GO; a fresh Rowan disposition that
+supersedes the regime; or **14 days** after window
+close — at which point, if none of the former has
+occurred, Wren files the tail record for Rowan's
+ruling and the regime **renews only on her ruling**
+(it does not lapse into unownership: the filing
+itself is the owned act, and checks continue at
+the tail cadence pending her ruling, reported as
+such).
+
+**Branch 1 — REVIVED-UNSTOPPED / OWNED.** The
+window closed with the chain live (W-2 continuing;
+no verified trigger fired S1-X; whether or not
+`contain_drive` was applied — if applied, the
+state is DRIVE_CONTAINED under a live registration
+and the tail log says so: drive suppressed, chain
+**not** stopped). Cadence: **one logged check
+daily**, plus an immediate check on any
+Julie-visible anomaly report. Classification
+continues against the churn invariants; any
+out-of-set observation is escalated the same day
+(a verified trigger in the tail is **not** S1-X's
+to answer — S1-X is dead, §3.6 (iv) — it goes to
+Rowan + Julie for a fresh at-trigger authorization
+or is carried into C3's preflight as its
+classification input). **Next decision:** C3,
+whose stop act is the authorized stop vehicle for
+this state (§4.3, form EXPECTED-REVIVED
+(POST-WINDOW)); or a fresh chain-stop authorization
+if Rowan/Julie choose to stop sooner. The state is
+carried **by name** — REVIVED-UNSTOPPED / OWNED —
+in every subsequent report, filing, and census
+until it changes. Bounded in effect ($0, no
+dispatch, delivery fenced), unbounded in duration,
+and owned for exactly that duration.
+
+**Branch 2 — DEPLOYED-STALE / OWNED (no event).**
+The window closed W-0/W-1f-free with no wake
+observed (Grant 2 never granted, or granted and
+unexercised — Variant D's stimulus never sent), or
+stands W-1f-pending: the composed semantic is
+live, the stale (or re-based) registration sits in
+place, and a wake is still expected eventually.
+Cadence: **one logged check weekly**, plus a check
+at any known pending D (§3.5). A wake observed in
+this branch is escalated **immediately**: the S1
+event has arrived unowned by any window, C3 is
+blocked, and Rowan dispositions it (a fresh window,
+a revised S1, or a C3 package that owns the event)
+— the tail never classifies it into a disposition
+by itself. **Next decision:** Grant 2 under a
+fresh window authorization, or Rowan's revised
+disposition, or C3 sequencing as she rules. Named
+in every subsequent report as DEPLOYED-STALE /
+OWNED until it changes.
+
+**Branch 3 — STOPPED.** S1-X fired and verified,
+or its episode stands exhausted/unverified: the
+tail's object is the stop record, not a chain.
+Cadence: daily checks until C3's preflight opens
+or R3-V is authorized, verifying the registration
+stays absent and `stopConfidence` as freshly read.
+**Next decision:** §4.3's eligibility path
+(VERIFIED → C3; EXHAUSTED/UNVERIFIED → R3-V
+first). Named as STOPPED-BY-S1X-VERIFIED or
+STOPPED-BY-S1X-UNVERIFIED in every report, per
+§4.3's distinction.
+
+In every branch the invariant is the one RS-1
+states: **no silent unowned interval** — expiry,
+failure, a

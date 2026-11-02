@@ -1,0 +1,181 @@
+s a continuing state; later checks
+classify against the churn invariants).
+
+**Stage 3b — deliberate completion (Variant D, as
+conditioned).** If **no natural wake has been
+observed by the +24-hour scheduled check**, Wren
+prepares the **Part D preflight report** (§6.3):
+the window log through +24 h, the current
+classification, the recorder baseline re-read, and
+target nonexistence re-verified. Wren presents it
+to Julie. **Only if Julie then grants Grant 2** —
+a separate decision, at or before the +24 h point
+as §6.3 defines — may the executor send the
+original S1 stimulus: exactly one `RequestPause`
+command, fresh `command_id` generated and recorded
+**before** sending, targeting the reserved
+nonexistent job `alarm-wake-probe:nonexistent`.
+Expected response: outcome `rejected`, reason
+`job_not_found`. **No re-send under any
+circumstance** — a timeout or ambiguous response is
+a STOP-and-classify event. If the preflight is not
+clean, Grant 2 may not be requested or granted
+until the anomaly is dispositioned (§6.3). If
+Julie does not grant Grant 2, no stimulus is sent
+and the window runs on natural traffic to close —
+the post-window regime of §3.7 (no-event branch)
+then owns the tail. A no-revival outcome is
+reported **only** as "**no observed revival within
+the tested window, subject to recorder
+limitations**" — the mandated wording, unchanged.
+
+### Stage 4 — Window close, S1 disposition, post-window regime
+
+At +72 hours the executor performs the **closing
+census** (the §3.1 read set, in full) and files the
+**window record**: every scheduled check (performed,
+missed, failed — §3.2 accounting), the coverage
+table (verified vs unobserved intervals), every
+classification, the event's disposition in exactly
+one of the §4.3 forms (or the named non-disposition
+that blocks C3), the S1-X state (fired / expired /
+spent — §3.6), the Layer-1 state (applied / not —
+`contain_drive`, if applied, bounds drive passes
+only and has **not** stopped the chain), the Part D
+state (granted+used / granted+unexercised-lapsed /
+never granted / never requested), and the
+ends-HELD certification. **S1-X expires at window
+close, fired or unfired (§3.6) — after expiry it is
+DEAD.** Rowan reviews the window record; the S1
+scope is then CLOSED (event dispositioned or
+expressly undispositioned), and **ownership passes
+to the §3.7 post-window regime without a gap**: the
+regime's first tail check is scheduled at the
+closing census itself.
+
+### Stage 5 — C3 (separate package revision, separate GO)
+
+C3's readiness package is revised to re-base its
+census to the composed build and to the §4.3
+eligibility state, is reviewed by Rowan, and is
+executed only under its own Julie GO. C3's
+preconditions are the two-part dependency as
+refined by RS-5 (§4.3): R5a-D CLOSED **and** a valid
+S1 disposition in one of the eligible forms. C3 is
+**not** authorized by anything in this proposal
+(§6.4).
+
+---
+
+## 3. R5AD-2 — First-wake detection, observation, classification, response (revised per Items B, D, E and RS-1, RS-2, RS-4)
+
+### 3.1 Detection surfaces (the scheduled read set) — unchanged
+
+Every scheduled check performs the same read set.
+All are GET surfaces or external read-backs; no
+read in the set sends a command, and no GET path
+calls `wake()` (source-verified; the assessment's
+standing finding). Every element of the §7.3
+pre-classified set and every S1-X trigger has at
+least one observing surface; load-bearing facts
+have two.
+
+| # | Read | What it detects |
+|---|---|---|
+| 1 | `GET /v2/d6-diagnostics` with `drive=1` (operator) | **Primary wake surface.** Recorder: `tableState`, `drivePasses` rows (stage, `driveOnce` invoked?, outcomes, recorded error, `armed_after`), `recorderHealth`. Alarm: live `getAlarm()` (`armedAt`), `pendingSchedule`, `pendingWatchdog` |
+| 2 | `GET /v2/d6-containment` (operator) | Containment projection: state, absence, verified flag, `stopConfidence`, stop-record/episode fields — second surface for containment facts; reports an S1-X firing's result |
+| 3 | `GET /v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6` | Preserved plan: state, totals, idx-26 entry disposition/`executionState`, grants projection, `phaseAccounting` (phase read here AND at #5) |
+| 4 | `GET /v2/jobs/plan:19cad189fab54b9c804a74a6:seg` | Preserved job: state, revision, **grants [] → [the one grant]** — the §7.3 issuance marker |
+| 5 | `GET /v2/generation/capabilities` | Phase block (second phase surface), standard admitted / Batch `batch_not_armed`, registry binding |
+| 6 | `GET /v2/d6-quota-reconcile` (operator) | Reconcile `ok`, drift, sole straddler; derived totals incl. **reserved 0 → 12**; per-PT-day dispatched (must stay 0) |
+| 7 | `GET /v2/conflicts` | Four-row `schedule_dead` baseline, exact-match (trigger T4 surface) |
+| 8 | `GET /v2/sync/changes?family=bindings&sinceSeq=1841` | 0 changes expected; any binding change is outside the §7.3 set |
+| 9 | cf-api queue read-back, `opalreader-generation-v2` | `delivery_paused: true`, exactly 1 consumer — the delivery fence, verified externally |
+| 10 | `GET /health` | Build stamp unchanged, generation `halted`, coordinator `armed` |
+
+The **window-open baseline** is the R5a-D closing
+census, incorporated by reference as the window
+record's first entry (values as in the prior
+proposal: `armedAt` 1793562576104 or its
+census-observed value, recorder missing/empty, plan
+`active` {1,0,0,0,0} entry `pending`, job `queued`
+rev 1 grants [], reserved 0, dispatched 0, phase
+frozen, conflicts exact, watermarks 18/1841,
+containment NORMAL/absent/verified).
+
+### 3.2 Monitoring mechanics — the vehicle (RM-1) and how checks are performed and verified (RS-2; Item D)
+
+Rowan's Item D required the monitoring to be
+**enforceable** (coverage defined, missed checks
+handled, post-window disposition named — §3.7), and
+the RS-2 revision supplied those controls. Her
+second sequencing ruling then held the **vehicle**
+not established: the REVISED text assumed "a local
+schedule automatically wakes Wren for unattended
+checks" without demonstrating the mechanism. This
+section is corrected under **RM-1**: it names the
+actual mechanism, cites its observed operational
+record, defines its lifecycle and its boundary, and
+states its limitations without papering over them.
+The RS-2 controls (logging rule, coverage
+accounting, ladder, WINDOW-FAILED) are preserved
+and now ride on the named vehicle.
+
+**A clarification on "agents," stated respectfully
+and precisely.** The vehicle is a **scheduled agent
+task (a cron job) on Wren's own runtime** — the
+same scheduler infrastructure that runs Julie's
+production monitors today (evidence below). It
+involves neither Rowan, nor the board, nor any
+Roundtable agent workflow: Rowan's "no longer uses
+agents" point concerns the **review relay** (the
+Dropbox rotation + Julie's relay), and this vehicle
+does not touch that relay. The job reports to Julie
+in the Coding Projects chat and writes the window
+log; Rowan encounters the vehicle only through the
+window record she reviews afterward, exactly as she
+reviews the fp monitor's log today.
+
+**The vehicle.** One or more **dedicated scheduled
+agent tasks** created under the Stage-1
+authorization (Part B names their creation, §6.2),
+running on the runtime scheduler, with delivery to
+the Coding Projects chat and owner
+`goal:opal-roundtable` (the standing owner of this
+case's schedules). Working names:
+`phaseb-s1-window-watch` (hourly phase),
+`phaseb-s1-window-watch-6h` (6-hourly phase), and
+`phaseb-s1-tail-watch` (§3.7 tail, created at Stage
+4). Each job's body carries: the exact §3.1 read
+set per check; the window-log path and append
+discipline (below); the §3.3 classification
+taxonomy and §3.4 response rules **for observation
+and escalation only**; the gap-detection
+cross-check (below); the escalation deliveries to
+the Coding Projects chat on the §3.4/§3.2 triggers;
+and the hard limits — **read-only GETs only; no
+production mutation of any kind; the job never
+performs a containment transition and never fires
+S1-X** (the boundary, below). Scheduling a job is a
+local runtime act with no production effect.
+
+**Operational evidence (observed Nov 2, 2026; not
+asserted).** The demonstrated instance is job
+`fp-ch2-generation-monitor` (interval 20 minutes,
+timezone America/New_York, owner
+`goal:opal-roundtable`), running unattended since
+Oct 29, 2026:
+
+- Scheduler status read Nov 2, 2026 (~5:29 p.m.
+  ET): **enabled**; last completed run **17:07:55
+  EST, status "succeeded"**; next run scheduled;
+  **zero consecutive failures** at read time.
+- Its recent run records show the exact 20-minute
+  cadence — runs scheduled **15:46, 16:06, 16:26,
+  16:46, 17:06 EST**, each with trigger_reason
+  "scheduled", each status "succeeded" — and a
+  further scheduled run in flight at the read.
+- Its run log
+  (`~/workspace/goals/opal-roundtable/hidden_files/fp-ch2-monitor-log.md`)
+  stood at the same read at **3,222 lines carrying
+  285 run s

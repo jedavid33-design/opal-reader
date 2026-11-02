@@ -1,0 +1,202 @@
+mplete (the fp
+monitor's runs are observed at ~1–2 minutes). The
+gap bounds below are therefore applied to
+actual-to-actual gaps with a **+10-minute
+tolerance** (≥ the documented early dispatch plus
+observed run durations, with margin): a gap breaches
+its bound only if it exceeds **2× the phase interval
++ 10 minutes**. Nominal-point matching uses the same
+±10-minute tolerance. Jitter inside tolerance is not
+a missed check and is never reported as one.
+
+**Missed-check detection and the escalation
+ladder.** A missed check is **detected at the next
+performed check** — ordinarily the next scheduled
+run — by the log gap against the nominal points,
+resolved into its shape by the cross-check above.
+On detection, the performing check (a) logs the gap
+as an unobserved interval with its shape, (b)
+performs the current check in full, and (c) applies
+the ladder:
+
+- **One missed/failed check, gap within bound**
+  (bound = 2× the scheduled interval for that phase
+  + the 10-minute tolerance: >2 h 10 min in the
+  hourly phase, >12 h 10 min in the 6-hourly phase,
+  >30 min in a tightened phase): logged and reported
+  to Julie at the next report point; cadence
+  continues; coverage qualification per above.
+- **Escalation bound breached** — two consecutive
+  missed/failed checks, **or** any single gap
+  exceeding its bound, **or** reads unavailable
+  across two consecutive performed checks: the
+  performing check **escalates to Julie immediately**
+  (delivery to the Coding Projects chat) **and the
+  matter is filed for Rowan**, and Wren declares the
+  window **HELD** (below) without waiting for
+  instruction.
+
+**The stop/hold decision rule — WINDOW-FAILED.**
+Wren **must** declare the window WINDOW-FAILED when
+the escalation bound is breached and coverage
+cannot be re-established by the next scheduled
+check, or when performed checks show the §3.1 set
+persistently unreadable (two consecutive failed
+checks on the same surface). The declaration is
+Wren's duty under this rule, not a discretionary
+judgment; it is written into the window log by the
+declaring run (or in session, if detected there) and
+delivered immediately; Julie may also declare it at
+any time, and Rowan may rule it on the record.
+Effects of WINDOW-FAILED:
+
+- The window's observation posture is **hold**: no
+  classification is upgraded on the strength of
+  failed coverage; the event, if any, stands
+  **undispositioned**.
+- **C3 is blocked** (§4.3): WINDOW-FAILED is not a
+  disposition.
+- S1-X is **not** extended by the failure: its
+  binding is time-based (§3.6) and expires at window
+  close regardless. During unobserved intervals S1-X
+  is in practice blind (it fires only on a verified
+  observation by a performed check, §3.4) — named
+  here so no one mistakes an armed S1-X for coverage.
+- Both window jobs are **disabled at the
+  declaration** (lifecycle, above); no tail job is
+  created.
+- Resumption (a renewed window, a re-based
+  disposition, or any onward step) requires
+  **Rowan's ruling + a fresh Julie authorization**.
+  Nothing in Part B self-heals a failed window.
+
+**Boundary — the vehicle never acts.** The watch
+jobs **observe, log, classify, and escalate only**.
+A watch job never performs a containment transition
+(no `contain_drive`, no `stop_chain`), never sends
+a command, and never fires S1-X. If a performed
+check verifies a T1–T4 trigger, the check records
+the firing decision in the window log (§3.6) and
+escalates immediately to Julie in the Coding
+Projects chat; **the S1-X act itself is performed by
+Wren in session** on that recorded decision, under
+§3.6's completion discipline. Layer-1 (B2), if
+granted, is likewise performed in session on the
+logged classification, never by a watch job. The
+firing decision and any transition are
+human-reviewable acts on a written record; the
+vehicle's function is to make that record complete
+and timely — not to act on it.
+
+**Cost (visible, per RM-1).** Each scheduled run is
+one agent task and consumes work allowance. Expected
+counts for the 72-hour design: **1 smoke run**;
+**≈22 scheduled window checks** (hourly phase ≈12,
+including the handoff run; 6-hourly phase ≈10,
+including the closing census). Supervised tightened
+and stimulus-offset checks are in-session work, not
+scheduler runs. Tail: Branch 1 daily (≤14 runs per
+14-day tail period), Branch 2 weekly (≈2 per
+period), Branch 3 daily until C3's preflight opens
+or R3-V is authorized. A materially higher count
+(e.g., repeated handoff failures) is reported, not
+absorbed silently.
+
+**Limitations (stated, not papered over).**
+
+- **L-1 — Runs can fail or be delayed.** A runtime
+  restart/replacement or a scheduler fault can kill
+  or delay a scheduled run. The design **detects**
+  this (log gaps + the run-history cross-check) but
+  cannot **prevent** it; coverage claims span
+  verified intervals only. Detection happens at the
+  next performed check — late in a 6-hourly phase, a
+  failure may go undetected for hours. That latency
+  is inherent to the cadence and is named, not
+  smoothed over.
+- **L-2 — Dispatch jitter.** Cadence is nominal;
+  coverage is actual (tolerance above). The design
+  does not claim minute-exact scheduling.
+- **L-3 — Escalation reaches Julie only when she
+  views the chat.** Escalation delivery lands in the
+  Coding Projects chat; there is **no paging
+  guarantee**, and an overnight escalation may sit
+  unread for hours. Consequence, stated plainly:
+  **S1-X response latency after a recorded firing
+  decision is not bounded by this design.** §3.6
+  imposes a completion discipline (first in-session
+  opportunity + a fresh-confirmation guard), and the
+  exposure during the interval is bounded **in
+  effect** (§7.3 churn under the holds — $0, no
+  dispatch, delivery fenced) but **not in time**. If
+  Rowan requires a hard completion bound, it must be
+  imposed by ruling (§7, Item RM-1-c); this proposal
+  does not invent one, and §3.6 cross-references
+  this limitation where the B′ condition is applied.
+- **L-4 — Allowance contention.** Each run consumes
+  work allowance (counts above). A window coinciding
+  with heavy other work could starve a run; a starved
+  run presents as a failed/missed run and is handled
+  by the ladder — detection, not prevention, again.
+- **L-5 — Reads can fail.** The scheduler proves
+  execution and logging of checks; it does not make
+  production reads infallible. A run whose reads fail
+  is a FAILED check under the coverage law; two
+  consecutive failures on a surface feed the
+  WINDOW-FAILED rule.
+- **L-6 — Supervised portions depend on attended
+  availability.** Tightened cadences, stimulus-offset
+  reads, and Stage-4 record work are performed in
+  session. Where a supervised check is not performed,
+  the log shows the gap and coverage accounting
+  governs; a supervised check is never back-filled
+  from the base cadence after the fact.
+
+**Reporting duty (unchanged in substance).** Wren
+reports to Julie **immediately** on any
+classification other than W-0, on any missed/failed
+check that breaches a bound, on any W-1 → W-2/W-3/
+W-4 transition, and on any declaration under this
+section. W-0 checks are silent — logged, not
+reported; under the vehicle, a W-0 run's chat
+delivery states no escalation.
+
+### 3.3 Classification taxonomy (RS-4: uncertainty classes resolved)
+
+Every performed check is classified into exactly
+one class. Paired surfaces must agree; a value that
+cannot be freshly read is not evidence (§3.2's
+failed-check rule governs check-level read
+failures; this taxonomy classifies what completed
+reads show).
+
+- **W-0 — NO EVENT.** Every read at baseline.
+  *Continue cadence.* (Span claims per §3.2
+  coverage accounting.)
+- **W-1 — WAKE OBSERVED, PASS PENDING.** `armedAt`
+  changed to a new value V (V **is** D, made
+  observable by the wake), no pass yet observed.
+  **W-1p** — V past-due or near: tightened cadence.
+  **W-1f** — V in the future (B3 re-base): recorded
+  with V; not a completed event (§3.5).
+- **W-2 — EXPECTED S1 EVENT.** A drive pass
+  observed (new recorder row, pass ran) **and**
+  every marker exactly inside the §7.3 set (the one
+  grant or its lease-expired void state within the
+  churn invariants; occurrence `granted` or its
+  §7.3-consistent value; job `generating` rev ≥ 2;
+  reserved ∈ {0, 12}; dispatched 0; attempts 0;
+  phase frozen **on both surfaces**; conflicts
+  exact; watermarks frozen; parked exact;
+  containment NORMAL; and **no recorder row
+  carrying an unexplained error** — see W-3e).
+  Later checks classify against the **churn
+  baseline** (the §7.3 invariants).
+- **W-3e — RECORDER ERROR ROW (RS-4).** A new
+  recorder row carries a non-null recorded error,
+  or its stage shows the pass died before
+  `driveOnce` completed, or `recorderHealth`
+  reports a recorder failure. An error-stage row is
+  a **finding requiring classification, never
+  absorbed into W-2** on the strength of matching
+  state alone. Handling (�

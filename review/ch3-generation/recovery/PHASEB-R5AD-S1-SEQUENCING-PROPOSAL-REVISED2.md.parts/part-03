@@ -1,0 +1,192 @@
+ections**: each run performs production
+  reads and appends a timestamped section — the
+  same per-check append discipline this section
+  requires of the window log.
+- Corroboration on the same scheduler: Julie's
+  daily sports monitors (Astros, PWHL, Vegas Golden
+  Knights, WPBL — daily), the twice-weekly
+  book-release watch, the weekly free-tier check,
+  and other standing jobs all run unattended on
+  this mechanism. Scheduled agent execution with
+  logging is routine, observed operation on this
+  runtime — not a new capability being claimed for
+  the occasion.
+
+What the evidence does **not** show: this window
+job, which does not exist yet. Family evidence
+establishes the mechanism; the job itself is proven
+by the Stage-1 smoke test (below), which is a
+precondition to the window — not a formality after
+it.
+
+**Cadence implementation.** The §3.2 cadence table
+(two base cadences plus event-driven tightenings)
+is implemented as **two jobs plus supervised
+checks**:
+
+| Interval / condition | Cadence | Performed by |
+|---|---|---|
+| Open → +2 h | The gate's V-sets (≈ +10, ≈ +25 min) count as the window's first checks; then +1 h, +2 h | V-sets: the Stage-2 executor in session; +1 h/+2 h: the hourly job |
+| +2 h → +12 h | Hourly | Hourly job |
+| +12 h → +72 h | Every 6 h | 6-hourly job (handoff, below) |
+| On W-1p | Every 10 min until a pass is observed, the value resolves as future (→ W-1f), or 2 h elapse without a pass (→ W-4) | **Supervised** in-session checks by Wren |
+| On W-3u (unverified trigger candidate) | Every 10 min until verified, resolved, or window disposition (§3.4) | **Supervised** in-session checks by Wren |
+| On Variant-D stimulus dispatch (Grant 2) | ≈ +2, +12, +37 min from dispatch, then rejoin the window cadence | The executor in session (necessarily present for the stimulus act) |
+| +72 h | **Closing census** (full §3.1 set) + window record | The 6-hourly job's final run (census); Stage 4 files the record in session |
+
+Two jobs rather than one, justified briefly: a
+scheduler interval is fixed per job, the window has
+exactly two base cadences, and a single
+10-minute-interval job computing phase in its body
+would need ~432 dispatches to yield ~22 checks —
+allowance spent on no-ops and a run history too
+noisy to cross-check. The tightened cadences are
+supervised because the conditions that trigger them
+(W-1p, W-3u) are themselves reported to Julie
+immediately (§3.4): a tightened phase coincides
+with an attended, escalated state by construction,
+so its 10-minute checks are performed by Wren in
+session and logged in the same window log with the
+performer named ("supervised"). The scheduled base
+cadence continues underneath throughout. Phase is
+computed by each run from the **recorded window-open
+timestamp** (written into the window log at Stage
+2): nominal points derive from window open + the
+table; performed checks are logged with actual
+times; coverage and gaps are measured
+actual-to-actual (below), so scheduler phase offset
+is immaterial to the accounting.
+
+**Handoff (+12 h).** The first hourly-job run at
+elapsed ≥ 12 h performs its check in full, then
+enables the 6-hourly job, verifies it enabled, then
+disables the hourly job, and logs **HANDOFF** with
+all three outcomes. If any handoff step fails, the
+hourly job remains enabled and hourly coverage
+continues; the failure is logged and reported, and
+the next hourly run retries. A failed handoff
+cannot silently create a gap: coverage continues at
+the denser cadence until a handoff succeeds.
+
+**Smoke test (job-specific operational proof).**
+In Stage 1 — after both window jobs are created
+(the 6-hourly job created disabled), before Stage 2
+may begin — the hourly job is enabled and run
+**once manually via the scheduler's run-now
+facility**, against the pre-window state. The run
+performs the full §3.1 set and appends a **SMOKE**
+entry to the window log (labeled pre-window; not a
+window check; excluded from coverage accounting).
+Wren then verifies **both** records — the SMOKE log
+entry and the scheduler's run record (status
+"succeeded") — and reports both to Julie, filed for
+Rowan with the Stage-1 record. **If the smoke test
+fails on either record, Part B's vehicle is
+unproven, Stage 2 does not begin** (§6.1: (A)
+cannot execute without (B) established), and the
+failure is reported and filed. The 6-hourly job and
+the tail job are proven the same way by their first
+performed checks (the handoff run; the tail job's
+first run at Stage 4), each with the two-record
+verification, reported in the window record. Any
+hourly-job run that fires in the Stage-1 → Stage-2
+interval before window open logs a **PRE-WINDOW**
+entry, performs no classification, and is excluded
+from coverage accounting; Stage 2 follows the smoke
+test promptly, so zero or one such entry is
+expected, and more than one is reported.
+
+**Job lifecycle.** Stage 1: both window jobs
+created (delivery: the Coding Projects chat; the
+creation results' delivery and next-run fields
+verified in session); hourly job smoke-tested as
+above and left enabled; 6-hourly job left disabled.
+Window open: the hourly job is already enabled; the
+window-open timestamp is recorded at the upload's
+D2 read-back (Stage 2). +12 h: handoff (above).
+Window close: the closing-census run logs
+**WINDOW-CLOSE** and disables the 6-hourly job;
+Stage 4 then **removes both window jobs** (removal
+recorded in the window record) and creates the tail
+job, whose first check is performed at creation via
+run-now (its smoke proof; §3.7's first tail check
+at the closing census itself). **WINDOW-FAILED:**
+the declaring run disables both window jobs at the
+declaration; **no tail job is created** (the §3.7
+regime arises from a window close, not a failure);
+removals are recorded when the failure is reported
+and filed. Tail job: removed at the §3.7 tail exit
+(C3's execution, Rowan's superseding disposition,
+or the ruling that follows the 14-day tail record),
+removal recorded in the tail record.
+
+**Per-check logging (the coverage rule).** Every
+check, at execution time, appends one entry to the
+**window log**: nominal (scheduled) time, actual
+time, performer (job id, or "supervised" with the
+session named), the full raw §3.1 values, the
+classification, and any report made. The window log
+is evidence, filed with the window record. **A
+check that left no log entry is a MISSED check by
+definition** — performance is the log, not the
+intention. A check whose entry exists but whose
+§3.1 set is incomplete (any read errored or
+unavailable) is a **FAILED check**, logged as failed
+with the failing surfaces named; a failed check is
+**not a negative observation** (it observed nothing
+about those surfaces) and counts as a missed check
+for gap purposes, with the distinction recorded.
+
+**Two-record cross-check (gap detection).** The
+window log is not the only record: the scheduler
+keeps its own **run history** per job (scheduled
+times, statuses, trigger reasons), independently
+queryable at any time. Each scheduled run, before
+performing its own check, reads the window-log tail
+**and** its job's run history, and reconciles them.
+A scheduled point with no performed check therefore
+resolves into a named shape:
+
+- **Run record "succeeded", no log entry** —
+  **LOG-FAILURE**: the run executed but its logging
+  step did not commit; the check's results are
+  unrecoverable. Counts as a missed check; the
+  discrepancy itself is logged by the detecting run
+  and reported.
+- **No run record for an elapsed nominal point** —
+  **SCHEDULER-GAP**: the job did not run at all.
+  Named as such; implicates the scheduler/runtime,
+  not the check procedure.
+- **Run record "failed"** — a **FAILED run**,
+  treated as a failed check (above).
+
+Supervised checks have no run record; their
+evidence is the log entry alone, with the performer
+named — stated so the asymmetry is on the record,
+not discovered later.
+
+**Coverage accounting.** An interval between two
+consecutive completed logged checks is a **VERIFIED
+interval**: classifications may span it. Any span
+containing a missed or failed check is an
+**UNOBSERVED interval**, named as such in the
+window record with its bounds. Consequences:
+
+- **W-0 ("no event") may be claimed only over
+  verified intervals.** A window whose close is
+  otherwise W-0 but which contains unobserved
+  intervals closes with the W-0 claim **qualified to
+  the verified intervals**, the gaps named; the
+  NEGATIVE disposition (§4.3) is unavailable on
+  gapped coverage unless Rowan dispositions the
+  gaps expressly.
+- An event whose first evidence appears at the
+  check ending an unobserved interval is classified
+  on its observed values, with its **arrival time
+  recorded as unknown-within the gap**.
+
+**Dispatch jitter and the gap tolerance.** Scheduler
+dispatch is not exact: quarter-hour-aligned
+schedules may be dispatched **up to ~5 minutes
+early** (documented scheduler behavior, to spread
+load), and a run takes time to co
