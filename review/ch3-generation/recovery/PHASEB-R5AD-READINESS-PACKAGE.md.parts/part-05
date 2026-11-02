@@ -1,0 +1,182 @@
+containment-v4/tests/containment-battery.test.mjs`, `2b2befa5…`, 67,037 B) | v4 composed | **42/42 pass** | 0 | `a3b5e310720146e70a245e8a097b107abbf64fef64a252c05883b0dba595421f` (`containment-v4/logs/containment-v4-corrections-composed.log`) |
+| Containment battery v4 (41 tests, pre-CT14d file) | v4 composed | **41/41 pass** | 0 | `976778a7773c0c8cd6aa665510e6a0f89d0af51c31eab9203b120364a86e8b0d` (`containment-v4/logs/containment-v4-composed.log`) |
+| R5a suite (`suites/r5a-battery.test.mjs`, unmodified) | v4 composed | **23/23 pass** | 0 | `0165246f1faa42bd182da4be0f7c542834e2d93eb7890d297d565bba0712e8ae` (`suites-v4/logs/r5a-v4-composed.log`) |
+| P2 parameterized regression (`suites/p2-battery.test.mjs`, unmodified) | v4 composed | **32/32 pass** | 0 | `81ec122b4e9608c23ccbb9580325ab73c8efe5ba69ee0ebae489d15cd2b32e55` (`suites-v4/logs/p2-v4-composed.log`) |
+
+The 42-test containment run supersedes the 41-test run
+on the same tree (CT14d is the only difference; no
+existing assertion was modified, deleted, or loosened
+in either round). The R5a suite's coverage is the
+semantic's offline evidence: the condition and
+threshold behavior (R5A-T5 both branches), the memo
+bounds (R5A-T2/T4: exactly 1 registration per
+operation; the strictly-earlier corrective second),
+the adversarial-wake churn bound (R5A-T7: 10 wakes →
+10 value-identical registrations, zero state growth),
+self-termination on first delivery (R5A-T6), and
+quiescent silence (R5A-T9: reads never wake). Harness
+caveats stand: the harness invokes `alarm()` directly
+and cannot prove real platform delivery, platform
+retry behavior, platform storage-effect ordering, or
+real-DO SQLite behavior beyond its mirrored `.one()`
+throw semantics. In particular the battery proves the
+condition's behavior **when a wake is handled by the
+new code**; it says nothing about per-instance
+adoption (§7 preamble, §10 item RD-R2).
+
+**Gate-time re-run requirement.** Before any upload, a
+R5a-D execution re-runs on the **gate-assembled tree**
+(the §3 fresh assembly, not the scratch composed
+tree), against the composed fixtures:
+
+1. the containment battery (42 tests incl. CT14d);
+2. the R5a suite (23 tests);
+3. the P2 parameterized regression (32 tests).
+
+All three must pass in complete runs with exit code 0;
+the logs are pinned with the build pin (§3 item 3) and
+cited in the execution record. Why: the pinned logs
+above are evidence about the pinned scratch tree; the
+gate uploads a fresh assembly, and the assembly that
+ships is the assembly that was tested (the standing
+P2 B3 / C1 precedent). Any divergence = STOP before
+upload (§9).
+
+## 9. STOP conditions
+
+Any one of the following stops the attempt; the GO is
+consumed; no retry without a fresh GO:
+
+- any §4 census item deviates from its hard
+  expectation — including `armedAt` differing at
+  census (a wake or pass has already occurred; classify
+  first, deploy nothing);
+- assembly mismatch: the gate-assembled tree differs
+  from §2 in any part, count, or hash;
+- any §8 battery re-run failure or divergence from the
+  standing results;
+- envelope/metadata drift vs the fresh live read
+  beyond the two documented projection artifacts
+  (§3 item 5);
+- an ambiguous upload response — no re-upload is made
+  until a read-back classifies the first attempt;
+- any §5 trigger (T1–T6) post-upload → STOP, then the
+  §5.1 classification decides the response: class A →
+  rollback evaluation inside the same GO, gated on the
+  §5.2 safety conditions; class B (including the
+  T5/T6 wake signature, per §5.1's Ruling Item 1
+  refinement) → HOLD, preserve evidence, escalate —
+  no rollback inside this GO; a failed or mismatched
+  class A rollback → STOP, hold, report;
+- any movement in the §7 V7 no-movement set;
+- observability unrestorable within the §5/§6 budget;
+- any wake signature (T5/T6 evidence of a fired wake)
+  observed at any point in the gate — the gate does
+  not continue past the arrival of the §1.4 consequence
+  as if nothing had happened, in any Ruling Item 1
+  branch.
+
+## 10. Unresolved risks bearing on R5a-D
+
+From the corrected register
+(`PHASEB-UNRESOLVED-RISK-REGISTER-REVISED.md`, pin
+`621535f0…`): **14 of 15 entries remain open** (R-14
+resolved by Rowan's R1 acceptance). The entries that
+bear on R5a-D, at their corrected strength:
+
+- **R-03 — Retry supersession is bounded, not
+  eliminated.** A pending platform retry is not a
+  schedule row; D cannot account for it, and a
+  registration fired by the past-due disjunct could in
+  principle supersede a retry that is still pending.
+  The threshold safeguard bounds this to registrations
+  stale beyond 3,600,000 ms; the documented inputs
+  (≤6 retries, exponential backoff from 2 s, multiplier
+  UNSPECIFIED) give an assumed envelope of 126 s, and
+  the live registration is ~26 hours stale — so in
+  **this** incident the supersession window is not
+  credibly occupied. The residual is the
+  unspecified-platform-behavior tail, and permanence
+  (§1.1) means the interaction is a permanent property
+  of the system. **Permanent production safety is NOT
+  claimed** (spec §6).
+- **R-05 — The 3,600,000 ms threshold is a provisional
+  candidate value only**, never a proven upper bound
+  on platform retries. In this incident it is not
+  load-bearing for *whether* the disjunct fires
+  (staleness exceeds it ~26×); it is load-bearing for
+  the permanent semantics' behavior in future, younger
+  incidents.
+- **R-04 — No traffic-independent rate bound exists.**
+  Registrations per unit time ≤ wake operations per
+  unit time; the memo bounds each operation to ≤1
+  (≤2 corrective). §1.3 sharpens what "wake traffic"
+  now includes: ordinary client position sync — the
+  rate is bounded by Julie's app use and other audited
+  command/report traffic, not by an operator. Each
+  wake's registration is value-identical (= D),
+  stateless, and self-terminating on first delivery
+  (battery R5A-T7/T6); a durable counter was the
+  declined alternative (spec §5).
+- **R-11 — D was unobservable pre-R5a; it remains
+  unobservable pre-wake.** No surface reads schedule
+  rows. The first wake retrospectively reveals D (the
+  post-wake `armedAt` IS the registered value); until
+  then the B1/B2/B3 branch is unresolved (Ruling 2's
+  remainder family), and §1.4 carries all three.
+- **R-12 — `getAlarm()` semantics after retry
+  exhaustion are UNSPECIFIED.** The live `armedAt`
+  sits inside that unspecified region; every gate
+  value here is a re-read expectation, never an
+  assumption, and this gate neither relies on nor
+  tests delivery.
+- **R-02 — Storage-effect ordering is unspecified.**
+  Detection of any divergence happens only at the next
+  successful dual read that actually occurs; no surface
+  reads on a schedule. This is why §7 treats
+  read-backs, not ordering, as ground truth — and why
+  §1.4's detection statement is as weak as it is.
+- **R-01 — Cross-invocation serialization (A-3) is
+  assumed, not documented.** The memo is per-operation
+  in-memory state threaded through one operation's
+  awaits; interleavings across concurrent invocations
+  lean on A-3. Harness evidence is harness-strength.
+- **R-06 — Recorder dual-failure blind spot.** If a
+  drive pass and its recorder write both fail, the
+  pass is invisible on shipped surfaces. After a
+  revival (§1.4), §7.3-set state checks bound what an
+  invisible pass could have done; they do not
+  eliminate the blindness.
+- **R-09 — The attempt-3 stall's causation is
+  unproven (H1/H4).** The recovery program proceeds
+  cause-unproven; R5a-D does not depend on the cause
+  and does not advance it.
+- **R-13 — The lying-read residual.** A storage read
+  that successfully returns a WRONG NORMAL cannot be
+  detected by construction; the two containment
+  surfaces read the SAME store, so their agreement
+  corroborates nothing. §4/§7 cross-checks against
+  facts containment does not control bound this at
+  census and postflight time only.
+
+**R5a-D-specific risks:**
+
+- **RD-R1 — The first-wake consequence (§1.4) and its
+  scope ownership (§1.5, Ruling Item 1).** The
+  dominant risk of this gate is not the upload; it is
+  that the deployed semantic converts ordinary future
+  traffic into the revival stimulus, on an uncontrolled
+  schedule, with incidental detection, and with
+  duration bounded only by a later gate's stop act.
+  The consequence set itself is bounded and
+  pre-classified (§7.3 set; $0; no dispatch); the
+  *governance* of its arrival is what is unresolved.
+- **RD-R2 — Runtime adoption is UNRESOLVED, with a
+  semantic edge.** Inherited from C1-R2: script
+  deployment verification does not establish that every
+  existing DO instance has adopted the new code, and
+  no check observes per-instance adoption. Here it
+  cuts deeper than in C1: the deployed artifact is a
+  *behavioral condition*, and it takes effect per
+  instance as instances adopt. A wake handled by a
+  not-yet-adopted instance evaluates the

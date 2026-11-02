@@ -1,0 +1,199 @@
+he same
+  finding is class B in full: HOLD, preserve evidence,
+  escalate, and the gate's outcome is for Rowan to
+  classify. In no branch does the gate roll back,
+  transition containment, or otherwise respond beyond
+  STOP + record + HOLD.
+
+### 5.2 When a rollback is safe (class A only)
+
+A class A rollback upload may fire only when ALL of
+the following are verified from fresh reads first:
+
+1. **Ends HELD verified** — GENERATION_HALT `"1"` and
+   queue `delivery_paused: true` on fresh read-backs.
+2. **Nothing in flight to strand** — the §7 V7
+   no-movement set at its census values (no live grant,
+   no dispatch, no command or generation in progress),
+   and no containment transition performed (none can
+   occur in this gate — budget 0). **If a wake has
+   fired and a grant is live (the §1.4 set), this
+   condition FAILS by construction**: the gate is then
+   in the §5.1 wake-signature branch, not in rollback
+   evaluation, until Rowan rules.
+3. **Rollback target verified** — the preserved
+   C1-build parts (§3 item 6) re-hash byte-identical
+   to the C1 closing stamped manifest immediately
+   before the rollback upload.
+4. **Evidence captured first** — the failing reads, the
+   upload response, and the D2 read-back are recorded
+   before the rollback upload is sent; rollback never
+   erases the record of the defect it answers.
+5. **No class B finding open** — if any unexplained or
+   wake-signature movement is under classification, the
+   gate is in a class B HOLD and no class A rollback
+   proceeds until Rowan rules on the class B finding.
+
+If any condition cannot be verified, the rollback does
+not fire: the gate stays STOPPED and HELD and the
+finding is escalated — the safety conditions are part
+of the permission, not a formality after it.
+
+**Rollback shape and limits (class A only, §5.1/§5.2).**
+Rollback = ONE upload of the preserved byte-identical
+C1-build parts (build `27b2b3a9…`) + D2-style read-back
++ ≤1 conditional observability PATCH, then the §7
+verification set re-run against the restored build.
+Rollback removes the R5a semantic from the deployed
+script; containment code remains (C1's state). It
+cannot un-create containment tables (none are created
+in this gate), un-register an alarm a wake has already
+re-registered (§3 item 6), un-issue a grant, or stop a
+revived chain. If rollback itself fails or its
+read-back mismatches, the executor STOPs, holds, and
+reports — no second rollback attempt inside the same
+GO. **Any rollback after the gate closes needs its own
+authorization.** Ends HELD in every path, including
+the rollback path.
+
+## 6. Observability checks
+
+Standing deploy law (every Worker code upload): an
+upload can silently reset script-settings observability
+to null; it must be checked and, if reset, re-applied —
+and the settings PATCH must not touch code.
+
+- **Pre-upload:** census item 2 records observability
+  enabled + `logs.persist: true` from the
+  script-settings read.
+- **Post-upload:** the D2 read-back re-reads
+  script-settings. Precedent: observability SURVIVED
+  the range-fix, P2, and C1 uploads (PATCH unspent
+  every time) — survival is the expectation, not an
+  assumption.
+- **If reset:** re-apply via a multipart PATCH to
+  `/workers/scripts/{name}/settings` — the settings
+  WRITE path (the GET path `/script-settings` accepts
+  no PATCH) — with a single part named `settings`
+  (Content-Type application/json) carrying ONLY the
+  observability object (enabled + logs persisted).
+  Then verify: observability enabled + persisted on
+  re-read, AND the script etag unchanged by the PATCH.
+  The PATCH counts against the §5 budget (≤1 per
+  upload leg).
+- **If observability cannot be restored within
+  budget:** STOP; trigger T3 is class A, so rollback
+  evaluation proceeds under §5.1/§5.2.
+
+## 7. Post-deploy verification (read-only)
+
+All verification is passive reads (no read wakes —
+§1.2). Two observation windows, mirroring the C1
+gate's practice: an immediate post-deploy set and a
+second set after a platform-slack interval (C1 used
+≈ +10 min and ≈ +25 min); preservation must pass at
+both.
+
+**What this section proves — and what it does not
+(C1-2 discipline, inherited).** These checks establish
+**script deployment verification**: the uploaded
+script's parts match the stamped manifest
+byte-for-byte, `/health` reports the build pin, and
+the read surfaces exercised below answer on the new
+build where observed. They do **NOT** establish
+**Durable Object runtime adoption**: existing DO
+instances adopt new code on their own lifecycle, no
+check here observes per-instance adoption, and an
+instance not yet adopted keeps serving the previous
+build without any surface here reporting that fact.
+For this gate the adoption gap has a specific edge
+(§10, item RD-R2): the R5a semantic takes effect per
+instance as instances adopt, so a wake handled by a
+not-yet-adopted instance evaluates the OLD condition
+and does nothing, while a later wake on an adopted
+instance fires the disjunct — the first-wake timing
+is doubly uncontrolled, and no §7 result narrows it.
+Nor does any check here observe the R5a semantic's
+effect: **no shipped read surface reports the arming
+condition, the threshold, or whether the disjunct has
+ever fired.** The only evidence the semantic is
+deployed is the coordinator part's byte-match plus
+the build stamp; its effect becomes observable only
+retrospectively, through `armedAt` and recorder rows
+after a wake. A fully passing §7 therefore supports
+exactly one claim: **the composed script is deployed
+and verified as a script, the surfaces read during
+verification answered consistently with it, and no
+wake signature was observed during the windows.** The
+windows do **not** bound the §1.4 consequence: the
+first wake may arrive after the gate closes, and no
+window length inside this gate retires that.
+
+- **V1 Health** — `/health` build stamp == the §3
+  build pin; generation `halted`; coordinator `armed`.
+- **V2 Script identity** — new etag ≠ the census etag
+  (required); 31 parts; **29 byte-identical to live**,
+  the coordinator byte-identical to its §2.1 composed
+  hash (`5303cb63…`), the identity part byte-identical
+  to its stamped form.
+- **V3 Settings surface** — revision still **1**;
+  exactly 10 bindings; GENERATION_HALT `"1"`; phase
+  policy `enforce`; observability per §6.
+- **V4 Queue** — `delivery_paused: true`, exactly 1
+  consumer (cf-api read-back; the gate makes no queue
+  call).
+- **V5 Containment reads** — `GET /v2/d6-containment`
+  and the `drive=1` containment projection: state
+  **NORMAL**, `absent: true`, `verified: true`;
+  `stopConfidence: "not_applicable"`; the v4
+  stop-record and episode fields at their empty
+  values; the recorder fields unchanged vs census
+  item 14 (`tableState: "missing"`, zero rows,
+  `recorderHealth: null`); `armedAt` **bit-identical**
+  to census — any change is trigger T6 (§5.1).
+- **V6 Preservation** — census-to-close, every item
+  exact: preserved plan `active` {1,0,0,0,0} with its
+  entry `pending`; its job `queued` rev 1, grants [],
+  quarantine unheld; the exemption projection (chapter
+  bound 26 / parked 0 / eligible 1; segment 1 / 569 /
+  8,022; digest `cdef2c7e…`); GENERATION_HALT `"1"`;
+  queue paused; conflicts exact 4-row baseline;
+  watermarks content 18 / bindings 1841 with 0 idx-26
+  rows and 0 changes; all five phase figures frozen on
+  both surfaces (§4 item 7); quota reconcile
+  `ok: true` with the sole straddler; parked job
+  fingerprint exact.
+- **V7 No-movement** — no grant issued (grants []),
+  the occurrence still `pending`, the job still
+  `queued` rev 1, derived reserved **0**, dispatched
+  (current PT day) **0**, no new plans, commands by
+  the executor, or conflicts rows. A code deploy
+  invokes no DO method, so **any** movement in this
+  set = STOP and report; its classification follows
+  §5.1 (T5/T6, including the wake-signature branch).
+- **V8 Record** — execution record with the census
+  transcript, assembly + battery logs (hashes), the
+  upload response, D2 read-back, observability reads,
+  both containment reads, the closing census repeat,
+  and the ends-HELD certification; filed on the board
+  with a Rowan cp. Classification of any unexpected
+  finding is Rowan's, not the executor's.
+
+Any V-item failure = STOP. The response then follows
+the §5.1 classification. STOP prevents further
+operator action inside the gate; per the standing
+correction-6 discipline, STOP is never represented as
+affecting an alarm chain (none is provoked by this
+gate, and a chain a wake revives outside the gate is
+not stopped by the gate's STOP).
+
+## 8. Battery requirements and evidence status
+
+**Standing results for this exact composed tree**
+(complete runs; full logs + exit codes captured;
+hashes re-verified firsthand during this package's
+preparation, Nov 2, 2026):
+
+| suite | tree | result | exit | log SHA-256 |
+|---|---|---|---|---|
+| Containment battery v4 + CT14d (`

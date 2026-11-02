@@ -1,0 +1,117 @@
+ shipped
+  condition and leaves the stale registration exactly
+  as today; a later wake on an adopted instance fires
+  §1.4. The first-wake consequence can therefore be
+  deferred by adoption timing in a way no surface
+  reports — one more reason its arrival cannot be
+  scheduled or certified absent.
+- **RD-R3 — The deployed tree is assembled at gate
+  time** (inherited from C1-R3). Bounded by: hash
+  assertions against §2 at assembly, the three-suite
+  battery re-run on the assembled tree (§8), and the
+  stamped-manifest read-back (V2).
+
+**What R5a-D does NOT resolve, stated plainly:**
+whether the alarm actually revives (only a wake +
+delivery shows that — S1's subject, or §1.4's
+unplanned arrival); the B1/B2/B3 branch (resolved only
+retrospectively by a wake); why the alarm stalled
+(R-09); whether containment works operationally (C3,
+PARTIAL by construction, and C3 cannot even be
+executed until this gate closes and its expectations
+are re-based to the composed build — Rowan's Ruling
+1); live drive suppression, concurrent wake
+suppression, and the racing-wake recheck (Ruling 2's
+remainder — OPEN, preserved for a separately reviewed
+S1 safety assessment; nothing in this package treats
+harness evidence or any physical stop as proof of
+them); any generation question. After a fully
+successful R5a-D, the system differs from today in
+exactly two respects: the composed script is deployed
+and verified as a script, and **the next wake — from
+any source in §1.2 — will evaluate the R5a condition
+against the stale registration**, with the §1.4
+consequence. The second difference is the gate's real
+content, and it is why §11's GO text names it.
+
+## 11. Explicit GO wording and authorization discipline
+
+**The GO this package contemplates** (for a future
+execution, only after Rowan's review of this package
+**and her ruling on Ruling Item 1 (§1.5)**; NOT
+requested here):
+
+> "GO — execute exactly one Gate R5a-D attempt as
+> pinned in the R5a-D readiness package (pin
+> `<READINESS-PIN>`): fresh census, battery re-run
+> (containment 42 + R5a 23 + P2 32) on the
+> gate-assembled composed tree, build pin, exactly
+> one upload of the composed candidate (coordinator
+> `5303cb63…`; entry `2bb0608b…` and service
+> `5c5183e6…` byte-identical to the live C1 build) to
+> `opalreader-api-v2-prod`, at most one conditional
+> observability PATCH, and — ONLY for a confirmed
+> deployment defect (class A, package §5.1: triggers
+> T1–T4, or any finding affirmatively tied to the
+> uploaded code by qualifying evidence) and ONLY
+> after the package's §5.2 rollback-safety conditions
+> are all verified — conditionally one rollback
+> upload of the preserved C1 build `27b2b3a9…` parts
+> plus at most one conditional PATCH; any external or
+> causally unresolved movement (class B, package
+> §5.1, including triggers T5–T6) authorizes NO
+> rollback under this GO — the response is HOLD,
+> preserve evidence, and escalate to Rowan and Julie,
+> and any rollback then needs its own ruling and GO;
+> passive reads only; NO containment transition, NO
+> command, NO wake or stimulus **by the executor**, NO
+> hold or queue change; ending HELD with containment
+> inert at NORMAL. I understand that this deploy
+> changes what the next wake does: after it, the
+> first wake from any source — including my own
+> ordinary app use (listening-position sync, a
+> settings change, a Generate tap) — is expected to
+> re-register the stale alarm to the earliest pending
+> due time, which may revive the alarm chain into the
+> package's bounded grant/void cycle (§1.4: at most
+> one live grant, no dispatch, no attempts, $0 spend,
+> phase figures frozen), continuing until a later
+> gate stops it; and I accept that consequence as
+> part of this GO."
+
+The final sentences of that wording are operative only
+under Rowan's ruling **(i)** on Ruling Item 1. Under
+ruling (ii) or (iii), or absent a ruling, this GO text
+is **inoperative** and the package returns for revision
+— the consequence's scope ownership changes what a GO
+must say, and this package does not pre-decide it.
+
+**Authorization discipline:** Rowan's review of this
+package is not a GO. Julie's GO is not requested by
+this package. If given later, the GO covers exactly
+one R5a-D attempt in the wording above and nothing
+else: not C3 (whose readiness is separately held and
+must be re-based to the composed build after this
+gate closes), not S1, not any transition, not any
+stimulus.
+
+## 12. Package contents and turn
+
+This package is a single consolidated document.
+Candidate identities are carried in full in §2; the
+stored diff (§2.1) and the battery logs (§8) are cited
+by hash and live in the GitHub archive. Companion
+documents in the archive: the R5a revised spec
+(`PHASEB-R5A-REVISED-SPEC.md`), the retry-supersession
+analysis (`PHASEB-R5A-RETRY-SUPERSESSION-REVISED.md`),
+the corrected C1 readiness package (this package's
+form), and the C1/C2 execution records (this package's
+census basis). The companion cp
+(`PHASEB-R5AD-READINESS-ROWAN-CP.md`) summarizes this
+package for the review folder, including Ruling Item 1.
+
+**Production remains under INVESTIGATION HOLD. Nothing
+in this package executes, deploys, transitions, wakes,
+or mutates anything. Turn: Rowan's — independent review
+of this R5a-D readiness package, including Ruling
+Item 1 (§1.5).**

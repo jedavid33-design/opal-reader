@@ -1,0 +1,197 @@
+  pushes are part of listening. No hold suppresses
+  them — GENERATION_HALT fences generation, not sync.
+  A wake from this source can arrive at any time after
+  the deploy, on Julie's ordinary schedule, with no
+  operator involvement and no warning.
+- **Client commands (item 1)** — a Generate tap
+  (apply refuses under the halt; the wake precedes the
+  refusal), a client settings change (`SetSettings`) —
+  are possible in ordinary use, less routine than
+  position sync.
+- **Reports (item 3)** are **not** expected while HELD:
+  the queue is paused, so no executor runs and nothing
+  reports. `requestGrant` (item 4) is likewise
+  unreachable without execution.
+- **Operator commands** occur only inside authorized
+  gates; none is outstanding (census item 16).
+
+**Consequence:** the gates-v4 scope text for this gate
+says the R5a semantics end the gate "live but
+unexercised: no wake is provoked" — true of the
+**executor**, and this package preserves it as an
+executor discipline. As a prediction about the
+**system**, it does not hold: the deployed semantic
+arms every future wake, and at least one wake source
+(position sync) is ordinary, expected traffic. The
+first wake after R5a-D is therefore not a remote
+hypothetical to note and file; it is an expected event
+on an uncontrolled schedule. §1.4 analyzes it; §1.5
+puts its scope ownership to Rowan as a ruling item.
+
+### 1.4 The first wake after R5a-D, step by step
+
+State at any first wake, per the census baselines
+(§4 items 9, 14): the preserved plan is the only
+selectable plan; `armedAt` = **1793562576104**
+(2026-11-01T19:49:36.104Z) — past due by ~26 hours at
+the Nov 2, 2026 observations and growing; the stale
+age exceeds the 3,600,000 ms threshold by more than
+an order of magnitude, so **the threshold provides no
+protection in this incident** (its purpose is retry
+gaps; this registration is not one). Pending schedule
+rows: 2 (1 watchdog). Containment: NORMAL (arm gate
+open).
+
+1. A wake arrives (§1.3: most plausibly a position
+   push). The containment arm gate does not suppress
+   (NORMAL). The condition evaluates: armed is
+   past-due beyond threshold → the disjunct fires →
+   **exactly one `setAlarm(D)`** (memo; a position
+   push schedules no earlier work, so the corrective
+   second registration does not arise; a command that
+   does schedule earlier work could produce the
+   bounded second).
+2. **D's value is unobservable before this moment** —
+   no shipped surface reads schedule rows (register
+   R-11). The branches are those of the accepted
+   alarm-semantics assessment, at its strengths:
+   **B1 (D = A)** is the leading, source-invariant
+   explanation (every `setAlarm` set the armed value
+   to the then-earliest due; pending rows are removed
+   only by alarm processing) — leading, **not proven**;
+   B2 (D < A) and B3 (D > A, D future) remain open.
+   The wake converts D from unobservable to observed:
+   a post-wake read of `armedAt` returns the registered
+   value.
+3. **Under B1/B2 (D in the past):** platform behavior
+   for a registration set to a past time is prompt
+   asynchronous delivery (documented; the assessment's
+   Q1). An alarm pass then runs the shipped path —
+   schedule processing, `recover()`, `driveOnce()` —
+   and the P2 recorder writes a row for it (the
+   recorder is live). `driveOnce` under the holds:
+   grant **issuance is not halt-fenced** (delivery is),
+   and the resulting state set is exactly the
+   pre-classified §7.3 set proven at the P2 gate:
+   grants [] → [the one issued grant
+   `grant:plan:19cad189fab54b9c804a74a6:seg:1:full`],
+   occurrence `pending` → `granted`, job `queued`
+   rev 1 → `generating` rev 2, derived reserved
+   0 → 12 — and nothing else: **delivery stays
+   halt-fenced and the queue stays paused, so
+   dispatched stays 0, no attempt runs, spend stays
+   $0, and all five phase figures stay frozen** (grant
+   issuance touches none of them — proven in the P2
+   §7.3 verification, not re-asserted from memory).
+   The pass's `finally` re-arms the watchdog — **the
+   chain is revived**: passes recur on the ~10-minute
+   watchdog cadence, the grant lease expires and the
+   grant/void cycle churns on its ~15-minute cadence
+   within the §7.3 invariants (≤1 live grant; reserved
+   ∈ {0, 12}; dispatched 0), recorder rows accrue
+   toward the 288-row cap, and this continues
+   **indefinitely** — the revived chain never
+   self-terminates — until C3's stop act (a later
+   gate) or another separately authorized disposition.
+   Containment at NORMAL does not suppress any of it;
+   NORMAL is the open state by design.
+4. **Under B3 (D in the future):** no immediate pass.
+   Registration re-bases to the future D; the chain
+   revives when D arrives, and the watchdog
+   self-perpetuates from there, with the same §7.3
+   churn thereafter.
+5. **Detection:** nothing reads on a schedule. The
+   first evidence of a fired wake would be incidental
+   — a changed `armedAt`, a recorder row, or a §7.3
+   transition noticed on some later read (register
+   R-02's detection bound: the next successful dual
+   read that actually occurs). There is no alerting.
+
+**In substance, the first wake is S1's stimulus
+outcome — revival of the alarm chain into the bounded
+§7.3 churn — arriving unplanned:** without S1's
+preflight census, its observation window, its
+trigger-evidence standard, or the S1-X companion
+containment authorization standing ready. What bounds
+it is real but narrow: the holds bound spend and
+delivery to zero, and the §7.3 set bounds the state
+churn. What does not bound it: duration, timing, or
+detection.
+
+### 1.5 Ruling Item 1 — whose scope owns the first wake
+
+The package is ready for review. Whether it is ready
+for a GO depends on a question this package does not
+answer for Rowan:
+
+- **(i) Inside R5a-D's scope.** The first-wake
+  consequence is pre-classified (§1.4), bounded by the
+  holds and the §7.3 set, and accepted as part of the
+  deploy decision; the GO wording (§11) names it, so
+  Julie's acceptance is informed, and S1 follows as
+  the planned observation of an already-revived (or
+  not-yet-revived) chain.
+- **(ii) Inside S1's scope.** Deploying the semantic
+  *is* arming the stimulus; R5a-D does not execute
+  until the stimulus itself is authorized and ready
+  (S1 readiness + GO, or a paired R5a-D → S1 sequence
+  under one plan), so the revival — whenever the wake
+  lands — is the planned, observed event S1 exists to
+  make it.
+- **(iii) Inside R5a-D's scope only with an added
+  control** — e.g., an app-use restraint interval
+  between R5a-D and S1. Named for completeness; it is
+  a human-factor control over an unbounded interval,
+  and client position events queued offline may flush
+  later, so restraint delays rather than removes the
+  wake.
+
+**Wren's recommendation (Wren's, not Rowan's):**
+option (ii)'s discipline — do not request Julie's GO
+on this package until Rowan rules the item; if she
+rules (i), the §11 GO text already names the
+consequence in terms Julie can accept or refuse with
+full information. Wren recommends against (iii) as a
+sole control. This recommendation decides nothing;
+the item is Rowan's.
+
+## 2. Exact candidate identity (two bases, stated precisely)
+
+The candidate is the **composed V4 tree**
+(`containment-v4/composed-tree/`): containment v4 +
+the R5a revised change. All identities below were
+re-computed firsthand from the trees during this
+package's preparation (Nov 2, 2026) and match
+`containment-v4/CANDIDATE-IDENTITIES.md` and
+`CANDIDATE-IDENTITIES-REVISED.md`.
+
+### 2.1 Against the CURRENT live build (the operative basis)
+
+Current live: the C1 build, stamp
+`27b2b3a9f1e7070ef243ee017703246744d57d5c`, script etag
+`adb8e5a5b104858a20835a17ffd714a70f72cea5e066c6d61c4b80a49adac46f`
+(C1 gate D2 read-back; etag re-read fresh at any
+R5a-D census). The C1 deploy tree
+(`c1-gate-execution/build/deploy-tree/`) was verified
+byte-identical to the containment candidate tree
+except for the stamped `v2/host/build-identity.mjs` —
+so the live coordinator part **is** the containment
+candidate coordinator, and the delta below is exact.
+
+**Unstamped composed candidate vs current live:
+exactly ONE part differs in code** —
+`v2/coordinator.mjs`:
+
+| part | bytes | SHA-256 (composed candidate) | SHA-256 (live) | diff vs live |
+|---|---|---|---|---|
+| `v2/coordinator.mjs` | 314,712 | `5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed` | `6c19a50e88d8bc00d357f7a5facf33ed8425b53daa20e8d700037f9fd121b2f2` (313,063 B) | **+66/−36** |
+
+- The delta is the R5a change as applied on the
+  containment base: the `ALARM_STALE_THRESHOLD_MS`
+  constant block, the memo threading at the three wake
+  call sites and `wake()` itself, and the
+  `_armAlarmIfEarlier()` rewrite (in which the
+  containment arm gate precedes the memo logic). It is
+  **not** the +51/−12 figure of the R5a revised spec —
+  that figure was measured against the pre-containment
+  baseline

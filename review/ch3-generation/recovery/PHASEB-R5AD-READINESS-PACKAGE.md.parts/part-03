@@ -1,0 +1,167 @@
+ other
+   non-terminal plan; no live grant.
+10. **Eligibility** — chapter bound **26** / parked
+    **0** / eligible **1**; segment eligible **1** /
+    **569** chars / **8,022** units; the chapter,
+    segment, and book scopes' digests mutually
+    consistent at
+    `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1`
+    (the post-exemption digest standing since Phase B
+    attempt 3).
+11. **Conflicts** — exact-match to the pinned four-row
+    `schedule_dead` lease baseline: id 1 @
+    2026-10-29T23:54:14.808Z (`grant:plan:3183ecbf…:seg:1:full`);
+    id 2 @ 2026-10-30T00:24:14.632Z
+    (`grant:plan:603ab416…:ch1:1:full`); id 3 @
+    2026-10-31T05:14:24.089Z (`grant:plan:b2dc2a3d…:ch1:1:full`);
+    id 4 @ 2026-11-01T01:04:30.364Z
+    (`grant:plan:e377a555…:ch2:1:full`); all cache_key
+    `lease`, expected `7`, found `LIKE or GLOB pattern
+    too complex: SQLITE_ERROR`, reason `schedule_dead`.
+12. **Parked job** —
+    `1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a`
+    `parked_policy` rev 1, definition fingerprint
+    `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`
+    exact, grants [].
+13. **Watermarks + occupancy** — content **18**;
+    bindings **1841**, **0** binding rows for the
+    idx-26 occurrence, **0** changes since seq 1841;
+    the idx-26 R2 key
+    (`audio/07d145f7b87b9621497d3b8a2c5828141592b94425fd5696fffedde9957d9590`)
+    **FREE** (LIST empty).
+14. **`drive=1` recorder + alarm baseline** (C2
+    closing set, Nov 2, 2026, identical across all
+    three C2 sets): `tableState: "missing"`,
+    `drivePasses: []`, `recorderHealth: null`;
+    `armedAt` **1793562576104** =
+    2026-11-01T19:49:36.104Z, `pendingSchedule` **2**,
+    `pendingWatchdog` **1**. Hard expectations: the
+    recorder fields exact; **`armedAt` bit-identical**
+    — an `armedAt` that already differs at census
+    means a wake or a pass has already occurred under
+    the CURRENT build (whose condition cannot
+    re-register a stale value — so a difference means
+    something else moved first) = STOP and classify
+    before anything else.
+15. **Containment projection, both surfaces** —
+    `GET /v2/d6-containment` and the `drive=1`
+    diagnostics containment block both read: state
+    **NORMAL**, `absent: true`, `verified: true`,
+    `stopConfidence: "not_applicable"`, the v4
+    stop-record and episode fields at their empty
+    values (null / 0 / false) — the C2-verified
+    readability baseline. Any other value = STOP.
+16. **No work in flight** — no gate executing, no GO
+    outstanding or partially consumed, no operator
+    action pending; the executor records the GO
+    (§11) on the board BEFORE the census begins, as at
+    prior gates.
+
+## 5. Mutation bounds, rollback, and classification
+
+| Write class | Bound | Notes |
+|---|---|---|
+| Forward worker script uploads | **exactly 1** | 31 parts, byte-identical to the stamped manifest (§3) |
+| Observability PATCH after forward upload | **≤1, conditional** | ONLY if the post-upload read shows observability reset (§6) |
+| Rollback uploads | **≤1, conditional** | ONLY for a **class A** confirmed deployment defect (§5.1), after the §5.2 safety conditions verify; the byte-identical preserved C1-build parts (§3 item 6). **Class B findings never fire a rollback inside this gate** |
+| Observability PATCH after rollback | **≤1, conditional** | Same condition, after a class A rollback upload |
+| Containment transitions | **0** | No `contain_drive`, no `stop_chain`, no `clear`, no `verify_chain_stop` |
+| Commands / reports / SubmitJob **by the executor** | **0** | The executor sends nothing that wakes (§1.2) |
+| Hold flips / settings flips / queue changes | **0** | GENERATION_HALT stays `"1"`; queue stays paused |
+| Alarm registrations caused by this gate | **0 expected** | A deploy is not a wake (the P2 and C1 deploys left `armedAt` bit-identical, observed); any `armedAt` change is a finding to classify (trigger T6), not a budget item. **Post-gate** registrations by later wakes are §1.4's subject and Ruling Item 1's — they are not caused by the executor and are not counted here, but they are not invisible either: they are the named consequence the GO must own (§11) if Rowan rules (i) |
+| Recorder rows caused by this gate | **0 expected** | The recorder writes only from the alarm handler |
+| Spend | **$0** | No dispatch is possible under the holds; dispatched must remain 0 (§7, V7) |
+
+**Rollback triggers (named). Every trigger STOPs the
+gate. What follows the STOP is decided by the trigger's
+class (§5.1) — no trigger causes a rollback
+automatically.**
+
+- **T1** — post-upload read-back parts not
+  byte-identical to the stamped manifest. **[Class A]**
+- **T2** — `/health` build stamp ≠ the build pin, or
+  generation not `halted`, or coordinator not `armed`.
+  **[Class A]**
+- **T3** — settings/bindings regression: settings
+  revision ≠ 1, bindings ≠ 10, GENERATION_HALT ≠ `"1"`,
+  phase policy ≠ `enforce`, or observability not
+  restorable within the §6 budget. **[Class A]**
+- **T4** — containment surface misbehavior: the state
+  route or the `drive=1` containment projection errors,
+  reports any state other than NORMAL, reports
+  `verified: false` against an absent store, or
+  `stopConfidence` ≠ `"not_applicable"` at rest.
+  **[Class A]**
+- **T5** — any §7 preservation item fails: a change vs
+  census in the preserved plan, its job, the exemption
+  projection, the parked job, the conflicts baseline,
+  any phase figure, quota, or the watermarks that is
+  not fully explained by the deploy itself (the deploy
+  explains ONLY the script etag, the build stamp, and
+  the coordinator part changing). **[Class B]** — with
+  the §1.4 refinement: a preservation change that is
+  exactly a §7.3-set transition (grant issued,
+  occurrence `granted`, job `generating`, reserved 12)
+  is evidence a **wake fired the deployed semantic**;
+  it is still class B for response purposes (the deploy
+  did not mechanically perform it; a wake did), and
+  its disposition follows Ruling Item 1 (§5.1).
+- **T6** — `armedAt` changed across the upload, or at
+  any verification window (alarm-registration movement
+  the executor did not cause). **[Class B]** — the
+  §1.4 refinement applies as for T5: under this build
+  an `armedAt` change is the signature of a wake
+  evaluating the new condition; it is reported with
+  its source evidence (commands rows, recorder rows)
+  and follows Ruling Item 1.
+
+### 5.1 Finding classification and permitted responses
+
+Inherited from the corrected C1 package (§3.1 there),
+unchanged in effect:
+
+- **Class A — CONFIRMED DEPLOYMENT DEFECT.** The
+  evidence ties the finding to the uploaded code or to
+  the upload itself: the finding sits on a surface the
+  uploaded script owns (script parts / etag, the build
+  stamp, the settings/bindings projection, the
+  containment surfaces); OR an error reproduces on the
+  new build that the §4 census showed absent on the
+  old build; OR a post-upload read-back mismatches the
+  stamped manifest. T1–T4 are class A by construction.
+  **Permitted response:** rollback inside this gate's
+  §5 budget — at most one rollback upload plus at most
+  one conditional observability PATCH — once **every**
+  §5.2 safety condition is verified. Nothing else
+  beyond the rollback sequence and HOLD is authorized.
+- **Class B — EXTERNAL OR CAUSALLY UNRESOLVED
+  MOVEMENT.** Movement with no established causal link
+  to the deploy's mechanics: movement in surfaces a
+  script upload cannot mechanically cause (T5), alarm
+  movement a deploy cannot mechanically perform (T6),
+  and ANY finding whose cause is undetermined after
+  the evidence is captured. **Permitted response —
+  the only one authorized: STOP, HOLD, preserve the
+  evidence exactly as read, and escalate to Rowan and
+  Julie.** A rollback for a class B finding is **NOT**
+  inside this gate's budget and **NOT** authorized by
+  this gate's GO; it requires a separate Rowan ruling
+  and a separate Julie GO.
+- **Doubt resolves to class B.** A finding is class A
+  only when the executor can affirmatively tie it to
+  the uploaded code with qualifying evidence. The
+  executor's own tracing never promotes a finding to
+  class A.
+- **Ruling Item 1 refinement (T5/T6 wake signature).**
+  §1.4 establishes that the deployed semantic makes a
+  wake-caused §7.3 transition a *foreseen* possibility,
+  neither a deployment defect nor unexplained in the
+  ordinary sense. How such a finding is dispositioned
+  inside an executing gate depends on Rowan's ruling:
+  under ruling **(i)**, the transition is the
+  pre-classified accepted consequence — the gate STOPs
+  its remaining steps, records the transition and its
+  source evidence in full, ends HELD, and the finding
+  is reported as the named consequence having occurred
+  (not as a defect, not as a surprise); under ruling
+  **(ii)** or **(iii)**, or absent a ruling, t

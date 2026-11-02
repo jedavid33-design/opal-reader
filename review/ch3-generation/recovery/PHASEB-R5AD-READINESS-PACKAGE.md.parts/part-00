@@ -1,0 +1,203 @@
+# Phase B — Gate R5a-D READINESS PACKAGE (composed deployment: containment + R5a)
+
+**Status: READINESS PAPERWORK ONLY. R5a-D is NOT executed
+by this package, and no GO is requested by it.** Rowan's
+review of this package is not a GO; a production GO for
+R5a-D remains a separate future step (Julie's explicit
+GO, after Rowan's review — and, per §1.5, after her
+ruling on Ruling Item 1). Production is under
+INVESTIGATION HOLD and ends HELD. This package
+authorizes nothing.
+
+**Assignment:** Rowan's ruling on the C2 correction and
+the C3 readiness package (Nov 2, 2026; recorded at
+`ROWAN-C3-SEQUENCING-RULING.md`): C2 correction
+ACCEPTED; C3 readiness HELD for sequencing — **Ruling 1
+= Option (ii): R5a-D must execute and close BEFORE C3**;
+do not execute C3 against the containment-only build;
+after R5a-D is separately authorized, executed, and
+accepted, C3's build and etag expectations are re-based
+to the verified composed production build. **Ruling 2:**
+the unverifiable remainder (live drive suppression,
+genuine concurrent wake suppression, the racing-wake
+recheck) remains OPEN; C3's eventual verdict is PARTIAL
+regardless. This package is the R5a-D readiness package
+that ruling assigns. It retains the structure Rowan
+required: existing holds, fresh census, exact candidate
+identity, battery requirements, mutation limits,
+rollback classification, STOP conditions, ends-HELD.
+
+**Gate structure:** R5a-D is the composed-deployment
+scope of the accepted five-scope structure (C1 / C2 /
+C3 / R5a-D / S1, plus standalone restoration and the
+R3-V micro-scope) in
+`PHASEB-RECOVERY-GATES-V4-REVISED.md` (pin
+`621535f0456e3d61cc7bcbc2fda04f661dc63e49`), executed in
+the order Rowan's sequencing ruling fixes: C1 (CLOSED)
+→ C2 (CLOSED, readability verified) → **R5a-D (this
+package)** → C3 (readiness held; to be re-based) → S1.
+The R5a technical authority is
+`PHASEB-R5A-REVISED-SPEC.md` (permanent condition +
+per-operation arm memo dedupe + stale-age safeguard;
+B3-future accepted per board comment `6584187105` and
+confirmed closed in Rowan's containment-correction
+ruling). The readiness form mirrors the corrected C1
+readiness package (pin
+`0e19d37116f6b36da02623a85d66aeb7dfcf7d6d`), whose
+rollback classification (C1-1) and runtime-adoption
+discipline (C1-2) this package inherits verbatim in
+effect. The deploy mechanics follow the proven P2 / C1
+pattern: fresh census → fresh assembly → battery
+re-run → build pin → ONE upload → read-back
+verification → ends HELD.
+
+## 0. What R5a-D is — and is not
+
+**R5a-D deploys code only.** It uploads the composed
+candidate (§2) to the production worker
+`opalreader-api-v2-prod` as a single script upload and
+verifies the **script deployment** with passive reads.
+It ends with:
+
+- containment **INERT at NORMAL** — no transition is
+  performed in this gate (budget 0, §5); the deployed
+  containment state is exactly the state C1 deployed
+  and C2 verified readable;
+- the **R5a arming semantics deployed** in the
+  coordinator part — the subject of §1, whose
+  operational consequence is analyzed there in full
+  and is the subject of Ruling Item 1;
+- the system **HELD**: GENERATION_HALT `"1"`, queue
+  `opalreader-generation-v2` delivery paused, the
+  Generate button NOT live;
+- the preserved Phase B plan, the idx-26 exemption,
+  the parked job, and every other production fact
+  exactly as at census — including the existing stale
+  alarm registration, left exactly as read.
+
+**R5a-D is not:** a containment transition of any kind;
+C3 operational verification; an alarm interaction, a
+wake, a command, a report, or a SubmitJob **by the
+executor**; a hold flip or a queue change; any
+generation; a stimulus. The executor provokes no wake
+and sends nothing that could wake (§1.2 enumerates what
+can). R5a-D does not touch the preserved plan
+`plan:19cad189fab54b9c804a74a6` or the live idx-26
+exemption in any way. What deploying the R5a
+*semantics* means for wakes that arrive later, from
+other sources, is not waived by this paragraph — it is
+§1, and it is the reason this package carries a ruling
+item.
+
+## 1. The deployed semantic and the first-wake consequence
+
+### 1.1 What the R5a change does, precisely
+
+One part changes (§2): `v2/coordinator.mjs`. Per the
+revised spec (`PHASEB-R5A-REVISED-SPEC.md` §§1–5), as
+carried in the composed tree:
+
+- The arming condition in `_armAlarmIfEarlier()` gains
+  a **past-due disjunct**: an armed value is treated as
+  unarmed when `armed <= now - ALARM_STALE_THRESHOLD_MS`,
+  with `ALARM_STALE_THRESHOLD_MS = 3,600,000` ms
+  (1 hour — a **provisional** candidate value, never a
+  proven upper bound on platform retries; spec §4).
+  Inside the threshold, shipped behavior is unchanged:
+  a past-due armed value may be a legitimate retry gap
+  and is never superseded.
+- When the disjunct fires, registration **moves to D** —
+  the earliest pending due time, computed by the
+  identical `SELECT MIN(due_at) FROM schedule WHERE
+  state = 'pending'` query in both arming paths. The
+  computation of D is **PROVEN from source** (spec
+  §2.2: one inserter for all schedule kinds, no kind
+  filter, aggregate total over the pending set), with
+  two named residuals: platform retry state is not a
+  schedule row, and D is a query-instant snapshot.
+  **B3-future is accepted behavior**: if D is in the
+  future, registration re-bases to the future D.
+- A **per-operation arm memo** dedupes registrations
+  within a single wake operation: at most **1**
+  `setAlarm` per top-level operation, at most 2 only
+  when the second value is strictly earlier (work the
+  same operation scheduled between evaluations). The
+  memo is in-memory, per-operation, never persisted.
+- The change is **permanent semantics**, not an
+  incident-boxed repair (ruling decision 1 in the R5a
+  revision ruling): every future wake, in every future
+  incident, evaluates the revised condition.
+- In the composed tree the containment arm gate
+  precedes the memo logic: a containment-suppressed
+  evaluation is not a registration and never touches
+  the memo. At NORMAL (the only state this gate leaves
+  deployed) the gate does not suppress.
+
+**Deployment itself performs no alarm action.** A
+script upload invokes no DO method and calls no alarm
+API; both prior deploys in this program (P2, C1) left
+`armedAt` bit-identical, observed. Deploying R5a-D
+does not register, delete, or deliver any alarm. What
+it changes is what the **next wake** will do when one
+arrives. That is the consequence the rest of this
+section analyzes.
+
+### 1.2 What can wake the coordinator (source-enumerated)
+
+In the deployed source (verified firsthand in the C1
+deploy tree, byte-identical to the composed tree
+outside the coordinator part), `wake()` has exactly
+three call sites, all in `v2/coordinator.mjs`:
+`handleCommand` (after its record step begins),
+`requestGrant`, and `handleReport`. The paths that
+reach them:
+
+**Reaches a wake:**
+
+1. **`POST /v2/commands` with a fresh, well-formed
+   command of a known type.** `handleCommand` returns
+   before `wake()` for a malformed command (missing
+   `command_id`, unknown type) and for a **replayed**
+   command (an existing receipt or pending record is
+   answered from the store and never re-executed).
+   Every other command — including one whose apply step
+   will refuse it (e.g., a generation command refused
+   under GENERATION_HALT) — passes `wake()` **before**
+   apply. Freshness, not success, is what wakes.
+2. **`POST /v2/sync/position`** — the Reader client's
+   listening-position sync. The API layer constructs a
+   fresh `PushPositionEvents` command (fresh
+   client-generated `commandId` per push) and calls
+   `handleCommand` with it (verified in
+   `v2/api.mjs`). **This is ordinary app use**: a
+   listening session on Julie's iPhone/iPad that syncs
+   progress sends these.
+3. **`POST /v2/reports`** — executor reports reach
+   `handleReport`, which wakes before its transaction.
+   Reports originate in the generation execution path,
+   which runs only from queue deliveries.
+4. **`requestGrant`** — internal to job execution and
+   the alarm path's own `retry_grant` processing; not
+   an external surface.
+
+**Never wakes:**
+
+- Every GET / read surface (sync pulls, playback,
+  diagnostics, eligibility, `/health`, the containment
+  reads): no read path calls `wake()` — the assessment's
+  standing finding, re-verified in the current source.
+- Migration commands (`MigrateImportBindings`,
+  `MigrateImportChunk`): the API layer routes them to
+  `submitMigrationCommand` (inert Option D submission)
+  and they never reach `handleCommand`.
+- Replayed or malformed commands (above).
+- A script deploy (this gate), a settings PATCH, a
+  queue operation: none is a wake.
+
+### 1.3 Which wake-capable traffic is expected while HELD
+
+This is the load-bearing question for this gate, and
+the answer is **not** "none":
+
+- **Position sync (item 2) is expected in ordinary
+  use.** Julie listens with the Reader app; position
