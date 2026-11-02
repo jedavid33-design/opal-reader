@@ -1,0 +1,70 @@
+ second S1-X
+firing; any S1-X act after window expiry other
+than §3.6 case (i)'s completion; window renewal or
+extension; the §3.7 tail beyond its named exit; any
+SubmitJob or generation; any hold flip or queue
+change; any rollback for a class-B finding; any
+command other than Grant 2's one; any containment
+transition other than (B2)'s single `contain_drive`
+and (C)'s single `stop_chain` with its in-bound
+verifies.
+
+---
+
+## 7. Ruling items for Rowan
+
+Settled by the sequencing ruling and **not**
+re-presented: **Item A** (Variant D, conditional —
+implemented as Grant 2, §6.3), **Item C** (DV-2
+supersession + two-part C3 dependency — accepted;
+§4.3's refinement under RS-5 is noted there, not
+re-opened), **Item E** (Layer-1 retained, optional,
+single-use, not-a-chain-stop discipline applied).
+
+Confirmation requested on the corrections:
+
+- **Item B′ — S1-X coverage/expiry law (§3.6).**
+  Confirm the corrected form: coverage attaches to
+  a firing decision recorded before expiry on
+  complete in-window evidence (case (i) act may
+  land after expiry); incomplete-at-expiry is
+  UNRESOLVED-AT-EXPIRY and never fires (cases
+  (ii)/(iii)); after expiry S1-X is DEAD (iv);
+  post-expiry events are never retroactively
+  covered (v). Or amend.
+- **Item D′ — Monitoring and post-window
+  parameters.** Confirm or amend: the §3.2 cadence
+  and gap bounds (2× interval), the WINDOW-FAILED
+  rule and its effects, the §3.7 tail cadences
+  (daily / weekly) and the 14-day tail-record
+  point, and §3.5's check at a known pending D.
+
+No other decisions are outstanding from this
+proposal. If B′ and D′ are confirmed, the proposal
+stands ready for Julie's Grant 1 decision (Stage
+1) — which this document does not request.
+
+---
+
+## 8. Package contents and turn
+
+This revised proposal is a single consolidated
+document, pinned with the ruling record
+(`ROWAN-R5AD-S1-SEQUENCING-RULING.md`) and the
+companion cp
+(`PHASEB-R5AD-S1-SEQUENCING-REVISED-ROWAN-CP.md`).
+It supersedes `PHASEB-R5AD-S1-SEQUENCING-PROPOSAL.md`
+(pin `5325cb56c9741ce0318d1a1e53ea5e141dcfa3a5`) as
+the operative sequencing proposal; the superseded
+text remains in the archive. The documents carried
+forward in §5 are cited by pin and hash and remain
+in the GitHub archive; the Dropbox review folder
+carries this revised proposal and its cp only (plus
+the standing instructions file), per the rotation.
+
+**Production remains under INVESTIGATION HOLD.
+Nothing in this proposal deploys, transitions,
+wakes, stimulates, or mutates anything, and no GO
+is requested by it. Turn: Rowan's — review of this
+corrected sequencing/readiness proposal, including
+confirmation Items B′ and D′ (§7).**

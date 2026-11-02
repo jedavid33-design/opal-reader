@@ -1,0 +1,194 @@
+ | Preserved job: state, revision, **grants [] → [the one grant]** — the §7.3 issuance marker |
+| 5 | `GET /v2/generation/capabilities` | Phase block (second phase surface), standard admitted / Batch `batch_not_armed`, registry binding |
+| 6 | `GET /v2/d6-quota-reconcile` (operator) | Reconcile `ok`, drift, sole straddler; derived totals incl. **reserved 0 → 12**; per-PT-day dispatched (must stay 0) |
+| 7 | `GET /v2/conflicts` | Four-row `schedule_dead` baseline, exact-match (trigger T4 surface) |
+| 8 | `GET /v2/sync/changes?family=bindings&sinceSeq=1841` | 0 changes expected; any binding change is outside the §7.3 set |
+| 9 | cf-api queue read-back, `opalreader-generation-v2` | `delivery_paused: true`, exactly 1 consumer — the delivery fence, verified externally |
+| 10 | `GET /health` | Build stamp unchanged, generation `halted`, coordinator `armed` |
+
+The **window-open baseline** is the R5a-D closing
+census, incorporated by reference as the window
+record's first entry (values as in the prior
+proposal: `armedAt` 1793562576104 or its
+census-observed value, recorder missing/empty, plan
+`active` {1,0,0,0,0} entry `pending`, job `queued`
+rev 1 grants [], reserved 0, dispatched 0, phase
+frozen, conflicts exact, watermarks 18/1841,
+containment NORMAL/absent/verified).
+
+### 3.2 Monitoring mechanics — how checks are performed and verified (RS-2; Item D)
+
+Rowan's Item D requires the monitoring to be
+**enforceable**: coverage defined, missed checks
+handled, post-window disposition named (§3.7).
+This section is the mechanism.
+
+**Vehicle (stated honestly).** The scheduled checks
+are **agent-executed check-ins performed by Wren**
+under Part B: a local schedule (created in Stage 1)
+wakes Wren at each cadence point; Wren performs the
+§3.1 set, classifies, logs, and reports per §3.4.
+There is no other monitoring machinery and this
+proposal invents none: the checks happen because
+Wren runs them, and their performance is proven by
+the window log — not assumed from the schedule's
+existence. The schedule's creation is a local agent
+act with no production effect, authorized as part
+of Part B (§6.2). GET-only: a check sends nothing
+and cannot wake the coordinator (§3.1 basis).
+
+**Per-check logging (the coverage rule).** Every
+check, at execution time, appends one entry to the
+**window log**: scheduled time, actual time, the
+full raw §3.1 values, the classification, and any
+report made. The window log is evidence, filed with
+the window record. **A check that left no log entry
+is a MISSED check by definition** — performance is
+the log, not the intention. A check whose entry
+exists but whose §3.1 set is incomplete (any read
+errored or unavailable) is a **FAILED check**,
+logged as failed with the failing surfaces named;
+a failed check is **not a negative observation**
+(it observed nothing about those surfaces) and
+counts as a missed check for gap purposes, with
+the distinction recorded.
+
+**Coverage accounting.** An interval between two
+consecutive completed logged checks is a **VERIFIED
+interval**: classifications may span it. Any span
+containing a missed or failed check is an
+**UNOBSERVED interval**, named as such in the
+window record with its bounds. Consequences:
+
+- **W-0 ("no event") may be claimed only over
+  verified intervals.** A window whose close is
+  otherwise W-0 but which contains unobserved
+  intervals closes with the W-0 claim **qualified to
+  the verified intervals**, the gaps named; the
+  NEGATIVE disposition (§4.3) is unavailable on
+  gapped coverage unless Rowan dispositions the
+  gaps expressly.
+- An event whose first evidence appears at the
+  check ending an unobserved interval is classified
+  on its observed values, with its **arrival time
+  recorded as unknown-within the gap**.
+
+**Cadence** (times from window open; parameters
+presented for confirmation, §7 Item D′):
+
+| Interval | Cadence |
+|---|---|
+| Open → +2 h | The gate's V-sets (≈ +10, ≈ +25 min) count as the window's first checks; then +1 h, +2 h |
+| +2 h → +12 h | Hourly |
+| +12 h → +72 h | Every 6 h |
+| On W-1p | Every 10 min until a pass is observed, the value resolves as future (→ W-1f), or 2 h elapse without a pass (→ W-4) |
+| On W-3u (unverified trigger candidate) | Every 10 min until verified, resolved, or window disposition (§3.4) |
+| On Variant-D stimulus dispatch (Grant 2) | ≈ +2, +12, +37 min from dispatch, then rejoin the window cadence |
+| +72 h | **Closing census** (full §3.1 set) + window record |
+
+**Missed-check detection and the escalation
+ladder.** A missed check is **detected at the next
+performed check** by the log gap (scheduled points
+are fixed in advance by the cadence table; the
+performing check compares the log against them).
+On detection, Wren (a) logs the gap as an
+unobserved interval, (b) performs the current check
+in full, and (c) applies the ladder:
+
+- **One missed/failed check, gap within bound**
+  (bound = 2× the scheduled interval for that
+  phase: >2 h in the hourly phase, >12 h in the
+  6-hourly phase, >30 min in a tightened phase):
+  logged and reported to Julie at the next report
+  point; cadence continues; coverage qualification
+  per above.
+- **Escalation bound breached** — two consecutive
+  missed/failed checks, **or** any single gap
+  exceeding its bound, **or** reads unavailable
+  across two consecutive performed checks: Wren
+  **reports to Julie immediately and files for
+  Rowan**, and declares the window **HELD**
+  (below) without waiting for instruction.
+
+**The stop/hold decision rule — WINDOW-FAILED.**
+Wren **must** declare the window WINDOW-FAILED when
+the escalation bound is breached and coverage
+cannot be re-established by the next scheduled
+check, or when performed checks show the §3.1 set
+persistently unreadable (two consecutive failed
+checks on the same surface). The declaration is
+Wren's duty under this rule, not a discretionary
+judgment; Julie may also declare it at any time,
+and Rowan may rule it on the record. Effects of
+WINDOW-FAILED:
+
+- The window's observation posture is **hold**: no
+  classification is upgraded on the strength of
+  failed coverage; the event, if any, stands
+  **undispositioned**.
+- **C3 is blocked** (§4.3): WINDOW-FAILED is not a
+  disposition.
+- S1-X is **not** extended by the failure: its
+  binding is time-based (§3.6) and expires at
+  window close regardless. During unobserved
+  intervals S1-X is in practice blind (it fires
+  only on a scheduled read's verified observation,
+  §3.4) — named here so no one mistakes an armed
+  S1-X for coverage.
+- Resumption (a renewed window, a re-based
+  disposition, or any onward step) requires
+  **Rowan's ruling + a fresh Julie authorization**.
+  Nothing in Part B self-heals a failed window.
+
+**Reporting duty (unchanged in substance).** Wren
+reports to Julie **immediately** on any
+classification other than W-0, on any missed/failed
+check that breaches a bound, on any W-1 → W-2/W-3/
+W-4 transition, and on any declaration under this
+section. W-0 checks are silent — logged, not
+reported.
+
+### 3.3 Classification taxonomy (RS-4: uncertainty classes resolved)
+
+Every performed check is classified into exactly
+one class. Paired surfaces must agree; a value that
+cannot be freshly read is not evidence (§3.2's
+failed-check rule governs check-level read
+failures; this taxonomy classifies what completed
+reads show).
+
+- **W-0 — NO EVENT.** Every read at baseline.
+  *Continue cadence.* (Span claims per §3.2
+  coverage accounting.)
+- **W-1 — WAKE OBSERVED, PASS PENDING.** `armedAt`
+  changed to a new value V (V **is** D, made
+  observable by the wake), no pass yet observed.
+  **W-1p** — V past-due or near: tightened cadence.
+  **W-1f** — V in the future (B3 re-base): recorded
+  with V; not a completed event (§3.5).
+- **W-2 — EXPECTED S1 EVENT.** A drive pass
+  observed (new recorder row, pass ran) **and**
+  every marker exactly inside the §7.3 set (the one
+  grant or its lease-expired void state within the
+  churn invariants; occurrence `granted` or its
+  §7.3-consistent value; job `generating` rev ≥ 2;
+  reserved ∈ {0, 12}; dispatched 0; attempts 0;
+  phase frozen **on both surfaces**; conflicts
+  exact; watermarks frozen; parked exact;
+  containment NORMAL; and **no recorder row
+  carrying an unexplained error** — see W-3e).
+  Later checks classify against the **churn
+  baseline** (the §7.3 invariants).
+- **W-3e — RECORDER ERROR ROW (RS-4).** A new
+  recorder row carries a non-null recorded error,
+  or its stage shows the pass died before
+  `driveOnce` completed, or `recorderHealth`
+  reports a recorder failure. An error-stage row is
+  a **finding requiring classification, never
+  absorbed into W-2** on the strength of matching
+  state alone. Handling (§3.4): report immediately;
+  if every state marker nevertheless sits exactly
+  inside the §7.3 set and the error is classifiable
+  against the design's known recorder failure modes
+  (recorder write failure with the pass itself
+  evidenced on 

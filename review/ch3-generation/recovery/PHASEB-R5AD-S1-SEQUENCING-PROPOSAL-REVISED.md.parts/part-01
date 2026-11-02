@@ -1,0 +1,200 @@
+ disjunct
+fires (the live registration `armedAt`
+**1793562576104** = 2026-11-01T19:49:36.104Z is ~26×
+beyond the provisional 3,600,000 ms threshold) →
+exactly one `setAlarm(D)` (memo-bounded); D
+unobservable until that moment (B1 leading, **not
+proven**; B2/B3 open); under B1/B2 the past-due
+registration delivers promptly → a drive pass under
+the holds → exactly the pre-classified §7.3 set
+(grant `grant:plan:19cad189fab54b9c804a74a6:seg:1:full`
+issued; occurrence `pending` → `granted`; job
+`queued` rev 1 → `generating` rev 2; derived
+reserved 0 → 12; **dispatched 0, attempts 0, $0,
+all five phase figures frozen**) — and the watchdog
+re-arms, so the chain **revives** into the bounded
+grant/void churn indefinitely (≤1 live grant;
+reserved ∈ {0, 12}) until a stop act or another
+authorized disposition. Under B3, registration
+re-bases to a future D and the chain revives when D
+arrives.
+
+Rowan's Option (ii) ruling assigns ownership of
+that event to **S1's scope**, and her sequencing
+ruling adds the condition this revision implements:
+the event's safety arrangements are not complete
+until their **coverage, expiry, monitoring, and
+post-window ownership** are defined to the standard
+of §§3.2, 3.6, 3.7. The first-wake consequence
+remains a **one-incident phenomenon** (this stale
+registration, this first wake); the disjunct remains
+a permanent semantic for any future registration
+that itself goes stale (R-03/R-05 residuals stand).
+
+---
+
+## 2. R5AD-1 — The sequence (authorization structure revised per RS-3)
+
+Five stages. No stage begins until the prior
+stage's exit condition is met. Holds are invariant
+throughout (GENERATION_HALT `"1"`, queue paused,
+containment NORMAL until and unless S1-X fires;
+§4.2).
+
+### Stage 0 — Paperwork and rulings (now)
+
+This revised proposal is reviewed by Rowan. The
+remaining confirmation items (§7: B′ S1-X
+coverage/expiry law; D′ monitoring and post-window
+parameters) are ruled on. Items A, C, E are settled
+(§0.1). **No production step of any kind occurs in
+Stage 0**, and no GO is requested until Rowan's
+rulings are on record.
+
+### Stage 1 — Arrangements authorized (no production step)
+
+Julie grants **Grant 1** (§6.2): parts (A) R5a-D
+execution, (B) window arrangements (including the
+(B2) Layer-1 contingency and the §3.7 post-window
+tail), and (C) S1-X standing chain stop — one
+decision, three separately named parts, under the
+§6.1 dependency law: **(A) is void unless (B) and
+(C) are granted with it.** Granting performs
+nothing: it arms the arrangements so deployment and
+event are never separated by an unowned interval.
+Part (D) is **not** in Grant 1 (DV-7): the fallback
+stimulus is authorized separately, later, under
+**Grant 2** (§6.3), if at all. As part of Stage 1,
+Wren creates the window's check schedule (a local
+agent scheduling act under Part B; no production
+effect) so the §3.2 cadence exists before the
+window can open.
+
+### Stage 2 — R5a-D executes and CLOSES (deployment only)
+
+Exactly the accepted readiness package: GO recorded
+on the board before census → 16-item fresh census
+→ fresh assembly → battery re-run (containment 42
++ R5a 23 + P2 32 on the gate-assembled tree) →
+build pin → **exactly one upload** → observability
+check (≤1 conditional PATCH) → V1–V8 verification →
+execution record → Rowan's independent execution
+review → **CLOSED**. R5a-D's close is **documentary
+and independent of the wake** (unchanged). DV-4
+stands: a T5/T6 wake signature during verification
+STOPs the gate and is simultaneously an early S1
+event inside the already-open window; class-B
+rollback discipline unchanged — **no rollback
+answers a wake**.
+
+**The S1 window opens at the completion of the
+upload's D2 read-back.** The gate's own V-reads are
+the window's first scheduled checks (§3.2 coverage
+accounting starts there).
+
+### Stage 3 — The S1 observation window (72 hours from window open)
+
+The window is the S1 scope under Option (ii): the
+first-wake event — natural or, under a separately
+granted Part D, deliberately completed — is
+detected, classified, and dispositioned inside it,
+under the §3 arrangements and the §6 authorizations.
+S1-X is armed for the window's duration under the
+§3.6 coverage law (part (C)). Layer-1
+`contain_drive` is available exactly as part (B2)
+provides — a drive-pass suppressor, **not a chain
+stop** (§0.3). Observation mechanics and failure
+law are §3.2; taxonomy §3.3; responses §3.4.
+
+**Stage 3a — natural event.** Ordinary traffic
+wakes the coordinator; §3 detects and classifies;
+an EXPECTED event (W-2) is recorded and reported,
+and observation continues to window close (the
+revived chain is a continuing state; later checks
+classify against the churn invariants).
+
+**Stage 3b — deliberate completion (Variant D, as
+conditioned).** If **no natural wake has been
+observed by the +24-hour scheduled check**, Wren
+prepares the **Part D preflight report** (§6.3):
+the window log through +24 h, the current
+classification, the recorder baseline re-read, and
+target nonexistence re-verified. Wren presents it
+to Julie. **Only if Julie then grants Grant 2** —
+a separate decision, at or before the +24 h point
+as §6.3 defines — may the executor send the
+original S1 stimulus: exactly one `RequestPause`
+command, fresh `command_id` generated and recorded
+**before** sending, targeting the reserved
+nonexistent job `alarm-wake-probe:nonexistent`.
+Expected response: outcome `rejected`, reason
+`job_not_found`. **No re-send under any
+circumstance** — a timeout or ambiguous response is
+a STOP-and-classify event. If the preflight is not
+clean, Grant 2 may not be requested or granted
+until the anomaly is dispositioned (§6.3). If
+Julie does not grant Grant 2, no stimulus is sent
+and the window runs on natural traffic to close —
+the post-window regime of §3.7 (no-event branch)
+then owns the tail. A no-revival outcome is
+reported **only** as "**no observed revival within
+the tested window, subject to recorder
+limitations**" — the mandated wording, unchanged.
+
+### Stage 4 — Window close, S1 disposition, post-window regime
+
+At +72 hours the executor performs the **closing
+census** (the §3.1 read set, in full) and files the
+**window record**: every scheduled check (performed,
+missed, failed — §3.2 accounting), the coverage
+table (verified vs unobserved intervals), every
+classification, the event's disposition in exactly
+one of the §4.3 forms (or the named non-disposition
+that blocks C3), the S1-X state (fired / expired /
+spent — §3.6), the Layer-1 state (applied / not —
+`contain_drive`, if applied, bounds drive passes
+only and has **not** stopped the chain), the Part D
+state (granted+used / granted+unexercised-lapsed /
+never granted / never requested), and the
+ends-HELD certification. **S1-X expires at window
+close, fired or unfired (§3.6) — after expiry it is
+DEAD.** Rowan reviews the window record; the S1
+scope is then CLOSED (event dispositioned or
+expressly undispositioned), and **ownership passes
+to the §3.7 post-window regime without a gap**: the
+regime's first tail check is scheduled at the
+closing census itself.
+
+### Stage 5 — C3 (separate package revision, separate GO)
+
+C3's readiness package is revised to re-base its
+census to the composed build and to the §4.3
+eligibility state, is reviewed by Rowan, and is
+executed only under its own Julie GO. C3's
+preconditions are the two-part dependency as
+refined by RS-5 (§4.3): R5a-D CLOSED **and** a valid
+S1 disposition in one of the eligible forms. C3 is
+**not** authorized by anything in this proposal
+(§6.4).
+
+---
+
+## 3. R5AD-2 — First-wake detection, observation, classification, response (revised per Items B, D, E and RS-1, RS-2, RS-4)
+
+### 3.1 Detection surfaces (the scheduled read set) — unchanged
+
+Every scheduled check performs the same read set.
+All are GET surfaces or external read-backs; no
+read in the set sends a command, and no GET path
+calls `wake()` (source-verified; the assessment's
+standing finding). Every element of the §7.3
+pre-classified set and every S1-X trigger has at
+least one observing surface; load-bearing facts
+have two.
+
+| # | Read | What it detects |
+|---|---|---|
+| 1 | `GET /v2/d6-diagnostics` with `drive=1` (operator) | **Primary wake surface.** Recorder: `tableState`, `drivePasses` rows (stage, `driveOnce` invoked?, outcomes, recorded error, `armed_after`), `recorderHealth`. Alarm: live `getAlarm()` (`armedAt`), `pendingSchedule`, `pendingWatchdog` |
+| 2 | `GET /v2/d6-containment` (operator) | Containment projection: state, absence, verified flag, `stopConfidence`, stop-record/episode fields — second surface for containment facts; reports an S1-X firing's result |
+| 3 | `GET /v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6` | Preserved plan: state, totals, idx-26 entry disposition/`executionState`, grants projection, `phaseAccounting` (phase read here AND at #5) |
+| 4 | `GET /v2/jobs/plan:19cad189fab54b9c804a74a6:seg`

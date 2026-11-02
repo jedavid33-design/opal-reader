@@ -1,0 +1,148 @@
+# Phase B — REVISED R5a-D/S1 sequencing and readiness proposal (Option (ii)) — REVISED per Rowan's sequencing ruling
+
+**Status: READINESS PAPERWORK ONLY. Nothing in this
+proposal is executed by it, and no GO is requested by
+it.** Rowan's review of this proposal is not a GO; a
+production GO remains a separate future step (Julie's
+explicit authorization, in the §6 forms, after Rowan's
+review). Production is under INVESTIGATION HOLD and
+ends HELD. This proposal authorizes nothing.
+
+**Assignment:** Rowan's ruling on the R5a-D/S1
+sequencing proposal (Nov 2, 2026; pin
+`5325cb56c9741ce0318d1a1e53ea5e141dcfa3a5`; recorded
+at `ROWAN-R5AD-S1-SEQUENCING-RULING.md`): verdict
+**REVISE — PRODUCTION HOLD CONTINUES**. The central
+Option-(ii) sequencing is **ACCEPTED IN PRINCIPLE**:
+S1 safety arrangements precede R5a-D deployment;
+R5a-D closes independently; S1 disposition precedes
+separately authorized C3. Ruling Items **A–E** are
+decided (§0.1) and corrections **RS-1..RS-5** are
+required (§0.2). The candidate identity, census
+requirements, test batteries, mutation budgets, STOP
+discipline, rollback classification, and
+runtime-adoption caveats from the readiness package
+are **accepted and carry forward unchanged** (§5).
+This revision changes sequencing, authorization,
+monitoring, and disposition law only. It does not
+execute the revised plan.
+
+**Gate structure (unchanged):** C1 (CLOSED) → C2
+(CLOSED, readability verified) → **R5a-D + S1 (this
+proposal: one deployment, one observation window, one
+owned first-wake event, one owned post-window tail)**
+→ C3 (readiness held; census re-based after R5a-D
+closes AND the S1 event is dispositioned, §4.3) →
+standalone restoration (separate, unchanged) → R3-V
+micro-scope (unchanged).
+
+---
+
+## 0.1 Ruling Items A–E — dispositions applied
+
+| Item | Rowan's ruling | Where applied | Status |
+|---|---|---|---|
+| **A** | Variant D selected **CONDITIONALLY**: the +24-hour fallback stimulus is a **separately authorized, single-use act**, subject to a clean preflight and the revised safety arrangements | §2 Stage 3b; §6.1 dependency law; **§6.3 Grant 2** (the separate Part D authorization) | **SETTLED by ruling** — implemented as a separate grant, not a folded-in consequence (RS-3) |
+| **B** | S1-X re-binding structure accepted **in principle**; correct its **operational coverage and expiry consequences** before approval | **§3.6** (coverage/expiry law, cases (i)–(v)) | Corrected; **confirmation requested** (§7 Item B′) |
+| **C** | DV-2 sequencing supersession and the two-part C3 dependency **ACCEPTED** | §4.1, §4.3 — recorded as settled law of this sequence | **SETTLED** — removed from ruling items |
+| **D** | Revise the 72-hour observation arrangements: enforceable check coverage, missed-check handling, post-window disposition | **§3.2** (monitoring mechanics, RS-2) and **§3.7** (post-window ownership, RS-1) | Corrected; parameters **confirmation requested** (§7 Item D′) |
+| **E** | Layer-1 `contain_drive` retained as **optional, single-use** contingency for natural or deliberate events; **not a chain stop, never represented as one** | §3.4, §6.2 Part (B2) — strikable; not-a-chain-stop discipline applied at every mention (§0.3) | **SETTLED** |
+
+## 0.2 Corrections banner — where RS-1..RS-5 are answered
+
+| Correction | Requirement | Answered in |
+|---|---|---|
+| **RS-1** | Address indefinite expected chain activity after window expiry: continued observation, authorized stop sequencing, or another explicit safety disposition — **no silent unowned interval** | **§3.7** — the post-window ownership regime (REVIVED-UNSTOPPED / OWNED and DEPLOYED-STALE / OWNED branches): named owner, named cadence, named next decision for every interval; expiry changes the regime, never ends ownership |
+| **RS-2** | Establish how scheduled monitoring is actually performed and verified: missed checks, unavailable reads, escalation, a stop/hold decision rule | **§3.2** — agent-executed logged check-ins; a check with no log entry is MISSED by definition; verified-vs-unobserved coverage accounting; failed checks; the escalation ladder; the WINDOW-FAILED decision rule and its effects |
+| **RS-3** | Correct the authorization dependency: Part A **requires** Parts B and C; Part D is conditional and **separately authorized** under Variant D | **§6** — §6.1 dependency law (A is **void** without B and C together); §6.2 Grant 1 (combined A+B+C, drafted); **§6.3 Grant 2** (Part D alone: its own authorization moment at/before the +24 h read, on a clean preflight reported to Julie) |
+| **RS-4** | Resolve W-3/W-4 uncertainty handling, recorder errors, failed reads, unverified trigger cases — the strict S1-X evidence standard preserved | **§3.3** (taxonomy revised: W-3e recorder-error class, W-3u unverified-trigger class) and **§3.4** (per-case handling table: unverified **never** fires S1-X; unverified = tighten + escalate + preserve; classification stays UNRESOLVED until verification or window disposition) |
+| **RS-5** | Distinguish verified S1-X stop from exhausted/unverified stop in C3 eligibility; preserve R3-V's exclusive post-exhaustion role | **§4.3** — the eligibility table: STOPPED-BY-S1X-VERIFIED vs STOPPED-BY-S1X-EXHAUSTED/UNVERIFIED (not a C3 disposition; R3-V first; `clear` never substitutes), plus the REVIVED-UNSTOPPED post-window path into C3 |
+
+**Carried corrections (prior round, unchanged):**
+R5AD-1 → §2 (sequence); R5AD-2 → §3
+(detection/observation/classification/response);
+R5AD-3 → §4 (boundaries); R5AD-4 → §6 (the §11
+replacement, now restructured by RS-3).
+
+## 0.3 Deviations — identified explicitly
+
+Carried from the prior proposal (status updated):
+
+- **DV-1 — Readiness §11 GO wording replaced in
+  full;** the Option-(i) acceptance paragraph
+  removed. **Superseded in form by DV-7**: §6 is now
+  two grants, not one four-part decision.
+- **DV-2 — Gates-v4 S1 hard dependency superseded
+  in order** (S1's event precedes C3). **SETTLED —
+  accepted by Rowan (Item C).** No longer a ruling
+  item; stated as the sequence's law.
+- **DV-3 — S1-X re-bound** to this sequence's pin
+  and window. Structure accepted in principle
+  (Item B); coverage/expiry law corrected in §3.6
+  and presented for confirmation (Item B′).
+- **DV-4 — T5/T6 wake-signature disposition**
+  (early S1 event inside the armed window; class-B
+  rollback discipline unchanged). Unchanged.
+- **DV-5 — Scheduled observation reads as a named
+  activity.** Extended by RS-2: the checks are now
+  logged, coverage-accounted, and failure-ruled
+  (§3.2), and by DV-8's post-window tail.
+- **DV-6 — Two C3 census items change form.**
+  Extended by DV-9 (eligibility forms).
+
+New in this revision:
+
+- **DV-7 — Part D leaves the combined
+  authorization.** Under Item A as conditioned and
+  RS-3, the +24 h fallback stimulus is **not** a
+  part of the combined grant: it is a separate,
+  single-use authorization (Grant 2, §6.3) that
+  Julie gives — or does not — at or before the
+  +24 h read, on a clean preflight reported to her.
+  The prior proposal's part (D) text is withdrawn.
+- **DV-8 — A post-window ownership regime exists**
+  (§3.7), including a Part B **tail** of read-only
+  checks after window close. The prior proposal
+  named the continuing chain honestly but left its
+  post-window observation to C3's arrival; RS-1
+  requires a named owner and cadence for every
+  interval, so the tail is new, named, and inside
+  Part B's authorization (§6.2).
+- **DV-9 — C3's S1-disposition forms are
+  refined** (§4.3): STOPPED-BY-S1X splits into
+  VERIFIED (a disposition) and EXHAUSTED/UNVERIFIED
+  (not a disposition — R3-V first), and
+  EXPECTED-REVIVED gains the post-window form
+  REVIVED-UNSTOPPED. This refines DV-6/§4.3 of the
+  prior proposal under RS-5; the two-part
+  dependency itself is settled (Item C) and does
+  not change.
+- **DV-10 — WINDOW-FAILED is a named window
+  outcome** (§3.2): a coverage failure state with
+  its own disposition (or non-disposition)
+  consequences for S1 and C3. The prior proposal's
+  cadence had no failure semantics.
+
+**Layer-1 discipline (Item E), applied globally:**
+every mention of `contain_drive` in this proposal
+carries its limit with it — `contain_drive`
+suppresses future drive passes; **it is not a chain
+stop and is never represented as one**:
+registrations continue while it is applied, and the
+chain is stopped only by a verified `stop_chain`
+(S1-X or C3) or not at all.
+
+Nothing else in the accepted basis changes (§5).
+
+---
+
+## 1. The problem, restated at ruling strength
+
+Unchanged from the prior proposal §1, at the same
+strength: deployment itself performs no alarm
+action; the deployed R5a semantic changes what the
+**next wake** does; a wake is **expected** in
+ordinary operations while HELD (`POST
+/v2/sync/position` constructs a fresh
+`PushPositionEvents` command per push and reaches
+`wake()`); on the first wake the past-due
