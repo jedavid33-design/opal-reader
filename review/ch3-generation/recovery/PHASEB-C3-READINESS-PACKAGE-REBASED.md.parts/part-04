@@ -1,0 +1,46 @@
+ly — the step's outcome is recorded, the gate ends, and the contradiction is reported for ruling (the stop that results is physically real if its read-back is null; its *provenance* — a verified record that a live registration survived — is exactly the R-02/R-15 evidence class Rowan must see). Verify ends unverified → STOP; attempts remaining per the episode count; exhaustion at attempt 3 → §3.2 law (R3-V onward only) |
+| C3-2c | Closing census repeat (§4 core + §4.3 delta) + both-surface stop-record read-back | none | passive reads | Any delta beyond this ledger's own = STOP and classify |
+
+**Branch (c) budget totals (worst case):** state writes **≤1**, audit rows **≤1**, `deleteAlarm` **≤1** (only inside C3-1c, only on an observed registration), `setAlarm` **0**; expected (premise holds at C3-0c, no verify call needed): **0 writes, 0 audit rows, 0 alarm ops** — branch (c) is, on its no-failure path, a **read-only gate**. It mints no episode, performs no transition, and its closing state is bit-identical to its opening state except for any C3-1c record. Its verdict is PARTIAL (§8 states the narrowed claim).
+
+---
+
+## 4. Fresh census — hard preflight expectations (C3-0), BRANCHED
+
+The C3-0 census must match **every applicable item exactly** before any mutation: the **branch-invariant core (§4.0)** plus **the executing branch's delta table** (§§4.1–4.4). These are **dated observations, not presumed current facts**: core values are the **opening baseline** (Grant 1 record: census set c0, 2026-11-02T23:23:46Z; D2 read-back completed 2026-11-02T23:28:41Z; V8a/V8b sets bit-identical thereafter), and branch-delta values are adopted from the **window closing census** (branches (a), (b), (c)) or the **tail log's latest completed check** (branch (d)) as the disposition record states them. Any deviation at execution is a STOP (§7) — the executor never rationalizes a difference. The C2 item-7 repair is carried in the core: **core item 7 enumerates both phase-accounting reads by name**, so the item covers exactly the surfaces it claims.
+
+**Branch selection is itself a census act:** C3-0 first establishes which §4.3 disposition form the window record carries (as reviewed by Rowan) and reads the state fresh; if the fresh state does not match the disposition's branch — or matches a §4.5 blocker instead — the gate stops at C3-0 with the mismatch as its finding. The executor never selects a more convenient branch.
+
+### 4.0 Branch-invariant core (all branches)
+
+| # | Item | Hard expectation | Basis |
+|---|---|---|---|
+| 1 | Health | build `fdb02395b3775dc945baa395591a73060ab146c4`; generation `halted`; coordinator `armed` | Opening baseline (D2/V8a/V8b, all sets) |
+| 2 | Script identity | etag `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e` | Opening baseline (ETag header only; body never read) |
+| 3 | Bindings / holds / observability | exactly 10 bindings; GENERATION_HALT `"1"`; `OPALREADER_PHASE_POLICY` `"enforce"`; observability enabled + `logs.persist: true` | Opening baseline, all sets |
+| 4 | Settings | revision **1** (lane standard, cap $50) | Opening baseline, all sets |
+| 5 | Queue | `delivery_paused: true`; exactly 1 consumer (`f260f2188d80426bb0588685e9d084eb`) | Opening baseline, all sets |
+| 6 | Capabilities | standard admitted; Batch `batch_not_armed`; registry `forever-pucked` ↔ `5c589095-f812-48a2-8ab2-03ba2791f2b2` | Opening baseline, all sets |
+| 7 | Phase accounting — **BOTH surfaces, each enumerated**: (a) the capabilities phase block (`GET /v2/generation/capabilities`); (b) the plan-diagnostics body `plan.phaseAccounting` (`GET /v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6`) | settled **1,029,420**; estimatedUnverified **19,018**; reservedUnverified **5,648**; inFlightUpper **0**; unknownOpen **0**; remaining **12,464,932** of 13,500,000 — exact on (a), and exact on (b) in its field names (`settledMicroCents` etc.) | Opening baseline — exact on both surfaces at census c0 and every Grant 1 verification set. **Branch note:** the §7.3 churn is halt-fenced and moves none of these figures in any branch; a phase figure moved at C3-0 is out-of-branch movement in **every** branch (§7) |
+| 8 | Quota | reconcile `ok: true`, drift empty, sole exception the adjudicated straddler `att-37d63768-db4b-447d-8150-580b7c6ee257`; PT dispatched 2026-10-29 / 10-30 / 10-31 / 11-01 = **57 / 79 / 44 / 76**; **0 for 2026-11-02 and every later PT day** at census time (any nonzero = movement); derived reserved **0** in branches (b)/(c); in branches (a)/(d) derived reserved ∈ **{0, 12}** exactly as the executing branch's delta states (the §7.3 grant's reservation cycling under the live chain — any other value is out-of-set) | Opening baseline, all sets |
+| 9 | Plans (registry level) | exactly 5 plans (smoke `complete`; old Ch 2 `retired`; fresh Ch 2 `complete`; Ch 3 `complete`; Phase B `plan:19cad189fab54b9c804a74a6` `active`) — the Phase B plan's **entry/job execution state is branch-variant** and is censused in the branch deltas, not here | Opening baseline |
+| 10 | Conflicts | exact match to the pinned four-row `schedule_dead` lease baseline (ids 1–4, all fields) | Opening baseline, all sets |
+| 11 | Parked job | `1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a` `parked_policy` rev 1, fingerprint `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`, grants [] | Opening baseline, all sets |
+| 12 | Watermarks + occupancy | content **18**; bindings **1841** with 0 changes since; idx-26 R2 key FREE (LIST empty) | Opening baseline, all sets |
+
+### 4.1 Branch (a) — EXPECTED-REVIVED (chain live at gate time)
+
+Baseline source: the **window closing census** (the S1 window record as reviewed by Rowan). Delta items, in addition to the core:
+
+| # | Item | Hard expectation |
+|---|---|---|
+| A-1 | Phase B plan execution state | plan `active`; entry occurrenceState `granted` **or** its lease-expired void state, exactly as the closing census recorded the churn state; job `plan:19cad189fab54b9c804a74a6:seg` `generating` rev ≥ 2; grants containing **exactly one** grant, `grant:plan:19cad189fab54b9c804a74a6:seg:1:full`, in a churn-invariant state; quarantine `held: false`. No second grant, no second plan movement (a second grant is trigger T4-class movement — §7) |
+| A-2 | Eligibility surface | as recorded at the closing census for the churn state (the granted occurrence's eligibility projection as the closing census read it); the three scope digests exactly `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1` (definition digests — a grant does not change them) |
+| A-3 | `drive=1` baseline — live chain | recorder table **exists**; `drivePasses` = the closing census's classified row set **plus** any rows accrued since, each matching the classified pass shape (a pass under the holds: grant cycle inside the §7.3 set, no dispatch, no error outside the classified set); `recorderHealth` as recorded at the closing census (a health change since is classified, not assumed); `pendingSchedule` **2** / `pendingWatchdog` **1** (the stop preserves schedule rows; the live chain does not change their count) |
+| A-4 | **armedAt — CONSISTENCY expectation (form changed, per §4.3)** | No fixed value is expected. The expectation is: the value read at C3-0 is **identical across the paired reads** within the census set, is a **live** registration (past-due-imminent or future, consistent with a chain turning ~10-minute passes), and is **recorded verbatim as the pre-stop value**; C3-5's observe step re-reads it and `stopArmedBefore` is the observe-step value, whatever it is. An `armedAt` of **null** in this branch contradicts the disposition (the chain was live) → STOP and classify. A value that changes **between** C3-0 and C3-5 only by the chain's own re-arm cycle is expected; a value inconsistent with the re-arm cycle (e.g. armed far beyond the next watchdog due) is a §7 STOP |
+| A-5 | Containment projection (both surfaces) | `NORMAL` — or `DRIVE_CONTAINED` **iff** the window record shows the Layer-1 (B2) `contain_drive` applied and standing (then RB-6 governs C3-1, and the audit history contains exactly that one window act: audit rows = the B2 pair — state write + `contain_drive:applied` — and no other containment event); `absent: false` if any window act ran, else `absent: true`; `verified: true`; `stopConfidence: "not_applicable"`; stop-record and episode fields at their empty values (no stop episode has ever been minted in this branch) |
+| A-6 | Disposition evidence | window record carries EXPECTED-REVIVED (a W-2 classification inside verified coverage); S1-X **never fired** (expired at window close, dead); Part D state as recorded |
+
+### 4.2 Branch (b) — NEGATIVE (no wake observed; closest to the original design)
+
+Baseline source: the **window closing census**. The disposition itself carries the mandated qualified wording — the wind

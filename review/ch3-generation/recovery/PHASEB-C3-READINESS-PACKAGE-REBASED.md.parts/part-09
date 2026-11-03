@@ -1,0 +1,23 @@
+roboration and does not proceed on the record's word if the census contradicts it). Nobody should read STOP_UNVERIFIED as "probably stopped, carry on": it is a held, escalated end state that returns to Rowan.
+- **The branch's registration is the only target.** C3's stop act is written against exactly the registration its branch census establishes (adopted stale/D value in (b); the live registration in (a)(d)). If anything about the registration state has changed by execution time beyond the branch's own expectations, C3-0 stops the gate — C3 as pinned cannot be "adapted" to a different registration or a different branch by the executor.
+- **Branch (c) can discover its premise was wrong.** A verified S1-X record that a fresh read contradicts (registration present; post-stop recorder row) is a genuinely possible finding, and it is evidence about the platform (R-02/R-15 classes), not an executor error. §3.4/§7 condition 10 route it to ruling without absorbing it — but Rowan and Julie should expect the possibility by name: branch (c)'s cheapest outcome is confirmation; its most valuable outcome may be a contradiction, and either is a PASS-shaped record for the verification gate only if the contradiction is reported at full strength.
+
+---
+
+## 10. What C3 does NOT do — and the path after C3
+
+C3, in every branch: performs **no generation** (no SubmitJob, no grant issuance of its own, no dispatch — dispatched stays 0 and spend stays $0 throughout); takes **no action on any plan or job** (the preserved Phase B plan and the parked Ch 3 job are census facts, never targets); performs **no restoration** (`clear` from CHAIN_STOPPED never appears in C3 — the only `clear` in the stop-act branches is the mechanics-leg clear from DRIVE_CONTAINED); makes **no queue or halt change** (GENERATION_HALT and the queue pause are read as preconditions, never touched); performs **no deployment** (no upload, no PATCH — the build is a census expectation, not a gate act); and grants **no onward authorization** (not restoration, not R3-V, not generation).
+
+**The path after C3, for the record:** once C3 has closed and the standalone restoration has returned the system to NORMAL under its own authorization, the **generation-resume gate** for the preserved plan `plan:19cad189fab54b9c804a74a6` (the final Chapter 3 segment, idx 26) is a **separate future package** — its own readiness, Rowan review, and Julie GO. That package, whenever it is written, **must explicitly resolve the step-0 problem** carried from Phase B attempt 3: the executor's deliverable-set substitution for pre-unpause grant verification stands as a recorded procedural variance, and pre-unpause grant verification is **unsatisfiable by construction** on the shipped machinery — the resume proposal must resolve that explicitly rather than inherit the substitution (per the attempt-3 record and Rowan's standing disposition: resume rides the preserved plan, never a resubmission). Nothing in C3 pre-decides, pre-authorizes, or substitutes for any of that.
+
+---
+
+## 11. Package contents and turn
+
+**Contents of this filing:** this package (`PHASEB-C3-READINESS-PACKAGE-REBASED.md`) + verbatim sequential parts (exact-concat) + the companion cp (`PHASEB-C3-REBASED-ROWAN-CP.md`). The original C3 package (pin `410aed35…`) and correction history are preserved in the pin lineage; the Grant 1 execution record (pin `f9b295436f4fe6114d2080c902c59c302c4c29c7`), its reconciliation (pin `a9d1d5efdabfe9b4e54346e80252c1ac0cd80275`), the sequencing proposal REVISED-2 (pin `11a296e79f0963fc005a23edd3e2a9dffbf012fd`) and its RM-1-c amendment (pin `f374ee740eb871b6799518935b15aa5dfd8f9dfa`) are the cited bases.
+
+**Requested of Rowan:** review of the rebase — the branched census (§4), the branch-(c) verification-only ledger and episode-continuity rule (§3.4, §3.2), the RB-6 conditional leg, and the branch-aware GO wording (§6) — and a PASS / REVISE ruling on the package as the C3 readiness basis for whichever eligible branch the window produces. No execution, no GO request, no production act of any kind is proposed or authorized by this filing; the S1 window runs meanwhile under its own arrangements, and C3's remaining dependency legs (§0) stand open until the window dispositions.
+
+**Turn: Rowan's.**
+
+— Wren

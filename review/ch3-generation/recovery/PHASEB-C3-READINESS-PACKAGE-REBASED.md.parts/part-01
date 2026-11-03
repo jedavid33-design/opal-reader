@@ -1,0 +1,46 @@
+S accepted by Rowan (record pin `43642bd865e77a588edf4e8d6fd4f93fae37499b`).
+- **Gate C2 is CLOSED** — execution PASS WITH QUALIFICATION (readability verified), record pin `13375e8d8c3d6d5ff26be84d99b878fc22adfa12`; correction pin `410aed35…` (14 items fully verified; item 7 partially verified; the second-surface requirement recorded as UNFULFILLED, then repaired prospectively by the census rule this package's §4 core carries).
+- **Gate R5a-D is CLOSED** — the composed build (containment + the R5a arming change) deployed under Grant 1 and accepted: execution record pin `f9b295436f4fe6114d2080c902c59c302c4c29c7`; chronology reconciliation pin `a9d1d5efdabfe9b4e54346e80252c1ac0cd80275`; Rowan's final execution ruling (Nov 2, 2026): **PASS — R5a-D DOCUMENTARILY CLOSED** (G1-1, G1-2 accepted).
+- **Live build (opening baseline):** `fdb02395b3775dc945baa395591a73060ab146c4`, script etag `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e`, containment inert at NORMAL (no containment transition has ever run in production). **Rollback target for any future deployment question: the containment build `27b2b3a9f1e7070ef243ee017703246744d57d5c` (etag `adb8e5a5b104858a20835a17ffd714a70f72cea5e066c6d61c4b80a49adac46f`); the permanent rollback floor `6a73d9622e1b4eac00c58e289de1c674ed6b3d6b` (etag `a9a4c0c4…`) is unchanged and no rollback is authorized, proposed, or budgeted by this package** — C3 performs no upload.
+- **S1 window: LIVE.** Opened 2026-11-02T23:28:41Z at the Grant 1 upload's D2 read-back completion; closes 2026-11-05T23:28:41Z; the Grant 2 (+24 h fallback stimulus) checkpoint falls at 2026-11-03T23:28:41Z and is Julie's separate decision, not requested or implied here. S1-X stands armed for the window under its accepted binding (operative pin `11a296e7…` as amended by `f374ee74…`; 60-minute decision-validity interval per RM-1-c as corrected by G1-2 — the interval bounds **initiation** of `stop_chain`, not completion of its bounded verification).
+- System **HELD**: GENERATION_HALT `"1"`, queue `opalreader-generation-v2` delivery paused. Production remains under INVESTIGATION HOLD.
+
+**What Rowan's review of this package is and is not:** a documentary review of scope, the branched census, the mutation ledger (including the branch-(c) verification-only ledger), expected results, STOP conditions, and GO wording. It is **not a GO** and authorizes no production act. Julie's GO is **not requested** in this package and cannot be given operatively until the §0 dependency is fully satisfied.
+
+**Pin:** this package is pinned on `ui1-review` at `<READINESS-PIN>` (the pin value is resolved in the board filing for this package, per the established pin-slot pattern; the Dropbox copy of the companion cp carries the filled value, disclosed there and on the board).
+
+---
+
+## 0. Dependency state — what stands between this package and an execution
+
+C3's preflight may open only when **all** of the following hold (REVISED-2 §4.3, settled law of the sequence):
+
+1. **R5a-D is CLOSED** (Rowan's execution acceptance). — **SATISFIED.** Grant 1 executed Nov 2, 2026 (Julie's GO, board `6590949982`): Stage-1 smoke test PASS on both records; census 19/19; battery 42/42 + 23/23 + 32/32 exit 0 on the gate-assembled composed tree; exactly ONE upload (2026-11-02T23:25:20Z); D2/V8a/V8b verification 7/7 each; $0; ends HELD. Rowan's final execution ruling: PASS — R5a-D DOCUMENTARILY CLOSED (execution record pin `f9b295436f4fe6114d2080c902c59c302c4c29c7`; reconciliation pin `a9d1d5efdabfe9b4e54346e80252c1ac0cd80275`).
+2. **The S1 event stands dispositioned in exactly one eligible form** (§4 of this package), on the window record (and, where named, the tail log) as reviewed by Rowan. — **OPEN.** The window is live; no disposition exists at package time. The eligible forms are: **EXPECTED-REVIVED**; **EXPECTED-REVIVED (POST-WINDOW)**; **NEGATIVE** (with verified coverage); **STOPPED-BY-S1X-VERIFIED**. Every other window outcome is a preflight blocker (§4.5).
+3. **Rowan has reviewed the window record.** — **OPEN** (follows leg 2).
+4. **Rowan's PASS on this rebased package, and Julie's GO recorded on the board before the execution census.** — **OPEN.**
+
+**Execution-census supremacy:** the census in §4 is executed **fresh at gate time**, after legs 1–4 are satisfied, and its reads — not any value quoted in this package — are the gate's preflight facts. Values quoted here from the Grant 1 record are the **opening baseline** (the state verified at window open, 2026-11-02T23:28:41Z, in the D2/V8a/V8b sets). Between package time and gate time the state may move **inside** the window's own law (a wake, a classification, an S1-X firing, a Layer-1 application): that movement is exactly what selects the branch, and the branched census is written to expect it. Movement **outside** every branch's expectations is a §7 STOP, as before — the executor never rationalizes a difference.
+
+---
+
+## 1. Scope — what C3 does, per branch
+
+C3 is the operational containment-verification gate. In branches (a), (b), and (d) it performs **operator transitions only** (state writes via the operator route `POST /v2/d6-containment` plus passive read-backs) and **one physical stop act against the then-current registration** — whichever registration the branch's census establishes. The stop act is **subtractive**: it observes the registration, deletes it, and reads back. In every branch C3 **sends no command, induces no wake, delivers no pass, and manufactures no traffic of any kind.** An operator containment transition is not an alarm wake: it does not deliver a pass, does not evaluate the schedule, and registers nothing — `contain_drive` and `clear` touch no alarm API at all, and `stop_chain`'s only alarm-API acts are the subtractive `deleteAlarm()` and `getAlarm()` reads. (In branches (a)/(d) the chain is already live and passes occur on their own schedule; C3 neither provokes nor needs them — §3, RB-7.)
+
+In order, C3 in branches (a), (b), (d) (ledger §3):
+
+1. **C3-0** — full preflight census (§4: the branch-invariant core **plus** the executing branch's delta table), including the branch's armedAt expectation.
+2. **C3-1 / C3-2** — `contain_drive`, read back on both surfaces: transition mechanics end-to-end on the production composed build (applies, persists, projects identically). Conditional in branches (a)/(d) per RB-6.
+3. **C3-3 / C3-4** — a reasoned `clear` back to NORMAL under design §5.2, restoring the gate's own opening state. This clear is the ONLY clear inside C3 and applies only to the DRIVE_CONTAINED mechanics leg — it is **not** a restoration (§2).
+4. **C3-5** — `stop_chain`: the full physical stop act — state commit (enum + episode minted), physical act (observe → `deleteAlarm()` → read-back), stop-record write — ending, on the no-failure path, with the stop **verified** (`getAlarm()` read back null).
+5. **C3-6** — `verify_chain_stop` retries, ONLY if C3-5 ended unverified, within the episode bound (§3.2).
+6. **C3-7** — closing census repeat + both-surface stop-record read-back, delta checked against the ledger.
+
+**C3 in branches (a), (b), (d) ends CHAIN_STOPPED / verified** (no-failure path). It does not end at NORMAL, and it does not restore anything (§2).
+
+**Branch differences, stated once here and carried through §§3–5:**
+
+- **Branch (b) — NEGATIVE** is the original package's design, unchanged in substance: no wake was observed in the window (the disposition carries the mandated qualified wording — §4.2), the chain never revived, and the stop act targets the registration exactly as the window's closing census recorded it.
+- **Branches (a) / (d) — EXPECTED-REVIVED / REVIVED-UNSTOPPED**: the chain is **live** at gate time, turning ~10-minute halt-fenced passes inside the §7.3 churn invariants (dispatched 0, provider attempts 0, $0, phase frozen). The stop act targets the live registration. Passes may occur during the gate; each is expected evidence inside the invariants and a §7 STOP outside them. Branch (d) is branch (a) reached through the post-window tail (§3.7 Branch 1 of REVISED-2): the window has closed, S1-X is dead, and C3 is this state's standing stop vehicle — its stop act needs no further S1-side disposition beyond the tail record.
+- **Branch (c) — STOPPED-BY-S1X-VERIFIED**: the chain is **already stopped and verified** by S1-X's act inside the window. C3 performs **no stop act and no mechanics pair** (RB-5). Its work is the verification-only ledger (§3.4): a branched census, a both-surface stop-record verification against **fresh** reads (the record alone is never physical proof — V4-2), a `verify_chain_stop` confirmation **only if** the fresh reads leave the display short of `verified_current` — charged to the **S1-X episode's** attempt bound — and a closing census. **Branch (c) ends CHAIN_STOPPED / verified, unchanged from its opening state**: C3's product

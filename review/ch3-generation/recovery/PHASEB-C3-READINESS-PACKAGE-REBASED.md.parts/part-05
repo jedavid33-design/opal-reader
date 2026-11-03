@@ -1,0 +1,45 @@
+ow record's negative is stated **only** as "**no observed revival within the tested window, subject to recorder limitations**," and this package adopts that wording for the disposition wherever it is cited: a NEGATIVE disposition asserts an observation outcome inside a tested window under a recorder with a known blind spot (R-06), never that the chain *cannot* revive. Delta items:
+
+| # | Item | Hard expectation |
+|---|---|---|
+| B-1 | Phase B plan execution state | exactly the opening baseline: entry `pending` / `executionState: null`; job `queued` rev 1, grants []; quarantine `held: false` (no wake ⇒ no grant cycle ever ran) |
+| B-2 | Eligibility | chapter bound **26** / parked **0** / eligible **1**; segment eligible **1** / **569** chars / **8,022**; all three scope digests exactly `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1` |
+| B-3 | `drive=1` baseline + **armedAt — ADOPTED value** | recorder **as recorded at the closing census** (table state, rows, health verbatim — a stimulus wake that re-registered without a pass may have created the table or not; the closing census is the authority, not a prediction); **`armedAt` exactly the closing census's recorded value** — hard in the same way the original package's 1793562576104 was hard: any other value at C3-0, including null, is a STOP. (If no wake of any kind occurred in the window, that value is 1793562576104, the stale registration, and this branch is the original design verbatim. If the Grant 2 stimulus was sent and its wake re-registered to the earliest pending due, the adopted value is that recorded D. Either way the census expectation is **the closing record's value**, re-derived from it — never carried from this package's text) |
+| B-4 | Containment projection (both surfaces) | `NORMAL`; `stopConfidence: "not_applicable"`; stop/episode fields empty; `absent: true` unless the window record shows a Layer-1 (B2) act (anomalous-signature case — then as §4.1 A-5's DRIVE_CONTAINED form, and the disposition record must say why a B2 act coexists with a NEGATIVE event classification) |
+| B-5 | Coverage + Part D state | **verified coverage** for the window (§3.2 accounting: NEGATIVE is unavailable on gapped coverage unless Rowan dispositioned the gaps expressly — §4.5); Part D state as recorded (granted+used / granted+unexercised-lapsed / never granted), consistent with B-3's adopted armedAt |
+
+### 4.3 Branch (c) — STOPPED-BY-S1X-VERIFIED (verification-only; §3.4 ledger)
+
+Baseline source: the **window closing census** + the tail log's Branch 3 checks (REVISED-2 §3.7) through gate time. Delta items:
+
+| # | Item | Hard expectation |
+|---|---|---|
+| C-1 | Containment projection (both surfaces) | state `CHAIN_STOPPED`; `absent: false`; `verified: true`; the stop record exactly as the window record carries it: `stopStatus` `verified` or `re_verified`; `stopVerifiedAt` = S1-X's recorded verification time; `stopVerifyAction` as recorded; `stopArmedBefore` = the registration S1-X deleted; `stopArmedAfter: null`; `stopVerifyAttempts` = the S1-X episode's recorded count (≥1, ≤3); `stopEpisodeId` = the S1-X `stop_chain` audit row id; `stopEpisodeExhausted: false`; **`stopConfidence` displayed `verified_current` on both surfaces at C3-0c, from the census's own fresh `getAlarm()` observations (null on each surface) — recorded success alone does not satisfy this item** |
+| C-2 | `drive=1` baseline — stopped chain | `armedAt` **null** (fresh, both surfaces — part of C-1's test); `pendingSchedule` **2** / `pendingWatchdog` **1** (the stop preserved the schedule rows); recorder as recorded (table/rows/health from the window record + tail checks; any row timestamped **after** the S1-X stop's verification is a contradiction to classify at C3-0c, not a detail) |
+| C-3 | Phase B plan execution state | exactly as the closing census recorded it post-stop (the §7.3 churn state frozen at the stop: grant/void state, job revision, occurrence state as the window record carries them — the stop froze the cycle mid-state and C3 expects **that** state, re-read fresh); no movement between the closing census and C3-0c beyond the tail log's recorded checks |
+| C-4 | Audit history segment | the S1-X episode's events present and complete in `d6_containment_events` (`stop_chain:applied`, its verify events, the firing-decision linkage as recorded in the window log); NO `clear` event after the stop; NO second episode. (This segment is also the restoration's future audit-review input — §2) |
+| C-5 | S1-X state | fired, single use consumed, record accepted as the disposition's basis; the firing was inside the accepted binding (decision recorded in-window on complete evidence; initiation within the 60-minute validity interval per RM-1-c/G1-2) — verified from the window record at preflight, not re-litigated |
+
+### 4.4 Branch (d) — EXPECTED-REVIVED (POST-WINDOW) / REVIVED-UNSTOPPED · OWNED
+
+Identical to §4.1 in every item, with these substitutions: the baseline source is the **tail log's latest completed check** (REVISED-2 §3.7 Branch 1, daily cadence) instead of the window closing census; A-3's "rows accrued since" runs from that check; A-6's disposition evidence is the window record's EXPECTED-REVIVED form **plus** the tail record standing REVIVED-UNSTOPPED / OWNED at gate time, with S1-X recorded **expired, never fired**. A tail gap (a missed daily check not yet dispositioned in the tail log) does not block this branch — the tail is an ownership regime, not a coverage claim — but the latest completed check must be **less than 48 hours old** at C3-0 or the census re-baselines from a fresh supervised check performed and logged before C3-0 opens (named here so the branch cannot execute on a stale tail).
+
+### 4.5 Preflight blockers — states in which C3 may NOT open (any branch)
+
+| State | Why blocked | Path onward |
+|---|---|---|
+| **STOPPED-BY-S1X-EXHAUSTED/UNVERIFIED** (episode exhausted at 3 attempts, or S1-X's stop verification failed/unresolved) | **Not a C3 disposition** (RS-5). The episode's verification budget is spent; C3 cannot mint, reset, or borrow against it | **R3-V first** — fresh Rowan ruling + Julie authorization, per exhausted episode, with the historical audit review. C3's dependency leg 2 is met on this state only when R3-V has resolved the episode to verified, or Rowan expressly dispositions the exhaustion record otherwise. Clearing CHAIN_STOPPED never substitutes |
+| **W-1f-pending** (registration re-based to a known future D, undispositioned) | The stop act's target state is in motion by design; C3 as pinned cannot be adapted to it by the executor | Rowan dispositions the end-state (observation extended to D under fresh authorization, or C3 re-derived against the future registration); §3.7 Branch 2 owns the interval meanwhile |
+| **W-4 unresolved** (wake observed, delivery not observed, undispositioned) | The event itself is unclassified — there is no branch whose census describes this state | Rowan's disposition required; observation continues meanwhile |
+| **WINDOW-FAILED** (coverage failure declared under §3.2) | The window's evidence cannot support any disposition | Rowan's ruling + fresh Julie authorization before any onward step |
+| **UNRESOLVED-AT-EXPIRY** (a trigger candidate stood unverified at window expiry) | An unexamined possible trigger cannot be the foundation of a verification gate | Rowan dispositions the record (fresh at-trigger authorization, or an express ruling feeding an eligible form) |
+| **No event; no disposition** (window closed W-0 with Grant 2 never granted/used and no NEGATIVE disposition recorded — DEPLOYED-STALE / OWNED standing alone) | No §4.3 form is met; a bare no-event close is not the NEGATIVE form (which requires the disposition, on verified coverage, in the mandated wording) | §3.7 Branch 2's next decisions govern (Grant 2 under a fresh window, Rowan's revised disposition, or C3 sequencing as she rules) |
+| **Window still open / disposition not yet reviewed** (the state at this package's writing) | Dependency legs 2–3 open (§0) | Window close + window record + Rowan's review |
+
+**Executor precondition (process, not a read):** Julie's GO recorded on the board before C3-0; Rowan's PASS on this rebased package on file; legs 1–3 of §0 satisfied; no other gate or operator action outstanding; in branch (d), the tail regime still standing (not superseded by a Rowan disposition that changes the path).
+
+---
+
+## 5. Expected results, step by step
+
+The stop record keeps its **three facts separate** at every stage (design v4 §2): (i) the **state enum**; (ii) the **physical verification record** — `stopStatus`, `stopVerifiedAt`, `stopVerifyAction`, `stopArmedBefore`, `stopArmedAfter`, `stopVerifyAttempts` — of which the `stopVerified*` fields record the most recent SUCCESSFUL verification and are never erased by a later failure; (iii) the **stop-verification status as displayed** — `st
