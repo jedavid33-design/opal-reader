@@ -1,0 +1,155 @@
+ects, or asserts
+   the existence of a grant before the holds lift, and the execution
+   record of this gate must state that plainly, in those words.
+2. **Why that is sound.** Before the holds lift, containment does not
+   rest on grant inspection at all — it rests on the holds themselves:
+   GENERATION_HALT `"1"` fences delivery and the paused queue fences
+   dispatch, and the census (§4) verifies both holds, the plan's
+   exact preserved shape, and the exclusivity facts the old step-0
+   actually needed (this plan is the only non-terminal plan; its job
+   carries exactly one occurrence; no other plan or job can be
+   selected by a drive pass). Those are **census facts, verified
+   while held** — they are not a grant check and are not presented as
+   one. The grant is the **first observable effect** of the drive
+   path running; verification therefore attaches where the evidence
+   first exists: **after** the lift, against the grant itself, in the
+   protocol of §2.3. A check moved to the first moment it can be
+   satisfied is a resolution; a check performed against a state that
+   cannot contain its object was the defect.
+3. **What replaces it, in one sentence:** a fully specified
+   **post-unpause verification protocol** (§2.3) with named poll
+   targets, branch-specific in-set expected values, a sliding
+   ≥35-minute stall window (Gate 4's durable ruling), exact abort
+   conditions, an exact re-hold sequence, and a named evidence set
+   that closes the verification.
+
+### 2.3 The post-unpause verification protocol (normative)
+
+**Start of protocol:** the moment the second hold lift (GR-4, queue
+unpause) is read back. The wake step (GR-2) precedes the lifts
+(§5), so the alarm chain is expected to be registered before the
+system opens; the protocol nonetheless keys all timing to the
+unpause read-back, the last executor-controlled instant.
+
+**Poll targets** (every poll reads ALL of these; a poll with a failed
+surface is a failed poll, not a negative observation):
+
+| # | Surface | What is read |
+|---|---------|--------------|
+| P-1 | `GET /v2/jobs/plan:19cad189fab54b9c804a74a6:seg` | job state/revision; `grants[]` — grant id, state, revision; the occurrence's state and `cache_key` |
+| P-2 | `GET /v2/d6-plans/plan:19cad189fab54b9c804a74a6` | plan state; totals {eligible, done, failed, blocked, prompts}; plan row `updatedAt` |
+| P-3 | `GET /v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6` | `plan.phaseAccounting` — phase surface 2 |
+| P-4 | `GET /v2/generation/capabilities` | phase surface 1; generationState; lanes (Batch must remain `batch_not_armed`) |
+| P-5 | `GET /v2/d6-quota-reconcile` | reconcile `ok`; derived reserved; dispatched for the current PT day; sole-exception check |
+| P-6 | `GET /v2/d6-diagnostics?drive=1` | drive-pass rows; live `getAlarm()` (`armedAt`); recorder health |
+| P-7 | `GET /v2/conflicts` | exactly the 4 pinned rows |
+| P-8 | `GET /v2/sync/changes?family=bindings&sinceSeq=1841` | binding changes (the success marker, §8.1) |
+| P-9 | `GET /health` (each poll) + cf-api queue read (first, last, and any abort) | build unchanged; generation state as expected for the phase of the protocol; queue state as expected |
+
+**Poll cadence:** at least one complete poll every 5 minutes from
+unpause until the protocol closes (success, §2.3.4) or aborts
+(§2.3.3). Polls are timestamped and preserved raw in the gate
+evidence, as in attempt 3's 23-poll set.
+
+#### 2.3.1 In-set expected values — branch GR-A (plan untouched; §4.1)
+
+The grant cycle is expected to reproduce, in order, the values the
+records pre-classify:
+
+1. **Grant appearance:** `grants[]` gains exactly one grant,
+   id **`grant:plan:19cad189fab54b9c804a74a6:seg:1:full`**; occurrence
+   `pending` → `granted`; job `queued` rev 1 → `generating` rev ≥ 2;
+   derived reserved 0 → **12** (the cohort reservation taken at
+   issuance). Dispatched still 0 at this instant; provider attempts
+   0; phase figures frozen except the derived-reserved movement.
+2. **Dispatch and attempts:** with the queue live and the halt lifted,
+   delivery proceeds: dispatched for the current PT day increments
+   **only** for this grant's attempts; each attempt is attributable
+   to this plan/occurrence on the reconcile and plan surfaces; the
+   settled figure moves only by this segment's recorded cost (§5.4).
+3. **Completion:** occurrence → `ready`; execution `committed`; plan
+   totals → {eligible 1, **done 1**, failed 0, blocked 0}; derived
+   reserved returns to 0 at grant close; the binding for
+   `5c589095-f812-48a2-8ab2-03ba2791f2b2:2a85f74f-353d-4c25-a86a-4a4db392868b`
+   appears (P-8: exactly one change, §8.1).
+
+Any value outside this set — a different or additional grant id, a
+second grant, reserved outside {0, 12} before dispatch, dispatched
+movement attributable to anything else, any phase movement beyond
+this segment's own accounting, any conflicts/binding/parked-job
+movement outside §8.1's single expected binding — is **out-of-set**
+and is an abort condition (§2.3.3), not a variation to absorb.
+**Foreign generation is a STOP** (Gate 4 law), at any point, in
+either branch.
+
+#### 2.3.2 In-set expected values — branch GR-B (plan carries §7.3 churn; §4.2)
+
+Identical in structure, with the cycle's starting values adopted from
+the C3/restoration censuses: the prior grant
+(`grant:plan:19cad189fab54b9c804a74a6:seg:1:full`) stands in the
+terminal void state the window record establishes; job and occurrence
+stand at their adopted post-churn values. The protocol then expects
+**one** new grant cycle for the same occurrence, closing at the same
+completion values as §2.3.1 step 3. The new grant's id form and the
+occurrence's state path out of its post-void state are **OQ-2 (§9)**:
+this branch may not execute until Rowan's ruling on OQ-2 fills those
+expectations in writing. Nothing in this paragraph invents them.
+
+#### 2.3.3 Abort conditions and the exact re-hold sequence
+
+**Abort conditions** (any one, at any poll):
+
+- A-1: the stall test of §2.3.4 is met (no grant, no progress).
+- A-2: any out-of-set value (§2.3.1/§2.3.2), including any foreign
+  generation signal.
+- A-3: the forecast line (12,808 units) is crossed by this segment's
+  cumulative settled delta before completion — a **forecast
+  deviation + STOP** (attempt-3 presentation §7.1/§12 law), reported
+  at exactly that strength.
+- A-4: the detection threshold (25,000 units) is crossed — reported
+  as a threshold crossing, never as a cap breach (§5.4).
+- A-5: any hold, build, settings, observability, conflicts, or
+  parked-job value moves outside its census expectation at any poll.
+- A-6: a drive-pass recorder row shows an error outcome attributable
+  to this plan's pass that the protocol cannot classify inside the
+  in-set values (cf. the window's W-3e discipline: recorder errors
+  are reported, never absorbed).
+
+**Re-hold sequence on abort (exactly this order, mirroring attempt
+3's §9.1 closing):**
+
+1. **Re-pause the queue** (cf-api PUT `delivery_paused: true`);
+   read back `delivery_paused: true`.
+2. **Re-halt generation** (restore envelope: identical parts,
+   GENERATION_HALT `"1"`); read back: `/health` generation `halted`,
+   build unchanged, etag unchanged, observability intact.
+3. **Closing capture** of the full P-1..P-9 set; the gate ends
+   **HELD** (§8.2). No containment transition is performed by this
+   gate on any path (§3): if the chain stands revived and churning
+   after an abort, that state is **REVIVED-UNSTOPPED / OWNED** under
+   the standing tail discipline until a future authorized disposition
+   — named in the execution record, never silently absorbed.
+
+**What an abort does and does not undo:** re-holding fences future
+delivery and dispatch. It does not un-issue a grant already issued
+(such a grant voids on lease expiry under the holds — the bounded
+§7.3 churn state, $0 if no dispatch occurred), does not un-dispatch
+an attempt already sent, and does not un-spend a provider cost
+already incurred. Exposure on any abort is reported in the three-line
+form of §8.3.
+
+#### 2.3.4 The stall test and the evidence that closes verification
+
+**Stall test (Gate 4's durable ruling — windows slide ≥ 35
+minutes):** a **progress event** is any of: grant appearance or grant
+state/revision change; an attempt recorded for this occurrence; plan
+totals change; occurrence state change; dispatched increment for this
+grant. If **two consecutive complete polls ≥ 35 minutes apart show no
+progress event between them**, the stall is declared (abort A-1).
+Any progress event **slides the window**: the 35 minutes runs from
+the last observed progress, never from the unpause. (Attempt 3's
+declaration is the precedent shape: first no-progress observation
+>10 min after submission, second 35 min 14 s later, no progress event
+between.) After grant + dispatch, the same sliding test keys on
+attempt/completion progress (OQ-6, §9: no record bounds a single
+segment's delivery d

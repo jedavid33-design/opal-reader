@@ -1,0 +1,103 @@
+xpectations at resume.** If passes ran during
+  the window/C3 period, `d6_drive_passes` exists at this gate's
+  census (§4.0 item 11 adopts its state). Is a drive-pass row for
+  this gate's own passes **required** closing evidence, or is the
+  P-1..P-9 grant/accounting evidence sufficient with rows as
+  corroboration? (The dual-failure blind spot, R-06, cuts both ways
+  and this package takes no position.)
+- **OQ-4 — the D-value at this gate's wake.** Prompt delivery after
+  the wake is expected under R5a's past-due disjunct (the pending
+  watchdog row is long past due), but D remains unobservable until
+  the wake and the B-family is not closed (B1 leading, not proven).
+  The §2.3.4 sliding stall test is designed to absorb any D; Rowan
+  is asked to confirm that no additional pre-lift observation is
+  required, rather than this package asserting one.
+- **OQ-5 — post-completion chain behavior.** After GR-6a's re-hold,
+  the alarm chain stands registered and the watchdog continues to
+  fire into the halt (passes under the holds, the pre-window normal).
+  Is any post-gate observation of that state required (a tail check),
+  or does the closing census suffice? This package proposes the
+  closing census suffices and asks Rowan to rule.
+- **OQ-6 — completion timing bound.** No record bounds how long one
+  segment's dispatch + attempts may legitimately take; §2.3.4
+  therefore keys the post-dispatch phase to the same sliding
+  ≥35-minute no-progress test rather than a deadline. Rowan is asked
+  to rule on whether a distinct, longer bound is required for the
+  post-dispatch phase.
+
+**Strength discipline:** every claim in this package is marked at its
+true strength where it matters — source-proven (the wake paths, the
+live-trigger finding), record-cited (baseline values, attempt-3
+figures), expected-not-proven (prompt delivery after the wake,
+re-issuance in GR-B), or open (OQ-1..OQ-6). Nothing platform-side is
+asserted beyond the records.
+
+---
+
+## 10. What this gate does NOT do — exclusions and the meaning of "undo"
+
+This gate, on every path: performs **no SubmitJob and creates no
+plan** (§1.1); arms **no Batch** and generates **nothing** beyond the
+single idx-26 segment (no rest-of-book, no other chapter, book, or
+segment); takes **no action on the preserved plan or the parked job**
+beyond letting the drive path run the preserved plan (no retirement,
+no revocation, no release, no quarantine change); makes **no
+exemption change** (no new exemption, no revocation — the standing
+exemption is a census fact); performs **no containment transition**
+and **no restoration** (restoration precedes this gate, §0 leg 3);
+**clears no conflicts row**; changes **no settings** beyond the two
+halt envelopes; performs **no deploy** and changes **no code**;
+changes **no queue property** beyond the GR-4/GR-6 pause toggles;
+and grants **no onward authorization** (Batch arming, rest-of-book
+generation, and any second resume attempt each need their own gates).
+
+**Rollback thinking.** There is no code change in this gate, so there
+is nothing to roll back in the deployment sense. Operationally,
+"undo" means exactly the **re-hold** (§2.3.3): re-pause + re-halt,
+restoring the containment the holds provide. Its limits are stated,
+not softened: a re-hold cannot un-issue a grant, un-dispatch an
+attempt, un-spend a provider cost, un-commit a completed segment, or
+un-advance the bindings watermark — nor should it: on the success
+path those are the gate's product, and on an abort path they are the
+exposure the three-line report (§8.3) exists to state. Build
+rollback is not applicable (no build changes; the floor law is
+untouched and the composed build stands).
+
+---
+
+## 11. Package contents, bases, and turn
+
+**Contents of this filing:** this package
+(`PHASEB-GENERATION-RESUME-PACKAGE.md`) + verbatim sequential parts
+(exact-concat, if the package exceeds ~30 KB) + the companion cp
+(`PHASEB-GENERATION-RESUME-ROWAN-CP.md`), pinned together on
+`ui1-review` in `jedavid33-design/opal-reader` under
+`review/ch3-generation/recovery/`.
+
+**Bases (all records on disk; no production calls were made):** the
+Phase B attempt-3 execution record (pin `ee8562b9…`) — census,
+checkpoint, step-0 §6, stall §8, closing §9; the stall diagnostic
+report `PHASEB-STALL-DIAGNOSTIC-REPORT.md` (pin `cccfea62…`) — §§1–2
+(wake/alarm source facts), §6 (live-trigger finding), §7 (the step-0
+variance this package resolves); the rebased C3 readiness package
+(pins `46112a03…` + correction `aba681a0…`) — §0 dependency form, §2
+restoration law, §4 branched census, §6 GO form, §10's step-0 charge
+to this package; `PHASEB-RECOVERY-GATES-V4-REVISED.md` — ledger and
+restoration law; the Grant 1 execution record (pin `f9b29543…`) —
+the composed build and opening-baseline live state; the R5a-D/S1
+sequencing proposal REVISED-2 (pin `11a296e7…`) — §1 (position-sync
+wake), §7.3 pre-classified set; the attempt-3 final presentation
+CORRECTED (pin `91826e5b…`) — §7.1 cost figures and law.
+
+**Requested of Rowan:** a **readiness review only** — PASS / REVISE
+on this package as the generation-resume readiness basis, including
+rulings on OQ-1 (all branches) and OQ-2 (if GR-B is to be
+executable). No execution, no GO request, no production act of any
+kind is proposed or authorized by this filing. The S1 window runs
+meanwhile under its own arrangements; C3, the restoration, and this
+gate's GO all stand in their own dependency order (§0).
+
+**Turn: Rowan's** — when Julie pokes her. (Julie relays; the board
+watch is cancelled and wake emails are suspended, both standing.)
+
+— Wren

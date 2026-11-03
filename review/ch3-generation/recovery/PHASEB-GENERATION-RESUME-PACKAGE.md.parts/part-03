@@ -1,0 +1,165 @@
+vider attempts **0**;
+settled delta across the window **0**.
+
+- The branch's delta values are **adopted from the C3 closing census
+  and the restoration census**, quoted in the execution record with
+  their sources; values those records do not establish are not
+  estimated here.
+- **Execution in GR-B additionally requires Rowan's ruling on OQ-2**
+  (§0 leg 4): the re-issuance mechanics after a void. Until that
+  ruling fills §2.3.2's expectations, GR-B is a census branch, not an
+  executable one.
+
+### 4.3 Preflight blockers — states in which this gate may NOT open
+
+- Containment not NORMAL at census (any CHAIN_STOPPED, DRIVE_CONTAINED,
+  unverified, or contested/`unknown` confidence) — the restoration
+  leg (§0.3) has not closed; STOP.
+- C3 closed in any form other than CHAIN_STOPPED / verified, or its
+  execution record not yet accepted by Rowan — STOP.
+- Any §4.0 item not exact, including build drift (§4.0 item 1) and
+  cross-surface phase disagreement (item 5) — STOP before any
+  mutation.
+- Plan/job matching neither §4.1 nor §4.2 — STOP; the state goes to
+  Rowan as a new branch question. The executor does not interpolate
+  a branch.
+- Current PT day headroom < 12 (§5.4) — the gate does not open that
+  day; this is a deferral, not a failure, and is recorded as such.
+
+---
+
+## 5. Execution sequence
+
+Each step names its ledger line (§3). Any §7 STOP condition, at any
+step, ends the sequence where it stands; if the holds have been
+lifted, the §2.3.3 re-hold sequence runs first, in its order, before
+anything else.
+
+- **GR-0 — Fresh execution census (§4).** Full read set; branch
+  selected by the census; every value recorded raw. STOP on any
+  deviation (§7.1). The census is also this gate's **quota-day
+  check**: the current PT day is named (PT day rolls at 07:00Z —
+  midnight PT), its dispatched count read, and headroom ≥ 12
+  verified (§5.4). If execution is expected to span the PT boundary,
+  the census states so and the pre-unpause re-check (GR-4 note)
+  applies.
+- **GR-1 — Voice checkpoint (§5.2, below).** Reads only.
+- **GR-2 — Wake slot (§5.3, below).** The single re-arming act, in
+  the form Rowan's OQ-1 ruling specifies.
+- **GR-3 — Halt lift.** Settings-only operative-envelope flip:
+  metadata = the live `/settings` read with only GENERATION_HALT
+  `"1"` → `"0"`; identical parts. Read-backs (attempt-3 §4 pattern,
+  all exact): `/health` generation `enabled`, build unchanged;
+  **etag unchanged**; parts byte-identical; observability intact (if
+  the flip resets observability, the standing deploy-law PATCH to
+  `/workers/scripts/{name}/settings` is applied and the etag
+  re-verified — that PATCH, if needed, is inside this step's single
+  counted mutation, as the flip's own repair, and is reported);
+  GENERATION_HALT `"0"`; 10 bindings; queue still paused.
+- **GR-4 — Queue unpause.** cf-api PUT `delivery_paused: false`;
+  read-back confirms. **Immediately before this step**, if the PT
+  day has rolled since GR-0, the quota-day check is re-read
+  (headroom ≥ 12 on the new day) — the attempt-3 step-0's legitimate
+  residue: a *quota* fact, checkable while held, checked while held.
+  From the unpause read-back, the §2.3 protocol runs.
+- **GR-5 — Monitored generation (§2.3).** Polls per §2.3 until
+  closure or abort. The executor sends **nothing** during GR-5: no
+  command, no second wake, no nudge of any kind. A revived chain
+  turning further passes after completion is expected machinery
+  behavior and is observed, not managed, until GR-6a.
+- **GR-6a — Success close.** On §2.3.4 closure: re-pause the queue
+  (read-back), then re-halt (restore envelope; read-backs as GR-3
+  mirrored: generation `halted`, etag unchanged, observability
+  intact). The end-state alternative is Julie's alone, expressed in
+  the GO (§6): the default, and the only form this package
+  recommends, is **holds restored**.
+- **GR-7 — Closing census.** The full §4 read set repeated. Expected
+  deltas from GR-0, and **only** these: plan totals done 1 (§8.1);
+  job/occurrence at their completion values; bindings watermark
+  **1842** with exactly the one idx-26 binding; phase settled
+  increased by exactly this segment's recorded cost, reserved figures
+  returned to baseline; quota dispatched for the PT day increased by
+  exactly this segment's attempt count; the alarm standing
+  re-registered by the chain's own re-arm cycle (value recorded, not
+  predicted). Any other delta = the record classifies it before
+  anyone calls the gate closed (§7.6).
+
+### 5.2 Voice checkpoint — re-verified fresh, read-only, no generation
+
+Attempt 3's checkpoint (§3 of its record) PASSED: post-exemption
+quotes showed the segment **eligible 1 / 569 chars / expected
+8,022**, exclusions all zero, `voice_prompt 0` — the disposition is
+`eligible` because the segment's POV resolves through its recorded
+cast voice, **Alex → Gemini Charon**, with no prompt.
+
+**This gate re-verifies the checkpoint fresh at GR-1**, because the
+exemption's standing effect is a projection (evidence class (b)) and
+months of intervening gates make a carried-forward PASS exactly the
+kind of claim this ladder does not make. Method, reads only: chapter
+quote (bound 26 / parked 0 / eligible 1) and segment quote (eligible
+1 / 569 / 8,022), exclusions zero, `voice_prompt 0`. The checkpoint
+**passes** only if all of those read exactly; the quote digest is
+recorded and compared against attempt 3's post-exemption digest
+(`cdef2c7e…`): agreement is corroboration; **disagreement is a STOP**
+(§7.2), never a rationalization — the executor does not decide which
+field's movement is innocent. No audio is generated, auditioned, or
+touched by the checkpoint; it reads the same quote surfaces the
+census reads.
+
+### 5.3 The wake slot (GR-2) — why a wake is needed, and why its form is Rowan's to fix
+
+The physical situation this gate opens into is new to the ladder:
+C3's stop deleted the alarm registration, and the restoration's
+`clear` — by design law (containment design §5.2; battery CT12) —
+**never re-arms**. At GR-0 the expected `getAlarm()` is therefore
+**null** (§4.0 item 4). Neither hold lift re-arms anything: the halt
+flip is a Cloudflare-side metadata act and the unpause is a queue
+act; neither reaches the coordinator. **Without a wake, there is no
+registration, no drive pass, and no grant — the attempt-3 stall
+shape, this time by construction rather than by fault.**
+
+What the deployed source establishes (diagnostic §§1–2, on the
+pre-R5a build; the composed build's R5a amendment changes the
+past-due rule, not the wake paths):
+
+- `wake()` ensures a pending watchdog row exists and calls
+  `_armAlarmIfEarlier()`, which sets the alarm when `getAlarm()`
+  returns **null** (or when the earliest due time is earlier than the
+  armed time). A null registration is therefore re-armable by any
+  single wake.
+- `wake()`'s only callers are `handleCommand` (every command),
+  `requestGrant`, and `handleReport`. **No GET or read path calls
+  `wake()`.** Ordinary app use does reach it: `POST /v2/sync/position`
+  constructs a fresh `PushPositionEvents` command per push
+  (REVISED-2 §1) — but Julie's app use is not an executor-controlled
+  step, and this gate does not schedule her behavior.
+- Schedule rows survive the stop (C3 §8), so at wake time the
+  earliest pending row is a long-past-due watchdog; under R5a's
+  past-due disjunct the wake re-registers the alarm to that due time
+  and prompt delivery is **expected — not proven** (the D-value
+  family, B1 leading / B2 / B3, is unobservable until the wake; the
+  §2.3.4 sliding stall test is the control that absorbs this).
+
+**The slot:** GR-2 is exactly one wake, performed by the mechanism
+Rowan names in her ruling on **OQ-1 (§9)**. The candidates the
+records put in view — and their problems, stated so the ruling has
+something to rule on:
+
+- (i) *A fresh, well-formed executor command whose apply is expected
+  to refuse on state grounds.* `handleCommand` calls `wake()` before
+  applying, so even a refused command wakes — but no record names a
+  specific command that is simultaneously fresh, well-formed, and
+  guaranteed side-effect-free on refusal in all states this gate can
+  open into. Naming one is a source question, not an executor choice.
+- (ii) *A replayed (idempotent) command.* The diagnostic's P1 text
+  says "even a rejected or replayed command wakes first
+  (`coordinator.mjs:521`)"; later ladder source summaries record that
+  replayed commands short-circuit at the receipt check **before**
+  `wake()`. These two statements conflict, the conflict is in the
+  records, and this package does not resolve it by preference.
+  **OQ-1.**
+- (iii) *Relying on the GR-3 halt flip or GR-4 unpause to wake.*
+  Rejected on the source above: neither reaches the coordinator.
+
+**Until OQ-1 is ruled, GR-2 is an unfilled slot and this gate cannot
+execute** — that is a stated dependency (§0 leg 4), not a ga

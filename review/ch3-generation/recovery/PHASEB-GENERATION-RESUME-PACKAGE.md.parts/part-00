@@ -1,0 +1,165 @@
+# Phase B — GENERATION-RESUME gate readiness package: ONE resume of the preserved plan for the final Chapter 3 segment (idx 26)
+
+**PRE-DRAFT — READINESS ONLY. This package authorizes nothing, requests
+no GO, and was written with ZERO production calls of any kind (not even
+reads). Every production value quoted below is cited from the records
+named in §11 and is labeled the OPENING BASELINE: the execution census
+in §4 is taken fresh at gate time and supersedes anything quoted here.**
+
+- **Prepared:** Nov 3, 2026, during the live S1 observation window, at
+  Julie's direction ("prep the generation-resume package now" — her
+  instruction in the Coding Projects chat, Nov 3, 2026), so that
+  Rowan's readiness review can begin **before** C3 executes and the
+  gate can move the moment its dependencies land. Pre-drafting changes
+  no dependency: execution remains fully gated behind the S1
+  disposition + Rowan's review of it, C3 execution and closure, the
+  standalone restoration, Rowan's PASS on this package, and Julie's
+  separate explicit GO for this gate (§0).
+- **Production state at writing:** INVESTIGATION HELD; generation
+  HALTED; queue PAUSED; S1 window OPEN (opened 2026-11-02T23:28:41Z,
+  closes 2026-11-05T23:28:41Z). No S1 disposition exists yet; C3 has
+  not executed; no restoration has been authorized or performed.
+- **NO SPOILERS:** this package carries structural metadata and
+  digests only. No segment text is read, printed, or quoted anywhere
+  in it.
+
+---
+
+## 0. Dependency state — what stands between this package and an execution
+
+This gate may open only when **all** of the following hold. Each leg
+is separate; none is bundled into another's authorization, and no
+leg's satisfaction is inferred from another's.
+
+1. **An eligible S1 disposition exists and Rowan has reviewed the
+   window (and, where applicable, tail) record.** The eligible forms
+   are C3's (§4 of the rebased C3 package, pin `46112a03…` as amended
+   by `aba681a0…`): EXPECTED-REVIVED; EXPECTED-REVIVED (POST-WINDOW);
+   NEGATIVE with verified coverage; STOPPED-BY-S1X-VERIFIED. A
+   blocker state (WINDOW-FAILED, W-4 unresolved,
+   UNRESOLVED-AT-EXPIRY, STOPPED-BY-S1X-EXHAUSTED/UNVERIFIED without
+   an R3-V disposition) leaves this gate closed until Rowan rules
+   otherwise. — **OPEN** (window live at writing).
+2. **C3 has EXECUTED and CLOSED under its own GO, ending
+   CHAIN_STOPPED / verified.** C3's four branches all end there on
+   their no-failure paths — (a)/(b)/(d) by C3's own stop act, (c) by
+   verified corroboration of S1-X's stop. A C3 execution ending
+   STOP_UNVERIFIED, or stopped at a premise failure (C-PF1..C-PF4),
+   or never executed, does **not** satisfy this leg: this package may
+   not open, and the state returns to Rowan (R3-V or a fresh ruling)
+   before anything here is rebased. — **OPEN.**
+3. **The standalone RESTORATION has been authorized, executed, and
+   closed under its own separate authorization** (Rowan ruling +
+   Julie GO + fresh census at its start + recorded reason in the
+   `clear` audit event + the mandatory historical audit review of the
+   full append-only `d6_containment_events` history, per gates v4
+   REVISED and C3 §2), ending with containment **NORMAL** and the
+   system otherwise HELD (GENERATION_HALT `"1"`, queue paused).
+   **Restoration is a PRECONDITION of this gate, never a step inside
+   it.** This package contains no `clear`, no containment transition
+   of any kind, and no budget for one (§3, §10). If the restoration's
+   closing state differs from the opening-baseline form §4 expects,
+   this package stops and is rebased — the executor never adapts it.
+   — **OPEN.**
+4. **Rowan's PASS on this package** (readiness), including her ruling
+   on the open questions in §9 — at minimum **OQ-1** (the wake slot,
+   §5 step GR-2) in all cases, and **OQ-2** additionally if the
+   executing branch is GR-B (§4.2). — **OPEN** (this filing requests
+   exactly this review).
+5. **Julie's separate explicit GO for THIS gate**, in the
+   branch-aware wording of §6, recorded before the execution census.
+   — **OPEN** (not requested by this filing).
+
+**Execution-census supremacy:** the census in §4 is executed fresh
+after legs 1–5 are satisfied, and its reads — not any value quoted in
+this package — are the gate's preflight facts. Between package time
+and gate time the state **will** move, by design: the window will
+disposition, C3 will stop the chain, the restoration will clear it.
+That movement is what selects this package's branch (§4.1/§4.2), and
+the branched census is written to expect exactly it. Movement outside
+every branch's expectations is a §7 STOP — the executor never
+rationalizes a difference (executor STOP law).
+
+---
+
+## 1. Purpose and scope — exactly one resume, of exactly one plan, for exactly one segment
+
+This gate exists to do one thing: **lift the two holds once, under
+observation, and let the PRESERVED Phase B plan generate its single
+remaining segment** — the final segment of *Forever Pucked* Chapter 3:
+
+- Plan: `plan:19cad189fab54b9c804a74a6` (segment scope, lane standard,
+  phase `forever-pucked`), created by the single SubmitJob of Phase B
+  attempt 3 (2026-11-02T01:23:15Z) and preserved untouched since its
+  §7.3 stall.
+- Job: `plan:19cad189fab54b9c804a74a6:seg`.
+- Single entry: chapterIndex 2, idx 26, occurrence
+  `2a85f74f-353d-4c25-a86a-4a4db392868b`, 569 chars, recorded cast
+  voice Alex → Gemini Charon, live quote **8,022 units ≈ $0.008**,
+  covered by the live idx-26 chapter exemption (applied in attempt 3,
+  preserved, never revoked).
+
+### 1.1 HARD LAW — resume rides the preserved plan; there is no resubmission
+
+**No SubmitJob — of any scope, under any wording — is sent in this
+gate, and no second intent for idx 26 is ever created by it.** This is
+not a preference; it is the diagnostic's containment finding
+(`PHASEB-STALL-DIAGNOSTIC-REPORT.md` §6): the preserved plan is a
+**live trigger** — with the halt lifted and the queue unpaused, the
+drive path picks this plan up with no further command, submission, or
+approval touchpoint in code, because it is the only selectable plan.
+A second SubmitJob would create a **duplicate plan** for the same
+occurrence: two plans competing for one occupancy key and one phase
+budget, with the duplicate's existence corrupting every exclusivity
+argument this gate's verification protocol (§2) rests on. Rowan's
+standing disposition of attempt 3 is the same: preserve the plan and
+the exemption; resume rides **this** plan. The ledger (§3) therefore
+carries a SubmitJob budget of **ZERO**, and any execution step that
+appears to require one is a §7 STOP by definition.
+
+### 1.2 What this gate is not
+
+No other generation of any kind: no rest-of-*Forever Pucked* (a
+separate fresh-quote decision), no Batch (Batch is unarmed —
+`batch_not_armed` — and its arming is a separate later gate chain per
+Julie's ordering: Chapter 3 first, then Batch), no other book, plan,
+or job. The parked Chapter 3 job
+(`1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a`)
+is a census fact only and is never touched (§10).
+
+---
+
+## 2. STEP-0 RESOLUTION — the headline section
+
+### 2.1 The variance, stated exactly as recorded
+
+Phase B attempt 3's approved procedure required, at its step-0
+(before unpause), **grant-level verification**: that a grant exists
+naming this plan, that the granted set is exactly {idx 26}, and that
+the reservation closes at 12. The attempt-3 execution record (§6)
+records what actually happened: **no grant existed at step-0**, so the
+executor substituted **deliverable-set verification** (the Phase B
+plan is the only non-terminal plan; its job is queued with exactly
+one pending occurrence; reconcile reserved 0) and re-applied the
+grant-level checks at every poll after unpause. Rowan's review
+recorded this as a **procedural variance**, and the diagnostic report
+(§7) states the structural point this package is required to resolve:
+
+> As the machinery stands, a pre-unpause grant-level verification is
+> **unsatisfiable by construction**, because no grant can exist
+> before the first post-unpause drive pass. (A grant issues only
+> inside `driveOnce`, whose only caller is the Durable Object alarm
+> handler; while both holds stand, no drive pass can run, so no grant
+> can come into existence for step-0 to inspect.)
+
+The next proposal — this one — "should say so and design its step-0
+accordingly, rather than paper over it again" (diagnostic §7). C3's
+package (§10) carries the same requirement forward by name.
+
+### 2.2 The resolution: no pre-unpause grant check is claimed, required, or performed — verification attaches to the first observable effect
+
+**This package resolves step-0 by design, as follows.**
+
+1. **There is no pre-unpause grant verification in this gate** — not
+   renamed, not substituted, not silently dropped. The execution
+   sequence (§5) contains no step that inspects, exp

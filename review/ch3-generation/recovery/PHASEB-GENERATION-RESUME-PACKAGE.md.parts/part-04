@@ -1,0 +1,173 @@
+p to be
+improvised around at execution time. If GR-0's census instead reads
+a non-null `armedAt` accounted for by the restoration record (§4.0
+item 4), GR-2 may be satisfiable trivially; the ruling should say
+what the executor does in that case too.
+
+### 5.4 Cost and quota treatment (Gate 4 law, carried at full strength)
+
+- **Expected cost of the one segment: 8,022 units ≈ $0.008** (live
+  quote, attempt-3 record). **Forecast line: 12,808 units ≈ $0.013**
+  (the m = 1 modeled bound). **Detection threshold: 25,000 units ≈
+  $0.025.** Per Gate 4's durable ruling, carried through the
+  attempt-3 presentation (§7.1): **the forecast line is a deviation
+  signal and the threshold is a DETECTION THRESHOLD — neither is a
+  cap, and no wording in this gate may present either as one.** A
+  literally unconditional hard cap is not achievable in this
+  architecture: the provider call precedes its measurement, so
+  exposure is parameterized by the realized duration multiplier. The
+  **physical backstop is the Gemini prepay balance** (Julie's AI
+  Studio prepay; $17.83 as of her Oct 29, 2026 screenshot — a
+  **historical** figure, not freshly verified, and not re-verified by
+  this package, which makes no calls). No automatic top-up exists or
+  is authorized.
+- **Phase budget:** the segment's settled cost lands inside phase
+  `forever-pucked`'s frozen $13.50 budget (remaining 12,464,932 units
+  at baseline); the per-grant phase guard applies as shipped. The
+  $50 settings cap is an outer backstop, untouched.
+- **Quota:** the provider-attempt cap is **100/day, rolling** (PT
+  day; boundary midnight PT = 07:00Z). The cohort worst case for this
+  gate is **12 slots** (the single grant's reservation), so the
+  census requires **headroom ≥ 12** on the executing PT day (GR-0),
+  re-checked at GR-4 if the day has rolled. Expected realized
+  attempts for one 569-char segment are far below the reservation;
+  the reservation is a bound, not a forecast.
+
+---
+
+## 6. Exact GO wording (for Julie's future decision — NOT requested here; INOPERATIVE until §0's legs are all satisfied)
+
+When Julie chooses to authorize one resume attempt, the operative
+wording is:
+
+> "GO — execute exactly one generation-resume attempt as pinned at
+> `<RESUME-PIN>`, **against whichever branch the execution census
+> verifies** (GR-A plan-untouched, or GR-B §7.3-churned with Rowan's
+> OQ-2 ruling in hand): fresh census on both phase surfaces; fresh
+> read-only voice checkpoint (Alex → Gemini Charon); exactly one wake
+> in the form Rowan's OQ-1 ruling specifies; one halt lift and one
+> queue unpause; the post-unpause verification protocol with its
+> sliding 35-minute stall window; **NO SubmitJob of any scope, NO
+> exemption call, NO containment transition, NO other generation**;
+> on success or abort alike, re-pause and re-halt so the attempt ends
+> HELD, with exposure reported in the three-line form. I understand
+> no pre-unpause grant verification exists or is claimed — the holds
+> are the pre-unpause containment and verification attaches to the
+> grant as the first observable effect after the lift; that the
+> dollar figures are a forecast line and a detection threshold, never
+> caps, with the prepay balance as the physical backstop; that one
+> GO covers one attempt and a stall consumes it; and that restoration
+> was authorized and executed separately, before this GO."
+
+The bracketed end-state alternative (§5 GR-6a): if Julie wishes the
+attempt to end with the holds **lifted** on success, her GO must say
+so expressly in place of the ends-HELD clause. Silence means HELD.
+Rowan's review of this package is not a GO. This package requests no
+GO. Production remains INVESTIGATION HELD at filing.
+
+---
+
+## 7. STOP conditions
+
+Any one of these stops the execution. Beyond the §2.3.3 re-hold
+sequence (when the holds stand lifted) and evidence capture, the
+executor performs no further act. The GO is consumed by the attempt
+either way; there is no in-gate retry.
+
+1. **Any GR-0 census deviation** — any §4.0 item not exact, or the
+   plan/job matching neither branch (§4.3) — STOP before any
+   mutation (executor STOP law). The executor's own tracing never
+   clears its own stop.
+2. **Voice checkpoint failure** — any §5.2 value not exact, or the
+   quote digest disagreeing with `cdef2c7e…` — STOP before GR-2.
+3. **Wake-slot failure** — GR-2 performed in the ruled form does not
+   produce a registration readable on the `drive=1` surface within
+   one watchdog period (10 minutes), or OQ-1 stands unruled at
+   execution time — STOP before the lifts (the system is still held;
+   no re-hold is needed and none is performed).
+4. **Any abort condition A-1..A-6** (§2.3.3) during GR-5 — re-hold in
+   the §2.3.3 order and STOP.
+5. **Any ambiguous response a fresh read cannot resolve** — the step
+   stays UNRESOLVED and the gate stops on it (gates v4 law); in
+   particular, an ambiguous halt-lift or unpause response is resolved
+   by fresh reads of the hold surfaces before the protocol clock is
+   treated as running.
+6. **Closing-census surprise (GR-7)** — any delta outside §5 GR-7's
+   enumerated set: the gate's record classifies it and the gate does
+   not close as PASS until Rowan rules on the classification.
+7. **Interruption** (executor death, lost session, infrastructure
+   restart) at any point — the attempt halts where it stands. If the
+   holds stand lifted at interruption, the system's state is
+   **OPEN-UNOWNED** and is escalated to Julie immediately on any
+   executor's return; resumption requires a fresh ruling + fresh GO.
+   A stopped resume is never restarted on anyone's interpretation
+   (standing rule: one GO, one attempt).
+
+---
+
+## 8. End states
+
+### 8.1 Success
+
+The segment is `committed`; the plan reads {eligible 1, done 1,
+failed 0, blocked 0}; exactly one new binding exists for the idx-26
+entityKey and the bindings watermark stands at **1842** (the advance
+from 1841 is an expected success marker — its absence at GR-7 means
+the gate does **not** close as success, whatever else reads well);
+holds **restored** (re-pause + re-halt, §5 GR-6a) unless Julie's GO
+expressly named the lifted alternative. **Julie's playback check is
+the acceptance step, outside the executor's verdict:** she plays the
+chapter end; the expected header is **"Complete 27/27"**. The
+executor's record claims the generation outcome only; whether Chapter
+3 is *finished* is Julie's word after playback, and Rowan's
+documentary execution review follows the same pattern as every prior
+gate.
+
+### 8.2 Failure / stall
+
+The gate ends **HELD** (re-pause + re-halt read back), the preserved
+plan and exemption stand exactly as the abort left them (a grant
+issued-then-voided under the re-hold is the §7.3 churn state, owned
+and named, not cleaned up), the raw poll set is preserved, and the
+record states the abort condition by its §2.3.3 number. **No retry
+inside this GO.** A further attempt is a new decision — Julie's fresh
+GO, against whatever Rowan rules on the abort record.
+
+### 8.3 Exposure reporting (all end states, three lines, always)
+
+1. **Verified charges:** the settled delta on both phase surfaces
+   (the only figure the ledger verifies), stated in units and dollars.
+2. **Unverified estimates:** any attempt whose outcome stands
+   `estimated_unverified` at closing, stated separately, never merged
+   into line 1.
+3. **Remaining phase room:** 13,500,000 minus the closing settled /
+   reserved position, from the closing census.
+
+(Attempt 3's closing is the precedent for a zero outcome under this
+form: verified $0, estimates unchanged, room 12,464,932.)
+
+---
+
+## 9. Open questions — for Rowan's ruling (nothing here is invented)
+
+- **OQ-1 (blocking, all branches) — the wake mechanism.** §5.3: after
+  a verified stop + a non-re-arming clear, which single act
+  legitimately re-registers the alarm? Sub-questions: (a) does a
+  replayed command `wake()` or short-circuit on the composed build
+  (the records conflict — diagnostic P1 text vs later ladder source
+  summaries)? (b) If a fresh command is required, which command is
+  fresh, well-formed, and side-effect-free on its expected refusal,
+  in every state this gate can open into? (c) If GR-0 reads a
+  non-null, restoration-accounted `armedAt`, is GR-2 satisfied
+  without any act? (d) What mutation accounting does the ruled
+  mechanism carry into §3?
+- **OQ-2 (blocking, branch GR-B only) — re-issuance after a void.**
+  When the §7.3 grant stands voided (lease expiry under the holds)
+  and the holds later lift, does a drive pass issue a **new** grant
+  for the occurrence? With what id (the `:seg:1:full` sequence —
+  incremented, or re-used)? What is the occurrence's state path out
+  of `granted`-post-void, and the job's revision path? The records
+  establish the void state (window classifications W-2) but do not
+  establish re-issuance mechanics; §2.3.2's expectations wait on this
+  ruling.
+- **OQ-3 — recorder e

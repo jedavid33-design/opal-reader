@@ -1,0 +1,163 @@
+uration, so the test — not a deadline — is the
+control).
+
+**Closure evidence (success):** the verification is closed by the
+poll set itself, preserved raw: the first poll showing the grant
+in-set, every intermediate poll, and the closing poll set showing
+§2.3.1 step 3 complete (or §2.3.2's ruled equivalent), **plus** the
+closing census of §5 step GR-7. No summary substitutes for the raw
+polls; the execution record quotes the closing values from them.
+
+---
+
+## 3. The mutation ledger — exact, action by action
+
+| Step | Act | Mutations |
+|------|-----|-----------|
+| GR-0 | Fresh execution census (§4) — reads only | 0 |
+| GR-1 | Voice checkpoint (§5.2) — eligibility quotes, reads only | 0 |
+| GR-2 | **Wake slot** (§5.3) — mechanism fixed by Rowan's OQ-1 ruling; accounting fixed by that ruling and recorded here by amendment before execution | per ruling |
+| GR-3 | Halt lift (§5.5) — settings-only operative-envelope flip, GENERATION_HALT `"1"` → `"0"`, identical parts | 1 |
+| GR-4 | Queue unpause (§5.5) — cf-api PUT `delivery_paused: false` | 1 |
+| GR-5 | Post-unpause verification protocol (§2.3) — polls, reads only | 0 |
+| GR-6a | Success close (§5.7): re-pause (cf-api PUT) + re-halt (restore envelope) | 2 |
+| GR-6b | Abort close (§2.3.3): re-pause + re-halt, same acts | 2 |
+| GR-7 | Closing census (§5.7) — reads only | 0 |
+
+**Budget totals:** counted mutations **≤ 4** on every path (GR-3,
+GR-4, and exactly one of GR-6a/GR-6b), **plus** the GR-2 wake slot at
+whatever accounting Rowan's ruling assigns it. **Explicit zero
+budgets:** SubmitJob **0** (§1.1); exemption calls **0** (the
+exemption stands applied; §10); containment transitions **0** (no
+`contain_drive`, no `stop_chain`, no `clear`, no `verify_chain_stop`
+— restoration is a precondition, §0 leg 3, and re-stopping a revived
+chain after an abort is a future gate, §2.3.3); settings changes
+beyond the two halt envelopes **0**; deploys **0** (the halt envelopes
+re-upload byte-identical parts with the single metadata value
+changed — the established flip mechanism of attempt 3 §4/§9.1,
+counted above as the mutations they are); queue changes beyond
+GR-4/GR-6 **0**; conflicts changes **0**.
+
+**Ambiguity law (gates v4, carried):** a step whose response is
+ambiguous stays UNRESOLVED until a fresh live read resolves it;
+recorded logical completion is never physical verification. The
+§2.3.3 re-hold read-backs are the abort path's physical evidence;
+the §5.7 closing census is the success path's.
+
+---
+
+## 4. Fresh census — hard preflight expectations (GR-0), BRANCHED
+
+The census is taken **fresh at gate time**, after §0 legs 1–5, in the
+§3.1-style full read set (the same surfaces as the S1 window's §3.1
+set, plus both phase surfaces enumerated by name and the §5.2 quote
+surfaces). **Branch-invariant core (§4.0) plus exactly one branch
+delta (§4.1 or §4.2).** The branch is selected **by the census** —
+specifically by the preserved plan/job values it reads — never by
+executor choice. A fresh state matching neither branch, or matching
+a §4.3 blocker, is a STOP before any mutation (executor STOP law).
+
+All values below not marked "adopted" are the **opening baseline**
+(cited from the Grant 1 execution record and the attempt-3 record);
+the census re-reads every one live.
+
+### 4.0 Branch-invariant core (all branches)
+
+1. **Build:** `/health` build `fdb02395b3775dc945baa395591a73060ab146c4`
+   (the composed build), generation `halted`, coordinator `armed`;
+   script etag `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e`;
+   parts byte-identical to the Grant 1 stamped manifest. *Any other
+   build at census = STOP and rebase (§0): a later gate that changed
+   the build must name itself in an amendment to this package first.*
+2. **Holds:** GENERATION_HALT `"1"`; queue `opalreader-generation-v2`
+   `delivery_paused: true`, exactly 1 consumer
+   (`f260f2188d80426bb0588685e9d084eb`); settings revision **1**;
+   `OPALREADER_PHASE_POLICY` `"enforce"`; 10 bindings; observability
+   enabled + persisted.
+3. **Containment:** state **NORMAL** on both surfaces (operator route
+   and the `drive=1` projection), `verified: true`,
+   `stopConfidence: "not_applicable"` — the restoration's closing
+   state, re-read fresh here (the restoration record alone never
+   carries the state into this gate). The closed S1/C3 episode(s)
+   stand in the audit history exactly as the restoration's historical
+   audit review enumerated them; the census records the summary
+   fields as read.
+4. **Alarm:** `getAlarm()` **null** on the `drive=1` read — the
+   expected post-stop, pre-wake physical state (C3's verified stop
+   deleted the registration; the restoration's `clear` does not
+   re-arm — design law). `pendingSchedule` / `pendingWatchdog` as
+   read and recorded (baseline: 2 / 1 — schedule rows survive a stop;
+   C3 §8). *A non-null `armedAt` at census is not automatically a
+   STOP: it is a deviation to classify against the restoration
+   record (a post-restoration wake — e.g. ordinary app use — may
+   legitimately have re-registered the chain, in which case GR-2's
+   form changes and Rowan's OQ-1 ruling governs how the executor
+   proceeds). An `armedAt` the restoration record cannot account for
+   = STOP.*
+5. **Phase accounting, on BOTH surfaces by name** (the C2 item-7
+   lesson — a census item naming two surfaces enumerates reads
+   covering both): surface 1 = capabilities `phases[forever-pucked]`;
+   surface 2 = plan diagnostics `plan.phaseAccounting`. Both must
+   agree exactly: settled **1,029,420**; estimatedUnverified
+   **19,018**; reservedUnverified **5,648**; inFlightUpper **0**;
+   unknownOpen **0**; remaining **12,464,932** of 13,500,000;
+   `unverifiedStatus: provider_unverified`.
+6. **Quota:** reconcile `ok: true`, drift empty, sole exception the
+   known adjudicated straddler
+   `att-37d63768-db4b-447d-8150-580b7c6ee257`
+   (`estimated_unverified`); current PT day dispatched recorded, with
+   **headroom ≥ 12** against the 100/day cap (§5.4).
+7. **Exemption projection (evidence class (b), labeled as such):**
+   chapter quote bound **26** / eligible **1**; segment quote
+   eligible **1** / 569 chars / expected **8,022**, `voice_prompt 0`
+   (the §5.2 voice checkpoint reads these same surfaces at GR-1; a
+   census/GR-1 disagreement = STOP). The exemption journal has **no
+   read surface** (attempt-3 §10 class (c): UNAVAILABLE) — this
+   package claims the exemption's existence from attempt 3's class
+   (a) operator response and its standing effect from this
+   projection, nothing more.
+8. **Conflicts:** exactly the 4 pinned `schedule_dead` lease rows
+   (ids 1–4, every field exact, per the attempt-3 census baseline).
+9. **Bindings/content:** bindings watermark **1841**, **0** changes
+   since 1841, **0** rows for occurrence `2a85f74f…`; content
+   watermark **18**; the idx-26 R2 occupancy key FREE (adopted from
+   the restoration-era reads if the restoration census re-read it;
+   otherwise re-read here — it is a census item, not an assumption).
+10. **Parked job:** `1832c21f…` `parked_policy` rev 1, fingerprint
+    `b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`,
+    grants [] — untouched.
+11. **Recorder:** `d6_drive_passes` state **adopted** from the
+    restoration census (missing at opening baseline; the window/C3
+    period may have created it). The census records the adopted state
+    and verifies the live read matches it; a mismatch = STOP and
+    classify (recorder dual-failure blind spot, register R-06: a
+    missing table after a period in which passes are known to have
+    run is a finding, not a detail).
+
+### 4.1 Branch GR-A — plan untouched (no wake ever reached the drive path)
+
+Selected when the census reads the preserved plan/job **exactly** at
+their attempt-3 closing values:
+
+- Plan `active`, totals {eligible 1, done 0, failed 0, blocked 0,
+  prompts 0}, `updatedAt` at its creation value; entry disposition
+  `eligible`, `occurrenceState: pending`, `executionState: null`;
+  quarantine `held: false`.
+- Job `queued` rev 1, **grants []**; occurrence `pending`,
+  `cache_key: null`.
+- In-set protocol values: §2.3.1 verbatim.
+
+This is the expected branch if the S1 window dispositions NEGATIVE,
+or if any revival was stopped before a drive pass could issue (§7.3
+set never entered).
+
+### 4.2 Branch GR-B — plan carries §7.3 churn (a wake issued the grant under the holds)
+
+Selected when the window/C3 records establish — and the census
+confirms — that the pre-classified §7.3 set was entered: grant
+`grant:plan:19cad189fab54b9c804a74a6:seg:1:full` issued and standing
+in its lease-expired **void** state; occurrence `granted`; job
+`generating` rev ≥ 2; derived reserved returned to **0** (the void
+released the reservation — any other reserved value at census in
+this branch = STOP); phase figures otherwise exactly §4.0 item 5;
+dispatched for every window day **0**; pro
