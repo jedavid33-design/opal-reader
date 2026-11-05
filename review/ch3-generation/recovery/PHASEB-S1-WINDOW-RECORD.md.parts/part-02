@@ -1,0 +1,59 @@
+e","grantId":"grant:plan:19cad189fab54b9c804a74a6:seg:1:full"},{"bindingProjection":{"scanned":0,"published":0,"noop":0,"conflicts":0,"pending":0}}]`, `outcomesMalformed` false, `errorName` null, `errorMessage` null, `armedAfter` **1793748974899**. Recorder health at the same read: `recordingFailures` 0, `lastRecordedAt` 1793748374899. The recorder `tableState` moved from `"missing"` (every pre-stimulus read) to `"populated"`.
+
+**The grant.** Exactly one grant was issued: **`grant:plan:19cad189fab54b9c804a74a6:seg:1:full`**, state `"issued"`, revision 2 — for the preserved plan's single occurrence, `2a85f74f-353d-4c25-a86a-4a4db392868b`.
+
+**Job and occurrence transitions.** Job `plan:19cad189fab54b9c804a74a6:seg`: `queued` revision 1 → **`generating` revision 2**. Occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b`: `pending` → **`granted`** (`cache_key` null throughout the window).
+
+**armedAt transition.** `armedAt` **1793562576104 → 1793748974899** — the delivered pass's watchdog re-arm (1793748974899 = 2026-11-03T23:36:14.899Z, the pass time + the 600 s watchdog period, per the set-1 entry). `pendingSchedule` 2 / `pendingWatchdog` 1, unchanged.
+
+**Quota and phase at the event.** Quota reconcile: `ok` true, drift [], sole straddler; PT day 2026-11-03 totals: dispatched **0**, reserved **12**, consumed **12**. Provider attempts 0. Phase frozen on both surfaces (settled 1029420 / estimatedUnverified 19018 / reservedUnverified 5648 / inFlightUpper 0 / unknownOpen 0 / remaining 12464932). Containment NORMAL on both surfaces. Classification basis, as logged: every marker exactly inside the §7.3 pre-classified set — exactly one grant issued; occurrence `granted`; job `generating` rev ≥ 2; derived reserved 12 (∈ {0, 12}); dispatched 0; attempts 0; phase frozen; containment NORMAL; no recorder error. No T1–T4 condition present.
+
+**Second pass.** Recorder row id 2 at **1793748975298** (= 2026-11-03T23:36:15.298Z — the watchdog tick delivering on schedule), stage complete, no new grant; the chain was live and self-delivering.
+
+**The §7.3 churn across the window.** From set 4 onward the pattern was invariant at every completed check: when the live grant reached its lease-expired void state, a later pass issued its sequential successor for the SAME single occurrence; at no read were two grants live simultaneously; derived reserved held at exactly 12 (the log's stated cross-check: a concurrent second grant would read 24); the occurrence remained singly `granted`; dispatched remained 0; phase, conflicts, and watermarks remained frozen; containment remained NORMAL; every recorder row read was stage complete with null error fields, and `recorderHealth.recordingFailures` remained 0 at every completed check. Progression as logged:
+
+| Observation | Total passes | Latest pass | Job rev | Live grant | Voided |
+|---|---|---|---|---|---|
+| Set 4 (+20m), 2026-11-03T23:46:23Z | 5 | id 5 | 3 | `seg:2:full` | seg:1 |
+| +30h, 2026-11-04T05:20:38Z | 77 (ids 28–77 of 77) | id 77 at 1793769384616 | 25 | `seg:24:full` | seg:1–23 |
+| +36h, 2026-11-04T11:20:23Z | 160 (ids 111–160 of 160) | id 160 at 1793790986824 | 49 | `seg:48:full` | seg:1–47 |
+| +42h, 2026-11-04T17:21:35Z | latest id 244 (returned ids 195–244) | id 244 at 1793812588536 | 73 | `seg:72:full` | seg:1–71 |
+| +54h, 2026-11-05T05:20:53Z | 296 (returned ids 247–296) | id 296 at 1793825819071 | 88 | `seg:87:full` | seg:1–86 |
+| +60h / +66h / close | 296 (unchanged) | id 296 | 88 | `seg:87:full` | seg:1–86 |
+
+Grant-carrying passes in each returned 50-row window numbered 14 where the log states the count (+30h, +36h, +42h, +54h, +60h, +66h, close). The most recent grant-carrying pass is **id 294** at **1793825789070**, carrying `grant:plan:19cad189fab54b9c804a74a6:seg:87:full`. By close: **87 grants total** — seg:1:full through seg:86:full all voided (revisions 2–87), exactly one live grant `seg:87:full` issued at revision 88.
+
+## 6. The W-4 evidence set
+
+**Last pass.** Recorder row **id 296** at **1793825819071** = **2026-11-04T20:56:59.071Z**, `finishedAt` identical, stage `"complete"`, `driveInvoked` true, error fields null. Its `armedAfter` — the standing registration — is **1793826389431**.
+
+**Standing registration.** `armedAt` **1793826389431** = due **2026-11-04T21:06:29.431Z**, read identically on both alarm surfaces (the drive=1 `alarm` block and the containment route's `alarm` block) at the +54h, +60h, +66h, and closing reads. `pendingSchedule` 2 / `pendingWatchdog` 1, unchanged. No pass has been recorded after 1793825819071.
+
+**Past-due ages** (the log's figures, at each check's first read):
+
+| Check | First read | Registration past due | No pass delivered for |
+|---|---|---|---|
+| +54h | 2026-11-05T05:20:53Z | 8h14m24s | 8h23m54s |
+| +60h | 2026-11-05T11:20:22Z | 14h13m53s | 14h23m23s |
+| +66h | 2026-11-05T17:20:47Z | 20h14m18s | 20h23m48s |
+| Close | 2026-11-05T23:21:06Z | 26h14m37s | 26h24m07s |
+
+Every figure is far beyond the 2-hour W-4 threshold from the first classification onward.
+
+**Everything else stayed in-set.** At +54h, +60h, +66h, and close the job/grant state was bit-identical in substance: job `generating` revision 88; 87 grants total, seg:1–86 voided, `seg:87:full` issued; occurrence `granted`; phase frozen on both surfaces; conflicts exactly the 4 pinned rows; bindings watermark 1841, 0 changes; queue paused, 1 consumer; containment NORMAL on both surfaces; recorder rows all complete, `recorderHealth.recordingFailures` 0. The log states at each W-4 check, in substance: nothing in the read set explains the stop — no recorder error row, recorderHealth clean, containment NORMAL, health halted/armed, queue still paused.
+
+**Timing coincidence — stated as coincidence, not causation.** The last recorded pass (2026-11-04T20:56:59.071Z) falls inside the log's onset bracket for the second 1101 fault (after the last good read at 2026-11-04T17:21:41Z; at or before the first failing read at 2026-11-04T23:20:36Z). The fault's read-surface failures were observed at +48h; the reads had recovered by +54h (2026-11-05T05:20:53Z); delivery did not resume. This record presents those facts in their temporal order only.
+
+**What is NOT claimed:**
+
+- **No claim that the 1101 fault caused the delivery stop.** The root cause of both 1101 faults (2026-11-01 and 2026-11-04) remains **UNCONFIRMED** — the same strength at which Rowan's earlier disposition left the Nov 1 fault — and no evidence in the window log connects the fault to the alarm-delivery stop.
+- **No claim about the standing registration's future in either direction.** This record does not claim the registration will fire late, and does not claim it will never fire. Post-retry-exhaustion `getAlarm()` semantics are **UNSPECIFIED** in the accepted alarm-semantics record, so neither direction is licensed by the evidence.
+- **No claim about the unobserved interval beyond what the recorder retrospectively shows.** Passes 245–296 ran inside the unobserved interval, through 2026-11-04T20:56:59.071Z (per the +54h entry's retrospective read); the interval itself was unobserved while it ran, and this record does not upgrade it to a verified interval.
+- **The W-4 is not a trigger and was never treated as one.** No S1-X act, no stimulus, and no command followed from any W-4 classification — observation and escalation only, exactly as the design provides. The W-4 remains **UNRESOLVED until Rowan dispositions it**.
+
+## 7. S1-X / Layer-1 accounting
+
+- **S1-X (Part C): never fired.** No **FIRING DECISION** entry exists anywhere in the window log. No verified T1–T4 trigger was ever recorded at any completed check in the window: no out-of-set grant activity (T1), no dispatch while halted (T2 — dispatched was 0 at every read of the window), no phase/quota movement beyond the §7.3 predictions (T3 — the only quota figures beyond baseline are the in-set reserved/consumed 12 of the churn, and the PT-day calendar roll expressly recorded as not-a-movement), and no second/concurrent/foreign grant, second plan/job movement, or conflicts/watermark/parked movement (T4). At the one check where trigger conditions were unverifiable (+48h, FAILED), the log records the governing rule and follows it: an unverified trigger never fires S1-X; no FIRING DECISION was recorded.
+- **Layer-1 (Part B2): never applied.** No `contain_drive` application is recorded anywhere in the window log.
+- **Containment transitions in the window: none.** The containment state read NORMAL / absent / verified at open and at every completed check through close; the stop-record fields were empty throughout (at close: `stopStatus` null, `stopVerifiedAt` null, `stopVerifyAction` null, `stopArmedBefore` null, `stopArmedAfter` null, `stopVerifyAttempts` 0, `stopEpisodeId` null, `stopEpisodeExhausted` false, `prevEpisodeId`/`prevEpisodeAttempts`/`prevEpisodeExhausted`/`prevEpisodeClosedAt` all null).
+- **Mutation tally attributable to the w

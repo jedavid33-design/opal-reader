@@ -1,0 +1,52 @@
+atch jobs: ZERO production mutations** — observation only. The watch jobs' only non-read acts were scheduler lifecycle acts inside Part B itself: the +12h handoff (enable the 6-hourly job, disable the hourly job) and the closing self-disable.
+- **The only production command sent in the window was the Grant 2 stimulus itself** (§5), sent once by Wren in session under Julie's separate GO — not by a watch job.
+
+## 8. Ends-HELD values at close
+
+From the closing census (reads 2026-11-05T23:21:06Z–23:21:18Z), as logged:
+
+- Generation **halted on both surfaces**: health `generation` `"halted"`; capabilities `generationState` `"halted"`, standard admitted, Batch `batch_not_armed`.
+- Queue `opalreader-generation-v2`: `delivery_paused` **true**, exactly **1 consumer** (`f260f2188d80426bb0588685e9d084eb`).
+- Containment: **NORMAL** / `absent: true` / `verified: true` / `stopConfidence` `"not_applicable"` on both surfaces; stop-record fields all empty (§7).
+- Build **`fdb02395b3775dc945baa395591a73060ab146c4`**; coordinator `armed`.
+- **$0 spent across the window; dispatched 0 throughout.**
+- Phase frozen at close on both surfaces: settled 1029420 / estimatedUnverified 19018 / reservedUnverified 5648 / inFlightUpper 0 / unknownOpen 0 / remaining 12464932 (`provider_unverified`).
+- Quota at close: reconcile `ok` true, drift [], sole straddler; PT day 2026-11-05 dispatched 0 / reserved 0 (calendar roll at 07:00Z), with PT day 2026-11-04's dispatched 0 / reserved 12 / consumed 12 preserved in `dayTotals`.
+- Plan `plan:19cad189fab54b9c804a74a6` still `active` {eligible 1, done 0, failed 0, blocked 0}; job `generating` revision 88; the single occurrence `granted`; live grant `seg:87:full`.
+- Conflicts exactly the 4 pinned `schedule_dead` rows (ids 1–4); bindings watermark 1841, 0 changes since 1841; content watermark 18 (window baseline, unchanged at every check that read it).
+
+## 9. Post-window ownership
+
+The window's expiry changes the regime, never the ownership. The state is carried under **§3.7 branch (1): REVIVED-UNSTOPPED / OWNED**, with the closing W-4 noted on the face of the regime: the chain revived under the holds and was never stopped by any act; it is currently not delivering, for the reasons and at the strength stated in §6, and the W-4 stands UNRESOLVED pending Rowan's disposition.
+
+- **Tail watch:** `phaseb-s1-tail-watch`, created **2026-11-05** by Wren in session — a daily read-only check at approximately **18:28 ET**, appending to the tail log `~/workspace/goals/opal-roundtable/hidden_files/phaseb-s1-tail-log.md`. (The window log itself is closed; the closing entry records both window jobs disabled — the hourly job at the +12h handoff, the 6-hourly job by its own closing act.)
+- **Tail exits** on the first of: C3 execution; a Rowan supersession; or the **14-day tail point, 2026-11-19T23:28:41Z**.
+- C3 remains the standing stop vehicle. It does not execute on this record: it requires an eligible S1 disposition supported by this record, Rowan's review of that disposition, Julie's separate explicit C3 GO, and a fresh matching execution census.
+
+## 10. Questions for Rowan — requests for ruling
+
+**(a) Disposition of the S1 event.** The window's event classification is **W-2 EXPECTED S1 EVENT** (first classified in observation set 1, 2026-11-03T23:26:32Z; continuing through the +42h check), on the evidence at §5: the Grant 2 stimulus was refused as designed, a drive pass followed ~1.9 s later, exactly one grant issued inside the §7.3 set, and the chain churned in-set thereafter. *Please rule: accept the W-2 classification and the S1 event disposition as recorded, or correct it.*
+
+**(b) Disposition of the W-4.** The closing classification is **W-4 WAKE OBSERVED, DELIVERY NOT OBSERVED (continuing), UNRESOLVED** (§6), and a W-4 unresolved is a listed blocker in §4.5 of the C3 package. The facts put to you are these: the chain revived on the stimulus and churned in-set from the first pass (2026-11-03T23:26:14.899Z) to the last (2026-11-04T20:56:59.071Z) — 21h30m44s of recorded delivery, 296 passes, 87 sequential grants, $0, no dispatch — and then stopped, temporally coincident with the second 1101 platform fault, whose root cause remains UNCONFIRMED; the standing registration has since stood past due to 26h14m37s at close with no delivery, and no read surface explains the stop. *Please rule: what disposition do you give the W-4 on this record?*
+
+**(c) The C3 branch consequence.** The rebased C3 package's branch **(a) EXPECTED-REVIVED** was written for a live revived chain, under which `armedAt` is a consistency expectation (identical across paired reads; null = STOP). The chain this window leaves behind is revived-but-not-delivering, under a standing past-due registration, inside the post-window regime of §3.7 branch (1). *Please rule: does C3 proceed under branch (a) on a fresh execution census, does it move to branch **(d) REVIVED-UNSTOPPED (POST-WINDOW)** on tail-log baselines, or does the W-4 require another vehicle first (e.g. R3-V, or a fresh ruling) before any C3 branch opens?*
+
+**(d) The generation-resume package.** The resume package stands pre-drafted at pin `0946f9f2fb978a46b562c738d8ac6d9d4ee977a6`, its dependency leg 1 being an eligible S1 disposition plus your review of this window record. *Please rule: should the resume package now be read, and what is your ruling on its **OQ-1** — the wake mechanism after a C3 stop and a restoration `clear` — in light of the W-4 evidence (§6), which now includes a registration that has stood past due for more than a day on a chain that demonstrably revived and delivered when woken?*
+
+## 11. What this record does NOT do
+
+This filing is a record for disposition review. It authorizes nothing and requests no execution: **no C3 execution, no restoration, no generation, no containment transition, no queue or hold change, no deployment** is authorized or requested by the filing itself. C3 still requires Julie's separate explicit GO and a fresh, matching execution census after Rowan's disposition. Production remains HELD exactly as at window close (§8).
+
+## 12. Source index
+
+- **Window log (source of truth for every value above):** `~/workspace/goals/opal-roundtable/hidden_files/phaseb-s1-window-log.md` — LOG OPENED, SMOKE (pre-window, excluded), WINDOW OPEN, hourly checks +0h51m…+12h51m, HANDOFF, 6-hourly checks +11h51m…+65h51m, STIMULUS, OBSERVATION sets 1–4, WINDOW-CLOSE census.
+- **Grant 1 GO** (Julie; window authorization, Parts A+B+C): Roundtable board, repo `jedavid33-design/opal-roundtable`, issue #15, comment **6590949982** — also cited in the window log's own header.
+- **Grant 2 GO** (Julie; the fallback stimulus): issue #15, comment **6618087797** (RT-H-20261103-7c2e91) — cited in the log's STIMULUS entry as recorded on the board before the send and read back byte-identical.
+- **Grant 2 execution summary** (board filing): issue #15, comment **6618430488**.
+- **Operative window package:** REVISED-2 pin `11a296e79f0963fc005a23edd3e2a9dffbf012fd` + RM-1-c pin `f374ee740eb871b6799518935b15aa5dfd8f9dfa`.
+- **C3 operative package:** pins `46112a03…` + `aba681a0…` (the §4.5 blocker list cited at §10(b) is that package's).
+- **Generation-resume package:** pin `0946f9f2fb978a46b562c738d8ac6d9d4ee977a6` (OQ-1 is that package's).
+- Grant 1 execution evidence (D2 read-back values behind the WINDOW-OPEN entry): `~/workspace/ch2-program/ch3-recovery/grant1-execution/evidence/` (suffix `d2`), as cited in the WINDOW-OPEN entry.
+- Tail log (post-window, §9): `~/workspace/goals/opal-roundtable/hidden_files/phaseb-s1-tail-log.md`.
+
+— End of record. Production hold stands. Your turn, Rowan — when Julie pokes you.

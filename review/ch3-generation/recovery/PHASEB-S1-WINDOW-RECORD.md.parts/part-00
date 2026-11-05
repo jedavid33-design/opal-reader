@@ -1,0 +1,61 @@
+# PHASE B S1 WINDOW RECORD — the 72-hour observation window: W-2 EXPECTED S1 EVENT, then W-4 (UNRESOLVED) at close
+
+Date: 2026-11-05
+Window record pin: <WINDOW-RECORD-PIN>
+Pin target: repo `jedavid33-design/opal-reader`, branch `ui1-review`, `review/ch3-generation/recovery/PHASEB-S1-WINDOW-RECORD.md`
+
+**Window identity.** The Phase B S1 observation window opened **2026-11-02T23:28:41Z** (2026-11-02 18:28:41 EST), at completion of the Stage-2 (Grant 1 Part A, R5a-D) upload's D2 read-back, and closed **2026-11-05T23:28:41Z** (2026-11-05 18:28:41 EST). Authorization: Grant 1 (Parts A+B+C), Julie's GO recorded on the Roundtable board, issue #15 comment `6590949982`. Operative package: R5a-D/S1 sequencing proposal REVISED-2, pin `11a296e79f0963fc005a23edd3e2a9dffbf012fd`, as amended by RM-1-c, pin `f374ee740eb871b6799518935b15aa5dfd8f9dfa`. Production build throughout the window: `fdb02395b3775dc945baa395591a73060ab146c4`.
+
+Every fact, timestamp, count, and value in this record is taken from the window log (§12 names it); raw values are quoted exactly as the log records them. Where a figure comes from a board comment rather than the log, the comment is named.
+
+## 2. Executive summary for Rowan
+
+- **The S1 event OCCURRED and was classified W-2 EXPECTED S1 EVENT.** At the +24h checkpoint there had been no natural wake; the Part D preflight was CLEAN and Julie gave her separate Grant 2 GO. Exactly one fallback stimulus was sent in session by Wren at **2026-11-03T23:26:13Z** (`command_id` `s1-stimulus-20261103232613`, a `RequestPause` against the confirmed-nonexistent job `alarm-wake-probe:nonexistent`); it was refused as designed (`{"outcome":"rejected","reason":"job_not_found"}`), and a drive pass was recorded **~1.9 s later**. Exactly one grant was issued, for the preserved plan's single occurrence; **$0** was spent; **dispatched 0**. The chain revived into the §7.3 pre-classified churn and stayed exactly inside it at every completed check.
+- **The chain then stopped delivering.** It delivered **296** recorded passes in total. The last pass is #296 at **2026-11-04T20:56:59.071Z**. Later on 2026-11-04 the **second 1101 platform fault** was observed: at the +48h check every DO-backed `/v2` read surface returned HTTP 500 / error code 1101 (the front-door surfaces — health and the queue read — still answered). The reads had recovered by the +54h check, but no pass has been recorded since 20:56:59.071Z.
+- **Closing classification: W-4 WAKE OBSERVED, DELIVERY NOT OBSERVED (continuing), UNRESOLVED.** The standing registration `armedAt` **1793826389431** (due **2026-11-04T21:06:29.431Z**) stood **26h14m37s past due** at the closing census with no delivery. The W-4 is carried to you unresolved — §6 states the evidence set and, explicitly, what is *not* claimed. It is a listed C3 blocker (§4.5 of the C3 package), so your disposition is on the critical path.
+- **Contingencies never fired.** S1-X never fired — no FIRING DECISION entry exists anywhere in the log, and no verified T1–T4 trigger was ever recorded. Layer-1 (`contain_drive`) was never applied. **WINDOW-FAILED was never declared**: the window's single failed check (+48h, the 1101 fault) left one unobserved interval of 11h59m18s, inside the 12h10m bound. The watch jobs' production mutation tally is **ZERO** — observation only; the only production command sent in the window was the Grant 2 stimulus itself.
+- **Ends HELD.** Generation halted on both surfaces, queue delivery paused with exactly 1 consumer, containment NORMAL, $0 spent across the window, dispatched 0 throughout (§8).
+
+Four questions for your ruling are at §10. Nothing in this filing executes or requests execution (§11).
+
+## 3. Window chronology
+
+### 3.1 WINDOW OPEN — 2026-11-02T23:28:41Z (baseline)
+
+Verified D2 values recorded in the log's WINDOW-OPEN entry (Grant 1 execution verify(d2) 7/7 PASS):
+
+- Build `fdb02395b3775dc945baa395591a73060ab146c4` (R5a-D composed build; coordinator part `5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed`); script etag `"bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e"`; 31/31 parts byte-identical to the stamped manifest; 29/31 identical to the pre-deploy C1 build.
+- Health: generation halted, coordinator armed. Settings revision 1; `GENERATION_HALT` `"1"`; `OPALREADER_PHASE_POLICY` `"enforce"`; 10 bindings; observability enabled + persisted (the upload did not reset it; no settings PATCH was needed or made).
+- Alarm: `armedAt` **1793562576104** — bit-identical to every pre-window read (the deployment performed no alarm action); `pendingSchedule` 2 / `pendingWatchdog` 1.
+- Drive recorder: `tableState` `"missing"`, `drivePasses` [], `recorderHealth` null.
+- Containment: NORMAL / `absent` true / `verified` true / `stopConfidence` `"not_applicable"`, stop and episode fields empty — identical on the operator route and the drive=1 projection.
+- Preserved Phase B plan `plan:19cad189fab54b9c804a74a6`: `active`, totals {eligible 1, done 0, failed 0, blocked 0, prompts 0}, entry `pending` / `executionState` null, quarantine `held` false; job `plan:19cad189fab54b9c804a74a6:seg` `queued` revision 1, grants [].
+- Phase accounting frozen on BOTH surfaces: settled **1029420**, estimatedUnverified **19018**, reservedUnverified **5648**, inFlightUpper 0, unknownOpen 0, remaining **12464932** (budget 13500000, `provider_unverified`).
+- Quota reconcile `ok` true, drift [], sole straddler `att-37d63768-db4b-447d-8150-580b7c6ee257`; derived reserved 0; dispatched 2026-11-02 = 0.
+- Conflicts: exactly the four pinned `schedule_dead` rows (ids 1–4). Watermarks content 18 / bindings 1841; idx-26 occupancy key FREE. Queue `opalreader-generation-v2` delivery paused, exactly 1 consumer `f260f2188d80426bb0588685e9d084eb`.
+- Classification at open: the deployment is not a wake (`armedAt` bit-identical, recorder empty, zero §7.3-set transitions).
+
+### 3.2 Hourly phase — nominal +1h to +12h, plus the +13h handoff check: all W-0
+
+Checks `CHECK +0h51m` through `CHECK +11h51m` (nominal +1h … +12h; actual first reads 2026-11-03T00:20:13Z → 2026-11-03T11:20:11Z) all completed with full §3.1 read sets, all status 200, and all classified **W-0 NO EVENT** — every read an EXACT MATCH on the window baseline. A thirteenth performed check, `CHECK +12h51m` (nominal +13h, actual first read 2026-11-03T12:20:05Z), also completed W-0 and performed the handoff. Every consecutive interval was a VERIFIED interval of ≈1h, inside the hourly gap bound 2h10m. No missed or failed check in the hourly phase.
+
+### 3.3 HANDOFF — 2026-11-03T12:20–12:21Z
+
+The +13h run enabled `phaseb-s1-window-watch-6h` (verified enabled, next run 2026-11-03 12:19:53 EST) and disabled the hourly job `phaseb-s1-window-watch` (verified `enabled: false`, next_run null): HANDOFF COMPLETE. One logging note, recorded candidly in the log: the first 6-hourly run found no HANDOFF entry yet in the log when it read the tail — coverage at the +12h/+13h points was therefore DOUBLED (both jobs performed checks ~1 minute apart), not gapped; the HANDOFF entry was appended after that run noted it missing and is present thereafter.
+
+### 3.4 6-hourly phase, pre-stimulus — +12h, +18h: W-0
+
+- First 6h run (nominal +12h; actual reads 2026-11-03T12:21:49Z–12:22:04Z): **W-0 NO EVENT**, exact baseline match.
+- `CHECK +17h51m` (nominal +18h; actual reads 2026-11-03T17:20:34Z–17:20:40Z): **W-0 NO EVENT**, exact baseline match. Interval from the previous check 4h58m45s, verified, inside the 6-hourly bound 12h10m.
+
+### 3.5 +24h — W-0, and the Part D preflight: CLEAN
+
+`CHECK +23h51m` (nominal +24h; actual reads 2026-11-03T23:20:49Z–23:21:07Z): **W-0 NO EVENT** — no W-1/W-2 anywhere in the log from WINDOW-OPEN to that point. Part D preflight (§6.3, data collection only), as logged:
+
+- Log completeness WINDOW-OPEN → +24h: CLEAN — every scheduled check logged and completed (hourly nominal +1h to +13h: 13 checks, all W-0; HANDOFF present; 6-hourly nominal +12h and +18h: both completed W-0; the +24h check itself completed W-0). No missed/failed checks outstanding; no unobserved interval (latest consecutive interval 6h00m15s, within the 12h10m bound).
+- Recorder baseline (the check's read #1): `tableState` `"missing"`, `drivePasses` [], `recorderHealth` null, `armedAt` 1793562576104, `pendingSchedule` 2, `pendingWatchdog` 1.
+- Target nonexistence: probe `GET /v2/jobs/alarm-wake-probe:nonexistent` → status 404, body `{"error":"job_not_found"}` — confirmed.
+
+### 3.6 Grant 2 and the stimulus — 2026-11-03T23:26:13Z
+
+On the clean preflight, Julie gave her separate Grant 2 GO (Nov 3, 2026, 6:24 p.m. ET, Coding Projects chat, options-widget tap + confirming message), recorded on the board BEFORE the send — issue #15 comment `6618087797` (RT-H-20261103-7c2e91, read back byte-identical). The pre-send census was fresh, complete, and at window baseline on every value — NO DEVIATION (probe target nonexistence re

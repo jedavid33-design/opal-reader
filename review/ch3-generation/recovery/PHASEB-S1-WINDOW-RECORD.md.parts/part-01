@@ -1,0 +1,50 @@
+-verified at send time: 404 `{"error":"job_not_found"}`).
+
+Exactly one stimulus was sent, and it was never re-sent: `POST /v2/commands` via the client connector, `command_id` **`s1-stimulus-20261103232613`**, body `{"command_id":"s1-stimulus-20261103232613","type":"RequestPause","payload":{"jobId":"alarm-wake-probe:nonexistent"}}`. Response (HTTP 200): `{"command_id":"s1-stimulus-20261103232613","outcome":"rejected","reason":"job_not_found"}` — the expected refusal; per the design this is SUCCESS for Grant 2's purpose (handleCommand wakes the coordinator before apply refuses).
+
+### 3.7 The four executor observation sets — W-2, then W-2 CONTINUING ×3
+
+- **Set 1** (reads 2026-11-03T23:26:32Z–23:26:36Z): **W-2 EXPECTED S1 EVENT** — the first drive pass was already recorded (§5). NO intervention.
+- **Set 2** (reads 2026-11-03T23:32:22Z–23:32:26Z): **W-2 CONTINUING** — state unchanged; still exactly one pass recorded; `armedAt` 1793748974899 (2026-11-03T23:36:14.899Z) future-dated relative to the read — the next watchdog tick, pending delivery.
+- **Set 3** (reads 2026-11-03T23:38:22Z–23:38:28Z): **W-2 CONTINUING** — the second pass delivered on schedule (pass 2 at 1793748975298 = 2026-11-03T23:36:15.298Z); the single grant `seg:1:full` still `issued`, no second grant.
+- **Set 4** (reads 2026-11-03T23:46:23Z–23:46:29Z, FINAL): **W-2 CONTINUING** — 5 passes recorded; grant `seg:1:full` had reached its lease-expired void state and its successor `grant:plan:19cad189fab54b9c804a74a6:seg:2:full` was issued for the SAME single occurrence (job revision 3) — the §7.3 churn baseline operating as pre-classified, expressly NOT a T4 second grant (no concurrent, foreign, or additional-occurrence grant; derived reserved held at exactly 12 throughout). The parked Ch 3 job read `parked_policy` revision 1 — unchanged. Ends HELD, $0 spent.
+
+### 3.8 Continuing checks — +30h, +36h, +42h: W-2 CONTINUING
+
+- **+30h** (`CHECK +29h51m`; reads 2026-11-04T05:20:38Z–05:21:10Z): 77 total passes (returned ids 28–77 of 77; latest pass id 77 at 1793769384616), all stage complete, no errors; job `generating` revision 25; live grant `seg:24:full` (seg:1–23 voided sequentially); derived reserved 12; dispatched 0; phase frozen; containment NORMAL.
+- **+36h** (`CHECK +35h51m`; reads 2026-11-04T11:20:23Z–11:20:39Z): 160 total passes (returned ids 111–160 of 160; latest pass id 160 at 1793790986824); job revision 49; live grant `seg:48:full` (seg:1–47 voided); all other markers in-set.
+- **+42h** (`CHECK +41h51m`; reads 2026-11-04T17:21:35Z–17:21:41Z): latest pass id 244 at 1793812588536 (= 2026-11-04T17:16:28.536Z; returned window ids 195–244, contiguous); job revision 73; live grant `seg:72:full` (seg:1–71 voided); all other markers in-set. **This is the last fully good read set before the fault.**
+
+### 3.9 The second 1101 fault — +48h check FAILED
+
+`CHECK +47h51m` (nominal +48h; first read pass 2026-11-04T23:20:36Z–23:20:57Z; confirmation retry of failing surfaces 2026-11-04T23:21:30Z–23:21:33Z, identical results): **8 of the 10 §3.1 surfaces FAILED with HTTP 500, body `error code: 1101`** — drive=1 diagnostics, containment, plan diagnostics, job view, capabilities, quota reconcile, conflicts, and bindings sync changes. The two readable surfaces matched the held baseline but do not establish event state: the Cloudflare queue read (status 200 — `delivery_paused` true, exactly 1 consumer) and `/health` (status 200 — build `fdb02395b3775dc945baa395591a73060ab146c4`, generation halted, coordinator armed). Classification: NONE — FAILED CHECK (read set incomplete), counting as missed for gap purposes. The log states the consequence exactly: whether the chain was still inside the §7.3 set, whether any pass had run since pass 244, and whether any T1–T4 condition existed were all UNVERIFIED as of that check; an unverified trigger never fires S1-X, and no FIRING DECISION was recorded.
+
+Onset bracket, from the log's own timestamps only: the fault was not present at the +42h check's last good read (**2026-11-04T17:21:41Z**) and was present at the +48h check's first read (**2026-11-04T23:20:36Z**). The recorder, read retrospectively at +54h, shows drive passes continuing inside that bracket until pass 296 at 2026-11-04T20:56:59.071Z, and none after. The log does not support a tighter onset for the read-surface failures than that bracket.
+
+### 3.10 +54h — reads recovered; W-4 first classified
+
+`CHECK +53h51m` (nominal +54h; reads 2026-11-05T05:20:53Z–05:21:00Z): all 10 §3.1 reads status 200, complete — the 1101 outage had cleared on every previously failing surface. Every §7.3 set marker was in-set (live grant `seg:87:full`, job revision 88, reserved 12, dispatched 0, phase frozen, containment NORMAL, no recorder error). The classifying fact was the delivery stall (§6): **W-4 WAKE OBSERVED, DELIVERY NOT OBSERVED**, first classified here. The completed-to-completed span +42h → +54h (2026-11-04T17:21:35Z → 2026-11-05T05:20:53Z) is **11h59m18s**, WITHIN the 6-hourly gap bound 12h10m (deadline was 2026-11-05T05:31:35Z); because the span contains the failed +48h check it is the window's one UNOBSERVED interval, closed by this check. Missed-check ladder: one missed/failed check, gap within bound — noted, cadence continued; escalation bound NOT breached; WINDOW-FAILED NOT declared; no cron jobs disabled.
+
+### 3.11 +60h and +66h — W-4 continuing
+
+- **+60h** (`CHECK +59h51m`; reads 2026-11-05T11:20:22Z–11:20:42Z): **W-4 (continuing)** — registration 14h13m53s past due; job/grant state unchanged from +54h. The quota PT day had rolled at 07:00Z: current-day (2026-11-05) totals dispatched 0 / reserved 0, with 2026-11-04's reserved 12 preserved in `dayTotals` — a calendar roll, not a movement (the log states this expressly).
+- **+66h** (`CHECK +65h51m`; reads 2026-11-05T17:20:47Z–17:20:53Z): **W-4 (continuing)** — registration 20h14m18s past due; state bit-identical to +54h/+60h.
+
+### 3.12 WINDOW-CLOSE census — nominal +72h
+
+`WINDOW-CLOSE — CHECK +71h51m` (reads 2026-11-05T23:21:06Z–23:21:18Z; entry appended 2026-11-05T23:22:03Z; window close 2026-11-05T23:28:41Z). Full §3.1 read set, all status 200. Closing classification: **W-4 WAKE OBSERVED, DELIVERY NOT OBSERVED (continuing)** — registration 26h14m37s past due, no pass delivered for 26h24m07s. Ends-HELD values at §8. The run disabled `phaseb-s1-window-watch-6h` before appending the entry (verified by cron.status immediately after: `enabled: false`, next_run null, queued 0); the hourly job was already disabled at the handoff (re-verified this run). Both window jobs are now disabled.
+
+## 4. Checks accounting
+
+As established by the log and the scheduler histories, per the closing entry:
+
+- **Hourly phase** (`phaseb-s1-window-watch`): nominal points +1h through +12h = 12 scheduled points — **12 performed and completed, all W-0**; plus one additional performed check at nominal +13h (the handoff run) — 13 performed, **0 missed, 0 failed**. (The pre-window SMOKE is excluded from coverage accounting.)
+- **6-hourly phase** (`phaseb-s1-window-watch-6h`): nominal points +12h, +18h, +24h, +30h, +36h, +42h, +48h, +54h, +60h, +66h, +72h = 11 points — **10 performed and completed** (+12h W-0, +18h W-0, +24h W-0 / PART D PREFLIGHT, +30h/+36h/+42h W-2 CONTINUING, +54h/+60h/+66h W-4, +72h closing census W-4) and **1 FAILED** (+48h — 8 of 10 surfaces HTTP 500 / error code 1101; run record "failed"; the window's single missed check). **0 points with no run record** — no SCHEDULER-GAP, no LOG-FAILURE.
+- **Unobserved intervals: exactly ONE** — 2026-11-04T17:21:35Z (+42h check first read) → 2026-11-05T05:20:53Z (+54h check first read), **11h59m18s** actual-to-actual, containing the failed +48h check; WITHIN the 6-hourly gap bound 12h10m. No gap bound was breached anywhere in the window, and the escalation bound was never breached. All other consecutive completed-check intervals are VERIFIED intervals.
+- **WINDOW-FAILED was never declared.**
+
+## 5. The S1 event evidence set
+
+**Stimulus dispatch and response.** Dispatch 2026-11-03T23:26:13Z (2026-11-03 18:26:13 EST), by Wren (Grant 2 executor, in session), after a fresh complete pre-send census at window baseline with NO DEVIATION. Command: `POST /v2/commands`, `command_id` `s1-stimulus-20261103232613`, type `RequestPause`, payload `{"jobId":"alarm-wake-probe:nonexistent"}`. Response (HTTP 200): `{"command_id":"s1-stimulus-20261103232613","outcome":"rejected","reason":"job_not_found"}` — the expected refusal, which per the design is success for the gate (handleCommand wakes the coordinator before apply refuses). Sent exactly once; never re-sent.
+
+**First pass.** Recorder row **id 1**: `at` **1793748374899** (= **2026-11-03T23:26:14.899Z**, ~1.9 s after dispatch), `finishedAt` 1793748374899, `stage` `"complete"`, `driveInvoked` true, outcomes `[{"planId":"plan:19cad189fab54b9c804a74a6","state":"activ
