@@ -1,0 +1,57 @@
+non-null `armedAt` that the restoration record does **not** account for, that is a census deviation under the resume package's own law (STOP at GR-0, §7.1) — not a GR-2 question at all.
+
+The satisfaction-by-observation disposition is **struck** and replaced by the ruled branch:
+
+> **OQ-1(c), as ruled (GR-3).** A non-null `armedAt` at GR-0, by itself, **satisfies nothing and omits nothing**: it does not satisfy the wake-verification requirement, and it does not justify omitting the probe. There is exactly **one** no-probe branch, and it opens only when **both** of the following hold:
+>
+> **(i) Documented provenance.** The standing registration's provenance is documented in the **restoration record** — concretely: the restoration gate's execution record, written at restoration time and standing **before the resume gate opens**, contains an account of the registration naming (a) that a registration stands at the restoration's close (or arose at an identified point the record covers), (b) its value as read at the restoration's closing census, and (c) the identified wake that produced it — the specific command, report, or app-use path the record names as the registration's source, with its timestamp. A value merely *consistent with* a re-arm against the surviving schedule rows is **not** documentation; an executor inference at GR-0 from the value's shape is **not** documentation; a restoration record containing no such account leaves provenance **undocumented**, and the no-probe branch unavailable, however plausible the registration's origin looks.
+>
+> **(ii) A fresh, independently observed drive effect, pre-lift.** After GR-0 and **before either hold lifts**, a drive effect satisfying the **same** wake-verification requirement as a probe-produced effect — corrected analysis §3.1: a new drive-pass recorder row on the P-6 surface, timestamped after GR-0, stage complete, `driveInvoked` true, error fields null — is independently observed under corrected §3.2's polling discipline and bound. The observation is the executor's own fresh read set, not the restoration record's report and not the registration's persistence.
+>
+> If both (i) and (ii) hold, GR-2 is recorded **satisfied-by-observation under GR-3**, the evidence (the restoration record's account + the raw observation polls) is quoted in the gate record, and the sequence proceeds to GR-3 with no probe sent. **If either fails — provenance undocumented, or no qualifying effect observed within the bound — the default is the probe**: GR-2 proceeds in its ruled form (§2.1 of the analysis) exactly as if the registration were null, unless the state is one the package's census law stops on first (next paragraph). **No second wake is ever improvised**: if the probe has been sent, a standing registration — however it arose and however well documented — never licenses a further wake act by this gate; if the probe has not been sent and the no-probe branch has failed on (ii), the probe is the one wake, sent once, under §4's discipline.
+>
+> A non-null `armedAt` that the restoration record does not account for **at all** — no provenance account and no closing-census value to compare — remains what the package's law already made it: a census deviation, STOP at GR-0 (package §7.1), not a GR-2 question. GR-3's branch governs the *accounted* case only; it does not soften the unaccounted case.
+
+### 2.2 Package text conformed
+
+- **Package §5.3's closing paragraph** read: "If GR-0's census instead reads a non-null `armedAt` accounted for by the restoration record (§4.0 item 4), GR-2 may be satisfiable trivially; the ruling should say what the executor does in that case too." The ruling has now said. "Satisfiable trivially" is struck; the paragraph is replaced by: "*If GR-0's census instead reads a non-null `armedAt`, corrected §2.4 of the OQ-1 analysis (GR-3 as ruled) governs: the value alone satisfies nothing and omits nothing; the no-probe branch requires documented provenance in the restoration record **and** a fresh, independently observed drive effect before either hold lifts; otherwise the probe is sent, or the census stops the gate.*"
+- **Package §4.0 item 4**'s sentence — "in which case GR-2's form changes and Rowan's OQ-1 ruling governs how the executor proceeds" — stands in substance (the ruling now exists) and is read as pointing at corrected §2.4 above; item 4's STOP rule for an unaccounted `armedAt` is unchanged and is restated in corrected §2.4's closing paragraph.
+
+---
+
+## 3. Required Revision 4 — the wake in the mutation ledger (GR-4)
+
+The ruling: "Count the fresh probe as exactly one production command, including its expected rejected receipt. Account separately for any resulting alarm registration, drive activity, grant churn, and other effects. Do not represent the expected refusal as proof of zero downstream effects. Update the resume gate's mutation ceiling and execution record accordingly."
+
+### 3.1 The package §3 GR-2 line — replaced
+
+As pinned, the package §3 ledger row for GR-2 reads:
+
+> | GR-2 | **Wake slot** (§5.3) — mechanism fixed by Rowan's OQ-1 ruling; accounting fixed by that ruling and recorded here by amendment before execution | per ruling |
+
+The mechanism is now ruled (GR-1) and its accounting is now fixed (GR-4). The row is replaced by:
+
+> | GR-2 | **Wake** (§5.3) — exactly one fresh probe command: `RequestPause` against `alarm-wake-probe:nonexistent`, newly minted command_id, via the client connector, expected receipt HTTP 200 `{"outcome":"rejected","reason":"job_not_found"}` (OQ-1 analysis §2, as corrected) | **1** |
+
+### 3.2 The corrected ceiling — package §3 budget totals
+
+As pinned, the totals read: "**Budget totals:** counted mutations **≤ 4** on every path (GR-3, GR-4, and exactly one of GR-6a/GR-6b), **plus** the GR-2 wake slot at whatever accounting Rowan's ruling assigns it."
+
+GR-4 assigns the wake **exactly one**. The totals are replaced by:
+
+> **Budget totals:** counted mutations **≤ 5** on every path — GR-2 (the probe: **1**), GR-3 (halt lift: 1), GR-4 (queue unpause: 1), and exactly one of GR-6a/GR-6b (re-pause + re-halt: 2). The probe's count of one is the **command itself, including its expected rejected receipt**: the receipt is the command's own response, not a second mutation and not an extra ledger line. No path counts the wake as zero, and no path counts it as more than one.
+
+The explicit zero budgets that follow in package §3 (SubmitJob 0; exemption calls 0; containment transitions 0; deploys 0; queue changes beyond GR-4/GR-6 0; conflicts changes 0) stand **unchanged** — the probe is none of those things: it is a client command through the ordinary command route, counted above, and it performs no containment transition, no submission, and no queue or settings act.
+
+### 3.3 Observed effects — accounted separately, never as mutations, never as zero-proof
+
+The probe's **effects** are accounted on separate lines from its mutation count, as **observed effects**, each with its read source:
+
+| Observed effect | How observed (read source) | Accounting |
+|---|---|---|
+| Alarm registration state after the probe | P-6 surface (`GET /v2/d6-diagnostics?drive=1`): `armedAt` value or null, per poll | An observed effect of the coordinator's `wake()`, not an executor mutation; recorded per poll, never predicted |
+| Drive activity | P-6 recorder rows (new row ids, timestamps, stage, `driveInvoked`, error fields) | Observed effects; the wake-verification evidence (corrected §3.1) |
+| Grant churn | P-1 job surface (`grants[]`, occurrence state, job revision) + P-5 derived reserved | Observed effects of the drive path under the holds; in-set churn is $0 and dispatch-fenced; any out-of-set value is an abort under package §2.3.3, not an accounting variation |
+| Any other effect | The remaining P-surfaces as polled | Observed and recorded as read; an effect no surface explains is a finding for the record, not an assumption |
+
+**The refusal proves nothing downstream.** The expected `job_not_found` refusal establishes exactly one fact: `handleCommand` ran and apply refused the command because the target job does not exist. It must **not** be represented — in the ledger, the execution record, or any summary — as proof of zero downstream effects. The Grant 2 precedent's read set *observed* no state change attributable to the command on the plan/phase/quota/conflict/binding surfaces (analysis §2.5, standing), but observation is the only route to that claim, in this gate as in the precedent: the execution record states what the polls **read**, and claims nothing about surfaces at instants no poll covered. Analysis §2.5's proposed treatment ("the wake is **one client command**… **Everything else: zero**") is conformed accordingly: the "one client command" count stands and is now the package's counted line (§3.1 above); the "everything else: zero" sentence is replaced by the observed-effects accounting 

@@ -1,0 +1,60 @@
+# Phase B — GENERATION-RESUME gate: CORRECTION to the resume package and the OQ-1 analysis
+
+_Correction filed by Wren, 2026-11-05, under Rowan's ruling on the C3 branch-(d) reconciliation and generation-resume OQ-1 analysis (verdict: REVISE — RESUME WAKE MECHANISM ACCEPTED IN PRINCIPLE; EXECUTION NOT AUTHORIZED; local record `ROWAN-C3D-OQ1-RULING.md`). Documentary only: this correction authorizes nothing, requests no GO, and performs no production act. The wake mechanism it corrects is NOT authorized for execution by the ruling or by this correction. Production remains INVESTIGATION HELD; GENERATION_HALT=1; queue paused._
+
+Correction pin (this document, the companion C3 correction, and the companion cp ride one pin commit): `<PACKAGE-PIN>` — repo `jedavid33-design/opal-reader`, branch `ui1-review`. (Pin-slot pattern, as established: a commit cannot name itself; the pinned copy carries the slot.)
+
+---
+
+## 0. What this correction amends
+
+This correction amends **two** documents, section by section, quoting every passage it strikes or replaces so the correction is self-contained:
+
+1. `PHASEB-GENERATION-RESUME-PACKAGE.md` — the generation-resume readiness package, pin `0946f9f2fb978a46b562c738d8ac6d9d4ee977a6` ("the package"). Amended: §3 (the GR-2 ledger line and the budget totals), §4.0 item 4 and §5.3 (the non-null `armedAt` / "satisfiable trivially" text), §7 item 3 (the wake-slot failure condition), and the §9 OQ-2 entry's status (via §5 below).
+2. `PHASEB-GENERATION-RESUME-OQ1-ANALYSIS.md` — the OQ-1 analysis, pin `60da50c3a6da36e42dd8e93fa67bc8673737613e` ("the analysis"). Amended: §2.4 (OQ-1(c)), §2.5 (OQ-1(d) ledger treatment), §3.1 (the R-06 cross-check), §3.2 (the observation bound), §4.1/§4.2 (failure behavior wording), §6 (the OQ-2 closure proposal).
+
+The ruling's resume decisions were: **GR-1 ACCEPT IN PRINCIPLE** (the fresh probe mechanism); **GR-2 ACCEPT WITH QUALIFICATION** (the 15-minute bound); **GR-3 REVISE** (non-null `armedAt`); **GR-4 CONDITIONAL ACCEPTANCE** (mutation ledger); **GR-5** (OQ-2 REMAINS OPEN FOR GR-B); **GR-6 REVISE** (recorder cross-check); **GR-7 PASS WITH CONDITIONS** (failure behavior). Required Revisions 3–6 are discharged by §2–§5 of this correction; GR-2's qualification is carried at §1; GR-7's conditions at §6; GR-1 and the gate's remaining preconditions are recorded at §7. Where the ruling and either amended document differ, **the ruling governs**; where this correction and an amended document differ, **this correction governs**.
+
+---
+
+## 1. GR-2 — the observation bound, qualified (analysis §3.2)
+
+The ruling: "Accept 15 minutes, with complete paired polling at least every five minutes, as the pre-lift observation and failure-decision bound. This is not proof of an upper bound on alarm delivery latency. No observed effect within the bound means STOP, preserve evidence, and leave both holds in place. No additional waiting period is required merely to extend the bound. However, the complete fresh census, restoration verification, and grant-state checks remain mandatory."
+
+### 1.1 Analysis §3.2 — struck and replaced
+
+Analysis §3.2's first bullet read:
+
+> - **Probe-to-first-effect bound: 15 minutes**, polled on the P-6 + P-1 read pair at a cadence of at least one complete poll every 5 minutes (the §2.3 protocol's cadence discipline), starting at the probe's dispatch.
+
+The bound and cadence stand — Rowan accepted both — but the bullet is replaced so the section carries the qualification in the same breath as the number:
+
+> - **Probe-to-first-effect bound: 15 minutes**, polled on the P-6 + P-1 read pair as **complete paired polls at least every 5 minutes** (both surfaces read at every poll; a poll with a failed surface is a failed poll, not a negative observation), starting at the probe's dispatch. **The bound is a failure-decision bound, not a latency finding:** it is the interval at whose expiry the gate decides the wake has failed; it is **not proof of an upper bound on alarm delivery latency**, and no wording in this gate may present it as one — delivery slower than 15 minutes is not excluded by anything in the record; it is simply outside the interval this gate will wait before deciding. **No observed effect within the bound = STOP**: the failure behavior of §4.1 runs (evidence preserved raw, both holds left in place, no re-hold needed or performed because no hold was lifted). **No additional waiting period is required merely to extend the bound** — the executor does not append a grace interval, a confirmation wait, or a second observation window on its own authority; a longer bound would be a ruling, not an executor courtesy. **And the bound's outcome decides nothing else in the gate:** the complete fresh census (GR-0), the restoration verification (the census's containment and restoration-record reads, package §4.0 item 3), and the grant-state checks (the §2.3 protocol's P-1/P-5 surfaces) remain **mandatory in full regardless of whether the wake verifies, fails, or is not needed** — a verified wake never shortens the census, and a satisfied-by-observation state (corrected §2.4) never waives a grant-state check.
+
+Analysis §3.2's second bullet (the justification from the evidence — the ~1.9 s precedent, the 600 s watchdog period, the 2-hour W-4 threshold) stands, with its closing sentence conformed: the bound is no longer "a proposal, not a settled constant" — **it is ruled at 15 minutes by GR-2, with the qualification above**; the sentence is replaced by: "*The bound is ruled (GR-2) at the proposed figure, as a failure-decision bound under the qualification stated in the first bullet — the figure's evidentiary basis is this bullet, and its character is the first bullet's, not a latency bound's.*"
+
+### 1.2 Package alignment
+
+- The package §2.3 poll discipline — "at least one complete poll every 5 minutes" during the post-unpause protocol — already matches the ruled cadence in form; the GR-2 pre-lift observation now adopts the **same paired-poll discipline by reference** (P-6 + P-1, complete pairs, ≥1 per 5 minutes), so the gate has one polling discipline on both sides of the lifts, not two.
+- **Package §7 item 3 is amended.** As pinned it reads:
+
+  > 3. **Wake-slot failure** — GR-2 performed in the ruled form does not produce a registration readable on the `drive=1` surface within one watchdog period (10 minutes), or OQ-1 stands unruled at execution time — STOP before the lifts (the system is still held; no re-hold is needed and none is performed).
+
+  That form is superseded in both its test and its interval: a **readable registration is not satisfaction** (GR-3: a non-null `armedAt` does not satisfy the observation requirement; the analysis §3 governing rule: persisted `armedAt` is not proof of delivery), and the interval is the ruled **15 minutes**, not one watchdog period. Package §7 item 3 is replaced by:
+
+  > 3. **Wake-slot failure** — GR-2 performed in the ruled form produces **no observed effect satisfying corrected §3.1 of the OQ-1 analysis within the ruled 15-minute bound** (complete paired polling at least every 5 minutes), or OQ-1 stands unruled at execution time — STOP before the lifts (the system is still held; no re-hold is needed and none is performed). A registration readable on the `drive=1` surface is a consistency marker only and never satisfies this item by itself.
+
+---
+
+## 2. Required Revision 3 — the non-null `armedAt` branch rewritten (GR-3)
+
+The ruling: "A non-null armedAt does not, by itself, satisfy GR-2 or justify omitting the probe. A restoration-accounted registration may justify a no-probe branch only if its provenance is documented and a fresh, independently observed drive effect satisfies the same wake-verification requirements before either hold lifts. Otherwise STOP and return for review. Do not improvise a second wake."
+
+### 2.1 Analysis §2.4 — struck and replaced
+
+Analysis §2.4 proposed:
+
+> **Proposal: yes, conditionally — and the condition is evidentiary, not formal.** … The proposal is therefore:
+>
+> - If GR-0 reads non-null `armedAt`, GR-2 is recorded **satisfied-by-observation** — no probe is sent (sending one would add a second wake whose only certain effect is noise in the evidence; the mechanism's discipline is *exactly one wake act by this gate*, and an act whose precondition is absent is not performed) — **provided** the restoration record accounts for the state (the value is consistent with a registration re-armed against the surviving schedule rows, i.e. a past-due or imminent due under R5a's past-due disjunct) **and** the §3 verification still runs in full: the observed-effect proof (a pass, or the in-set grant transition) is **not waived** by satisfaction-by-observation. If no delivery follows within the §3 bound, the gate treats the case under §4 exactly as a failed wake — the registration, however it arose, did not deliver.
+> - If GR-0 reads 

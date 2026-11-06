@@ -1,0 +1,45 @@
+of this section — effects are **as observed**, line by line, or not claimed.
+
+### 3.4 Execution-record requirement
+
+The gate's execution record must carry, for GR-2: the probe line itself (the command type and target, the newly minted command_id, the dispatch timestamp, the connector route); its receipt (the HTTP status and the response body verbatim); and **each observed effect with its read source** (surface, poll timestamp, and the values as read) — the registration state, the recorder rows relied on, and the grant-state reads — so the record distinguishes at every point between the **one counted mutation** (the command), its **receipt** (part of the same line), and the **observed effects** (separately sourced reads). A record that merges the receipt into a second count, omits an observed effect, or states an unobserved surface as unchanged fails GR-4.
+
+---
+
+## 4. Required Revision 5 — OQ-2 RESTORED TO OPEN for GR-B (GR-5)
+
+The ruling: "The window establishes sequential grant reissuance after expiry while the chain was delivering. It does not establish the behavior after stop, clear, and restart. Preserve the observed pattern as a conditional expectation, but do not close the cold-restart question on inference alone. GR-B remains blocked until this case is resolved by sufficient evidence or a separately reviewed, bounded verification protocol."
+
+### 4.1 Analysis §6 — the closure proposal struck
+
+Analysis §6 closed with this disposition paragraph:
+
+> - **Proposed disposition (Rowan rules — Q5):** OQ-2 is **NARROWED to the extension point**. This analysis proposes Rowan close OQ-2 for branch GR-B by adopting the observed pattern as §2.3.2's expectations — new grant, incremented id (`seg:88:full` if the standing grant has voided by the gate's first delivered pass, the exact number being a census/protocol observation, not a prediction), occurrence `granted` throughout, job revision incrementing per issuance — **with the cold-restart extension named in the package as an assumption at exactly that strength**, so the executor at GR-B knows which expectation is observed and which is extended. If Rowan instead holds OQ-2 open for the cold-restart sub-case, GR-B may not execute until the extension is otherwise evidenced, and GR-A (if its census form obtains) is unaffected. **This analysis does not close OQ-2; it reports the narrowing and proposes the disposition.**
+
+**The closure proposal is struck.** Rowan has held OQ-2 open, on exactly the branch this paragraph proposed to close by inference. The paragraph is replaced by:
+
+> - **Disposition (as ruled — GR-5): OQ-2 REMAINS OPEN for GR-B.** The window establishes sequential grant reissuance after lease expiry **while the chain was delivering** — the mechanics of §6's observations (new grant, incremented id, occurrence `granted` throughout, job revision incrementing per issuance) stand as observations at exactly that scope. The window does **not** establish behavior after **stop, clear, and restart**: the cold-restart case — the resume gate's own case — is unobserved, and it is **not** closed by inference from the delivering-chain pattern. The observed pattern is preserved as a **conditional expectation** only: it is what the executor expects to see if the machinery behaves alike after a restart, it may be used to *recognize* in-set behavior in a future approved verification protocol, and it fills **no** expectation in package §2.3.2 by its own force. **GR-B remains BLOCKED** until the cold-restart case is resolved by sufficient evidence or by a separately reviewed, bounded verification protocol — either route is a future Rowan ruling, requested with its evidence or its protocol, not an executor determination at gate time.
+
+Analysis §6's earlier text stands with one conforming change: its "Established (observation strength, delivering chain)" bullet already scopes itself correctly and is unchanged; the "Not established" bullet's cold-restart point is now the **dispositive** one, and its phrasing ("an **extension of the observed pattern, not an observation**") is adopted by the replacement paragraph above. §6's title and framing ("as now observed") stand, read as: observed **for the delivering chain**.
+
+### 4.2 What this means for the package's branches — precisely
+
+- **GR-A is unaffected.** By the package's own branch definition (§4.1), GR-A is selected when the census reads the preserved plan/job **exactly at their attempt-3 closing values**: job `queued` rev 1, **grants []**, occurrence `pending`. No grant has ever been issued in that form, so no void exists and no re-issuance question can arise inside it: the first grant the protocol expects (§2.3.1 step 1 — `seg:1:full` appearing, occurrence `pending` → `granted`, reserved 0 → 12) is an **initial issuance**, whose expectations are fully specified from the records without OQ-2. Package §0 leg 4 says the same thing in dependency form: OQ-2 is required "**additionally if** the executing branch is GR-B." GR-5 therefore changes nothing for GR-A: if GR-A's census form obtains and the gate's other preconditions stand (§7 below), GR-A may execute on the corrected documents.
+- **GR-B is blocked.** By the package's own terms, §2.3.2's expectations "wait on" the OQ-2 ruling ("this branch may not execute until Rowan's ruling on OQ-2 fills those expectations in writing"), §4.2 repeats it ("Execution in GR-B additionally requires Rowan's ruling on OQ-2"), and §0 leg 4 makes it a gate precondition. GR-5 is a ruling on OQ-2 that **declines to fill** those expectations and holds the question open. GR-B therefore remains a **census branch, not an executable one**: if the GR-0 census selects GR-B's form, the gate stops there and the OQ-2 question returns to Rowan with whatever the census read — the executor does not execute GR-B on the conditional expectation, does not treat the delivering-chain pattern as §2.3.2's fill, and does not re-characterize the census into GR-A. The package §9 OQ-2 entry's status is conformed to read: "**OQ-2 (blocking, branch GR-B only) — REMAINS OPEN** (GR-5, 2026-11-05): the delivering-chain reissuance pattern is a conditional expectation only; the post-stop/clear/restart case is unobserved and unclosed."
+
+---
+
+## 5. Required Revision 6 — recorder-discrepancy handling, explicit and non-permissive (GR-6)
+
+The ruling: "An in-set grant transition without a recorder row is meaningful corroborating evidence, but does not independently establish the complete GR-2 wake-verification requirement. Classify it as an R-06 evidence discrepancy. Do not lift either hold on that evidence alone. Return for review unless an independently adequate verification route has been approved."
+
+### 5.1 Analysis §3.1 — the cross-check passage struck and replaced
+
+Analysis §3.1's secondary cross-check read:
+
+> - **Secondary cross-check — the in-set grant transition.** The P-1/P-5 surfaces showing the preserved plan's grant cycle move exactly inside the branch's expected set (GR-A: the named grant appears, reserved 0 → 12; GR-B: as §6 leaves it for Rowan's OQ-2 ruling). A pass moves the grant state whether or not its recorder row survives — the recorder has a known dual-failure blind spot (register R-06: a pass and its recording failing together is invisible on the row surface). The cross-check exists so the protocol does not declare a wake failed on a recording failure; **whether the cross-check alone satisfies GR-2 is a question for Rowan (Q6)** — the conservative default this analysis proposes is: row **or** cross-check satisfies, and a cross-check-only satisfaction is recorded **as an R-06-class observation** in the gate record, at that strength, never silently as a clean pass.
+
+The proposed "row **or** cross-check satisfies" default is **struck**. Rowan has ruled it (GR-6), and the passage is replaced by:
+
+> - **Corroborating cross-check — the in-set grant transition (never sufficient alone).** The P-1/P-5 surfaces showing the preserved plan's grant cycle move exactly inside the branch's expected set (GR-A: the named grant appears, reserved 0 → 12; GR-B: not executable while OQ-2 stands open — §4 of the companion correction) is **meaningful corroborating evidence** that a pass ran: a pass moves the grant state whether or not its recorder row survives, and the recorder has a known dual-failure blind spot (register R-06: a pass and its recording failing together is invisible on the row surface). But corroboration is its whole weight. **An in-set grant transition without a recorder row does NOT independently establish the wake-verification requirement** and does not satisfy GR-2: wake verification requires the **recorder-row route** — a new `d6_drive_passes` row under the primary evidence above — **or an independently adequate verification route that Rowan has approved in advance**. No other route exists by default.
+> - **The discrepancy path.** If, within the §3.2 bound
