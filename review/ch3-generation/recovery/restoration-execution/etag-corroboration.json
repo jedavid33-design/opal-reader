@@ -1,0 +1,8 @@
+{
+ "purpose": "Post-execution corroboration of the restoration census script-etag read (record note E-1): the execution-time header reads were not saved as artifacts; this read was captured at filing time, after the gate closed, with no intervening deploy or upload.",
+ "capturedAt": "2026-11-06T02:53:35Z",
+ "method": "In-process GET of the script content endpoint with the connector credential surrogate (package section 3.2); etag response header, quotes stripped for comparison.",
+ "etagHeaderRaw": "\"bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e\"",
+ "etagStripped": "bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e",
+ "matchesExecutionTimeValue": true
+}

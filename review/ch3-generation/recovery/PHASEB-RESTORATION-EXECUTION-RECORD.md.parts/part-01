@@ -1,0 +1,128 @@
+# PHASE B — STANDALONE RESTORATION: EXECUTION RECORD
+
+**Gate:** standalone restoration — the return of containment from
+`CHAIN_STOPPED` to `NORMAL` by exactly one reasoned `clear`, closing
+stop episode 3.
+**Execution window:** 2026-11-06 — Julie's GO recorded on the board
+before the census (board comment 6675499312, 2026-11-05 ~9:47 p.m. ET);
+R-0 confirmation census 02:48:22Z–02:49:00Z; the single `clear`
+dispatched 02:49:15Z and committed at `updatedAt` 1793933356719
+(02:49:16.719Z); closing confirmation 02:49:28Z–02:49:36Z (all other
+times UTC; 2026-11-05 evening, America/New_York).
+**Result:** **RESTORATION EXECUTED — the single `clear` applied
+first-send, exactly as the one-act ledger prescribed; the system ends
+HELD in NORMAL with no alarm registration standing.** Every condition
+of Rowan's readiness ruling (PASS WITH CONDITIONS) was discharged as
+specified in §1. Closure of the gate awaits Rowan's documentary
+execution review of this record.
+**Spend:** $0.
+**Raw evidence:** `~/workspace/ch2-program/ch3-recovery/restoration-execution/`
+— opening confirmation reads `r01`–`r16b` (the §3 read set; read 6, the
+script etag, is a header-only read with no body file — see note E-1),
+the sent body `r1-body.json`, the act response `s1.json`, and the
+closing confirmation reads `t01`–`t16b`. Every value in this record is
+taken from those files; §8 indexes them. This record's own pin is
+carried in the companion CP's `<RESTORE-EXEC-PIN>` slot (a record
+cannot name its own commit).
+
+---
+
+## 1. Authority chain
+
+The gate executed under the following chain, in order. No link was
+skipped, and Julie's GO was recorded on the board **before** the
+confirmation census opened — the ordering the GO wording itself
+requires.
+
+| # | Link | Reference |
+|---|---|---|
+| 1 | Containment design v4 REVISED — restoration policy (§6), episode law (§4.2), truth model (§2.3) | `PHASEB-CONTAINMENT-DESIGN-V4-REVISED.md` |
+| 2 | Recovery gates v4 REVISED — "Standalone restoration authorization (NOT a gate; decision 2)" | `PHASEB-RECOVERY-GATES-V4-REVISED.md` |
+| 3 | Gate C3 execution record (the episode this gate closes) | `PHASEB-C3-EXECUTION-RECORD.md`, pin `b4727c408f6c446a94466594ea2cc7c59d11de8d` |
+| 4 | Rowan ruling on the C3 execution record, §A — C3 EXECUTED AND CLOSED at PARTIAL strength; restoration prerequisites stated (fresh closing-state confirmation; historical audit review covering episode 3, all four transitions, and the rejected C3-1 request); **no restoration authorized** | `ROWAN-C3-EXECUTION-OQ36-RULING.md` |
+| 5 | Standalone restoration readiness package (operative §3 confirmation set + expectations; §4 ledger; §4.2 reason; §4.3 expected post-clear state) | `PHASEB-RESTORATION-READINESS-PACKAGE.md`, pin `e6359a2183d431b3598c83f11c60d61cd29d13fd` |
+| 6 | **Rowan ruling: restoration readiness PASS WITH CONDITIONS** — Q-1 confirmation = execution census as one preflight act ACCEPT; Q-2 audit reconciliation ACCEPT AT DOCUMENTARY STRENGTH, qualification to be preserved in the execution record; Q-3 §4.2 reason ACCEPT verbatim; Q-4 single-act rule ACCEPT (exactly one `clear` request, no corrected re-send in any failure branch) | `ROWAN-RESTORATION-RESUME-CORR2-RULING.md` |
+| 7 | **Julie's GO**, in the package's §6 wording exactly as presented, given by button tap in the Coding Projects chat 2026-11-05 ~9:47 p.m. ET and **recorded on the board before the census** | Board comment **6675499312**, opal-roundtable issue #15 |
+| 8 | R-0 confirmation census opened | 2026-11-06T02:48:22Z (first evidence file, `r01`) — after link 7 |
+
+The GO's scope, as given: the §3 fresh closing-state confirmation
+census against the §2 historical audit review; then exactly one
+`clear` of CHAIN_STOPPED with the §4.2 recorded reason; read-backs
+only; no re-send in any failure branch; ending HELD in NORMAL with
+the registration still absent. The GO expressly records Julie's
+understanding that restoration does not re-arm anything, does not
+lift GENERATION_HALT or the queue pause, does not touch the preserved
+plan or the idx-26 exemption, and does not authorize the
+generation-resume gate or any generation.
+
+Production state entering the gate: build `fdb02395…` live;
+containment `CHAIN_STOPPED`, stop verified (episode 3); no alarm
+registration; GENERATION_HALT `"1"`; queue
+`opalreader-generation-v2` delivery paused; the Phase B plan
+`plan:19cad189fab54b9c804a74a6` and the idx-26 chapter exemption
+preserved, untouched by this gate.
+
+### 1.1 The ruling's conditions, and how each was discharged
+
+| Condition (ruling §A) | Discharged |
+|---|---|
+| Julie's separate explicit GO | Link 7 — given in the pinned §6 wording, recorded on the board (comment 6675499312) before the census |
+| The complete fresh matching census | §2 — the §3 read set run fresh in the execution session, immediately before the act (Q-1); every expectation matched; no deviation arose |
+| Historical audit disclosure | §1.2 — the readiness package §2 review carried into this record at documentary strength (Q-2) |
+| Exact one-act ledger | §3 — exactly one `clear` request sent, once; no rejection, no re-send, no second act of any kind (Q-4) |
+| Read-back verification | §4 — both containment surfaces read back NORMAL and field-agreeing, with `stopConfidence "not_applicable"` on both |
+| Closing census proving NORMAL, registration null, both holds standing, no unauthorized changes | §4 — NORMAL on both surfaces; `armedAt` null; GENERATION_HALT `"1"` and queue `delivery_paused: true` re-read at closing; the only delta anywhere is the ledger's own (§4.2) |
+| Q-3: the reason preserved verbatim in the authorization and the audit event | §3.1 — the sent body's reason is byte-identical to the package §4.2 text (verified programmatically against `r1-body.json`); it is recorded in the act's audit events at the accounting strength of §5 |
+
+### 1.2 Historical audit disclosure (Q-2 — documentary strength, preserved)
+
+Per Q-2, the historical audit reconciliation is carried here at the
+strength Rowan accepted. In her words (ruling §A, Q-2): the
+reconciliation rests on "transition responses, state fields,
+timestamps, and episode arithmetic. It accounts for episode 3, four
+reported transitions, and the rejected C3-1 request. **It is not a
+direct enumeration of audit-table rows.**" That qualification is
+preserved in this record: no audit surface is invented, and no
+stronger verification is claimed anywhere below — including for this
+gate's own two audit rows (§5).
+
+The history as reconciled (readiness package §2, performed
+documentarily and re-confirmed against the fresh surfaces at R-0):
+
+- **Episode 3 is the only episode the history contains.** It was
+  opened by the `stop_chain:applied` audit row 3 on
+  2026-11-06T02:24:06Z, verified at attempt 1 of a bound of 3
+  (`stopVerifyAttempts 1`, the stop act itself; no
+  `verify_chain_stop` was ever called), and was **not exhausted**
+  (`stopEpisodeExhausted: false`). No episode 1 or 2 exists — the id
+  3 is the audit-row id of the stop commit, not an episode counter —
+  and no episode had ever closed before this gate (all `prevEpisode*`
+  fields read null at C3 closing and again at R-0, §2). The design
+  §6 R3-V naming requirement therefore did not arise.
+- **The four reported transitions** (all carrying
+  `authorizationRef` "Gate C3 branch (d) — Julie GO, board comment
+  6675116603"): audit row 1 `contain_drive:applied`
+  (2026-11-06T02:23:44Z, NORMAL → DRIVE_CONTAINED, `updatedAt
+  1793931825315`); row 2 `clear:applied` (2026-11-06T02:23:53Z,
+  DRIVE_CONTAINED → NORMAL, `updatedAt 1793931834501`, reason recorded
+  "Gate C3 mechanics leg: restore opening state" — a mechanics-leg
+  reversal inside C3, **not** a restoration; no episode event, as no
+  stop episode was open); row 3 `stop_chain:applied`
+  (2026-11-06T02:24:06Z, NORMAL → CHAIN_STOPPED, minting episode 3);
+  row 4 `stop_chain_verify:verified` (inside the same act: observed
+  `stopArmedBefore 1793826389431`, `deleteAlarm()` ×1, read-back null
+  → `stopArmedAfter null`, `stopStatus "verified"`, `stopVerifiedAt
+  1793931847431`).
+- **The rejected C3-1 request is part of the historical record.** The
+  first C3-1 send (2026-11-06T02:23:12Z, body `{action:
+  "contain_drive"}` in the operative ledger's abbreviated notation)
+  was rejected pre-act, HTTP 200 `{"outcome":"rejected","reason":
+  "authorization_ref_required"}`, writing nothing. Rowan accepted its
+  classification (a pre-act request-form rejection, not a state
+  mutation or intervening drive movement). It is **not an audit
+  row** — route validation refused it before any store touch. The
+  corrected re-send (02:23:44Z) applied as audit row 1. Both sends
+  remain in the history; neither is edited out.
+- **Reconciliation statement (package §2.6):** the audit history, as
+  it can be read, is COMPLETE and CONSISTENT; no inconsistency was
+  found. The containment state row did n

@@ -1,0 +1,149 @@
+hWatermark 1841`, changes []; idx 26 remains unbound (its plan entry carries no binding; the bindings watermark is unmoved) | ✓ |
+| 17 | Eligibility (client, both scopes) | digest `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1` on both scopes | `r16a` (chapter, chapterIndex 2): digest `cdef2c7e…` (full value as expected), eligibleCount 1, totalChars 569, expectedCost 8022, exclusions `bound_already 26`; `r16b` (book): the identical digest, eligibleCount 315, totalChars 414,619, expectedCost 5,845,190, exclusions `bound_already 92` | ✓ |
+
+**Confirmation notes — projection shapes and evidence strength, stated
+honestly.** None of these is a deviation: every value read matched its
+expectation. They record exactly what the evidence set does and does
+not contain, so Rowan's review sees the set as it is.
+
+- **E-1 (read 6, script etag — the C3 E-1 gap, closed in method, thin
+  in artifact).** The §3.2 read was performed as specified — an
+  in-process GET via the connector's `dynamic_credentials` surrogate
+  mechanism, etag taken from the response header, quotes stripped —
+  at R-0 and again at closing (§4), returning
+  `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e`
+  both times. **No raw evidence file for this read exists in
+  `restoration-execution/`** (there is no `r06`/`t06` file: the read
+  yields a header, not a body, and no header dump was saved). The etag
+  value in this record therefore stands at executor-assertion
+  strength, corroborated by (i) the `/health` build marker
+  `fdb02395…` read in-set on both passes, (ii) the settings surface
+  read in-set, and (iii) the value being the Grant 1 build's etag as
+  established in earlier gates' records. The method gap C3's E-1
+  named is closed; the artifact gap is disclosed, not papered over.
+- **E-2 (parked-job fingerprint).** As at C3 (its note E-5): the
+  parked job's stored fingerprint string is **not exposed on the read
+  surfaces used**, and no fingerprint byte-compare was performed. The
+  confirmation verified the job's state (`parked_policy`), revision
+  (1), empty grants, and its full occurrence composition as read.
+- **E-3 (audit history at confirmation).** The §1.2 review's
+  falsifiability check (§2.5 of the package) rested on the state row
+  re-read at R-0 (episode 3, attempts 1, not exhausted, `prevEpisode*`
+  all null) — the audit table itself has no separate read surface in
+  the read set, at confirmation or at closing (§5 carries the same
+  note for this gate's own audit rows).
+- **E-4 (projection shapes).** Three shape facts, none substantive:
+  (i) `r01`'s containment response nests the alarm block inside the
+  containment object, while `r02`'s drive projection omits the alarm
+  key from its containment sub-object and carries the alarm block as a
+  top-level sibling — the containment fields are identical on the
+  shared field set, and the alarm values are equal on both files;
+  (ii) the phase-accounting projections' field sets differ as item 8
+  states (the comparison is on shared fields); (iii) the plan totals
+  object (item 10) carries a fifth field, `prompts: 0`, alongside the
+  four §3.3 figures; the conflicts read (item 15) returns its rows in
+  descending id order. The recorder read (item 2) is a 50-row
+  descending window (ids 296 → 247), not a full-table dump: "latest
+  pass 296, no row after 296" is established by the window's head, the
+  row count the window implies against the established total, and
+  `recorderHealth.lastRecordedAt 1793825819071` corroborating.
+
+**Movement check across the confirmation:** none. Recorder latest row
+296 with no successor; `armedAt` null on both containment reads; job
+revision 88; the single live grant at seg:87; phase figures frozen;
+conflicts, watermarks, quota all at baseline. The gate proceeded to
+R-1 on this confirmation, in the same session, as Q-1 requires.
+
+---
+
+## 3. R-1 — The single `clear` (the gate's only act)
+
+Exactly one state-changing act exists in this gate, and exactly one
+request was sent. No command, report, SubmitJob, wake provocation, or
+stimulus of any kind was sent at any point.
+
+### 3.1 The request
+
+**Dispatched 2026-11-06T02:49:15Z** (evidence `r1-body.json`, file
+stamp 02:49:15.607Z) to the operator containment route on the live
+composed build:
+
+```json
+{"action":"clear","authorizationRef":"Standalone restoration — Julie GO, board comment 6675499312","reason":"Standalone restoration of containment after Gate C3 (branch (d)), executed and closed with the stop verified (episode 3, verified at attempt 1; Rowan documentary review PASS AT PARTIAL STRENGTH). The stop's purpose is complete: the standing W-4 registration is deleted and read back null, no drive pass has occurred since pass 296, and the chain stands frozen under a verified stop record. CHAIN_STOPPED is no longer needed: the generation-resume gate requires NORMAL as its opening state and carries its own separately ruled wake. This clear returns containment to NORMAL only — it re-arms nothing (no alarm registration stands after it), lifts no hold (GENERATION_HALT remains \"1\"; the generation queue remains paused), and authorizes no generation."}
+```
+
+- The `authorizationRef` is the package §4.1 form, with the GO comment
+  id filled from the board record of Julie's GO (link 7).
+- The `reason` is the package §4.2 text **verbatim** — 751 characters,
+  inside the route's 2,000-character bound — verified byte-identical
+  against §4.2 programmatically after drafting this record (Q-3). The
+  executor did not edit it at send time.
+
+### 3.2 The response
+
+**Response** (evidence `s1.json`; envelope HTTP 200):
+
+```json
+{"outcome":"applied","action":"clear","state":"NORMAL","idempotent":false,"stopVerified":null}
+```
+
+— the package §4.3 expected response exactly, including
+`idempotent: false` (the §4.5 idempotent-applied trap did not arise).
+The response's `stateRead` (the post-clear state as the act returned
+it), field by field against §4.3's expectations:
+
+| Field | Expected (§4.3) | `s1` stateRead | ✓ |
+|---|---|---|---|
+| `state` | `NORMAL` | `NORMAL` | ✓ |
+| `known` / `absent` / `verified` | `true` / `false` / `true` | `true` / `false` / `true` — the row persists, as designed | ✓ |
+| `updatedAt` | the clear's timestamp | **1793933356719** (2026-11-06T02:49:16.719Z) | ✓ |
+| `authorizationRef` | the §4.1 restoration ref | "Standalone restoration — Julie GO, board comment 6675499312" | ✓ |
+| `stopStatus` | `null` | `null` | ✓ |
+| `stopVerifiedAt` | `null` | `null` | ✓ |
+| `stopVerifyAction` | `null` | `null` | ✓ |
+| `stopArmedBefore` | `null` | `null` | ✓ |
+| `stopArmedAfter` | `null` | `null` | ✓ |
+| `stopVerifyAttempts` | `0` | `0` | ✓ |
+| `stopEpisodeId` | `null` | `null` — episode 3 is closed, not current | ✓ |
+| `stopEpisodeExhausted` | `false` | `false` | ✓ |
+| `prevEpisodeId` | **3** | **3** | ✓ |
+| `prevEpisodeAttempts` | **1** | **1** | ✓ |
+| `prevEpisodeExhausted` | **false** | **false** | ✓ |
+| `prevEpisodeClosedAt` | the clear's timestamp | **1793933356719** — bit-equal to `updatedAt` in the event (the package did not assert bit-equality; it is observed here) | ✓ |
+
+One shape note, stated plainly: the POST response's `stateRead` does
+**not** carry `stopConfidence` or an alarm block (it carries an
+`errorName: null` field instead). The §4.3 `stopConfidence
+"not_applicable"` expectation is therefore discharged not by `s1` but
+by the R-2 read-backs (§4.1), where both surfaces carry it. Nothing in
+`s1` contradicts §4.3; the field simply is not on this projection.
+
+### 3.3 The one-act ledger ran clean (Q-4)
+
+**The `clear` was sent exactly once.** There was no rejection, no
+ambiguous or lost response, no §R re-entry, and **no re-send of any
+kind** — the Q-4 rule (no corrected re-send, including after a
+request-form rejection) was never engaged because no failure branch
+arose. The contrast with C3 is recorded for the history's
+completeness, not hidden: C3's ledger contained one pre-act
+request-form rejection (zero writes) followed by a corrected re-send
+inside that gate's multi-step framing; this gate's stricter
+single-act ledger ran without any such event. The §4.1
+`authorizationRef` and §4.2 reason were in the body from the first
+and only send, in the forms the readiness package prescribed.
+
+---
+
+## 4. R-2 / R-3 — Read-backs and closing confirmation
+
+### 4.1 Read-backs and the closing set
+
+The closing confirmation ran 2026-11-06T02:49:28Z–02:49:36Z as one
+continuous read series (`t01`–`t16b`), its first two reads being the
+R-2 pair (both containment surfaces) and the remainder the R-3 full
+§3 set repeated. (Evidence-shape note: the set contains this single
+closing series, not two separately captured passes; `t01`/`t02` lead
+it and discharge R-2, and the full series discharges R-3.)
+
+- **Containment, both surfaces:** `NORMAL`, `known true`, `absent
+  false`, `verified true`, `updatedAt 1793933356719`, the r

@@ -1,0 +1,163 @@
+estoration
+  `authorizationRef`, and every post-clear field exactly as in §3.2's
+  table — `t01` (containment route) and `t02`'s containment
+  projection **agreeing in every shared field**, and **`stopConfidence
+  "not_applicable"` on both surfaces** — §4.3's expectation, and
+  package assumption A-4 confirmed by observation.
+- **Alarm block (both closing files):** `armedAt null`,
+  `pendingSchedule 2`, `pendingWatchdog 1` — the clear touched no
+  alarm API, no registration stands, and the schedule rows are
+  preserved.
+- **Recorder:** the 50-row window is **content-identical** to the
+  opening window (`t02`'s `drivePasses` equals `r02`'s exactly);
+  latest row still 296 @ 1793825819071; `recordingFailures 0`. No pass
+  was provoked by the clear; no row is timestamped at or after the
+  act.
+- **Script etag (closing re-read, §3.2 method):** identical to the
+  opening read — `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e`
+  (same evidence strength as note E-1).
+
+### 4.2 Delta analysis — closing vs opening
+
+- **Byte-identical closing files (12):** `t03` = `r03` (plan
+  diagnostics + phase surface b), `t04` = `r04` (health), `t05` =
+  `r05` (script settings — GENERATION_HALT still `"1"`, observability
+  standing), `t07` = `r07` (queue — `delivery_paused: true`, one
+  consumer), `t09` = `r09` (preserved plan), `t10` = `r10` (Phase B
+  job), `t11` = `r11` (parked job), `t12` = `r12` (quota reconcile),
+  `t13` = `r13` (quota), `t14` = `r14` (conflicts), `t15a` = `r15a`
+  and `t15b` = `r15b` (sync watermarks) — verified by direct file
+  comparison.
+- **Timestamp-only differences (3):** `t08` vs `r08` (capabilities)
+  differ **only** in the `asOf` field (1793933304962 →
+  1793933371489); `t16a` vs `r16a` and `t16b` vs `r16b` (eligibility)
+  differ **only** in `quotedAt` (1793933309609 → 1793933376042;
+  1793933310074 → 1793933376792). Every substantive field — phase
+  figures, lanes, registry, digests, eligible counts, costs,
+  exclusions — is identical, verified field by field.
+- **The act's own delta (2 files):** `t01` vs `r01` and `t02` vs
+  `r02` differ exactly in the containment state the `clear` wrote
+  (§3.2's field table) plus `t02`'s read-time `asOf` stamp. No other
+  field anywhere in the set moved.
+
+**Delta verdict:** the only deltas in the entire gate are the
+ledger's own writes (§5) and read-time timestamp fields. No
+out-of-gate delta exists; no STOP-and-classify arose at closing.
+
+---
+
+## 5. Totals reconciliation (package §4.4, expected no-failure path)
+
+| Measure | §4.4 expected | This execution | ✓ |
+|---|---|---|---|
+| State writes | **1** (the single commit transaction: state → NORMAL, episode summary preserved, current-episode record reset, atomically) | **1** — the `clear` commit, `updatedAt 1793933356719` | ✓ |
+| Audit rows | **2** (`clear:applied` + `stop_episode_closed`) | **2** — at the accounting strength stated below | ✓ |
+| `deleteAlarm` | **0** | **0** — the clear touches no alarm API; no registration existed to delete | ✓ |
+| `setAlarm` | **0** | **0** — nothing in this gate arms; `armedAt` read null at opening, in the act's aftermath, and at closing | ✓ |
+| Commands / reports / SubmitJob | **0** | **0** | ✓ |
+| Uploads / PATCHes / hold flips / queue changes | **0** | **0** — GENERATION_HALT stood `"1"` and the queue stood paused throughout, read at confirmation and at closing | ✓ |
+| Recorder rows created by the gate | 0 | **0** — 296 rows at opening and at closing, window content-identical | ✓ |
+| Spend | $0 | **$0** | ✓ |
+
+**Counting basis, stated honestly (Q-2's qualification applied to
+this gate's own rows).** The state-write count is established by the
+single applied transition's response and the `updatedAt` it left
+(1793933356719). The audit-row count and names follow the package
+§4.4 budget and the deployed composed source's clear path — the
+state-commit insert (`clear:applied`, detail carrying the reason),
+then the episode-close insert (`stop_episode_closed`), in one
+transaction — corroborated by the state row's outcome: the
+`prevEpisode*` summary (episode 3, attempts 1, not exhausted, closed
+at the commit's timestamp) is exactly the state the episode-close
+half of that transaction writes, and no other act in the gate could
+have written it. **The audit table itself has no separate read
+surface in the read set** (note E-3): the two-row count (rows 5 and 6
+of the history, per §1.2's forward accounting) is established by the
+transition response plus the source-defined commit shape plus the
+resulting state, not by a direct audit-table read, and this record
+claims it on exactly that basis — the same documentary strength Q-2
+accepted for the C3 history.
+
+**Worst case was the same bound, as designed:** R-1 was sent exactly
+once and the transaction is atomic — it either committed once
+(1 write / 2 rows) or not at all (0 / 0). No failure branch arose,
+and none could have multiplied writes.
+
+---
+
+## 6. End state
+
+The system ends **HELD in NORMAL**, exactly as the GO prescribed:
+
+- **Containment:** `NORMAL` on both surfaces, row present and
+  verified, `stopConfidence "not_applicable"` (no stop exists for a
+  present-tense confidence to describe). Episode 3 is **closed**: its
+  summary stands in `prevEpisodeId 3`, `prevEpisodeAttempts 1`,
+  `prevEpisodeExhausted false`, `prevEpisodeClosedAt 1793933356719`
+  (Tier 2, until a future authorized clear overwrites it); the full
+  history stands in Tier 1 — six audit rows as reconciled at
+  documentary strength (C3's four + this gate's two). The verified
+  fact of the stop survives in the audit history, the `prevEpisode*`
+  summary, and the C3 record — not in the current-episode fields,
+  which stand reset.
+- **Alarm:** no registration stands (`armedAt: null` on both closing
+  surfaces). Schedule rows preserved (pendingSchedule 2 /
+  pendingWatchdog 1). The `clear` re-armed nothing, and nothing will
+  wake the coordinator except the ordinary wake paths under NORMAL
+  inside a future authorized gate.
+- **Holds:** GENERATION_HALT still `"1"` (generation `halted`); queue
+  `opalreader-generation-v2` still `delivery_paused: true`, one
+  consumer. **Restoration lifted no hold at any point.**
+- **Preserved work, untouched:** Phase B plan
+  `plan:19cad189fab54b9c804a74a6` `active` {1,0,0,0}, entry `granted`;
+  job `generating` rev 88; the single live grant
+  `grant:plan:19cad189fab54b9c804a74a6:seg:87:full` stands `issued` —
+  frozen exactly as censused; the idx-26 chapter exemption stands as
+  it stood (this gate neither consulted nor touched it). Phase
+  accounting frozen; conflicts at the four-row baseline; watermarks
+  18 / 1841.
+- **Recorder:** 296 rows, latest 2026-11-04T20:56:59.071Z, health
+  clean — unchanged across the gate.
+- **Spend:** $0 across the gate. No deployment, no code change, no
+  settings change was made at any point.
+
+---
+
+## 7. What this record does NOT establish
+
+- **No re-arm occurred, and none was tested.** Restoration deleted
+  nothing and created no registration; `armedAt` is null because the
+  registration C3 deleted stays absent, not because any arm path was
+  exercised. This record is evidence about the *absence* of a
+  registration at confirmation and closing — it says nothing about
+  whether a future wake under NORMAL will deliver. **The W-4 remains
+  UNRESOLVED** (its root cause unconfirmed; neither 1101 fault is
+  attributed), the **racing-wake recheck remains
+  PLATFORM-UNVERIFIED**, and **post-retry-exhaustion `getAlarm()`
+  semantics remain UNSPECIFIED** — all carried at full strength from
+  the C3 record. The generation-resume gate's wake design already
+  assumes delivery cannot be presumed; nothing here weakens that
+  assumption.
+- **Runtime adoption generally remains unproven.** This gate proves
+  the deployed `clear` path executed its designed transaction on the
+  production build for this singleton row at this moment, read back
+  identically on both surfaces. It does not prove adoption of any
+  build by every Durable Object instance, and no claim of that scope
+  is made (the standing C1-2 limitation).
+- **The audit rows are accounted, not enumerated.** Per Q-2 and §5:
+  rows 5 and 6 are established by the transition response, the
+  source-defined commit shape, and the resulting state — not by a
+  direct audit-table read, which no established surface provides.
+- **The script etag stands at the strength of note E-1** (method
+  closed, artifact thin), and the parked job's fingerprint was not
+  byte-compared (note E-2).
+
+## 8. What this record does not authorize
+
+This record is evidence, not authority. It authorizes nothing, and
+nothing in it advances any other gate:
+
+- **The generation-resume gate remains CLOSED.** Its remaining
+  preconditions are Rowan's documentary review of **this** record,
+  the final readiness confirmation, and **Julie's separate GO**. The
+  corrected resume package stands as ruled (package pin `0946f9f2

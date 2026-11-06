@@ -1,0 +1,52 @@
+ot exist before C3-1; every
+  containment-route act since creation is one of the acts enumerated
+  above. The R-0 confirmation (§2) re-read the state row before this
+  gate's act and found every episode fact exactly as this review
+  states — the review was falsifiable at execution, and it was not
+  falsified.
+- **Forward accounting:** this gate's `clear` appends audit row 5
+  (`clear:applied`, detail carrying the §4.2 reason) and audit row 6
+  (`stop_episode_closed`, outcome `closed`, detail carrying
+  `{episodeId: 3, attempts: 1, exhausted: false, finalStopStatus:
+  "verified", reason}`) inside its single commit transaction — stated
+  here, as in the package (assumption A-2), at documentary accounting
+  strength: the row ids follow from the reconciled count of 4 and the
+  deployed source's clear path; the read surfaces expose the summary
+  fields, not row ids (§5).
+
+---
+
+## 2. R-0 — Fresh closing-state confirmation (the preflight census)
+
+Per Q-1, the ruling's fresh read-only closing-state confirmation and
+the gate's execution census are **one act**: the readiness package §3
+read set, run in the execution session immediately before the act,
+every expectation verified from fresh reads. The set ran
+2026-11-06T02:48:22Z–02:49:00Z (evidence file timestamps; the reads'
+own `asOf` stamps agree — e.g. `r02` at 02:48:23.274Z). The act
+followed 15 seconds after the last opening read. No value was
+inherited from the C3 record as fact; every expected value below was
+the C3 closing value stated as an expectation, re-read fresh.
+
+**Result: every §3.3 expectation matched exactly. No deviation arose;
+the STOP rule was never engaged. The gate proceeded to R-1 on this
+confirmation.**
+
+| # (§3.1) | Item | Expected | Read (evidence) | ✓ |
+|---|---|---|---|---|
+| 1 | Containment, surface 1 (`GET /v2/d6-containment`, operator) | `CHAIN_STOPPED`; stop record exact (below); `stopConfidence "verified_current"` | `r01`: state `CHAIN_STOPPED`, `known true`, `absent false`, `verified true`, `updatedAt 1793931847431`, `authorizationRef` "Gate C3 branch (d) — Julie GO, board comment 6675116603"; `stopStatus "verified"`, `stopVerifiedAt 1793931847431`, `stopVerifyAction "stop_chain"`, `stopArmedBefore 1793826389431`, `stopArmedAfter null`, `stopVerifyAttempts 1`, `stopEpisodeId 3`, `stopEpisodeExhausted false`; all four `prevEpisode*` fields null; `stopConfidence "verified_current"` | ✓ |
+| 2 | Containment, surface 2 (`GET /v2/d6-diagnostics?drive=1`, operator) + alarm + recorder | Surface agreement with read 1; `armedAt null`; recorder latest 296, failures 0 | `r02`: containment projection **identical to `r01` in every shared field** (projection-shape note E-4); alarm block `armedAt null`, `pendingSchedule 2`, `pendingWatchdog 1`; recorder `tableState "populated"`, the 50-row descending window ids **296 → 247**, all stage `complete`, latest row id 296 @ `1793825819071`; `recorderHealth`: `recordingFailures 0`, `lastRecordedAt 1793825819071` | ✓ |
+| 3 | Phase B plan diagnostics (`GET /v2/d6-diagnostics?planId=…`, operator) | plan `active`; phase accounting (surface b) as item 8 | `r03`: `found true`, plan `plan:19cad189fab54b9c804a74a6` `active`, `phase "forever-pucked"`, bookId `5c589095-f812-48a2-8ab2-03ba2791f2b2`; phase accounting per item 8 | ✓ |
+| 4 | Health | build `fdb02395b3775dc945baa395591a73060ab146c4`; generation `halted`; coordinator `armed` | `r04`: build `fdb02395b3775dc945baa395591a73060ab146c4`, `"generation":"halted"`, `"coordinator":"armed"`, scope `production` | ✓ |
+| 5 | Script settings (cf-api) | 10 bindings; GENERATION_HALT `"1"`; `OPALREADER_PHASE_POLICY "enforce"`; observability enabled + logs persisted; `compatibility_date 2026-08-29` + `nodejs_compat` | `r05`: exactly 10 bindings — `ALLOWED_ORIGIN`, `COORDINATOR`, `GEMINI_API_KEY`, `GENERATION_HALT` (plain_text `"1"`), `OPALREADER_ACCESS_TOKEN`, `OPALREADER_GENERATION_V2`, `OPALREADER_MIGRATION_OPERATOR_TOKEN`, `OPALREADER_PHASE_POLICY` (plain_text `"enforce"`), `OPALREADER_STORAGE`, `OPALREADER_V2_SCOPE`; observability `enabled: true`, logs `enabled: true`, `persist: true`; `compatibility_date "2026-08-29"`, `compatibility_flags ["nodejs_compat"]` | ✓ |
+| 6 | Script etag (§3.2 in-process surrogate GET, response header) | `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e` | Read by the §3.2 method (header, quotes stripped): `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e` — the Grant 1 build's etag, matching. **Evidence strength: see note E-1** | ✓ (see E-1) |
+| 7 | Queue (cf-api) | `delivery_paused: true`; exactly 1 consumer `f260f2188d80426bb0588685e9d084eb`; retention 86,400 s | `r07`: queue `93b6a35fb8cf4788a91a2c90b748ae66` (`opalreader-generation-v2`), `delivery_paused: true`, `message_retention_period 86400`, `consumers_total_count 1`, consumer `f260f2188d80426bb0588685e9d084eb` (script `opalreader-api-v2-prod`) | ✓ |
+| 8 | Phase accounting — BOTH surfaces (reads 8 and 3) | settled **1,029,420**; estimatedUnverified **19,018**; reservedUnverified **5,648**; inFlightUpper **0**; unknownOpen **0**; remaining **12,464,932** of 13,500,000; `provider_unverified` | Surface (a) capabilities (`r08`, `asOf 1793933304962`) and surface (b) plan diagnostics (`r03`): **every shared field equal** — settled 1029420, estimatedUnverified 19018, reservedUnverified 5648, inFlightUpper 0, remaining 12464932, budget 13500000. The projections carry different field sets, stated exactly: the capabilities phase object carries `bookId` and omits `settledBasis` / `unknownOpen` / `unverifiedStatus`; the diagnostics object carries those three (`settledBasis "recorded_known_existing_ledger"`, `unknownOpen 0`, `unverifiedStatus "provider_unverified"`) and omits `bookId`. The comparison is on the shared fields, per the C2 lesson | ✓ |
+| 9 | Capabilities (client) | Standard admitted; Batch `batch_not_armed`; registry `forever-pucked` ↔ `5c589095-f812-48a2-8ab2-03ba2791f2b2` | `r08`: `generationState "halted"`; lanes standard `admitted: true`, batch `admitted: false`, reason `"batch_not_armed"`; phase registry `forever-pucked` ↔ bookId `5c589095-f812-48a2-8ab2-03ba2791f2b2` | ✓ |
+| 10 | Preserved plan (client) | `plan:19cad189fab54b9c804a74a6` `active` {1,0,0,0}; sole entry `granted`; quarantine `held: false` | `r09`: `active`, `stopReason null`; totals eligible 1 / done 0 / failed 0 / blocked 0 (the totals object additionally carries a `prompts: 0` field — note E-4); sole entry occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b`, chapterIndex 2, 569 chars, `occurrenceState "granted"`; quarantine `held: false` | ✓ |
+| 11 | Phase B job (client) | `generating` rev **88**; 86 voided + exactly one issued (`seg:87:full`) | `r10`: job `plan:19cad189fab54b9c804a74a6:seg` `generating`, revision **88**; 87 grants — 86 `voided` (seg:1–86) and exactly one live: `grant:plan:19cad189fab54b9c804a74a6:seg:87:full`, state `issued`, its revision 88; the single occurrence `granted` | ✓ |
+| 12 | Parked Ch 3 job (client) | `parked_policy` rev 1; grants `[]` | `r11`: job `1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a` `parked_policy`, revision **1**, grants `[]`; 27 occurrences as read — 24 `pending`, 3 `ready`. **Fingerprint: not byte-compared — C3 note E-5's narrowed strength carries (see E-5)** | ✓ (see E-5) |
+| 13 | Quota reconcile (operator) | `ok: true`, armed, drift empty, sole exception the adjudicated straddler; dispatched 0 for every PT day after 2026-11-01 | `r12`: `"ok": true`, `"armed": true`, `drift []`, `driftCount 0`, `exceptionCount 1` — the sole exception `att-37d63768-db4b-447d-8150-580b7c6ee257` (`estimated_unverified`); dayTotals dispatched 2026-10-29 = 57, 10-30 = 79, 10-31 = 44, 11-01 = 76, 11-03 = 0, 11-04 = 0, current day 2026-11-05 dispatched 0 / reserved 0 / consumed 0 (2026-11-04 carries reserved 12 / consumed 12 — the standing grant's derived reservation accounting on the rolled PT day, exactly as at C3) | ✓ |
+| 14 | Quota (client) | settings revision **1**; attempts today 0; provider dispatches today 0 | `r13`: `settingsRevision 1`, `attemptsToday 0`, `providerDispatchesToday 0`, dayKey `2026-11-05` | ✓ |
+| 15 | Conflicts (client) | exactly the 4 baseline `schedule_dead` lease rows (ids 1–4) | `r14`: exactly 4 rows (returned in descending id order 4 → 1), all `cache_key "lease"`, `expected "7"`, `found "LIKE or GLOB pattern too complex: SQLITE_ERROR"`, `reason "schedule_dead"` — id 1 @ 1793318054808 `grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full`; id 2 @ 1793319854632 `grant:plan:603ab416bd67ab1b25de97be:ch1:1:full`; id 3 @ 1793423664089 `grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full`; id 4 @ 1793495070364 `grant:plan:e377a5559961b294154276b6:ch2:1:full` — the pinned baseline, exact in every field | ✓ |
+| 16 | Watermarks (client) | content **18**, bindings **1841**, zero changes on both | `r15a`: content `highWatermark 18`, changes []; `r15b`: bindings `hig

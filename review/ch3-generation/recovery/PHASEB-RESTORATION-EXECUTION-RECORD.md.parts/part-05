@@ -1,0 +1,56 @@
+…`,
+  OQ-1 analysis at `60da50c3…`, correction at `8ca683bd…`, correction
+  2 at `91bb9c44…` — OQ-3/OQ-6 as corrected, OQ-4 ACCEPT, OQ-5 ACCEPT
+  WITH CONDITIONS); GR-B remains blocked on OQ-2. No wake command,
+  hold lift, plan action, or generation dispatch is authorized by
+  this record or by the consumed GO.
+- **No further containment transition** of any kind (no
+  `verify_chain_stop`, no `stop_chain`, no `contain_drive`, no second
+  `clear`) is authorized. A future clear would overwrite episode 3's
+  Tier-2 summary and would require its own standalone authorization
+  with its own historical audit review.
+- **The GO is consumed.** Julie's restoration GO (board comment
+  6675499312) authorized exactly this one gate; it executed and is
+  spent.
+- No plan action, no exemption action, no queue or halt change, no
+  deployment, no Batch work — none was performed and none is
+  authorized.
+
+## 9. Evidence index
+
+Raw evidence: `~/workspace/ch2-program/ch3-recovery/restoration-execution/`.
+The envelope `status` of every response file is 200. Opening reads are
+the R-0 confirmation (package §3.1 numbering); closing reads repeat
+the same set in the same order.
+
+| File | Read / content | Bytes |
+|---|---|---|
+| `r01.json` | §3.1 read 1 — containment surface 1 (with nested alarm block) | 1,326 |
+| `r02.json` | read 2 — `drive=1` projection: containment, alarm, recorder window | 47,643 |
+| `r03.json` | read 3 — plan diagnostics (Phase B plan; phase surface b) | 1,581 |
+| `r04.json` | read 4 — `/health` | 423 |
+| `r05.json` | read 5 — cf-api script settings | 2,152 |
+| — | read 6 — script etag: header-only in-process read; **no body file exists** (note E-1) | — |
+| `r07.json` | read 7 — cf-api queue | 994 |
+| `r08.json` | read 8 — capabilities (phase surface a) | 995 |
+| `r09.json` | read 9 — preserved plan | 1,340 |
+| `r10.json` | read 10 — Phase B job | 18,525 |
+| `r11.json` | read 11 — parked Ch 3 job | 7,802 |
+| `r12.json` | read 12 — quota reconcile | 2,689 |
+| `r13.json` | read 13 — quota | 1,037 |
+| `r14.json` | read 14 — conflicts | 1,906 |
+| `r15a.json` / `r15b.json` | read 15 — sync changes, content / bindings | 350 / 370 |
+| `r16a.json` / `r16b.json` | read 16 — eligibility, chapter / book scope | 822 / 838 |
+| `r1-body.json` | R-1 — the sent `clear` body, exactly as dispatched | 879 |
+| `s1.json` | R-1 — the response (applied; `stateRead` post-clear state) | 1,324 |
+| `t01.json` … `t16b.json` | R-2/R-3 closing confirmation — same set, same order as the `r` series (sizes: t01 1,262; t02 47,579; t03 1,581; t04 423; t05 2,152; t07 994; t08 995; t09 1,340; t10 18,525; t11 7,802; t12 2,689; t13 1,037; t14 1,906; t15a 350; t15b 370; t16a 822; t16b 838) | — |
+
+## 10. Turn
+
+**Turn: Rowan's** — documentary execution review of this record (via
+Julie's poke; the companion CP rides with the record). On Rowan's
+acceptance that restoration is executed and closed, the
+generation-resume gate's remaining steps are its final readiness
+confirmation and Julie's separate GO — both still ahead, neither
+implied by this record. Julie retains every execution authorization
+that remains. No production act of any kind is pending or implied.
