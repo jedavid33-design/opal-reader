@@ -1,0 +1,65 @@
+# GENERATION TURN-ON — SCOPING PACKAGE: Standard return to normal operations + Batch lane arming (one program, two workstreams)
+
+_Scoping/design document, drafted by Wren 2026-11-06. Sources: the live build source tree (the Grant 1 composed tree, `containment-v4/composed-tree/`, coordinator SHA-256 `5303cb63…`, the tree that produced live build `fdb02395b3775dc945baa395591a73060ab146c4`); the gen-pkg-1 design record (`~/workspace/gen-pkg-1/`); the quota design (`~/workspace/ch2-program/remediation/QUOTA-PROPOSAL.md`); and Wren's own fresh read-only production census of 2026-11-06 (§2). File:line citations are to the composed tree unless another source is named. This package is pinned at `<SCOPE-PIN>` (the pin is carried in the companion CP file, per the established slot pattern)._
+
+---
+
+## 1. Purpose and authority
+
+Julie decided on 2026-11-06 (board comment 6686374302) to scope BOTH remaining generation workstreams in one program:
+
+1. **Workstream 1 — Standard turn-on**: end the gate-era holds and return the Standard lane to normal operations, so generation runs from Julie's app under the standing in-code controls.
+2. **Workstream 2 — Batch arming**: design, build, prove on staging, and arm the Batch lane, which the v2 design law has always kept (Standard + Batch both stay) but which has never been armed in the D6 system.
+
+Execution order proposed by this package: **Workstream 1 first** (it is governance and two proven mechanical acts, no code change), **Workstream 2 after Workstream 1 is stable** (it is a real build). One program, two workstreams, each with its own gate chain and Julie's separate GO at each consequential step, per Approval Mode.
+
+**This package authorizes nothing.** It changes no production state, lifts no hold, arms nothing, and spends nothing. It exists so Rowan can rule on the governance questions in §3.3 and the gap analysis in §4, and so Julie can give (or withhold) each gate's GO with the full picture in front of her.
+
+Standing facts the scoping rests on, all re-verified in §2: the Standard lane is **admitted** today (the server would accept Standard intents); what keeps generation off is the pair of deliberate holds — `GENERATION_HALT` = `"1"` and the generation queue paused. The Batch lane is **not admitted**: capabilities reports `batch_not_armed`, and §4 shows that is a code constant, not a setting.
+
+---
+
+## 2. Fresh current-state census (Wren, read-only, 2026-11-06T13:52Z–13:56Z)
+
+All reads read-only; no production state was changed by this census.
+
+| Surface | Read | Value |
+|---|---|---|
+| Health | `GET /health` | build `fdb02395b3775dc945baa395591a73060ab146c4`, coordinator `armed`, generation `halted` |
+| Capabilities | `GET /v2/generation/capabilities` | generationState `halted`; standard `{admitted: true}`; batch `{admitted: false, reason: "batch_not_armed"}`; configuredLane **null** |
+| Phase (in capabilities) | forever-pucked ↔ book `5c589095-f812-48a2-8ab2-03ba2791f2b2` | budget 13,500,000; settled 1,037,880; estimatedUnverified 19,018; reservedUnverified 5,648; remaining **12,456,472** |
+| Containment | `GET /v2/d6-containment` (operator) | state **NORMAL**, known/verified true, `stopConfidence: not_applicable`; closed-episode summary prevEpisode 3 / 1 attempt / not exhausted; alarm block armedAt **1793973224012** (a standing registration), pendingSchedule 1, pendingWatchdog 1 |
+| Drive recorder | `GET /v2/d6-diagnostics?drive=1` | latest retained window = passes **311–360** (the read returns the latest 50), every pass stage `complete`, `recordingFailures` 0, latest pass recorded 1793972624012 (2026-11-06T13:43:44Z). **The chain is alive and passing under the holds.** Each recent pass's sole outcome is the binding-projection sweep (scanned/published/noop/conflicts/pending all 0) — no plan outcomes, no grants: there is no non-terminal plan for a pass to advance |
+| Plans | `GET /v2/d6-plans` | 5 plans, all terminal: Phase B `plan:19cad189fab54b9c804a74a6` **complete** (totals done 1, entry `ready`, execution `committed` — read directly, §2 note), Ch 3 `plan:e377a555…` complete, Ch 2 `plan:b2dc2a3d…` complete, smoke `plan:3183ecbf…` complete, old Ch 2 `plan:603ab416…` retired. **No active plan exists.** |
+| Parked job | `GET /v2/jobs/1832c21f…` | state `parked_policy`, revision 1, lane standard, grants [] — untouched, as preserved |
+| Conflicts | `GET /v2/conflicts` | exactly **4** rows, all `schedule_dead` (ids 1–4, the pinned baseline set) |
+| Quota | `GET /v2/quota` | day 2026-11-06: attemptsToday 0 (estimate-ledger), providerDispatchesToday 0, providerReservedToday 0, providerAttemptDailyLimit 100; month 2026-11 spent 302,292 units, monthlyCap $50, settingsRevision 1, parked null |
+| Quota reconcile | `GET /v2/d6-quota-reconcile` (operator) | armed true, ok true, drift []; sole exception the known adjudicated straddler (`att-37d63768…`, `estimated_unverified`) |
+| Queue | cf-api GET queue | `opalreader-generation-v2` (93b6a35f…): **delivery_paused true**; sole consumer `f260f2188d80426bb0588685e9d084eb` |
+| Script settings | cf-api GET script settings | binding `GENERATION_HALT` = `"1"`; `OPALREADER_PHASE_POLICY` = `enforce`; compatibility_date 2026-08-29 + `nodejs_compat` |
+| Script-settings | cf-api GET script-settings | observability enabled + logs persisted (intact) |
+| FP book quote | `GET /v2/d6-eligibility?bookId=5c589095…&scope=book` | **314 eligible, 414,050 chars, expected 5,837,168 units (≈ $5.84)**, digest `7d76a0538d8156a050eab0c34ecdb584d92da0c39f6d97a2589fc16ad5e5247f`; exclusions: bound_already 93, voice_prompt 0, parked 0, other 0; advisory true |
+| Staging | `GET https://opalreader-api-v2.…/health` | worker `opalreader-api-v2` live: build `2fe71b5f…`, scope `staging-smoke`, coordinator armed, generation halted |
+
+§2 note — the Phase B plan's stored state: the execution record's precision note (pin `c36740ed…`) recorded that the plan row's `state` field read `active` on the plan surfaces during the completion polls. This census reads the plan directly and it now reports **`complete`**, consistent with `driveOnce`'s finish step settling a fully-done plan on a subsequent pass. No discrepancy is carried forward.
+
+What the census establishes for scoping: production is exactly in its documented end state — HELD at NORMAL, chain alive and idling, no active work, FP's remaining book quoted at ≈ $5.84 against ≈ $12.46 of phase room.
+
+---
+
+## 3. Workstream 1 — Standard turn-on (return to normal operations)
+
+### 3.1 The exact mechanical changes (two acts, both proven in the gates)
+
+Turn-on is the resume gate's lift pair, performed once and **not** reversed at the end:
+
+1. **Halt lift** — flip the `GENERATION_HALT` plain-text binding from `"1"` to `"0"` by the metadata-only envelope upload proven in the C1/Grant-1/resume lineage and used at the resume gate's GR-3 step (evidence: `resume-execution/` flip set + EXECUTION-LOG): all 31 script parts byte-identical to the live build (manifest-compared before upload), only the binding text changes, script etag unchanged, observability re-checked after the upload (and re-applied by the multipart settings PATCH if the upload reset it — the standing post-upload rule). Effect in source: the entry computes `generationEnabled = env.GENERATION_HALT === "0"` (`worker-entry-prod-d6.js:326`) and only then wires `sendGrant` from the queue binding (`:343`) — with the halt lifted, grant outbox rows actually dispatch; the entry's halt admission fence (`isHaltRefusedCommand`, `:296-306`) also stops refusing the legacy staging command shapes.
+2. **Queue unpause** — cf-api `PUT` the queue with `queue_name` + `settings.delivery_paused: false`, then read back `delivery_paused: false` (the proven pattern; a `--data`-style silent no-op is impossible under the read-back rule).
+
+No code deploy. No settings-record change. No containment transition (containment is NORMAL and inert; it is not part of the on/off path at all — it was a gate-era verification instrument, and it stays available).
+
+### 3.2 The operating model after turn-on (proposed)
+
+- **Julie generates from the app.** The generation client (live build `d5b-v2-generation-client-3`, entry `app-269.js`) already implements the full flow: capabilities-driven lane rendering, the server-quoted confirmation dialog, one SubmitJob per intent, plan status in plain words (gen-pkg-1 design brief §1–§5; client source §4.4 below). Submitting a chapter/book intent creates a plan; the standing alarm chain's drive passes advance it (grant → queue → D6 executor → commit → binding projection publishes the audio to all devices with no app open — the F2 hands-off property).
+- **The per-plan gate regime ends.** No more per-chapter GOs, censuses, or executor runs by Wren for ordinary generation. Wren's role returns to monitoring and exception-handling.
+- **Standing controls that remain in code** (none of these is a gate-era hold; all are

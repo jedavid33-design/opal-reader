@@ -1,0 +1,50 @@
+oduction build admits Batch, the live client's Batch button enables itself on next capabilities load — no client build, no publication, no device update. The client side of arming is therefore a *verification* item (an attended device check that the button enables, selects, and submits a batch intent — part of the arming gate, §4.6), not a work item. One wording note: the sheet's helper text already explains the lanes ("Standard makes audio right away. Batch waits for a batch window.", :644), written for this day.
+
+### 4.5 Staging — the test target
+
+The staging worker `opalreader-api-v2` is live (§2: build `2fe71b5f…`, scope `staging-smoke`, generation halted) with its own staging client connector. Consistent with the program's staging-first habits, Batch build work proves there first. What a staging arming test CAN prove without production: the batch execution path end-to-end against the real Gemini Batch API on synthetic content (submit → fence row → poll → retrieval → flush/commit → binding), the batch_maps lifecycle incl. ambiguous and never-accepted handling, quota accounting under the new ruling, repair-chain behavior on a forced batch failure, and the allowlist flip's admission surface (capabilities + intent admission) — all against staging's own store.
+
+What it cannot prove: production parity. Two cautions are recorded as open items rather than assumed away. **OPEN ITEM B-2**: whether the staging worker's deployed entry is the composed tree's `worker-entry.js` (which wires the legacy executor) must be established at build time — staging's wiring materially differs from production's, and a staging pass on the legacy path would prove the components, not the D6 integration. **OPEN ITEM B-3**: whether staging's Gemini calls draw on the same AI Studio prepay balance as production's must be established before any staging provider call; if they share the balance, staging Batch tests spend real (if small) money from the same pot and need a stated test budget.
+
+### 4.6 Risks
+
+- **R-B1 — Admission-before-execution.** Flipping the allowlist before the D6 Batch execution path exists would admit intents whose dispatches the executor refuses wholesale — plans would be created, granted (reserving quota/budget), and refused in a loop of parked/refused outcomes. Mitigation is sequencing law: the allowlist edit is the final commit of the arming gate, never an early step (§4.3 net).
+- **R-B2 — Accounting bypass.** Batch submissions/polls outside the quota guard's accounting would silently defeat the 100/day policy cap and the phase projection's attempt assumptions. The accounting ruling (§4.3) is a design-gate deliverable, not an implementation detail.
+- **R-B3 — Ambiguity spend.** Batch's defining risk is the ambiguous submission (a POST whose outcome is unknown): the fence + enumeration + never-accepted machinery exists precisely because a blind retry can double-submit and double-spend. The D6 integration must preserve the legacy contract's discipline exactly (fence BEFORE submit; never re-post on a fence alone — executor.mjs:186-192), and its tests must include the crash-between-fence-and-note case.
+- **R-B4 — History (context, not evidence).** Julie remembers v1-era Batch as the lane that tangled: in the v1 system, Batch sessions for Forever Pucked became so entangled that the cure was wiping the whole book and re-importing it (main-chat record, Oct 20, 2026). That history is why this workstream's testing burden is set high and why arming is a separate gate after Standard is stable. It is recorded as context for the burden, not as evidence about the v2 components, which are different code.
+- **R-B5 — Latency semantics.** Batch completion is provider-paced (a "batch window", unbounded by any Reader-side SLA in the design record). Plans on the Batch lane interact with the driver's pass cadence and the stall/observation habits built for Standard; the design gate must state the expected completion envelope and what "stalled" means for a batch plan, or normal-ops monitoring will misread normal Batch latency as an anomaly.
+- **R-B6 — Rollback asymmetry.** A production build that admits Batch, rolled back to a Standard-only build, leaves any in-flight batch maps/plans in a store the older build refuses to advance — the standing rollback pre-holds (halt + pause before any rollback) and the floor law (`6a73d962…` minimum) apply unchanged; the arming gate must state the disposition of in-flight batch work under rollback.
+
+### 4.7 Proposed gate chain (proposal, not a ruling)
+
+Sequenced after Workstream 1's declaration (§3.4 step 5), per Julie's one-program decision:
+
+1. **B-G1 Design gate** — this package's §4 ruled on by Rowan: the D6 Batch execution-path design (which existing contracts it speaks), the quota accounting ruling for submissions/polls (B-1/B-3 resolved or explicitly bounded), the latency/stall semantics (R-B5), rollback disposition (R-B6). Julie's design GO.
+2. **B-G2 Build + harness** — local build only: the execution path, repair integration, accounting implementation; the standing batteries plus new Batch batteries (fence/ambiguity/never-accepted, crash-window, accounting, refusal-regression for Standard) — with the standing caveat that harness-green is no evidence for real-DO empty-result paths, so throw-safe tests are explicit.
+3. **B-G3 Staging proof** — deploy to staging under its own GO; synthetic-content end-to-end Batch runs incl. forced failure/ambiguity cases; staging evidence record; Rowan source + evidence review.
+4. **B-G4 Production arming gate** — census → deploy of the Batch-capable build with the allowlist STILL Standard-only (proving the build is inert) → the allowlist flip as its own recorded act → capabilities read-back (batch admitted) → one bounded Julie-submitted Batch smoke (a segment or chapter she chooses) → observation → execution record + Rowan review. Julie's attended device check (button enabled, §4.4) is part of this gate.
+
+---
+
+## 5. Combined program shape
+
+| Gate | Workstream | Needs from Rowan | Needs from Julie | Character |
+|---|---|---|---|---|
+| Scoping review (this package) | both | Rulings on §3.3 Q1–Q8; §4 gap acceptance; B-1/B-2/B-3 dispositions | — | Paper only |
+| Turn-on gate (§3.4) | 1 | Execution-record review; normal-ops declaration | GO; smoke chapter choice + in-app submission; playback check | Two proven acts + a 7-day soak; no code |
+| B-G1 design | 2 | Design ruling incl. quota accounting | Design GO | Paper + source study |
+| B-G2 build | 2 | Source review | — (build is local) | The program's one real build |
+| B-G3 staging proof | 2 | Evidence review | GO for staging deploy + any staging spend (B-3) | Synthetic content only |
+| B-G4 arming | 2 | Execution review | GO; Batch smoke submission; device check | Deploy + one-line flip + smoke |
+
+No time promises are made for any step; effort character only: Workstream 1 is days of paper and observation, Workstream 2 is the program's substantive engineering.
+
+**Cost / free-tier flags.** All infrastructure work stays on the free GitHub + Cloudflare tiers (standing rule); no step in either workstream requires a paid tier — the storage guard's 10 GB boundary is itself a free-tier guard. Generation spend is Gemini prepay, drawn per Julie's standing rule ($20 top-ups at a time, from fun); Workstream 1's smoke and the rest of Forever Pucked (≈ $5.84 expected) sit inside the existing phase budget and the existing prepay balance's purpose. Workstream 2's staging tests may spend small real amounts **only if** B-3 resolves to a shared balance, and then only under a stated test budget in the B-G3 GO. Batch pricing is asserted nowhere (B-1).
+
+---
+
+## 6. What this package does NOT authorize
+
+Everything production. Specifically: no halt flip, no queue unpause, no settings write, no allowlist change, no deploy to any worker (production or staging), no phase binding record, no SubmitJob or other generation command, no containment transition, no quarantine release, no conflicts-row disposition, no parked-job act, and no provider call of any kind. The census in §2 was read-only. Each act named in §3 and §4 requires its own gate and Julie's explicit GO at that gate, exactly as the program has run since October.
+
+— Wren (drafted 2026-11-06; scoping only)
