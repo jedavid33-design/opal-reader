@@ -1,0 +1,53 @@
+above admission, is the template (:857–858):
+
+```
+    if (!D6_LANE_ALLOWLIST.includes(lane || "standard"))
+      return { outcome: "rejected", reason: "lane_not_allowed" };
+```
+
+and admission refusals return identically (:861–863):
+
+```
+    const admission = admitPhase(bookId, phase);
+    if (!admission.ok)
+      return { outcome: "rejected", reason: admission.reason };
+```
+
+`book_not_onboarded` therefore surfaces as `{ outcome: "rejected", reason: "book_not_onboarded" }` — indistinguishable in form from `lane_not_allowed`, `phase_required`, `phase_mismatch`, and the rest of the existing family. The client surfaces the server's reason string; no client change is needed or proposed. The name was a Wren proposal in the correction; the ruling's acceptance list carries the E1 design (with the name) — the name stands as ruled unless Rowan renames it in this review, in which case the rename is a one-token change inside this same branch.
+
+### 2.2 The zero-mutation guarantee — ordering established from source
+
+The guarantee is not a hope about the branch; it follows from `submitIntent`'s write ordering, verified for this specification:
+
+1. The function's pre-admission acts are the input destructure and the lane check — both pure; neither writes.
+2. Admission is called next (:861). On refusal the function returns at :863.
+3. EVERY write in the function lies strictly after that return: the halt-epoch note (`noteHaltObservation`, :909) and the plan insert with its entries, inside `coord._tx` (:912 onward). There is no ledger, quota, epoch, or watermark write before or inside admission (the source's own comment at :859–860 attests the invariant: *"a rejection creates no plan and moves no ledger state"*).
+4. Inside admission itself, the only store interaction before the verdict is READS (`phaseBindingForBook`, `phaseRegistryEstablished`), plus the idempotent `ensurePhaseBindingSchema` DDL (`CREATE TABLE IF NOT EXISTS`) — ensured during any earlier binding read or write in the world's life, and a no-op once the table exists.
+
+So a `book_not_onboarded` refusal executes **zero writes**: no plan row, no plan entries, no attempt-ledger row, no quota or dispatch counter movement, no phase-accounting movement, no epoch note, no sync watermark movement. This ordering is the battery's central assertion (T-NO-MUTATION, §3) and the post-deploy probe's safety basis (§5): the probe intent cannot spend, reserve, or generate, because the code path that could do those things is never entered.
+
+---
+
+## 3. The offline verification battery
+
+### 3.0 The harness and the world
+
+The battery runs on the house harness (`containment-v4/tests/harness.mjs`): real SQLite via `node:sqlite`, a `SqlCursor` whose `.one()` THROWS on 0 or >1 rows (production DO semantics — the fake that returns null is exactly the divergence that hid the P8 deadlock), a fake clock, a statement-matching SQL fault injector (`faults.sql = { match(query), error }`, the exact error object thrown), and `makeWorld(treeDir)` instantiating the SHIPPED entry class over the harness storage. `makeWorld`'s defaults are the production shape: `OPALREADER_PHASE_POLICY: "enforce"`, `GENERATION_HALT: "1"`, and the service constructed with `phasePolicyMode: "enforce"` — i.e., the harness world is ENFORCEMENT-bound by default, and the battery's enforce cases need no special construction. The world exposes the service's own surface (`submitIntent`, `eligibilityQuote`, `bindPhaseBook`, `listPlans`, `planStatus`, `capabilities`) and the coordinator, so assertions read the same surfaces the code reads. Registry seeding follows the harness pattern: `service.bindPhaseBook({ phase: "forever-pucked", bookId: BOOK })` (the harness constants `BOOK` / `PHASE` carry the FP shape). The battery file is new (proposed home: alongside the standing batteries, e.g. `tests/s1-enforcement-battery.test.mjs` in the candidate's test tree — the implementation return names its actual home); it adds cases, it does not modify any standing battery.
+
+### 3.1 The named tests (R1's eight items)
+
+**T-BOUND** — *bound book admission* (R1 item 1, first half). Enforce world, registry seeded with the FP pair. `submitIntent` for the bound book with `phase: "forever-pucked"`, chapter scope → admitted; `listPlans` shows exactly one new plan whose stored phase is `"forever-pucked"` (the DERIVED phase, not merely the caller's string). Proves: the production construction's one legitimate path is undisturbed by the branch — the FP-unaffected regression at the service surface.
+
+**T-UNBOUND-NAMED** — *unbound book admission, named phase* (R1 item 1, second half). Enforce world, registry established. The unbound fixture book submits with (i) `phase: "forever-pucked"` → `{ outcome: "rejected", reason: "phase_bound_to_other_book" }`; (ii) an invented phase string → `{ outcome: "rejected", reason: "phase_not_budgeted" }`. Proves: the pre-existing named-phase refusals are byte-identical in behavior after the change (the delta touched only the fall-through). The third named-phase refusal, `phase_unbound`, is NOT exercised — it is unreachable with the one-entry budget constant (§1.3 row 8); the battery does not pretend otherwise, and the case is carried by the §1.3 source table.
+
+**T-NULL-REFUSAL** — *null-phase refusal* (R1 item 2). Enforce world, registry established. The unbound fixture book submits with `phase: null` (and, as a second call, with the phase field omitted — the destructure defaults it to null, the path the app actually takes for such a book) → `{ outcome: "rejected", reason: "book_not_onboarded" }`. Proves: the gap is closed, in the house refusal shape (§2.1), on exactly the fall-through case.
+
+**T-NO-MUTATION** — *no plan, ledger, or quota mutation on refusal* (R1 item 3; the battery's central assertion). Enforce world, registry established; the FP plan from T-BOUND (or a seeded equivalent) standing, so the store is non-trivial. Snapshot BEFORE the refused intent: the full `d6_plans` contents, the genstore accounting tables' contents (attempt ledger / phase accounting inputs), the quota and dispatch counters as the service's reads report them, and both sync watermarks. Run the T-NULL-REFUSAL intent. Snapshot AFTER and require byte-identity of every snapshot element. (The "before" snapshot is taken after seeding, so the schema-ensure DDL of §2.2.4 has long since run and cannot masquerade as a mutation.) Proves at harness strength: the §2.2 ordering claim — the refusal precedes every write, so nothing moved. This is the property the post-deploy probe (§5) relies on in production.
+
+**T-QUOTE-OPEN** — *eligibility quotes remain available* (R1 item 4). Enforce world. `eligibilityQuote` for the UNBOUND fixture book returns a computed quote (eligible counts and expected units present; no rejection, no throw) — before the refused intent and again after it, with identical content. Proves: E1 refuses generation, not information; the onboarding figure step's input survives the enforcement it precedes.
+
+**T-LEGACY** — *legacy/fixture construction compatibility* (R1 item 5). A second service constructed over the SAME harness coordinator with `phasePolicyMode: "legacy"` (direct construction through `createGenerationService` with the harness world's coord/store/sources — the mode is a construction argument, and fixtures are exactly direct constructions). Registry established; the unbound fixture book submits null-phase through the LEGACY service → ADMITTED, a plan created with phase `null`. Proves: the refusal discriminates by construction, not by data — the fall-through survives precisely where the sanctioned fixture behavior requires it, and the gate on `enforcePhasePolicy` is itself under test. (The registry-EMPTY legacy path, `admitPhaseLegacy`, is unmodified code and remains covered by the standing legacy suites under T-REGRESSION; this battery does not duplicate it.)
+
+**T-REGRESSION** — *Standard and Batch admission regressions* (R1 item 6). (i) Batch: an enforce-world `submitIntent` with `lane: "batch"` → `{ outcome: "rejected", reason: "lane_not_allowed" }` — `batch_not_armed`'s admission-layer equivalent, unchanged; and a batch intent for the UNBOUND book with null phase STILL returns `lane_not_allowed` (the lane fence at :857 precedes admission at :861 — the ordering proves the new branch did not disturb the lane fence, and no `book_not_onboarded` leaks ahead of it). (ii) Standard: T-BOUND / T-UNBOUND-NAMED / T-NULL-REFUSAL ARE the Standard admission regression at the changed surface. (iii) The standing batteries — containment (42), P2, R5A, V-3 cold-restart — re-run complete on the candidate tree (§3.3's exit rule governs the whole set).
+
+**T-THROWSAFE** — *real-SQLite throw-safe paths* (R1 item 7). Enforce world, registry seeded. Arm the harness SQL fault injector to throw a sentinel error on any query touching `d6_phase_bindings`; submit an intent — for the BOUND bo

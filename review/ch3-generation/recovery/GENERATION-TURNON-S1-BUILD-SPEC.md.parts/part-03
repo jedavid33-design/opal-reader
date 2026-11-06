@@ -1,0 +1,60 @@
+ok (the read precedes any verdict, so the bound case is the strong one) → the call surfaces the sentinel (thrown identity, `===`) and creates NOTHING: no plan, no admission, no ledger movement (asserted against the T-NO-MUTATION snapshot discipline). Disarm the injector; the same intent then admits normally (the fault was test-side only). Proves: an unreadable registry can never produce an admission — fail-closed by propagation, on the real-SQLite harness whose `.one()` throws with production semantics (no null-fake anywhere in the path).
+
+**T-BOOTSTRAP** — *ordering support case* (supporting; beyond R1's eight). Fresh enforce world, NO binding recorded: a null-phase intent for the unbound book → `phase_binding_required` (the bootstrap gate fires; the E1 branch is unreachable). Then record the FP binding and repeat the identical intent → `book_not_onboarded`. Proves: the branch arms exactly when the registry establishes, and the pre-existing bootstrap refusal's precedence is preserved.
+
+### 3.2 What the battery does NOT prove
+
+Harness-green is claimed at harness strength only, per standing law. The battery proves the branch's behavior in the harness world; it does not prove platform behavior (DO runtime adoption of a deploy is proven only by the post-deploy read-backs and the §5 probe, in the gate); it does not exercise `phase_unbound` (unreachable, §1.3 row 8); it makes no provider call and touches no staging or production state.
+
+### 3.3 The exit rule
+
+The battery's verdict exists only as ONE complete run — the new S1 battery plus the standing batteries (containment, P2, R5A, V-3) — executed on the EXACT pinned candidate tree (§4), with the full log and exit code captured and filed with the implementation return. No partial run, no subset, and no run on a pre-pin tree supports any claim. A single failing case fails the candidate: the delta is corrected and the battery re-run complete, or the candidate is withdrawn — there is no "green except" for a one-branch change.
+
+---
+
+## 4. The candidate's identity discipline
+
+- **Base.** The candidate tree derives from the composed tree (the deployed source of the live build `fdb02395…`). The delta is §1.2's branch and nothing else.
+- **Manifest discipline.** The candidate's upload manifest is compared part-by-part against the live build's 31-part manifest (SHA-256 per part, the standing deploy discipline). The comparison must show **exactly one differing part — the part carrying `v2/generation/service.mjs`** — with the other 30 parts byte-identical. Any second differing part is a STOP: the candidate is out of scope as built and is not presented. (If the upload composition ever groups modules differently than one part per module, the comparison is over the composed module set and must still isolate the difference to `service.mjs`'s content alone.)
+- **Build stamp.** Per house practice, the deployed worker's `/health` build marker is the pinned review-artifact commit of the deployed tree (the live build reads `fdb02395…`, its pin). The candidate, once pinned, stamps that pin commit when deployed; the offline battery identifies its tree by the manifest hash set above, and the pin (§below) binds the two.
+- **Pin before review.** The implementation return pins, on `ui1-review`, in one commit: the candidate tree delta (or the tree manifest + the changed file at full content, following the house pin pattern for build candidates), the battery file, and the complete battery log with its exit code. Rowan's independent review (R1) is of THAT pin — candidate, tests, and logs together. The design documents (the correction, this specification) are not a candidate and are never presented as one (the ruling, R1: *"Do not treat the current design as an already-built candidate"*).
+- **Sequence the ruling fixes.** This specification → Rowan's review → implementation + battery run + pin (a separate return) → Rowan's independent review of the built candidate → only then is the production GO (with the §6 passage) presented to Julie. The deployment itself happens inside that GO's gate, under the holds, per §5.
+
+---
+
+## 5. Post-deploy verification — the refused-intent probe (specified now, executed only inside the gate)
+
+Carried forward from the correction (§1.4) unchanged in substance, restated against the built candidate:
+
+1. **Place in sequence**: census (on the live build) → deploy of the pinned candidate under the holds (GENERATION_HALT still `"1"`, queue still paused) → post-deploy read-backs → **the probe** → halt lift → queue unpause → smoke. The probe precedes every lift.
+2. **Post-deploy read-backs** (before the probe): capabilities + health read back the candidate's build identity (its pin); phases render unchanged (FP present, budget 13,500,000, binding link intact); containment NORMAL; the gate's census predicates re-run against the new build where they name state — a deploy that moved any of them stops the gate. Observability re-checked after the upload and re-applied if reset, per standing deploy law; the etag captured and saved as an evidence artifact.
+3. **The probe**: exactly ONE intent, submitted by the executor through the client connector, for a named unonboarded library book (named in the GO at presentation; any of the six), `phase: null`, chapter scope, Standard lane. Expected and REQUIRED outcome: the rejection `{ outcome: "rejected", reason: "book_not_onboarded" }`.
+4. **Zero-movement read-back**: after the probe — plans list unchanged, sync watermarks unchanged, phase accounting unchanged, quota counters unchanged. The probe's safety basis is §2.2's ordering (proven offline by T-NO-MUTATION, observed live here).
+5. **Failure disposition**: if the probe is ADMITTED, or refused under any other reason, or any state moved — STOP: the gate ends HELD, no lift is attempted, and the deploy is dispositioned under the standing rollback rules (the rollback target for this deploy is the census build `fdb02395…`, itself above the permanent floor `6a73d962…`) before anything else is contemplated.
+6. **Counting**: the probe is a SubmitJob-class command and is counted in the gate's acts; it is the GO's sole named exception to its no-Wren-submission bar (§6). No FP probe is needed pre-lift: the smoke itself is the FP admission proof, and an FP admission failure would refuse closed at submission (no spend) inside the gate's observation.
+
+---
+
+## 6. R2 conformance — the suspended-smoke default, and the full R2-conformed GO passage
+
+### 6.1 What R2 displaces (quoted verbatim from the correction, then struck)
+
+The correction's §2.2(c) classification read:
+
+> "**(c) SMOKE SUSPENDED-BY-FAULT** — at the decision bound, a platform fault of the 1101 class is verified in progress on the read surfaces (the standing signature: /health 200 while DO-backed /v2 routes fail), or such a fault consumed the interval such that the evidence cannot distinguish stall from fault. The gate PAUSES: no classification of the plan itself, no soak, no retry; the holds stay exactly as they are (lifted — the fault is not a safety event, and re-holding into a fault would repeat the program's standing WAIT law error); the gate re-convenes only on Julie's word after the fault clears, with a fresh decision interval for the still-standing plan or a fresh smoke, as Julie and Rowan direct. Suspension is a named state in the record, never an unmarked overrun of the bound."
+
+The correction's §2.5 predicate sentence read, in its relevant clause:
+
+> "every other path ends in a named state (FAILED-and-re-held, SUSPENDED-BY-FAULT, or TURNED ON UNDER OBSERVATION with the soak still running) recorded in the gate record."
+
+And the correction's §5 GO passage carried the clause:
+
+> "or SUSPENDED-BY-FAULT (a verified 1101-class platform fault — the gate pauses, holds untouched, and re-convenes only on my word)"
+
+All three are **STRUCK** to the extent they leave the holds lifted during a suspension. The ruling is explicit: the default is a verified emergency re-hold followed by a fresh Julie GO before resumption; *"No indefinitely paused gate may leave generation enabled by default."* The correction's reasoning at §2.2(c) (that a fault is not a safety event and re-holding into one repeats the WAIT-law error) is displaced as the DEFAULT; §6.2 states the ruled replacement and the one mechanics note that makes it executable.
+
+### 6.2 The R2 replacement (operative text)
+
+**§2.2(c), as conformed:**
+
+> "**(c) SMOKE SUSPENDED-BY-FAULT** — at the decision bound, a platform fault of the 1101 class is verified in progress on the read surfaces (the standing signature: /health 200 while DO-backed /v2 routes fail), or such a fault consumed the interval such that the evidence cannot distinguish stall from fault. The classification LANDS (it is a terminal classification of the smoke, never an unmarked overrun of the bound), and the gate then closes by the R2 default: **the executor ru

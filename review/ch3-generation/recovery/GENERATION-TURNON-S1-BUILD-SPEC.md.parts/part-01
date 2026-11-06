@@ -1,0 +1,77 @@
+# WS1 — S1 ENFORCEMENT BUILD SPECIFICATION, OFFLINE VERIFICATION BATTERY, AND R2-CONFORMED GO PASSAGE
+
+_Wren's return under Rowan's WS1 final readiness ruling (relayed by Julie 2026-11-06; verbatim record `ROWAN-WS1-READINESS-BG2-SCOPE-RULING.md`; board verbatim 6687725188). The ruling: **S1–S4 ACCEPTED IN SUBSTANCE; DESIGN ACCEPTED WITH TWO REQUIRED GATE CORRECTIONS; GO PRESENTATION NOT YET APPROVED.** This document answers R1 (a narrow build specification + offline verification battery) and R2 (the SUSPENDED-BY-FAULT default), and carries the GO passage conformed for R2. It is a SPECIFICATION ONLY: it implements nothing, builds nothing, pins nothing by itself, deploys nothing, and presents no GO. Review pin: `<S1B-PIN>` (repo `jedavid33-design/opal-reader`, branch `ui1-review`). Operative sources: the WS1 correction (pin `0e2f03fa9c3b2ec8771d8ecef7f14e7d211104fe`), the WS1 design package (pin `5cca000fac0838203f084aa07d9ada53c7fa1c75`), and the deployed source (the containment-v4 composed tree — the tree of the live build `fdb02395b3775dc945baa395591a73060ab146c4`)._
+
+**Reading note.** §1 specifies the code change exactly, against the deployed source. §2 specifies the refusal's surface semantics and the zero-mutation guarantee. §3 is the offline verification battery — R1's eight named coverage items as named tests on the house harness. §4 is the candidate's identity discipline. §5 specifies the post-deploy refused-intent probe for the eventual gate. §6 performs the R2 conformance (struck passages quoted verbatim) and presents the FULL R2-conformed GO passage as one operative text. §7 states boundaries. S1–S4 stand accepted in substance; nothing in this document relitigates them.
+
+---
+
+## 1. The change, exactly
+
+### 1.1 The branch and its surroundings (source, verified for this specification)
+
+Admission lives in `v2/generation/service.mjs` (the composed tree). The dispatch is `admitPhase` (:402):
+
+- Enforcement-bound construction + registry EMPTY → refusal `phase_binding_required` (the round-5 bootstrap gate, :424). Every intent is refused in that window.
+- Non-enforcement construction + registry EMPTY → `admitPhaseLegacy` (the round-1 history derivation, preserved verbatim).
+- Registry ESTABLISHED (either construction) → `admitPhaseRegistry` (:431).
+
+`admitPhaseRegistry` reads the book's own binding row first — `const own = phaseBindingForBook(coord, bookId);` (:432), a synchronous coordinator SQLite read (`coord._oneOrNull` over `d6_phase_bindings WHERE book_id = ?`, phase-policy.mjs) — and its final line is the fall-through (:447):
+
+```
+    return { ok: true, phase: null };
+```
+
+That return is the whole gap: registry established, the book has NO binding row (`own === null`), the caller named NO phase (`callerPhase === null`) → the book is admitted unbudgeted, and the plan it creates skips both phase checks at grant time (`grant-guards.mjs:223`, `if (plan.phase) { … }`). The construction flag is `enforcePhasePolicy`, bound at construction (`phasePolicyMode === "enforce"`, service.mjs:233 in substance): the production entry (`worker-entry-prod-d6.js`, `d6Service`) constructs the service with `phasePolicyMode: "enforce"` UNCONDITIONALLY (:407), and the entry's intent route returns a 503 configuration failure if the deployment var is not exactly `"enforce"`. Every direct construction (test fixtures, legacy suites) defaults to `"legacy"` (service.mjs:201). No request, command, or intent field can select the mode.
+
+### 1.2 The delta
+
+One branch, in `admitPhaseRegistry`, in `v2/generation/service.mjs` — the fall-through case split on the construction flag (the operative code text was ruled on in the correction, §1.2, and is reproduced here as the build's exact target):
+
+```
+    // E1 (S1 enforcement): in an enforcement-bound construction, a
+    // book with no registry row may not submit unbudgeted. The
+    // per-book-budget policy (Q1 ruling) is enforced HERE, at the
+    // only admission gate, on the row already read above.
+    if (enforcePhasePolicy)
+      return { ok: false, reason: "book_not_onboarded" };
+    return { ok: true, phase: null };
+```
+
+The delta is confined to this branch (plus its comment). The build touches **exactly one file: `v2/generation/service.mjs`**. Expressly NOT touched: `phase-policy.mjs` (the read already exists and is unchanged), `grant-guards.mjs` (the :223 skip is correct for plans that legitimately carry a phase; null-phase plans become uncreatable in the production construction instead), `gen-constants.mjs` (no budget change; `PHASE_BUDGET_MICRO_CENTS` stands at its one entry, :75), `worker-entry-prod-d6.js` (the construction is already unconditionally enforce), any route, the schema, and the client.
+
+### 1.3 Before/after behavior — every admission case
+
+Verified against the deployed code paths for this specification. "Registry" = `d6_phase_bindings`; FP = the one bound pair (`forever-pucked` ↔ book `5c589095-f812-48a2-8ab2-03ba2791f2b2`).
+
+| # | Construction | Registry | Book's row | Caller phase | TODAY | AFTER E1 |
+|---|---|---|---|---|---|---|
+| 1 | enforce | empty | — | any | refused `phase_binding_required` (bootstrap gate) | **unchanged** — the E1 branch is unreachable; the gate fires first (ordering proven by T-BOOTSTRAP, §3) |
+| 2 | legacy | empty | — | any | `admitPhaseLegacy` history rules | **unchanged** — that function is not modified |
+| 3 | any | established | bound | null | refused `phase_required` | unchanged |
+| 4 | any | established | bound | = its phase | admitted; phase DERIVED from the row | unchanged (the FP path; T-BOUND) |
+| 5 | any | established | bound | ≠ its phase | refused `phase_mismatch` | unchanged |
+| 6 | any | established | unbound | a non-budgeted string | refused `phase_not_budgeted` | unchanged (T-UNBOUND-NAMED) |
+| 7 | any | established | unbound | budgeted, bound to another book | refused `phase_bound_to_other_book` | unchanged (T-UNBOUND-NAMED) |
+| 8 | any | established | unbound | budgeted, no binding for that phase | refused `phase_unbound` | unchanged — **UNREACHABLE with the current constant**: the only budgeted phase is `forever-pucked`, and it is bound. This case becomes reachable only when a second phase is budgeted (an onboarding act under its own gate). It is asserted from the source table here and is NOT a battery case (§3.2) |
+| 9 | **enforce** | established | unbound | null | **admitted `{ ok: true, phase: null }`** | **REFUSED `book_not_onboarded` — THE CHANGE** (T-NULL-REFUSAL) |
+| 10 | legacy | established | unbound | null | admitted `{ ok: true, phase: null }` | **unchanged** — the refusal is gated on `enforcePhasePolicy`; the sanctioned fixture behavior is preserved (T-LEGACY) |
+| — | any | any | the binding READ THROWS | any | the exception propagates out of `admitPhase` / `submitIntent` before any write; the intent errors; nothing is created | unchanged — E1 adds no catch, no default, no coercion (T-THROWSAFE) |
+
+One correction to the case list this specification was asked to cover: "bound book + null caller phase" is sometimes wondered about as unreachable — it IS reachable and is row 3 (`phase_required`). Every other listed case is reachable except row 8's `phase_unbound`, flagged above.
+
+### 1.4 What does NOT change (the negative scope)
+
+- **No new read.** The branch decides on `own`, the value `phaseBindingForBook` already returned at the head of the function. No new query, table, index, route, settings key, or configuration surface is introduced.
+- **No new empty-result path.** The branch rides the existing `coord._oneOrNull` null return — the throw-safe reader. No `.one()` call is added; the standing harness/real-DO `.one()` divergence is not engaged by this change.
+- **The eligibility/quote path is untouched.** `eligibilityQuote` (exposed on the service alongside `submitIntent`) never passes through `admitPhase`; quotes for unonboarded books remain available by design — the onboarding procedure's figure step is computed from a fresh whole-book quote for a book that is by definition not yet onboarded. E1 refuses generation, not information (T-QUOTE-OPEN).
+- **Resumption, the driver, and repair never re-run admission.** `admitPhase` has exactly one call site (`submitIntent`, service.mjs:861). A stored plan carries its phase; the design's state matrix (AUTO / RE-TESTED rows) describes driver behavior over stored plans, which this change cannot reach. A plan admitted before the deploy keeps the phase it was admitted with. The parked Chapter 3 job (preserved) is a job, not an intent; untouched.
+- **Not an onboarding.** No budget constant changes, no binding is recorded by this build; FP's constant and binding stand exactly as they are. Not a registry redesign (accepted decision 1 stands).
+
+---
+
+## 2. Refusal semantics
+
+### 2.1 The refusal's shape — house form
+
+`submitIntent` (service.mjs:851) presents every refusal as the same object shape. The lane refusal, two lines 
