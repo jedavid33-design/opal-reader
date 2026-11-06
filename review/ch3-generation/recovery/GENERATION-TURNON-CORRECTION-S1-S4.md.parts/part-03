@@ -1,0 +1,61 @@
+dertaking, recorded in the GO, to submit only onboarded books; (ii) the daily check's unexplained-plan rule sharpened for this decision: ANY plan whose book is not onboarded — whatever its phase — is a NORMAL-OPS-ANOMALY on sight and a T-1 trigger evaluation the same day; (iii) the turn-on's validity is tied to the decision: if an unonboarded-book plan is ever observed, the turn-on gate's declaration path is void until Rowan dispositions it.
+- **What E3 does not do**: it does not make the exposure zero, bounded per book, or technically detected before spend begins (detection is daily, after the fact, though the cap/quota bound the maximum one-day exposure). Those are the reasons it is the fallback, not the recommendation.
+
+### 1.7 Struck text and replacements (mechanics)
+
+The design package §3's closing paragraph —
+
+> "No code deploy. No settings-record write. No containment transition. The settings record's legacy `geminiLane` key is non-operative (Q8 PASS) and is touched by nothing in this package."
+
+— is struck and replaced by:
+
+> "One code deploy — the S1 enforcement build (§1 of the correction) — precedes the two acts below, performed under the holds and verified before any lift. No settings-record write. No containment transition. The settings record's legacy `geminiLane` key is non-operative (Q8 PASS) and is touched by nothing in this package."
+
+And §8's skeleton sentence —
+
+> "The gate's skeleton is as accepted in principle: census → halt lift → queue unpause → a bounded Julie-submitted Standard smoke → a seven-day soak → execution record → Rowan review → declaration."
+
+— is struck and replaced by:
+
+> "The gate's skeleton is as accepted in principle, with the S1 step inserted: census → S1 enforcement deploy + post-deploy verification (incl. the refused-intent probe) → halt lift → queue unpause → a bounded Julie-submitted Standard smoke → a seven-day soak → execution record → Rowan review → declaration."
+
+(§4.5's "keeps the turn-on gate itself code-free" is struck wherever relied on; the recommendation of O1 is unaffected — O1's own per-book deploys were always code acts under their own micro-gates.)
+
+---
+
+## 2. S2 — Smoke failure and timeout semantics
+
+The design package's §8.3 failure handling read, in full:
+
+> "**Failure handling**: the sliding ≥35-minute no-progress stall test (Gate 4 law) governs observation; on a declared stall Wren observes and reports — no act beyond §7 — and the gate record carries the stall for Rowan. A policy_block outcome is NOT a failure (the F3 recursive split is design behavior; the resume's own segment completed exactly that way). A provider/platform fault during the smoke: WAIT (standing law), the plan parks or waits by its own machinery, and the smoke's clock is a reporting matter, not a retry license."
+
+That paragraph is struck and replaced by §§2.1–2.5 below. What it got right is preserved (policy_block is not a failure; a platform fault is WAIT, never a retry license); what it lacked — a decision bound, terminal classifications, a failure disposition — is now defined.
+
+### 2.1 The maximum observation/decision interval
+
+- The smoke's clock starts at **Julie's submission** (the plan's creation read-back).
+- The **sliding ≥35-minute no-progress stall test** (Gate 4 law) runs throughout and can declare a stall at any time — a stall declaration is a decision point (§2.2), not merely a report.
+- **Hard decision bound: 4 hours from submission (PROPOSAL parameter, for Rowan to fix).** By the bound, the executor must land one of the three terminal classifications at §2.2 — on the evidence then standing. The bound is a decision deadline, not a success deadline: it forces a disposition, never a claim. Sizing basis, at design strength: the program's observed Standard generation (Gate 4's 15 policy-heavy segments completed inside one observed run; the resume's single segment completed ≈ 8 minutes after unpause including the cold start) puts a 20-segment chapter's ordinary completion far inside 4 hours; a smoke still incomplete at 4 hours is therefore evidence of stall or fault, not of ordinary latency. The one force that can consume hours is a platform fault — and a fault is handled by classification (§2.2(c)), not by silently extending the bound.
+
+### 2.2 Terminal classifications (exactly one lands, in the gate record)
+
+- **(a) SMOKE COMPLETE** — the plan reaches its full §8.3 completion-evidence set (done 20 / failed 0 with any failed entry individually explained, job complete, exactly the expected new bindings, the recorder discipline clean) inside the bound and no stall stands declared. Only this classification can proceed to the soak-entry evaluation (§2.4).
+- **(b) SMOKE FAILED** — any of: a stall declared under the sliding test and not recovered by the decision bound; the plan incomplete at the decision bound for any reason other than (c); a §7 trigger firing during the smoke (§2.3); the completion-evidence set unattainable (e.g., an R-06 recorder discrepancy — also T-4); Julie withdrawing the smoke. A failed smoke is a failed GATE ATTEMPT (§2.3's disposition), full stop.
+- **(c) SMOKE SUSPENDED-BY-FAULT** — at the decision bound, a platform fault of the 1101 class is verified in progress on the read surfaces (the standing signature: /health 200 while DO-backed /v2 routes fail), or such a fault consumed the interval such that the evidence cannot distinguish stall from fault. The gate PAUSES: no classification of the plan itself, no soak, no retry; the holds stay exactly as they are (lifted — the fault is not a safety event, and re-holding into a fault would repeat the program's standing WAIT law error); the gate re-convenes only on Julie's word after the fault clears, with a fresh decision interval for the still-standing plan or a fresh smoke, as Julie and Rowan direct. Suspension is a named state in the record, never an unmarked overrun of the bound.
+
+### 2.3 Conditions requiring emergency re-hold during the smoke — and the failure close
+
+- **Emergency re-hold (§7.3's pair) is required** when any §7 trigger, as refined at §3 of this correction, FIRES during the smoke — the same law as the soak (the gate's A2 incorporation already applied §7 from the moment of the halt lift; this correction makes the smoke's instance explicit). Julie's word requires it at any time, trigger or none.
+- **A declared stall, by itself, does not fire the re-hold** — the stalled plan parks under its own machinery and cannot spend while parked; the disposition is §2.3's failure close below, taken as a gate act, not an emergency act.
+- **The failure close (DEFAULT, PROPOSED for ruling)**: on SMOKE FAILED, the gate attempt ends and the executor runs the re-hold pair (re-pause, then re-halt — §7.3's order and verifications) as the attempt's closing acts, then files the failure record. Rationale: a failed smoke has not earned a turned-on system, and the program's standing posture is that an unproven state returns to HELD rather than idling in an unplanned configuration. **Julie may countermand at the time** (her word, in the moment, directs the system to stay on for diagnosis or any other reason) — the default binds the executor, never Julie.
+- **The incomplete plan's disposition**: it is left EXACTLY as it stands — no plan command, no retirement, no release, no resubmission by anyone. Under the re-hold it is inert (its state is whatever the matrix says it is: a stalled chapter plan stands `active` or parked per its guards, RE-TESTED/AUTO under the matrix if normal operations is ever declared by a later gate). Its incompleteness is recorded with its plan id and totals in the failure record; nothing about it is silently carried into any later attempt — a later turn-on gate re-censuses it as a non-terminal plan under P-5 and it receives its own disposition there.
+
+### 2.4 The soak-entry predicate — the complete evidence set, all of it, first
+
+The seven-day soak clock starts ONLY when every item below stands verified, recorded as the gate's SOAK-ENTRY predicate set:
+
+1. SMOKE COMPLETE (§2.2(a)) with the full §8.3 completion-evidence set in the record;
+2. **The accounting check on the smoke**: the settled delta reported in the three-line form against the chapter's quote; quota reconcile `ok: true` with no new drift; no reservation of the smoke plan surviving its terminal state (the reservation-leak check, run at completion and again at soak entry);
+3. **Julie's playback acceptance of the smoke chapter, recorded** (her confirmation in chat, recorded on the board — the Gate 4 / resume pattern);
+4. **The normal-operations observation arrangement verified active** in the §4.4 form (definition read-back + check #0 logged + first-run terms) — the arrangement must exist before the period it observes;
+5. **P-14 closed** (the OQ-5 duty verified and terminated, §4.5) — already a census predicate; re-affir

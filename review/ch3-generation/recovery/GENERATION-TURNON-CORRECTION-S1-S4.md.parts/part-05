@@ -1,0 +1,56 @@
+ge hold-state protocol
+
+The precedent this codifies is the resume gate's own close: at ~03:55Z the first closing capabilities read showed `generationState: "enabled"` while the settings binding and health already read halted; a recheck at 03:58:02Z read `halted` — classified, and accepted by Rowan (Q3 of the execution review, with precision), as isolate projection lag, not a hold deviation. The protocol below makes that judgment mechanical, in both directions (a projection claiming ON after a verified re-hold, or claiming OFF while turn-on stands).
+
+**Stage 1 — detection.** Any disagreement among {capabilities `generationState`, health `generation`, settings `GENERATION_HALT`, queue `delivery_paused`} with the last AUTHORIZED hold state opens the protocol. No single read ever fires T-8.
+
+**Stage 2 — bounded rechecks.** Three rechecks over ten minutes (PROPOSAL parameters, for Rowan to fix), each reading ALL FOUR surfaces. The settings binding and the queue state are AUTHORITATIVE (they ARE the hold mechanisms); capabilities and health are PROJECTIONS of the binding (the execution transient lived in exactly a projection: `service.mjs`'s capabilities read of the isolate env). Classification at the protocol's end — or earlier, the moment an authoritative reading lands:
+
+- **(a) Transient projection lag** — every recheck's authoritative pair agrees with the authorized state, and the disagreement is confined to a projection surface: if the projection converges within the bound → TRANSIENT: logged, reported as NORMAL-OPS-MOVEMENT (or in the gate record, during the smoke), **no re-hold, no trigger fire**. If the projection still disagrees at the bound while the authoritative pair is consistent → the holds stand as the authoritative pair reads them (the system is as held/unheld as authorized); the persisting projection fault is a NORMAL-OPS-ANOMALY (projection fault), escalated the same day; **T-8 does not fire** — re-holding against a consistent authoritative pair would be acting on the broken surface.
+- **(b) Authoritative hold-state failure** — ANY recheck in which an authoritative surface reads contrary to the authorized state:
+  - (i) **Less-held than authorized** (e.g., after a verified re-hold, the binding reads `"0"` or the queue reads unpaused): SAFETY failure → **emergency re-hold immediately** (§7.3's pair re-asserts both holds), immediate reporting per §7.4, and the state is treated as NOT safely held until the re-assertions verify — if a re-assertion cannot be verified, §7.4's escalation governs.
+  - (ii) **More-held than authorized** (during turn-on standing: the binding reads `"1"` or the queue reads paused, with no re-hold commanded): INTEGRITY anomaly — nothing can dispatch, so nothing is unsafe; but the state changed outside authority. Immediate report to Julie; **no act**; the holds are re-lifted only on Julie's fresh direction (never on the executor's inference that it "must have been" a glitch).
+  - (iii) **Authoritative surface unreadable** inside the protocol (the settings read or the queue read cannot be obtained at a recheck): the protocol cannot clear → the UNKNOWN is treated as (b)(i) for posture during the SMOKE (decision blocked; the smoke cannot classify COMPLETE; at the bound, FAILED (evidence-incomplete) or SUSPENDED-BY-FAULT on the 1101 signature) and as an ANOMALY with same-day escalation during the SOAK (day not clean). It does not by itself fire the pair — acting blind is its own hazard — UNLESS a readable authoritative surface independently shows (b)(i).
+
+**Preserved, expressly**: any emergency re-hold under T-8 or any trigger is reported immediately (§7.4), and any re-turn-on afterward requires Julie's FRESH GO through a new gate (§7.1). The recheck protocol consumes minutes, never authority: it classifies; it does not forgive a real failure, and it does not manufacture one from a lagging projection.
+
+---
+
+## 4. S4 — Soak auditability
+
+### 4.1 The clean observation day, defined
+
+A soak day is a **CLEAN OBSERVATION DAY** only when ALL of the following stand in the `normal-ops-daily-check` log for that day:
+
+1. The daily check ran and completed (not merely started);
+2. **Every** surface of the §8.5 check set was read successfully: capabilities; health; containment on both surfaces; the recorder tail; the plans list; quota; the reconcile walk (complete, paginated); per-phase accounting for every budgeted phase; conflicts; the bindings watermark;
+3. The accounting checks of §8.5 were completed against those reads (settled matched to named plans; the aging flag evaluated; the reservation-leak check evaluated; month-to-date vs the cap trajectory);
+4. A classification (NORMAL-OPS-QUIET / MOVEMENT / ANOMALY) was recorded with its timestamp and the day's salient values.
+
+Any surface unreadable, any check unevaluated, or any classification unrecorded → the day is a **MISSED-READ DAY**, not a clean day. There is no partial credit: a day that cannot be fully observed does not count toward the seven.
+
+### 4.2 Missed-read handling
+
+- A missed-read day **extends the soak day-for-day** (accepted decision 8) — the seven required days are seven CLEAN days, consecutive or not, but see the pause rule below.
+- **The make-up obligation**: the next completed check must explicitly cover the gap interval — watermarks, counters, and phase figures compared against the LAST CLEAN day's recorded values, so movement inside the gap is retrospectively accounted for and named in that check's classification. (Residual, stated: intraday transients inside a missed interval — a reservation that opened and closed within the gap — are unobservable in principle; the soak's accounting is day-granular, as designed, and the correction does not pretend otherwise.)
+- **Two consecutive missed-read days** = NORMAL-OPS-ANOMALY with same-day escalation to Julie, and the soak clock PAUSES (no further days can accrue, clean or otherwise) until a clean day lands. The pause is an observation state, not a hold change: the holds stay as authorized, and no generation right is affected by the pause itself — but no declaration can be built on paused time (§4.3).
+
+### 4.3 Anomaly deadlines and the disposition of unresolved findings
+
+- **Acknowledgment**: every NORMAL-OPS-ANOMALY is reported to Julie the same day it is classified (the design already required this; it is now a deadline, not a habit).
+- **Disposition deadline: 24 hours from the report (PROPOSAL exact, for Rowan to fix).** A finding is DISPOSITIONED only by a written disposition — Julie's decision, or Rowan's ruling relayed of record — naming its resolution or its accepted standing (an anomaly that fired and was dispositioned in writing does not bar declaration; the design's A6.4 already said so — this correction gives the standing a deadline and a paper form).
+- **Undispositioned at 24 hours** → the finding escalates (to Rowan via Julie, with the finding's full evidence) AND the soak PAUSES in place (holds untouched — §8.4's early-end terms) until the disposition lands. A paused soak resumes its count where it stopped once disposition is recorded and a clean day lands.
+- **Unresolved accounting findings at soak end BLOCK the declaration.** Design A6 items 3–4 —
+
+> "3. End-of-soak accounting is clean: reconcile `ok`, no unresolved aging flags, no reservation leaks, every settled unit of the soak explained by a named plan.
+> 4. No NORMAL-OPS-ANOMALY stands unresolved at declaration. (An anomaly that fired and was dispositioned in writing does not bar declaration; an emergency re-hold during the soak VOIDS the soak — declaration then requires a fresh turn-on gate after Julie's fresh GO, never a resumed soak. PROPOSAL, for ruling.)"
+
+— are conformed to read, in substance: *clean* means every finding either resolved or dispositioned in writing under the 24-hour rule; **no finding carries past the declaration silently** — a finding Julie wishes to carry (e.g., an aging estimated-unverified item she accepts as standing, like the FP straddler's 19,018, already reported as standing at §8.5) must be NAMED in the execution record as carried-by-disposition, with her words cited; anything else undispositioned at the soak's seventh clean day extends or pauses the soak under the deadline rule rather than expiring quietly. An emergency re-hold during the soak still VOIDS the soak (accepted decision 8), unchanged.
+
+### 4.4 The observation arrangement verified active before the soak begins — without deadlock
+
+The design's §8.5 setup sentence —
+
+> "Setup verified threefold at the turn-on gate's close, on the OQ-5 precedent (definition read-back quoted in the execution record; a manual check #0 logged; the first scheduled run's log confirmed before the arrangement is called established — if setup cannot be established as specified, the gate record returns for review rather than claiming the condition discharged)."
+
+— left a sequenc

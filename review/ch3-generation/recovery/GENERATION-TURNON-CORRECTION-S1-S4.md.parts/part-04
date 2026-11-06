@@ -1,0 +1,50 @@
+med here because the soak may not begin while a predecessor duty is open.
+
+If any item cannot be verified, there is no soak start and no partial start: the gate record states which item failed, and the path forward is Julie's and Rowan's, not the executor's inference.
+
+### 2.5 The no-silent-transition rule, as a gate predicate
+
+Restated as the ruling requires, in predicate form: **no state of the smoke other than SMOKE COMPLETE + the full §2.4 set transitions into the soak; no soak outcome other than the full A6 set (as amended at §4.3) transitions into a declaration of normal operations; every other path ends in a named state (FAILED-and-re-held, SUSPENDED-BY-FAULT, or TURNED ON UNDER OBSERVATION with the soak still running) recorded in the gate record.** An unresolved smoke — one whose classification is not yet landed — holds the gate in the smoke phase indefinitely until it lands or Julie directs otherwise; the passage of time is never itself a transition.
+
+---
+
+## 3. S3 — Emergency trigger refinements
+
+The design package's §7.2 trigger table is replaced in full by the table at §3.2. The struck table (verbatim, for the record) is:
+
+> | # | Trigger | Objective check (surface) |
+> |---|---|---|
+> | T-1 | **Foreign / unexplained dispatch** — provider dispatches or settled movement with no plan explaining them | `GET /v2/quota` (`providerDispatchesToday` > 0) or a phase settled delta, against `GET /v2/d6-plans` showing no non-terminal or newly-terminal plan that accounts for them (§6.3(a)'s backstop) |
+> | T-2 | **Loop signature** — a plan burning the day without producing: ≥ 100 provider dispatches in one PT day (the cap itself) with zero new bindings in the same window | Quota read + bindings watermark (`GET /v2/sync/changes?family=bindings`) |
+> | T-3 | **Reconcile drift** — `reconcileQuota.ok === false` or a drift list beyond the sole known adjudicated straddler | `GET /v2/d6-quota-reconcile` (operator) |
+> | T-4 | **R-06-class recorder discrepancy** — an in-set accounting transition with the expected recorder row missing at the A-7 observation point (the transition's poll + one further complete poll) | Drive recorder (`drive=1`) against plan/job accounting reads |
+> | T-5 | **Conflicts change** — the conflicts set differs from the four baseline `schedule_dead` rows | `GET /v2/conflicts` |
+> | T-6 | **Storage boundary pressure** — recorded base + D6 bytes ≥ 95% of the 10 GB free-tier boundary (PROPOSAL figure), or `storage_boundary` refusals appearing across successive passes for multiple plans | Storage accounting surfaces; drive outcomes (`parked_storage`) |
+> | T-7 | **Containment deviation** — containment state ≠ NORMAL, or any containment field inconsistent with the baseline, not commanded under an authorization | `GET /v2/d6-containment` (both surfaces) |
+> | T-8 | **Hold-state inconsistency** — capabilities/health generationState inconsistent with the last authorized hold state (e.g., `halted` while turn-on stands and no re-hold was commanded; or `enabled` after a re-hold's verified read-backs) | Capabilities + health |
+> | T-9 | **Provider-fault storm** — ≥ 10 consecutive provider-error-class attempt outcomes across plans in one PT day with zero successes (PROPOSAL figure) — the 1101 lesson: do not keep feeding a platform fault | Attempt diagnostics across the day's plans; quota reads |
+
+What the ruling requires and this section adds: for every trigger, (i) the reliable evidence source named as a surface set, and (ii) the consequence when that source is UNAVAILABLE; and for T-8, the two-stage lag-vs-failure protocol (§3.3). §7.1's authority (Julie's unlimited general authority; Wren's narrow preauthorized form), §7.3's two-act procedure, §7.4's immediate reporting, and the fresh-Julie-GO rule for any re-turn-on are PRESERVED unchanged — the ruling accepted them; this section refines only the trigger evaluations.
+
+### 3.1 The unavailable-source law (applies to every trigger)
+
+- A trigger whose evidence source cannot be read evaluates **UNKNOWN — never PASS, never "no fire"**. Silence of a surface is not evidence of safety on a live system.
+- **During the smoke**: an UNKNOWN on any trigger whose source is authoritative for the completion evidence (T-1, T-3, T-4, T-5, T-7) means the evidence set is incomplete → the smoke cannot be classified COMPLETE; at the decision bound it classifies FAILED (evidence-incomplete) or SUSPENDED-BY-FAULT (if the unavailability carries the 1101 signature). UNKNOWN triggers are reported in the gate record by name.
+- **During the soak**: a daily check with an unreadable authoritative source is NOT a clean day (§4.1 — missed-read handling applies: the soak extends). The same authoritative source unavailable on TWO CONSECUTIVE checks is a NORMAL-OPS-ANOMALY with same-day escalation to Julie. Unavailability alone never fires a re-hold — with one exception: T-8, where the authoritative surfaces ARE the holds (§3.3(b)).
+- A surface returning a READABLE ERROR SHAPE (a route refusing, a reconcile reporting `ok: false`) is not "unavailable" — it is evidence, evaluated by the trigger's own rule. Unavailability means: no trustworthy value could be obtained (transport failure, 1101-class 500s, malformed payload).
+
+### 3.2 The refined trigger table
+
+| # | Trigger | Reliable evidence source | Evaluation rule (fires when) | Source-unavailable consequence (§3.1 applied) |
+|---|---|---|---|---|
+| T-1 | Foreign / unexplained dispatch | `GET /v2/quota` (`providerDispatchesToday`) + per-phase accounting + `GET /v2/d6-plans` | Dispatches > 0 or a settled delta exists that no non-terminal or newly-terminal plan accounts for | Quota or plans unreadable → UNKNOWN; smoke: blocks COMPLETE; soak: day not clean; both unreadable at one check → ANOMALY same day |
+| T-2 | Loop signature | `GET /v2/quota` + bindings watermark (`GET /v2/sync/changes?family=bindings&sinceSeq=<last>`) | ≥ 100 dispatches in one PT day with zero new bindings in the window | Either unreadable → UNKNOWN (the signature is a conjunction; a half-read signature is no signature); soak: day not clean |
+| T-3 | Reconcile drift | `GET /v2/d6-quota-reconcile` (operator, paginated, complete walk) | `ok === false`, or drift beyond the sole adjudicated straddler `att-37d63768…` | Route unreadable or walk incomplete → UNKNOWN (a partial walk is not a reconcile); smoke: blocks COMPLETE; soak: day not clean; two consecutive → ANOMALY |
+| T-4 | R-06 recorder discrepancy | Drive recorder (`GET /v2/d6-diagnostics?drive=1`) against plan/job accounting reads | An in-set accounting transition lacks its expected recorder row at the A-7 observation point (transition poll + one further complete poll) | Recorder unreadable → the observation point cannot be met: during the smoke, any accounting transition in that window is UNVERIFIED → blocks COMPLETE and is reported as a discrepancy-class finding (the recorder is also P-12's aliveness surface; its failure is itself an ANOMALY) |
+| T-5 | Conflicts change | `GET /v2/conflicts` | The set differs from the four baseline rows (ids 1–4, pinned contents) | Unreadable → UNKNOWN; smoke: blocks COMPLETE; soak: day not clean |
+| T-6 | Storage boundary pressure | R2 bucket accounting (the weekly free-tier script's read path) + plan-state reads (`parked_storage` outcomes) | Recorded base + D6 bytes ≥ 95% of 10 GB (provisional threshold, accepted decision 8), OR `storage_boundary` refusals across successive passes for multiple plans | R2 accounting unreadable → evaluate on the refusal half alone (plan reads); if plan reads also fail → UNKNOWN; soak: day not clean |
+| T-7 | Containment deviation | `GET /v2/d6-containment` (operator surface) AND the `drive=1` projection — two surfaces by design | Either surface reads state ≠ NORMAL, or fields inconsistent with the baseline, not commanded under an authorization | ONE surface unreadable → evaluate on the other, flagged single-surface in the log; BOTH unreadable → UNKNOWN and, because containment state would be unknowable on a live system, ANOMALY with same-day escalation; smoke: blocks COMPLETE |
+| T-8 | Hold-state failure | The AUTHORITATIVE pair — script settings binding read (`GENERATION_HALT`) + queue state via cf-api — with capabilities + health as PROJECTIONS | The two-stage protocol at §3.3 (replaces any single-read evaluation) | Per §3.3: an authoritative surface unreadable inside the recheck protocol is itself the failure path (§3.3(b)(iii)) |
+| T-9 | Provider-fault storm | Attempt diagnostics across the day's plans (plan diagnostics) + `GET /v2/quota` | ≥ 10 consecutive provider-error-class attempt outcomes across plans in one PT day, zero successes (provisional threshold, accepted decision 8) | Diagnostics unreadable → evaluate on quota/plan outcome reads alone; if no attempt evidence is obtainable at all → UNKNOWN; soak: day not clean |
+
+### 3.3 T-8 rewritten: the two-sta

@@ -1,0 +1,62 @@
+# WS1 CORRECTION S1–S4 — enforcement, smoke semantics, trigger refinements, soak auditability, and the conformed GO passage
+
+_Amends the WS1 turn-on design package, `GENERATION-TURNON-DESIGN-PACKAGE.md`, pin `5cca000fac0838203f084aa07d9ada53c7fa1c75` (board summary 6686937444), under Part 1 of Rowan's combined WS1/WS2 design ruling (relayed by Julie in chat 2026-11-06; local record `ROWAN-COMBINED-DESIGN-RULING.md`). Design only: nothing here is implemented, deployed, or presented to Julie. The §9 GO wording as conformed at §5 of this correction is returned FOR ROWAN'S FINAL READINESS REVIEW — it is NOT approved for presentation. Production remains HELD at NORMAL. Pin slot: this document is pinned at `<CORR2-PIN>` (named in the companion CP)._
+
+---
+
+## 0. Disposition of the ruling's Part 1
+
+| Ruling item | Disposition |
+|---|---|
+| Accepted decision 1 — O1 interim onboarding architecture (code-constant budgets, existing binding route, no registry redesign for this gate) | STANDS. No correction. §1 of this correction builds S1's enforcement on the same machinery. |
+| Accepted decision 2 — the figure calculation is a recommendation tool; Julie retains authority over actual budgets; FP's $13.50 unchanged | STANDS. No correction. |
+| Accepted decision 3 — OI-4 procedural identity control (canonical book ID from the book surface, proposed phase and budget, exact target identity verified immediately before the irreversible write; any discrepancy stops) | STANDS. No correction; the control is part of the onboarding procedure as filed. |
+| Accepted decision 4 — OI-1 RE-TESTED for `parked_budget` / `parked_storage` (re-testing grants no authority over budgets, storage, accounting, quarantine) | STANDS. No correction. |
+| Accepted decision 5 — Q4 legacy plan-less conclusion at source strength; fail-closed behavior and residual uncertainty remain visible | STANDS. No correction. |
+| Accepted decision 6 — the nine-trigger framework and two-act procedure, subject to corrections | CORRECTED at §3 (S3): every trigger gains its evidence source and unavailable-source consequence; T-8 is rewritten as a two-stage rule. |
+| Accepted decision 7 — OI-2: additional Standard submissions for onboarded books during the soak, within restrictions | STANDS. Carried into the conformed GO (§5) unchanged. |
+| Accepted decision 8 — OI-3 thresholds provisional (60-dispatch smoke signal = escalation threshold, not a cap; 95% storage; 10 consecutive errors; missed-day extension; re-hold invalidates the soak) | STANDS, and the provisional thresholds are woven into §§2–4 where they operate. |
+| **S1 — enforce the onboarded-book restriction** | **§1 of this correction.** The enforcement design (E1, recommended), the re-verified absence of a configuration-only alternative (E2), and the fallback risk decision (E3, not recommended). |
+| **S2 — smoke failure and timeout semantics** | **§2 of this correction.** Decision interval, terminal classifications, re-hold conditions, incomplete-smoke disposition, the soak-entry evidence predicate. |
+| **S3 — refine emergency triggers** | **§3 of this correction.** |
+| **S4 — make the soak auditable** | **§4 of this correction.** Clean-day definition, missed reads, deadlines, findings disposition, observation-arrangement verification, P-14's evidence. |
+| §9 GO wording — NOT YET APPROVED FOR PRESENTATION | **§5 of this correction**: the passage conformed in full, for Rowan's final readiness review. |
+
+One correction propagates beyond S1's own section and is flagged wherever it lands: the design package's §3 closed with the sentence **"No code deploy"** for the turn-on gate. Under §1's enforcement design the gate gains one small reviewed deploy before the lifts. **WS1 is therefore no longer a zero-code gate.** The struck text and its replacements are given at §1.6.
+
+---
+
+## 1. S1 — Enforce the onboarded-book restriction
+
+### 1.1 How a phase-null submission flows today (source, exact)
+
+The ruling's premise is confirmed at source strength; this subsection is the flow the enforcement must close.
+
+1. Every generation intent enters through `submitIntent` (generation/service.mjs:851). Its first acts are the lane check (:857 — `lane_not_allowed`) and phase admission (:861): `const admission = admitPhase(bookId, phase);` — the source comment at :859-860 attests the invariant the design relies on: *"a rejection creates no plan and moves no ledger state."* Plan creation, intent identity, and all ledger movement happen only after `admission.ok`.
+2. `admitPhase` (service.mjs:402) in the production construction — enforcement-bound unconditionally (the entry constructs `phasePolicyMode: "enforce"`; a missing/mistyped var makes the entry's intent route return a 503 configuration failure, :215-231) — passes the round-5 bootstrap gate (registry established in production, so the gate at :424 does not fire) into `admitPhaseRegistry` (:431).
+3. `admitPhaseRegistry` reads the book's own binding row FIRST: `const own = phaseBindingForBook(coord, bookId);` (:432) — a synchronous coordinator SQLite read (`coord._oneOrNull` over `d6_phase_bindings WHERE book_id = ?`, phase-policy.mjs). A bound book is fully governed: null phase → `phase_required`; wrong phase → `phase_mismatch`; correct → derived phase. An unbound book CLAIMING a phase is refused (`phase_not_budgeted` / `phase_bound_to_other_book` / `phase_unbound`, :442-445).
+4. **The gap is the function's fall-through return (:447 in substance): an unbound book submitting with NO phase is admitted `{ ok: true, phase: null }`.** The phase-policy header states it as designed behavior: *"no phase at all still runs unbudgeted (phase null)"* — designed for the pre-policy world, and the precise path the Q1 ruling now closes as policy.
+5. The admitted plan stores phase `null` (the admitted phase is what intent identity binds, service.mjs:881-890). At grant time the phase checks are conditional on a phase existing: grant-guards.mjs:223 `if (plan.phase) { … }` — a null-phase plan skips BOTH the phase-halt check and the phase-budget projection. What still governs it: the quarantine fence (grant-guards, above :223), the storage projection (`d6StorageProjection` → `storage_boundary`, :253-254), the monthly settings cap, and the quota guard with cohort bounding. That residue — cap/quota/storage only — is the scoping package's Q1 finding, now traced to its exact branch.
+
+So: today, any of the six unonboarded library books, submitted from the app with no phase, would be admitted and would generate unbudgeted. The GO wording cannot close this (the ruling, S1: *"Do not claim technical enforcement based solely on GO wording"*). §1.2 designs the closure.
+
+### 1.2 E1 — The enforcement design (RECOMMENDED)
+
+**The change, stated at the smallest true scope**: one branch in one function. In `admitPhaseRegistry` (generation/service.mjs), the fall-through case — registry established, the book has NO binding row (`own === null`), and the caller named NO phase (`callerPhase === null`) — returns a refusal instead of an unbudgeted admission, **when the construction is enforcement-bound**:
+
+```
+    // E1 (S1 enforcement): in an enforcement-bound construction, a
+    // book with no registry row may not submit unbudgeted. The
+    // per-book-budget policy (Q1 ruling) is enforced HERE, at the
+    // only admission gate, on the row already read above.
+    if (enforcePhasePolicy)
+      return { ok: false, reason: "book_not_onboarded" };
+    return { ok: true, phase: null };
+```
+
+Design facts, each source-checked:
+
+- **The read the check performs is already performed.** `phaseBindingForBook(coord, bookId)` runs at the head of `admitPhaseRegistry` for every admission; the branch is reached only when it returned null. E1 introduces **no new read, no new table, no new surface** — it changes the verdict on a value already in hand. The read is synchronous in the coordinator's SQLite (the same class as every other admission read), so admission's shape and timing are unchanged.
+- **The refusal name** is `book_not_onboarded` (PROPOSED name, for Rowan to fix): it says what is true — the book is not onboarded — and sits in the existing refusal family (`phase_required`, `phase_unbound`, …). The client surfaces the server's reason string; no client change is needed or proposed.
+- **Fail-closed on read error, by construction.** If the registry read throws, the exception propagates out of `admitPhase`/`submitIntent` BEFORE any plan or ledger write (admission is the first state-touching step, §1.1.1) — the intent errors, nothing is created. This is the same throw law the grant guard documents for its own reads (*"propagates … and no grant issues — a refusal, never a silent pass"*). E1 adds no catch, no default, no coercion: an unreadable registry can never produce an admission.
+- **Forever Pucked is unaffected.** FP has a registry row; its branch (`own` no
