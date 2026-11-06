@@ -1,0 +1,517 @@
+--- a/v2/coordinator.mjs
++++ b/v2/coordinator.mjs
+@@ -2520,6 +2520,7 @@
+       // the chain advances with no client present.
+       const jobRow = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, grant.job_id);
+       const followOn = report.detail && report.detail.followOn;
++      const parentData = jobRow ? JSON.parse(jobRow.data_json || "{}") : {};
+       if (jobRow && jobRow.kind === "repair" &&
+           (jobRow.state === "complete" || jobRow.state === "partial") &&
+           followOn && Array.isArray(followOn.occurrences) && followOn.occurrences.length > 0) {
+@@ -2530,20 +2531,118 @@
+         const followPred = prefixRangeClause("job_id", grant.job_id + ":follow:");
+         const prior = this._one(
+           `SELECT COUNT(*) AS n FROM jobs WHERE ${followPred.clause}`, ...followPred.params).n;
+-        const followId = `${grant.job_id}:follow:${prior + 1}`;
+-        const sub = this._submitJob({
+-          jobId: followId, bookId: jobRow.book_id, chapterIndex: jobRow.chapter_index,
+-          lane: jobRow.lane, occurrences: followOn.occurrences,
+-          data: { ...(JSON.parse(jobRow.data_json || "{}")), chainParent: grant.job_id },
+-        }, "repair_chain", "repair");
+-        if (sub.outcome === "applied") {
+-          this._logTransition("job", followId, "repair_chain", null, "queued", 1,
+-            { parent: grant.job_id });
+-          // The chain ADVANCES, not just queues (P2 review finding 5): the
+-          // follow-on is granted in the same transaction. A refusal
+-          // (park/cap/quota) leaves it queued for the plan advancer —
+-          // the report itself is unaffected either way.
+-          this._issueGrant(followId, { jobEvent: "grant", cause: "repair_chain" });
++        // B-G2 §3.9 (D-3): for a BATCH parent the follow-on
++        // occurrences are PARTITIONED by this report's results —
++        // occurrences whose result outcome is policy_block go to
++        // a Standard-lane follow-on carrying the deviation
++        // markers; all others keep the inherited parent lane.
++        // Ids are allocated deterministically policy-subset-first
++        // from the existing sequence. Only a policy_block result
++        // takes the deviation — a batch provider_error never
++        // does. For a non-batch parent there is exactly one
++        // group and the created job is byte-equivalent to the
++        // pre-B-G2 shape (inherited lane, no new data keys).
++        const groups = [];
++        if (jobRow.lane === "batch") {
++          const outcomeByOcc = new Map((report.results || [])
++            .map((r) => [r.occurrenceId, r.outcome]));
++          const occIdOf = (o) => typeof o === "string" ? o : o.occurrenceId;
++          const policySubset = followOn.occurrences.filter(
++            (o) => outcomeByOcc.get(occIdOf(o)) === "policy_block");
++          const otherSubset = followOn.occurrences.filter(
++            (o) => outcomeByOcc.get(occIdOf(o)) !== "policy_block");
++          if (policySubset.length > 0)
++            groups.push({ occurrences: policySubset, lane: "standard",
++              data: { ...parentData, chainParent: grant.job_id,
++                parentLane: "batch",
++                laneDeviation: "batch_policy_block_standard",
++                followOnClass: "policy_block" } });
++          if (otherSubset.length > 0)
++            groups.push({ occurrences: otherSubset, lane: jobRow.lane,
++              data: { ...parentData, chainParent: grant.job_id,
++                parentLane: "batch", followOnClass: "other" } });
++        } else {
++          groups.push({ occurrences: followOn.occurrences,
++            lane: jobRow.lane,
++            data: { ...parentData, chainParent: grant.job_id } });
++        }
++        let followSeq = prior;
++        for (const group of groups) {
++          followSeq += 1;
++          const followId = `${grant.job_id}:follow:${followSeq}`;
++          const sub = this._submitJob({
++            jobId: followId, bookId: jobRow.book_id, chapterIndex: jobRow.chapter_index,
++            lane: group.lane, occurrences: group.occurrences,
++            data: group.data,
++          }, "repair_chain", "repair");
++          if (sub.outcome === "applied") {
++            this._logTransition("job", followId, "repair_chain", null, "queued", 1,
++              { parent: grant.job_id });
++            // The chain ADVANCES, not just queues (P2 review finding 5): the
++            // follow-on is granted in the same transaction. A refusal
++            // (park/cap/quota) leaves it queued for the plan advancer —
++            // the report itself is unaffected either way.
++            this._issueGrant(followId, { jobEvent: "grant", cause: "repair_chain" });
++          }
++        }
++      }
++      // B-G2 B2-R2 — repair ORIGINATION. The §3.9 seam above
++      // partitions follow-ons of an existing repair parent; it
++      // cannot create the FIRST repair job for an original job.
++      // Origination lives here, as a report consequence in the
++      // same transaction: when a NON-repair BATCH job's report
++      // carries policy_block results for occurrences this report
++      // has just settled into blocked_policy, the first repair
++      // job is created on the STANDARD lane with the same
++      // deviation markers the partition uses, and granted in the
++      // same transaction (the chain advances, not just queues —
++      // the follow-on precedent). The repair job is an ordinary
++      // kind:"repair" job from birth: its own reports flow
++      // through the §3.9 partition, its attempts count in the
++      // same segmentAttemptsUsed derivation over the shared plan
++      // linkage (the Batch fence attempt and the Standard repair
++      // attempts are rows in one attempt log under one plan), and
++      // the shared commit machinery gives exactly-once binding.
++      // Ids are allocated deterministically from the
++      // `${jobId}:repair:` sequence, and the submission command
++      // id is per-parent-per-sequence, so a replayed report
++      // cannot mint a duplicate. Only a policy_block result
++      // originates — a batch provider_error never does, a
++      // Standard original job never does (its repair entry stays
++      // the client RequestRepair command), and a repair job
++      // never originates (it partitions instead).
++      if (jobRow && jobRow.kind !== "repair" && jobRow.lane === "batch") {
++        const blockedNow = [];
++        for (const r of report.results || []) {
++          if (r.outcome !== "policy_block") continue;
++          const occRow = this._oneOrNull(
++            `SELECT * FROM occurrences WHERE job_id = ? AND occurrence_id = ?`,
++            grant.job_id, r.occurrenceId);
++          if (occRow && occRow.state === "blocked_policy")
++            blockedNow.push({ occurrenceId: occRow.occurrence_id,
++              revisionKey: occRow.revision_key });
++        }
++        if (blockedNow.length > 0) {
++          const originPred = prefixRangeClause("job_id", grant.job_id + ":repair:");
++          const priorOrigins = this._one(
++            `SELECT COUNT(*) AS n FROM jobs WHERE ${originPred.clause}`,
++            ...originPred.params).n;
++          const repairId = `${grant.job_id}:repair:${priorOrigins + 1}`;
++          const sub = this._submitJob({
++            jobId: repairId, bookId: jobRow.book_id,
++            chapterIndex: jobRow.chapter_index, lane: "standard",
++            occurrences: blockedNow,
++            data: { ...parentData, chainParent: grant.job_id,
++              parentLane: "batch",
++              laneDeviation: "batch_policy_block_standard",
++              followOnClass: "policy_block",
++              repairOrigin: "batch_policy_block" },
++          }, `repair_origin:${grant.job_id}:${priorOrigins + 1}`, "repair");
++          if (sub.outcome === "applied") {
++            this._logTransition("job", repairId, "repair_origin", null, "queued", 1,
++              { parent: grant.job_id });
++            this._issueGrant(repairId, { jobEvent: "grant", cause: "repair_origin" });
++          }
+         }
+       }
+       return { ok: true, ready, blocked, failed };
+@@ -3393,16 +3492,43 @@
+           `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND ${leaseOpsPred.clause}`,
+           ...leaseOpsPred.params);
+         const grantedIds = new Set(grantOps.map(r => JSON.parse(r.detail_json || "{}").occurrenceId));
++        // B-G2 §3.7 (B2-R1): custody occurrences are EXCLUDED from
++        // the newly-unknown set — lease expiry must never turn a
++        // legitimately in-flight Batch map into outcome_unknown
++        // (commitVerified cannot commit an outcome_unknown
++        // occurrence, and Batch latency legitimately exceeds the
++        // 15-minute lease).
++        const custodyIds = new Set();
++        for (const o of occs) {
++          if (!grantedIds.has(o.occurrence_id)) continue;
++          if (this._batchCustody(grant, o.occurrence_id))
++            custodyIds.add(o.occurrence_id);
++        }
+         const newlyUnknown = [];
+         for (const o of occs) {
+           if (!grantedIds.has(o.occurrence_id)) continue;
++          if (custodyIds.has(o.occurrence_id)) continue;
+           const r = this.applyOccEvent(grant.job_id, o.occurrence_id, "lease_expired",
+             "lease_expiry", { grantId: grant.grant_id });
+           if (r.ok) newlyUnknown.push(o.occurrence_id);
+         }
+-        if (newlyUnknown.length > 0)
++        if (newlyUnknown.length > 0) {
+           this.applyJobEvent(grant.job_id, "unknown", "lease_expiry", { grantId: grant.grant_id });
+-        for (const oid of newlyUnknown) this.reconcileUnknown(grant.job_id, oid);
++          for (const oid of newlyUnknown) this.reconcileUnknown(grant.job_id, oid);
++        } else if (custodyIds.size > 0) {
++          // Custody tolling: at least one custody occurrence and
++          // nothing became unknown — reschedule the lease at
++          // now + LEASE_MS. This schedule row is consumed by the
++          // caller, so exactly one pending lease row exists for
++          // the grant; the grant and its occurrences are untouched.
++          const tolled = this._now() + LEASE_MS;
++          this.sql.exec(`UPDATE grants SET lease_expires_at = ? WHERE grant_id = ?`,
++            tolled, grant.grant_id);
++          this._schedule(tolled, "lease", grant.grant_id,
++            { deferred: "batch_custody" });
++          this._logTransition("grant", grant.grant_id, "lease_tolled_batch_custody",
++            grant.state, grant.state, null, { tolledTo: tolled });
++        }
+         break;
+       }
+       case "retry_grant": {
+@@ -3792,6 +3918,43 @@
+     return this._batchTransition(jobId, occurrenceId, ["fenced"], "rejected",
+       { detail: detail ? String(detail).slice(0, 320) : "rejected" }, "batch_rejected");
+   }
++  // B-G2 §3.7 (B2-R1) — the Batch-custody predicate. An occurrence
++  // is in provider custody when its latest batch map is
++  // non-superseded in state fenced / submitted / ambiguous, the map
++  // belongs to THIS grant, the map generation's attempt is still in
++  // phase dispatching, and its execution is non-terminal. Custody
++  // tolling is a pure read + reschedule: it performs no provider
++  // call and moves no accounting state, so it is safe in every
++  // halt / containment state (including a silent chain). No
++  // Standard occurrence can satisfy the predicate — it requires a
++  // batch map — so Standard lease behavior is unchanged by
++  // construction. Read against the raw tables with a presence
++  // check: a store whose genstore schema was never ensured has no
++  // custody to protect.
++  _batchCustody(grant, occurrenceId) {
++    const tables = this._one(
++      `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'
++        AND name IN ('d6_attempt_log', 'd6_execution_records')`);
++    if (!tables || tables.n < 2) return false;
++    const map = this._latestBatchMap(grant.job_id, occurrenceId);
++    if (!map || map.superseded_at) return false;
++    if (map.grant_id !== grant.grant_id) return false;
++    if (!["fenced", "submitted", "ambiguous"].includes(map.state))
++      return false;
++    const exec = this._oneOrNull(
++      `SELECT * FROM d6_execution_records
++        WHERE job_id = ? AND occurrence_id = ?
++          AND state NOT IN ('committed', 'failed')
++        ORDER BY created_at DESC, execution_id DESC LIMIT 1`,
++      grant.job_id, occurrenceId);
++    if (!exec) return false;
++    const attempt = this._oneOrNull(
++      `SELECT * FROM d6_attempt_log
++        WHERE execution_id = ? AND phase = 'dispatching'
++        ORDER BY seq DESC LIMIT 1`, exec.execution_id);
++    return !!attempt;
++  }
++
+   // Lookup adoption: enumeration FOUND the job (a match is evidence).
+   adoptBatchByLookup({ jobId, occurrenceId, providerName, evidence }) {
+     return this._batchTransition(jobId, occurrenceId, ["ambiguous"], "submitted",
+@@ -3854,6 +4017,283 @@
+     return done;
+   }
+ 
++  // ============ B-G2 §3.10: multiple-match adjudication =========
++  // The ONLY exit from ambiguous is adoption by an accepted
++  // provider identity (D-6). Every enumeration over an ambiguous
++  // map is recorded (a run row under the call's authorization
++  // reference); multiple matches adopt NOTHING and open an
++  // adjudication record preserving EVERY returned identifier
++  // verbatim plus the duplicate-exposure report; an open
++  // adjudication blocks all later automatic adoption, and only
++  // the operator decision act (batchAdjudicationDecide) resolves
++  // it, selecting from the preserved set. No path in this build
++  // deletes adjudication rows, closes a map from an adjudication,
++  // or routes an assertion of non-acceptance into one: the
++  // never-accepted resolution stays unreachable from every wired
++  // flow by construction.
++
++  _batchAdjPresence() {
++    const found = new Set(this._all(
++      `SELECT name FROM sqlite_master WHERE type = 'table'
++         AND name IN ('d6_batch_adjudication_runs',
++                      'd6_batch_adjudications')`).map((r) => r.name));
++    const runs = found.has("d6_batch_adjudication_runs");
++    const adj = found.has("d6_batch_adjudications");
++    if (runs && adj) return "present";
++    if (!runs && !adj) return "absent";
++    return "inconsistent";
++  }
++
++  _ensureBatchAdjSchema() {
++    this.sql.exec(`CREATE TABLE IF NOT EXISTS d6_batch_adjudication_runs (
++      run_id TEXT PRIMARY KEY, job_id TEXT NOT NULL,
++      occurrence_id TEXT NOT NULL, generation INTEGER NOT NULL,
++      at INTEGER NOT NULL, authorization_ref TEXT NOT NULL,
++      source TEXT NOT NULL, outcome TEXT NOT NULL,
++      match_count INTEGER NOT NULL, identifiers_json TEXT NOT NULL,
++      enumeration_may_be_incomplete INTEGER NOT NULL DEFAULT 0,
++      exposure_json TEXT)`);
++    this.sql.exec(`CREATE TABLE IF NOT EXISTS d6_batch_adjudications (
++      adjudication_id TEXT PRIMARY KEY, job_id TEXT NOT NULL,
++      occurrence_id TEXT NOT NULL, generation INTEGER NOT NULL,
++      status TEXT NOT NULL, latest_run_id TEXT,
++      identifiers_json TEXT NOT NULL, exposure_json TEXT,
++      selected_provider_name TEXT, resolution_authorization_ref TEXT,
++      evidence_ref TEXT, resolved_at INTEGER,
++      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`);
++  }
++
++  // Presence-checked read: an empty store returns null WITHOUT
++  // creating the tables; a half-created pair is a loud refusal,
++  // never a silent empty read.
++  batchAdjudicationOpenFor(jobId, occurrenceId, generation) {
++    const presence = this._batchAdjPresence();
++    if (presence === "absent") return null;
++    if (presence === "inconsistent")
++      throw new Error("batch_adjudication_schema_inconsistent");
++    return this._oneOrNull(
++      `SELECT * FROM d6_batch_adjudications WHERE job_id = ? AND
++         occurrence_id = ? AND generation = ? AND status = 'open'`,
++      jobId, occurrenceId, generation) || null;
++  }
++
++  // §3.10.3's duplicate-exposure report: an UPPER-BOUND SCENARIO
++  // derived from the fence attempt's carried bound. It writes no
++  // dispatch row and moves no counter. A missing fence attempt or
++  // bound yields null fields with the reason recorded — never a
++  // zero-filled exposure.
++  _batchDuplicateExposure(jobId, occurrenceId, observed) {
++    const exec = this._oneOrNull(
++      `SELECT * FROM d6_execution_records WHERE job_id = ? AND
++         occurrence_id = ? ORDER BY created_at DESC, execution_id DESC
++         LIMIT 1`, jobId, occurrenceId);
++    const attempt = exec ? this._oneOrNull(
++      `SELECT * FROM d6_attempt_log WHERE execution_id = ? AND
++         phase = 'dispatching' ORDER BY seq DESC LIMIT 1`,
++      exec.execution_id) : null;
++    const upper = attempt ? attempt.upper_micro_cents : null;
++    if (upper === null || upper === undefined)
++      return { providerJobsObserved: observed, countedDispatches: 1,
++        ledgeredUpperMicroCents: null,
++        maximumProviderJobsUpperMicroCents: null,
++        unledgeredDuplicateUpperMicroCents: null,
++        basis: "upper_bound_scenario_not_a_charge_claim",
++        reason: "batch_exposure_unavailable" };
++    return { providerJobsObserved: observed, countedDispatches: 1,
++      ledgeredUpperMicroCents: upper,
++      maximumProviderJobsUpperMicroCents: observed * upper,
++      unledgeredDuplicateUpperMicroCents: (observed - 1) * upper,
++      basis: "upper_bound_scenario_not_a_charge_claim" };
++  }
++
++  // The §3.10.4 shared adjudicator. `enumerate` is the adapter's
++  // listBatchesByDisplayName, injected by the caller (the service
++  // layer) so the coordinator itself makes no provider call: the
++  // enumeration happens BEFORE the recording transaction, and a
++  // halt refusal from the adapter propagates to the caller with
++  // nothing written. Called ONLY by the operator route — no
++  // other flow in this build enumerates an ambiguous map.
++  async batchReconcileByEnumeration({ jobId, occurrenceId,
++      authorizationRef, source = "operator-route", enumerate }) {
++    const map = this._latestBatchMap(jobId, occurrenceId);
++    if (!map || map.superseded_at || map.state !== "ambiguous") {
++      if (map && !map.superseded_at && map.state === "submitted")
++        return { resolved: true, reason: "already_submitted",
++          mapState: "submitted", providerName: map.provider_name };
++      return { resolved: false, reason: "not_ambiguous",
++        mapState: map ? map.state : null };
++    }
++    const matches = (await enumerate(map.display_name)) || [];
++    const identifiers = matches.map((m) => String(m.name));
++    const mayBeIncomplete = matches.length >= 100;
++    return this._tx(() => {
++      // Re-read inside the transaction: the map may have moved
++      // since the enumeration.
++      const cur = this._latestBatchMap(jobId, occurrenceId);
++      if (!cur || cur.superseded_at || cur.state !== "ambiguous" ||
++          cur.generation !== map.generation)
++        return { resolved: false, reason: "batch_adjudication_map_moved",
++          mapState: cur ? cur.state : null };
++      this._ensureBatchAdjSchema();
++      const now = this._now();
++      const runId = `badrun-${crypto.randomUUID()}`;
++      const open = this._oneOrNull(
++        `SELECT * FROM d6_batch_adjudications WHERE job_id = ? AND
++           occurrence_id = ? AND generation = ? AND status = 'open'`,
++        jobId, occurrenceId, cur.generation);
++      const recordRun = (outcome, exposure) => {
++        this.sql.exec(`INSERT INTO d6_batch_adjudication_runs
++          (run_id, job_id, occurrence_id, generation, at,
++           authorization_ref, source, outcome, match_count,
++           identifiers_json, enumeration_may_be_incomplete,
++           exposure_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
++          runId, jobId, occurrenceId, cur.generation, now,
++          String(authorizationRef || ""), String(source || ""),
++          outcome, matches.length, JSON.stringify(identifiers),
++          mayBeIncomplete ? 1 : 0,
++          exposure ? JSON.stringify(exposure) : null);
++      };
++      const upsertOpen = (exposure) => {
++        const merged = [...new Set([...(open
++          ? JSON.parse(open.identifiers_json) : []), ...identifiers])];
++        if (open) {
++          this.sql.exec(`UPDATE d6_batch_adjudications SET
++            latest_run_id = ?, identifiers_json = ?,
++            exposure_json = COALESCE(?, exposure_json),
++            updated_at = ? WHERE adjudication_id = ?`,
++            runId, JSON.stringify(merged),
++            exposure ? JSON.stringify(exposure) : null, now,
++            open.adjudication_id);
++          return open.adjudication_id;
++        }
++        const id = `badj-${crypto.randomUUID()}`;
++        this.sql.exec(`INSERT INTO d6_batch_adjudications
++          (adjudication_id, job_id, occurrence_id, generation,
++           status, latest_run_id, identifiers_json, exposure_json,
++           created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)`,
++          id, jobId, occurrenceId, cur.generation, runId,
++          JSON.stringify(merged),
++          exposure ? JSON.stringify(exposure) : null, now, now);
++        return id;
++      };
++      // 0 matches: the ambiguity stands unchanged; the run record
++      // is the only write.
++      if (matches.length === 0) {
++        recordRun("no_match", null);
++        return { resolved: false, reason: "batch_no_match_not_terminal",
++          mapState: "ambiguous", runId, matches: [] };
++      }
++      const exposure = matches.length >= 2
++        ? this._batchDuplicateExposure(jobId, occurrenceId, matches.length)
++        : null;
++      // Single match, valid name, no open adjudication: adopt and
++      // resume. This is the ONLY automatic adoption.
++      if (matches.length === 1 && matches[0].nameValid && !open) {
++        const adopted = this.adoptBatchByLookup({ jobId, occurrenceId,
++          providerName: matches[0].name,
++          evidence: `display_name:${cur.display_name}` });
++        if (!adopted.ok) {
++          recordRun("no_match", null);
++          return { resolved: false,
++            reason: adopted.reason || "batch_adjudication_map_moved",
++            mapState: "ambiguous", runId, matches: identifiers };
++        }
++        recordRun("adopted", null);
++        return { resolved: true, mapState: "submitted",
++          providerName: matches[0].name, runId, matches: identifiers };
++      }
++      if (matches.length === 1 && !matches[0].nameValid) {
++        const adjudicationId = upsertOpen(null);
++        recordRun("single_match_name_invalid", null);
++        return { resolved: false,
++          reason: "batch_single_match_name_invalid",
++          mapState: "ambiguous", runId, matches: identifiers,
++          adjudicationId };
++      }
++      if (matches.length >= 2) {
++        const adjudicationId = upsertOpen(exposure);
++        recordRun("multiple_match_block", exposure);
++        return { resolved: false, reason: "batch_duplicate_match_block",
++          mapState: "ambiguous", runId, matches: identifiers,
++          exposure, adjudicationId };
++      }
++      // Single valid match WITH an open adjudication: no automatic
++      // adoption on any later enumeration; the run updates the
++      // record's latest evidence only.
++      const adjudicationId = upsertOpen(null);
++      recordRun("evidence_updated", null);
++      return { resolved: false, reason: "batch_adjudication_open",
++        mapState: "ambiguous", runId, matches: identifiers,
++        adjudicationId };
++    });
++  }
++
++  // Presence-checked read of every adjudication record (§3.12's
++  // inventory consumes it): an absent pair reads as empty WITHOUT
++  // creating the tables; a half-created pair throws.
++  batchAdjudicationRows() {
++    const presence = this._batchAdjPresence();
++    if (presence === "absent") return [];
++    if (presence === "inconsistent")
++      throw new Error("batch_adjudication_schema_inconsistent");
++    return this._all(`SELECT * FROM d6_batch_adjudications
++      ORDER BY job_id, occurrence_id, generation`);
++  }
++
++  // The §3.10.5 decision act: one transaction. The selected name
++  // must be a member of the record's preserved identifier set AND
++  // a valid provider job name; adoption reuses adoptBatchByLookup
++  // with the adjudication evidence string. The record states an
++  // operator decision on a stated basis — it does NOT assert the
++  // selected job is provably the original submission.
++  batchAdjudicationDecide({ adjudicationId, jobId, occurrenceId,
++      selectedProviderName, authorizationRef, evidenceRef }) {
++    const presence = this._batchAdjPresence();
++    if (presence === "absent")
++      return { ok: false, reason: "batch_adjudication_not_found" };
++    if (presence === "inconsistent")
++      throw new Error("batch_adjudication_schema_inconsistent");
++    return this._tx(() => {
++      const adj = this._oneOrNull(
++        `SELECT * FROM d6_batch_adjudications WHERE adjudication_id = ?`,
++        adjudicationId);
++      if (!adj || adj.job_id !== jobId ||
++          adj.occurrence_id !== occurrenceId)
++        return { ok: false, reason: "batch_adjudication_not_found" };
++      if (adj.status !== "open") {
++        if (adj.selected_provider_name === selectedProviderName)
++          return { ok: true, alreadyApplied: true,
++            providerName: adj.selected_provider_name };
++        return { ok: false,
++          reason: "batch_adjudication_already_resolved" };
++      }
++      const preserved = JSON.parse(adj.identifiers_json);
++      if (!preserved.includes(selectedProviderName) ||
++          !/^batches\/[A-Za-z0-9_-]+$/.test(selectedProviderName))
++        return { ok: false,
++          reason: "batch_adjudication_selection_not_enumerated" };
++      const map = this._latestBatchMap(jobId, occurrenceId);
++      if (!map || map.superseded_at || map.state !== "ambiguous" ||
++          map.generation !== adj.generation)
++        return { ok: false, reason: "batch_adjudication_map_moved" };
++      const adopted = this.adoptBatchByLookup({ jobId, occurrenceId,
++        providerName: selectedProviderName,
++        evidence: `batch_adjudication:${adjudicationId}` });
++      if (!adopted.ok)
++        return { ok: false,
++          reason: adopted.reason || "batch_adjudication_map_moved" };
++      const now = this._now();
++      this.sql.exec(`UPDATE d6_batch_adjudications SET
++        status = 'adopted', selected_provider_name = ?,
++        resolution_authorization_ref = ?, evidence_ref = ?,
++        resolved_at = ?, updated_at = ? WHERE adjudication_id = ?`,
++        selectedProviderName, String(authorizationRef || ""),
++        String(evidenceRef || ""), now, now, adjudicationId);
++      return { ok: true, adopted: true,
++        providerName: selectedProviderName };
++    });
++  }
++
+   claimView(grantId) {
+     return this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grantId) || null;
+   }

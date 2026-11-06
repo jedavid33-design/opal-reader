@@ -1,0 +1,2677 @@
+--- a/v2/coordinator.mjs
++++ b/v2/coordinator.mjs
+@@ -2520,6 +2520,7 @@
+       // the chain advances with no client present.
+       const jobRow = this._oneOrNull(`SELECT * FROM jobs WHERE job_id = ?`, grant.job_id);
+       const followOn = report.detail && report.detail.followOn;
++      const parentData = jobRow ? JSON.parse(jobRow.data_json || "{}") : {};
+       if (jobRow && jobRow.kind === "repair" &&
+           (jobRow.state === "complete" || jobRow.state === "partial") &&
+           followOn && Array.isArray(followOn.occurrences) && followOn.occurrences.length > 0) {
+@@ -2530,20 +2531,118 @@
+         const followPred = prefixRangeClause("job_id", grant.job_id + ":follow:");
+         const prior = this._one(
+           `SELECT COUNT(*) AS n FROM jobs WHERE ${followPred.clause}`, ...followPred.params).n;
+-        const followId = `${grant.job_id}:follow:${prior + 1}`;
+-        const sub = this._submitJob({
+-          jobId: followId, bookId: jobRow.book_id, chapterIndex: jobRow.chapter_index,
+-          lane: jobRow.lane, occurrences: followOn.occurrences,
+-          data: { ...(JSON.parse(jobRow.data_json || "{}")), chainParent: grant.job_id },
+-        }, "repair_chain", "repair");
+-        if (sub.outcome === "applied") {
+-          this._logTransition("job", followId, "repair_chain", null, "queued", 1,
+-            { parent: grant.job_id });
+-          // The chain ADVANCES, not just queues (P2 review finding 5): the
+-          // follow-on is granted in the same transaction. A refusal
+-          // (park/cap/quota) leaves it queued for the plan advancer —
+-          // the report itself is unaffected either way.
+-          this._issueGrant(followId, { jobEvent: "grant", cause: "repair_chain" });
++        // B-G2 §3.9 (D-3): for a BATCH parent the follow-on
++        // occurrences are PARTITIONED by this report's results —
++        // occurrences whose result outcome is policy_block go to
++        // a Standard-lane follow-on carrying the deviation
++        // markers; all others keep the inherited parent lane.
++        // Ids are allocated deterministically policy-subset-first
++        // from the existing sequence. Only a policy_block result
++        // takes the deviation — a batch provider_error never
++        // does. For a non-batch parent there is exactly one
++        // group and the created job is byte-equivalent to the
++        // pre-B-G2 shape (inherited lane, no new data keys).
++        const groups = [];
++        if (jobRow.lane === "batch") {
++          const outcomeByOcc = new Map((report.results || [])
++            .map((r) => [r.occurrenceId, r.outcome]));
++          const occIdOf = (o) => typeof o === "string" ? o : o.occurrenceId;
++          const policySubset = followOn.occurrences.filter(
++            (o) => outcomeByOcc.get(occIdOf(o)) === "policy_block");
++          const otherSubset = followOn.occurrences.filter(
++            (o) => outcomeByOcc.get(occIdOf(o)) !== "policy_block");
++          if (policySubset.length > 0)
++            groups.push({ occurrences: policySubset, lane: "standard",
++              data: { ...parentData, chainParent: grant.job_id,
++                parentLane: "batch",
++                laneDeviation: "batch_policy_block_standard",
++                followOnClass: "policy_block" } });
++          if (otherSubset.length > 0)
++            groups.push({ occurrences: otherSubset, lane: jobRow.lane,
++              data: { ...parentData, chainParent: grant.job_id,
++                parentLane: "batch", followOnClass: "other" } });
++        } else {
++          groups.push({ occurrences: followOn.occurrences,
++            lane: jobRow.lane,
++            data: { ...parentData, chainParent: grant.job_id } });
++        }
++        let followSeq = prior;
++        for (const group of groups) {
++          followSeq += 1;
++          const followId = `${grant.job_id}:follow:${followSeq}`;
++          const sub = this._submitJob({
++            jobId: followId, bookId: jobRow.book_id, chapterIndex: jobRow.chapter_index,
++            lane: group.lane, occurrences: group.occurrences,
++            data: group.data,
++          }, "repair_chain", "repair");
++          if (sub.outcome === "applied") {
++            this._logTransition("job", followId, "repair_chain", null, "queued", 1,
++              { parent: grant.job_id });
++            // The chain ADVANCES, not just queues (P2 review finding 5): the
++            // follow-on is granted in the same transaction. A refusal
++            // (park/cap/quota) leaves it queued for the plan advancer —
++            // the report itself is unaffected either way.
++            this._issueGrant(followId, { jobEvent: "grant", cause: "repair_chain" });
++          }
++        }
++      }
++      // B-G2 B2-R2 — repair ORIGINATION. The §3.9 seam above
++      // partitions follow-ons of an existing repair parent; it
++      // cannot create the FIRST repair job for an original job.
++      // Origination lives here, as a report consequence in the
++      // same transaction: when a NON-repair BATCH job's report
++      // carries policy_block results for occurrences this report
++      // has just settled into blocked_policy, the first repair
++      // job is created on the STANDARD lane with the same
++      // deviation markers the partition uses, and granted in the
++      // same transaction (the chain advances, not just queues —
++      // the follow-on precedent). The repair job is an ordinary
++      // kind:"repair" job from birth: its own reports flow
++      // through the §3.9 partition, its attempts count in the
++      // same segmentAttemptsUsed derivation over the shared plan
++      // linkage (the Batch fence attempt and the Standard repair
++      // attempts are rows in one attempt log under one plan), and
++      // the shared commit machinery gives exactly-once binding.
++      // Ids are allocated deterministically from the
++      // `${jobId}:repair:` sequence, and the submission command
++      // id is per-parent-per-sequence, so a replayed report
++      // cannot mint a duplicate. Only a policy_block result
++      // originates — a batch provider_error never does, a
++      // Standard original job never does (its repair entry stays
++      // the client RequestRepair command), and a repair job
++      // never originates (it partitions instead).
++      if (jobRow && jobRow.kind !== "repair" && jobRow.lane === "batch") {
++        const blockedNow = [];
++        for (const r of report.results || []) {
++          if (r.outcome !== "policy_block") continue;
++          const occRow = this._oneOrNull(
++            `SELECT * FROM occurrences WHERE job_id = ? AND occurrence_id = ?`,
++            grant.job_id, r.occurrenceId);
++          if (occRow && occRow.state === "blocked_policy")
++            blockedNow.push({ occurrenceId: occRow.occurrence_id,
++              revisionKey: occRow.revision_key });
++        }
++        if (blockedNow.length > 0) {
++          const originPred = prefixRangeClause("job_id", grant.job_id + ":repair:");
++          const priorOrigins = this._one(
++            `SELECT COUNT(*) AS n FROM jobs WHERE ${originPred.clause}`,
++            ...originPred.params).n;
++          const repairId = `${grant.job_id}:repair:${priorOrigins + 1}`;
++          const sub = this._submitJob({
++            jobId: repairId, bookId: jobRow.book_id,
++            chapterIndex: jobRow.chapter_index, lane: "standard",
++            occurrences: blockedNow,
++            data: { ...parentData, chainParent: grant.job_id,
++              parentLane: "batch",
++              laneDeviation: "batch_policy_block_standard",
++              followOnClass: "policy_block",
++              repairOrigin: "batch_policy_block" },
++          }, `repair_origin:${grant.job_id}:${priorOrigins + 1}`, "repair");
++          if (sub.outcome === "applied") {
++            this._logTransition("job", repairId, "repair_origin", null, "queued", 1,
++              { parent: grant.job_id });
++            this._issueGrant(repairId, { jobEvent: "grant", cause: "repair_origin" });
++          }
+         }
+       }
+       return { ok: true, ready, blocked, failed };
+@@ -3393,16 +3492,43 @@
+           `SELECT detail_json FROM ledger_ops WHERE kind = 'attempt' AND ${leaseOpsPred.clause}`,
+           ...leaseOpsPred.params);
+         const grantedIds = new Set(grantOps.map(r => JSON.parse(r.detail_json || "{}").occurrenceId));
++        // B-G2 §3.7 (B2-R1): custody occurrences are EXCLUDED from
++        // the newly-unknown set — lease expiry must never turn a
++        // legitimately in-flight Batch map into outcome_unknown
++        // (commitVerified cannot commit an outcome_unknown
++        // occurrence, and Batch latency legitimately exceeds the
++        // 15-minute lease).
++        const custodyIds = new Set();
++        for (const o of occs) {
++          if (!grantedIds.has(o.occurrence_id)) continue;
++          if (this._batchCustody(grant, o.occurrence_id))
++            custodyIds.add(o.occurrence_id);
++        }
+         const newlyUnknown = [];
+         for (const o of occs) {
+           if (!grantedIds.has(o.occurrence_id)) continue;
++          if (custodyIds.has(o.occurrence_id)) continue;
+           const r = this.applyOccEvent(grant.job_id, o.occurrence_id, "lease_expired",
+             "lease_expiry", { grantId: grant.grant_id });
+           if (r.ok) newlyUnknown.push(o.occurrence_id);
+         }
+-        if (newlyUnknown.length > 0)
++        if (newlyUnknown.length > 0) {
+           this.applyJobEvent(grant.job_id, "unknown", "lease_expiry", { grantId: grant.grant_id });
+-        for (const oid of newlyUnknown) this.reconcileUnknown(grant.job_id, oid);
++          for (const oid of newlyUnknown) this.reconcileUnknown(grant.job_id, oid);
++        } else if (custodyIds.size > 0) {
++          // Custody tolling: at least one custody occurrence and
++          // nothing became unknown — reschedule the lease at
++          // now + LEASE_MS. This schedule row is consumed by the
++          // caller, so exactly one pending lease row exists for
++          // the grant; the grant and its occurrences are untouched.
++          const tolled = this._now() + LEASE_MS;
++          this.sql.exec(`UPDATE grants SET lease_expires_at = ? WHERE grant_id = ?`,
++            tolled, grant.grant_id);
++          this._schedule(tolled, "lease", grant.grant_id,
++            { deferred: "batch_custody" });
++          this._logTransition("grant", grant.grant_id, "lease_tolled_batch_custody",
++            grant.state, grant.state, null, { tolledTo: tolled });
++        }
+         break;
+       }
+       case "retry_grant": {
+@@ -3792,6 +3918,43 @@
+     return this._batchTransition(jobId, occurrenceId, ["fenced"], "rejected",
+       { detail: detail ? String(detail).slice(0, 320) : "rejected" }, "batch_rejected");
+   }
++  // B-G2 §3.7 (B2-R1) — the Batch-custody predicate. An occurrence
++  // is in provider custody when its latest batch map is
++  // non-superseded in state fenced / submitted / ambiguous, the map
++  // belongs to THIS grant, the map generation's attempt is still in
++  // phase dispatching, and its execution is non-terminal. Custody
++  // tolling is a pure read + reschedule: it performs no provider
++  // call and moves no accounting state, so it is safe in every
++  // halt / containment state (including a silent chain). No
++  // Standard occurrence can satisfy the predicate — it requires a
++  // batch map — so Standard lease behavior is unchanged by
++  // construction. Read against the raw tables with a presence
++  // check: a store whose genstore schema was never ensured has no
++  // custody to protect.
++  _batchCustody(grant, occurrenceId) {
++    const tables = this._one(
++      `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'
++        AND name IN ('d6_attempt_log', 'd6_execution_records')`);
++    if (!tables || tables.n < 2) return false;
++    const map = this._latestBatchMap(grant.job_id, occurrenceId);
++    if (!map || map.superseded_at) return false;
++    if (map.grant_id !== grant.grant_id) return false;
++    if (!["fenced", "submitted", "ambiguous"].includes(map.state))
++      return false;
++    const exec = this._oneOrNull(
++      `SELECT * FROM d6_execution_records
++        WHERE job_id = ? AND occurrence_id = ?
++          AND state NOT IN ('committed', 'failed')
++        ORDER BY created_at DESC, execution_id DESC LIMIT 1`,
++      grant.job_id, occurrenceId);
++    if (!exec) return false;
++    const attempt = this._oneOrNull(
++      `SELECT * FROM d6_attempt_log
++        WHERE execution_id = ? AND phase = 'dispatching'
++        ORDER BY seq DESC LIMIT 1`, exec.execution_id);
++    return !!attempt;
++  }
++
+   // Lookup adoption: enumeration FOUND the job (a match is evidence).
+   adoptBatchByLookup({ jobId, occurrenceId, providerName, evidence }) {
+     return this._batchTransition(jobId, occurrenceId, ["ambiguous"], "submitted",
+@@ -3854,6 +4017,283 @@
+     return done;
+   }
+ 
++  // ============ B-G2 §3.10: multiple-match adjudication =========
++  // The ONLY exit from ambiguous is adoption by an accepted
++  // provider identity (D-6). Every enumeration over an ambiguous
++  // map is recorded (a run row under the call's authorization
++  // reference); multiple matches adopt NOTHING and open an
++  // adjudication record preserving EVERY returned identifier
++  // verbatim plus the duplicate-exposure report; an open
++  // adjudication blocks all later automatic adoption, and only
++  // the operator decision act (batchAdjudicationDecide) resolves
++  // it, selecting from the preserved set. No path in this build
++  // deletes adjudication rows, closes a map from an adjudication,
++  // or routes an assertion of non-acceptance into one: the
++  // never-accepted resolution stays unreachable from every wired
++  // flow by construction.
++
++  _batchAdjPresence() {
++    const found = new Set(this._all(
++      `SELECT name FROM sqlite_master WHERE type = 'table'
++         AND name IN ('d6_batch_adjudication_runs',
++                      'd6_batch_adjudications')`).map((r) => r.name));
++    const runs = found.has("d6_batch_adjudication_runs");
++    const adj = found.has("d6_batch_adjudications");
++    if (runs && adj) return "present";
++    if (!runs && !adj) return "absent";
++    return "inconsistent";
++  }
++
++  _ensureBatchAdjSchema() {
++    this.sql.exec(`CREATE TABLE IF NOT EXISTS d6_batch_adjudication_runs (
++      run_id TEXT PRIMARY KEY, job_id TEXT NOT NULL,
++      occurrence_id TEXT NOT NULL, generation INTEGER NOT NULL,
++      at INTEGER NOT NULL, authorization_ref TEXT NOT NULL,
++      source TEXT NOT NULL, outcome TEXT NOT NULL,
++      match_count INTEGER NOT NULL, identifiers_json TEXT NOT NULL,
++      enumeration_may_be_incomplete INTEGER NOT NULL DEFAULT 0,
++      exposure_json TEXT)`);
++    this.sql.exec(`CREATE TABLE IF NOT EXISTS d6_batch_adjudications (
++      adjudication_id TEXT PRIMARY KEY, job_id TEXT NOT NULL,
++      occurrence_id TEXT NOT NULL, generation INTEGER NOT NULL,
++      status TEXT NOT NULL, latest_run_id TEXT,
++      identifiers_json TEXT NOT NULL, exposure_json TEXT,
++      selected_provider_name TEXT, resolution_authorization_ref TEXT,
++      evidence_ref TEXT, resolved_at INTEGER,
++      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`);
++  }
++
++  // Presence-checked read: an empty store returns null WITHOUT
++  // creating the tables; a half-created pair is a loud refusal,
++  // never a silent empty read.
++  batchAdjudicationOpenFor(jobId, occurrenceId, generation) {
++    const presence = this._batchAdjPresence();
++    if (presence === "absent") return null;
++    if (presence === "inconsistent")
++      throw new Error("batch_adjudication_schema_inconsistent");
++    return this._oneOrNull(
++      `SELECT * FROM d6_batch_adjudications WHERE job_id = ? AND
++         occurrence_id = ? AND generation = ? AND status = 'open'`,
++      jobId, occurrenceId, generation) || null;
++  }
++
++  // §3.10.3's duplicate-exposure report: an UPPER-BOUND SCENARIO
++  // derived from the fence attempt's carried bound. It writes no
++  // dispatch row and moves no counter. A missing fence attempt or
++  // bound yields null fields with the reason recorded — never a
++  // zero-filled exposure.
++  _batchDuplicateExposure(jobId, occurrenceId, observed) {
++    const exec = this._oneOrNull(
++      `SELECT * FROM d6_execution_records WHERE job_id = ? AND
++         occurrence_id = ? ORDER BY created_at DESC, execution_id DESC
++         LIMIT 1`, jobId, occurrenceId);
++    const attempt = exec ? this._oneOrNull(
++      `SELECT * FROM d6_attempt_log WHERE execution_id = ? AND
++         phase = 'dispatching' ORDER BY seq DESC LIMIT 1`,
++      exec.execution_id) : null;
++    const upper = attempt ? attempt.upper_micro_cents : null;
++    if (upper === null || upper === undefined)
++      return { providerJobsObserved: observed, countedDispatches: 1,
++        ledgeredUpperMicroCents: null,
++        maximumProviderJobsUpperMicroCents: null,
++        unledgeredDuplicateUpperMicroCents: null,
++        basis: "upper_bound_scenario_not_a_charge_claim",
++        reason: "batch_exposure_unavailable" };
++    return { providerJobsObserved: observed, countedDispatches: 1,
++      ledgeredUpperMicroCents: upper,
++      maximumProviderJobsUpperMicroCents: observed * upper,
++      unledgeredDuplicateUpperMicroCents: (observed - 1) * upper,
++      basis: "upper_bound_scenario_not_a_charge_claim" };
++  }
++
++  // The §3.10.4 shared adjudicator. `enumerate` is the adapter's
++  // listBatchesByDisplayName, injected by the caller (the service
++  // layer) so the coordinator itself makes no provider call: the
++  // enumeration happens BEFORE the recording transaction, and a
++  // halt refusal from the adapter propagates to the caller with
++  // nothing written. Called ONLY by the operator route — no
++  // other flow in this build enumerates an ambiguous map.
++  async batchReconcileByEnumeration({ jobId, occurrenceId,
++      authorizationRef, source = "operator-route", enumerate }) {
++    const map = this._latestBatchMap(jobId, occurrenceId);
++    if (!map || map.superseded_at || map.state !== "ambiguous") {
++      if (map && !map.superseded_at && map.state === "submitted")
++        return { resolved: true, reason: "already_submitted",
++          mapState: "submitted", providerName: map.provider_name };
++      return { resolved: false, reason: "not_ambiguous",
++        mapState: map ? map.state : null };
++    }
++    const matches = (await enumerate(map.display_name)) || [];
++    const identifiers = matches.map((m) => String(m.name));
++    const mayBeIncomplete = matches.length >= 100;
++    return this._tx(() => {
++      // Re-read inside the transaction: the map may have moved
++      // since the enumeration.
++      const cur = this._latestBatchMap(jobId, occurrenceId);
++      if (!cur || cur.superseded_at || cur.state !== "ambiguous" ||
++          cur.generation !== map.generation)
++        return { resolved: false, reason: "batch_adjudication_map_moved",
++          mapState: cur ? cur.state : null };
++      this._ensureBatchAdjSchema();
++      const now = this._now();
++      const runId = `badrun-${crypto.randomUUID()}`;
++      const open = this._oneOrNull(
++        `SELECT * FROM d6_batch_adjudications WHERE job_id = ? AND
++           occurrence_id = ? AND generation = ? AND status = 'open'`,
++        jobId, occurrenceId, cur.generation);
++      const recordRun = (outcome, exposure) => {
++        this.sql.exec(`INSERT INTO d6_batch_adjudication_runs
++          (run_id, job_id, occurrence_id, generation, at,
++           authorization_ref, source, outcome, match_count,
++           identifiers_json, enumeration_may_be_incomplete,
++           exposure_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
++          runId, jobId, occurrenceId, cur.generation, now,
++          String(authorizationRef || ""), String(source || ""),
++          outcome, matches.length, JSON.stringify(identifiers),
++          mayBeIncomplete ? 1 : 0,
++          exposure ? JSON.stringify(exposure) : null);
++      };
++      const upsertOpen = (exposure) => {
++        const merged = [...new Set([...(open
++          ? JSON.parse(open.identifiers_json) : []), ...identifiers])];
++        if (open) {
++          this.sql.exec(`UPDATE d6_batch_adjudications SET
++            latest_run_id = ?, identifiers_json = ?,
++            exposure_json = COALESCE(?, exposure_json),
++            updated_at = ? WHERE adjudication_id = ?`,
++            runId, JSON.stringify(merged),
++            exposure ? JSON.stringify(exposure) : null, now,
++            open.adjudication_id);
++          return open.adjudication_id;
++        }
++        const id = `badj-${crypto.randomUUID()}`;
++        this.sql.exec(`INSERT INTO d6_batch_adjudications
++          (adjudication_id, job_id, occurrence_id, generation,
++           status, latest_run_id, identifiers_json, exposure_json,
++           created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)`,
++          id, jobId, occurrenceId, cur.generation, runId,
++          JSON.stringify(merged),
++          exposure ? JSON.stringify(exposure) : null, now, now);
++        return id;
++      };
++      // 0 matches: the ambiguity stands unchanged; the run record
++      // is the only write.
++      if (matches.length === 0) {
++        recordRun("no_match", null);
++        return { resolved: false, reason: "batch_no_match_not_terminal",
++          mapState: "ambiguous", runId, matches: [] };
++      }
++      const exposure = matches.length >= 2
++        ? this._batchDuplicateExposure(jobId, occurrenceId, matches.length)
++        : null;
++      // Single match, valid name, no open adjudication: adopt and
++      // resume. This is the ONLY automatic adoption.
++      if (matches.length === 1 && matches[0].nameValid && !open) {
++        const adopted = this.adoptBatchByLookup({ jobId, occurrenceId,
++          providerName: matches[0].name,
++          evidence: `display_name:${cur.display_name}` });
++        if (!adopted.ok) {
++          recordRun("no_match", null);
++          return { resolved: false,
++            reason: adopted.reason || "batch_adjudication_map_moved",
++            mapState: "ambiguous", runId, matches: identifiers };
++        }
++        recordRun("adopted", null);
++        return { resolved: true, mapState: "submitted",
++          providerName: matches[0].name, runId, matches: identifiers };
++      }
++      if (matches.length === 1 && !matches[0].nameValid) {
++        const adjudicationId = upsertOpen(null);
++        recordRun("single_match_name_invalid", null);
++        return { resolved: false,
++          reason: "batch_single_match_name_invalid",
++          mapState: "ambiguous", runId, matches: identifiers,
++          adjudicationId };
++      }
++      if (matches.length >= 2) {
++        const adjudicationId = upsertOpen(exposure);
++        recordRun("multiple_match_block", exposure);
++        return { resolved: false, reason: "batch_duplicate_match_block",
++          mapState: "ambiguous", runId, matches: identifiers,
++          exposure, adjudicationId };
++      }
++      // Single valid match WITH an open adjudication: no automatic
++      // adoption on any later enumeration; the run updates the
++      // record's latest evidence only.
++      const adjudicationId = upsertOpen(null);
++      recordRun("evidence_updated", null);
++      return { resolved: false, reason: "batch_adjudication_open",
++        mapState: "ambiguous", runId, matches: identifiers,
++        adjudicationId };
++    });
++  }
++
++  // Presence-checked read of every adjudication record (§3.12's
++  // inventory consumes it): an absent pair reads as empty WITHOUT
++  // creating the tables; a half-created pair throws.
++  batchAdjudicationRows() {
++    const presence = this._batchAdjPresence();
++    if (presence === "absent") return [];
++    if (presence === "inconsistent")
++      throw new Error("batch_adjudication_schema_inconsistent");
++    return this._all(`SELECT * FROM d6_batch_adjudications
++      ORDER BY job_id, occurrence_id, generation`);
++  }
++
++  // The §3.10.5 decision act: one transaction. The selected name
++  // must be a member of the record's preserved identifier set AND
++  // a valid provider job name; adoption reuses adoptBatchByLookup
++  // with the adjudication evidence string. The record states an
++  // operator decision on a stated basis — it does NOT assert the
++  // selected job is provably the original submission.
++  batchAdjudicationDecide({ adjudicationId, jobId, occurrenceId,
++      selectedProviderName, authorizationRef, evidenceRef }) {
++    const presence = this._batchAdjPresence();
++    if (presence === "absent")
++      return { ok: false, reason: "batch_adjudication_not_found" };
++    if (presence === "inconsistent")
++      throw new Error("batch_adjudication_schema_inconsistent");
++    return this._tx(() => {
++      const adj = this._oneOrNull(
++        `SELECT * FROM d6_batch_adjudications WHERE adjudication_id = ?`,
++        adjudicationId);
++      if (!adj || adj.job_id !== jobId ||
++          adj.occurrence_id !== occurrenceId)
++        return { ok: false, reason: "batch_adjudication_not_found" };
++      if (adj.status !== "open") {
++        if (adj.selected_provider_name === selectedProviderName)
++          return { ok: true, alreadyApplied: true,
++            providerName: adj.selected_provider_name };
++        return { ok: false,
++          reason: "batch_adjudication_already_resolved" };
++      }
++      const preserved = JSON.parse(adj.identifiers_json);
++      if (!preserved.includes(selectedProviderName) ||
++          !/^batches\/[A-Za-z0-9_-]+$/.test(selectedProviderName))
++        return { ok: false,
++          reason: "batch_adjudication_selection_not_enumerated" };
++      const map = this._latestBatchMap(jobId, occurrenceId);
++      if (!map || map.superseded_at || map.state !== "ambiguous" ||
++          map.generation !== adj.generation)
++        return { ok: false, reason: "batch_adjudication_map_moved" };
++      const adopted = this.adoptBatchByLookup({ jobId, occurrenceId,
++        providerName: selectedProviderName,
++        evidence: `batch_adjudication:${adjudicationId}` });
++      if (!adopted.ok)
++        return { ok: false,
++          reason: adopted.reason || "batch_adjudication_map_moved" };
++      const now = this._now();
++      this.sql.exec(`UPDATE d6_batch_adjudications SET
++        status = 'adopted', selected_provider_name = ?,
++        resolution_authorization_ref = ?, evidence_ref = ?,
++        resolved_at = ?, updated_at = ? WHERE adjudication_id = ?`,
++        selectedProviderName, String(authorizationRef || ""),
++        String(evidenceRef || ""), now, now, adjudicationId);
++      return { ok: true, adopted: true,
++        providerName: selectedProviderName };
++    });
++  }
++
+   claimView(grantId) {
+     return this._oneOrNull(`SELECT * FROM claims WHERE grant_id = ?`, grantId) || null;
+   }
+--- a/v2/executor.mjs
++++ b/v2/executor.mjs
+@@ -228,6 +228,24 @@
+     const matches = await providers.listBatchesByDisplayName(map.display_name);
+     if (!matches || !matches.length)
+       return { resolved: false, reason: "no_match_not_terminal" };
++    // B-G2 §3.10.5 / D-6 (amended): multiple matches adopt
++    // NOTHING. The pre-B-G2 adopt-first behavior is rejected law
++    // (an arbitrary identity — creation-time order is not
++    // evidence); the block outcome carries every returned
++    // identity for the operator surface. A single match with an
++    // invalid provider job name is likewise never adopted, and
++    // an open adjudication blocks automatic adoption entirely —
++    // only the operator decision act resolves one.
++    if (matches.length > 1)
++      return { resolved: false, reason: "batch_duplicate_match_block",
++        matches: matches.map((m) => m.name) };
++    if (matches[0].nameValid === false)
++      return { resolved: false, reason: "batch_single_match_name_invalid",
++        matches: [matches[0].name] };
++    if (typeof coordinator.batchAdjudicationOpenFor === "function" &&
++        coordinator.batchAdjudicationOpenFor(jobId, occurrenceId, map.generation))
++      return { resolved: false, reason: "batch_adjudication_open",
++        matches: [matches[0].name] };
+     coordinator.adoptBatchByLookup({ jobId, occurrenceId,
+       providerName: matches[0].name, evidence: `display_name:${map.display_name}` });
+     const payload = await workSource(jobId, occurrenceId);
+--- a/v2/generation/d6-executor.mjs
++++ b/v2/generation/d6-executor.mjs
+@@ -43,11 +43,15 @@
+ //     data_json; the resolved plan id also keys the genstore
+ //     records for the post-claim bookkeeping).
+ //
+-// Lane law: D6 is Standard-only. A batch job (coord.jobView lane not
+-// in the allowlist), a batch dispatch payload, or a batch work-source
+-// payload refuses the WHOLE message with { refused:
+-// "lane_not_allowed" } and zero provider contact. This executor has
+-// no submitBatch call anywhere — the Batch lane cannot execute here.
++// Lane law (B-G2): the allowlist decides. A batch job (coord.jobView
++// lane not in the allowlist), a batch dispatch payload, or a batch
++// work-source payload on a non-admitted lane refuses the WHOLE
++// message with { refused: "lane_not_allowed" } and zero provider
++// contact. On an admitted lane, a batch-lane job takes the Batch
++// branch (§3.3): fence bundle -> one POST per occurrence -> the
++// shared poll step -> the shared commit tail, reported under the
++// cohort rule (§3.6.5). The candidate ships with the allowlist at
++// ["standard"], so the Batch branch is inert as shipped (§3.13).
+ //
+ // Repair law: the executor NEVER loops retries. A retryable known
+ // failure (HTTP 500/502/503, or a flush/verify stage failure) returns
+@@ -55,7 +59,8 @@
+ // retryable: true } }; the generation service owns the repair chain
+ // (bounded by REPAIR_MAX_RETRIES and the shared 12-attempt segment
+ // budget in the genstore attempt log).
+-import { fingerprintFor } from "../executor.mjs";
++import { fingerprintFor, displayNameFor } from "../executor.mjs";
++import { quotaArmed } from "./quota-budget.mjs";
+ import {
+   heldQuarantine, heldQuarantineStrict, ensureQuarantineSchema,
+ } from "./quarantine.mjs";
+@@ -77,6 +82,19 @@
+ const TERMINAL_EXECUTION_STATES = new Set(["committed", "failed"]);
+ const RETRYABLE_HTTP = new Set([500, 502, 503]);
+ 
++// B-G2 §3.4: a refusal inside the fence bundle. Every refusal a
++// bundle step RETURNS is converted to this thrown shape so the
++// enclosing coord._tx rolls the whole bundle back (B2-R4).
++class BatchBundleRefusal extends Error {
++  constructor(reason, detail) {
++    super(reason);
++    this.name = "BatchBundleRefusal";
++    this.reason = reason;
++    this.batchBundleRefusal = true;
++    if (detail !== undefined) this.detail = detail;
++  }
++}
++
+ // Workstream A re-arm fence — the plan-state vocabulary (design
+ // packet §2.1, accepted by Rowan's ruling, board issue #15 comment
+ // 6532307605). REFUSED is exactly the complement of the driver's
+@@ -671,13 +689,870 @@
+              committed: true };
+   }
+ 
++  // --- B-G2 §3.4/§4.1: the fence + accounting bundle (D-1) --------
++  //
++  // ONE synchronous coord._tx callback: no await, no provider call
++  // inside. The steps run in the spec's fixed order — W1 execution,
++  // W2 attempted transition, W3 spend intent, W4 attempt reservation,
++  // W5 the fence, W6 markDispatching (whose body runs
++  // applyDispatchQuota: dispatch row, slot increment, attempt day
++  // stamp — all on the PT day key computed at fence time). Any
++  // refusal RETURNED by a step is converted into a THROWN
++  // BatchBundleRefusal so the whole bundle rolls back; quota
++  // refusals already propagate as thrown QuotaBudgetRefusals (B2-R4:
++  // validated on the real harness in BG2-F). The provider POST may
++  // only happen after this returns committed: the dispatch count is
++  // durable BEFORE the act it counts.
++  function batchFenceBundle({ grantId, jobId, occurrenceId,
++                              planId = null, payload }) {
++    const chars = String(payload?.text || "").length;
++    return coord._tx(() => {
++      if (!quotaArmed(coord))
++        throw new BatchBundleRefusal("batch_quota_unarmed");
++      // W1: the execution record (create, or reuse the live one).
++      const created = store.createExecution(
++        { planId, jobId, occurrenceId, grantId });
++      const execution = created.execution;
++      // W2: execution -> attempted. A reused execution already in
++      // `attempted` is re-entered only if no dispatching attempt
++      // exists for it yet; any other state fails closed.
++      if (execution.state === "granted") {
++        store.transitionExecution(execution.execution_id, "attempted");
++      } else if (execution.state === "attempted") {
++        const live = store.attemptsForExecution(execution.execution_id)
++          .filter((a) => a.phase === "dispatching");
++        if (live.length > 0)
++          throw new BatchBundleRefusal("batch_accounting_conflict",
++            "dispatching_attempt_exists");
++      } else {
++        throw new BatchBundleRefusal("batch_accounting_conflict",
++          `execution_state_${execution.state}`);
++      }
++      // W3: the spend intent (acquire, or reuse a live, still-open
++      // intent of this same grant and consumer; a noted or foreign
++      // intent refuses the bundle).
++      const acq = coord.acquireSpendIntent(
++        { grantId, jobId, occurrenceId, consumerId });
++      let intent = acq.intent || null;
++      if (!acq.acquired) {
++        if (!intent || intent.superseded_at || intent.outcome)
++          throw new BatchBundleRefusal(
++            acq.reason || "spend_intent_unavailable");
++        if (intent.consumer_id !== consumerId)
++          throw new BatchBundleRefusal("claimed_by_other");
++        if (intent.grant_id !== grantId)
++          throw new BatchBundleRefusal("batch_accounting_conflict",
++            "intent_grant_mismatch");
++      }
++      // W4: the attempt reservation at the model's upper bound.
++      const attemptId = store.reserveAttempt(execution.execution_id,
++        { upperMicroCents: upperBoundAttemptMicro(chars) });
++      // W5: the fence itself — the durable record that precedes the
++      // POST it counts (D-1). Requires the live intent from W3.
++      const displayName = displayNameFor(grantId, occurrenceId);
++      const fence = coord.fenceBatchSubmit(
++        { grantId, jobId, occurrenceId, displayName, consumerId });
++      if (!fence.fenced)
++        throw new BatchBundleRefusal(fence.reason || "fence_refused");
++      // W6: markDispatching — the quota step runs inside this same
++      // transaction, so a quota refusal leaves NO map, intent,
++      // attempt, or dispatch row behind.
++      const attempt = store.markDispatching(attemptId);
++      return { executionId: execution.execution_id, attemptId, attempt,
++               intent, map: fence.map, displayName,
++               dispatchDay: attempt?.dispatched_day_key || null };
++    });
++  }
++
++  // --- B-G2 §3.5/§3.6/§3.8: Batch terminal bundles, the shared
++  // poll step, and the shared commit tail --------------------------
++
++  const BATCH_MODEL_RE = /^gemini-3\.8-(?:flash|flash-lite)-tts$/i;
++
++  // §3.6.4 terminal bundle: ONE synchronous coord._tx — validate
++  // the map is still `submitted` with the same provider name and
++  // generation, the attempt still `dispatching`, the execution
++  // still `attempted`; then confirm the attempt (success carries
++  // the known cost; policy carries outcome policy_block; any other
++  // terminal failure failed_known at cost 0), note the spend
++  // outcome, write the genstore terminal receipt, and (for
++  // failures) fail the execution. The map state does not change;
++  // terminal consumption is derived from attempt + execution +
++  // occurrence state. An already-confirmed attempt with the SAME
++  // outcome returns alreadyApplied (the caller proceeds from the
++  // receipt); a DIFFERENT confirmed outcome is
++  // batch_accounting_conflict and fails closed.
++  function batchTerminalBundle({ jobId, occurrenceId, map, outcome,
++                                 classification = null,
++                                 durationSec = null, batchState = null }) {
++    try {
++      return coord._tx(() => {
++        const conflict = { conflict: true,
++          reason: "batch_accounting_conflict" };
++        const exec = store.executionFor(jobId, occurrenceId);
++        if (!exec) return conflict;
++        const attempts = store.attemptsForExecution(exec.execution_id);
++        const attempt = attempts.length
++          ? attempts[attempts.length - 1] : null;
++        if (!attempt) return conflict;
++        if (attempt.phase === "confirmed") {
++          if (attempt.outcome === outcome)
++            return { alreadyApplied: true,
++              receipt: store.batchTerminalReceipt(
++                jobId, occurrenceId, map.generation) };
++          return conflict;
++        }
++        if (attempt.phase !== "dispatching" || exec.state !== "attempted")
++          return conflict;
++        const m = c._latestBatchMap(jobId, occurrenceId);
++        if (!m || m.superseded_at || m.state !== "submitted" ||
++            m.provider_name !== map.provider_name ||
++            m.generation !== map.generation)
++          return conflict;
++        store.confirmAttempt(attempt.attempt_id, {
++          outcome,
++          costMicroCents: outcome === "success"
++            ? knownCostMicro(durationSec || 0) : 0,
++          providerRequestId: map.provider_name });
++        const noted = c.noteSpendOutcome({ jobId, occurrenceId,
++          outcome: outcome === "success" ? "success" : "failed_known",
++          detail: outcome === "success" ? "batch_success"
++            : `${batchState || "BATCH_STATE_FAILED"}:${classification?.kind || "provider_error_unclassified"}` });
++        if (!noted.noted && noted.reason !== "already_noted")
++          throw new BatchBundleRefusal("batch_accounting_conflict",
++            `intent_note_${noted.reason || "failed"}`);
++        store.writeBatchTerminalReceipt({
++          jobId, occurrenceId, generation: map.generation,
++          executionId: exec.execution_id, attemptId: attempt.attempt_id,
++          providerName: map.provider_name, batchState: batchState || null,
++          classificationKind: classification?.kind || null,
++          classificationOutcome: outcome,
++          providerCode: classification?.providerCode ?? null,
++          blockReason: classification?.blockReason ?? null,
++          finishReason: classification?.finishReason ?? null,
++          retryable: classification ? !!classification.retryable : null,
++          durationSec: durationSec ?? null, cacheKey: null });
++        if (outcome !== "success") {
++          store.failExecution(exec.execution_id,
++            outcome === "policy_block"
++              ? "batch_policy_block" : "batch_provider_error",
++            { batchState: batchState || null,
++              classificationKind: classification?.kind || null,
++              providerCode: classification?.providerCode ?? null,
++              blockReason: classification?.blockReason ?? null,
++              finishReason: classification?.finishReason ?? null,
++              retryable: classification ? !!classification.retryable : null });
++        }
++        return { applied: true };
++      });
++    } catch (err) {
++      if (err && err.reason === "batch_terminal_receipt_conflict")
++        return { conflict: true,
++          reason: "batch_terminal_receipt_conflict" };
++      throw err;
++    }
++  }
++
++  // §3.5 known-outcome bundle (an HTTP answer to the POST is a
++  // KNOWN rejection): map -> rejected, intent outcome failed_known,
++  // attempt confirmed failed_known at cost 0, execution failed at
++  // stage `submit` — one transaction, the §3.6.4 shape. A bundle
++  // that fails validation (the map is no longer `fenced`) rolls
++  // back whole; the caller then takes the ambiguity path on the
++  // durable state (a rejection the system can no longer prove is
++  // never claimed as known — CW-13).
++  function batchKnownOutcomeBundle({ jobId, occurrenceId, executionId,
++                                     attemptId, generation, httpStatus,
++                                     quotaExceeded }) {
++    try {
++      coord._tx(() => {
++        const m = c._latestBatchMap(jobId, occurrenceId);
++        if (!m || m.superseded_at || m.state !== "fenced" ||
++            m.generation !== generation)
++          throw new BatchBundleRefusal("batch_accounting_conflict",
++            "map_not_fenced");
++        const rej = c.noteBatchRejected({ jobId, occurrenceId,
++          detail: `submit_http_${httpStatus}` });
++        if (!rej.ok)
++          throw new BatchBundleRefusal("batch_accounting_conflict",
++            rej.reason || "reject_failed");
++        const noted = c.noteSpendOutcome({ jobId, occurrenceId,
++          outcome: "failed_known",
++          detail: `batch_submit_http_${httpStatus}` });
++        if (!noted.noted && noted.reason !== "already_noted")
++          throw new BatchBundleRefusal("batch_accounting_conflict",
++            "intent_note_failed");
++        store.confirmAttempt(attemptId, { outcome: "failed_known",
++          costMicroCents: 0, providerRequestId: null });
++        store.failExecution(executionId, "submit",
++          { httpStatus, batch: true,
++            ...(quotaExceeded ? { quotaExceeded: true } : {}) });
++      });
++      return { applied: true };
++    } catch (err) {
++      return { conflict: true,
++        reason: (err && err.reason) || "batch_accounting_conflict" };
++    }
++  }
++
++  // §3.8 shared commit tail: a terminal-success's audio enters the
++  // same post-synthesis tail the Standard path runs (factored from
++  // runFresh): spend-outcome note, fingerprint cache key, flush +
++  // verify in R2, verified transition, commitVerified, binding
++  // projection note. `fromState` is the execution's recorded state:
++  // `attempted` runs the full tail; `synthesized` (a crash between
++  // the transition and the flush) re-enters at the flush, whose
++  // conditional PUT adopts a digest-equal durable object.
++  async function commitBatchAudio({ jobId, occurrenceId, executionId,
++                                    fromState, payload, audio, format,
++                                    durationSec }) {
++    noteOutcome(jobId, occurrenceId, "success", "d6_synthesized");
++    const bytes = audio instanceof Uint8Array ? audio
++      : new TextEncoder().encode(String(audio ?? ""));
++    const cacheKey = fingerprintFor(payload);
++    if (fromState === "attempted")
++      await store.transitionExecution(executionId, "synthesized",
++        { cacheKey, format, durationSec });
++    let flushed;
++    try {
++      flushed = await flushStore.flushAndVerify(
++        cacheKey, bytes, format, durationSec);
++    } catch (err) {
++      if (err instanceof FlushError) {
++        await store.failExecution(executionId, err.stage,
++          { code: err.code,
++            objectKey: flushStore.objectKeyFor(cacheKey, format) });
++        return { failed: true, stage: err.stage, code: err.code };
++      }
++      throw err; // a crash mid-flush: the record stays synthesized
++    }
++    await store.transitionExecution(executionId, "flushed", {
++      objectKey: flushed.objectKey, etag: flushed.etag,
++      sizeBytes: flushed.sizeBytes, sha256: flushed.sha256,
++      cacheKey, format });
++    await store.transitionExecution(executionId, "verified", {
++      objectKey: flushed.objectKey, etag: flushed.etag,
++      sizeBytes: flushed.sizeBytes, sha256: flushed.sha256,
++      cacheKey, format });
++    await hydrateProbeKey(cacheKey);
++    let commit;
++    try {
++      commit = await store.commitVerified({
++        executionId, jobId, occurrenceId, revisionKey: cacheKey,
++        cacheKey, sha256: flushed.sha256,
++        provenance: `d6:${executionId}` });
++    } catch (err) {
++      if (err && typeof err.reason === "string") {
++        await store.failExecution(executionId, "commit",
++          { reason: err.reason, objectKey: flushed.objectKey });
++        return { failed: true, stage: "commit", code: err.reason };
++      }
++      throw err; // a crash, not a verdict: the record stays verified
++    }
++    if (commit && commit.bound === false) {
++      await store.failExecution(executionId, "commit",
++        { reason: commit.reason || "not_bound",
++          objectKey: flushed.objectKey });
++      return { failed: true, stage: "commit",
++        code: commit.reason || "not_bound" };
++    }
++    noteBindingCommitted(c, { executionId, jobId, occurrenceId });
++    return { committed: true, cacheKey, objectKey: flushed.objectKey };
++  }
++
++  // §3.8 receipt resume: a landed success receipt with the commit
++  // tail still owed. The audio is re-obtained by RETRIEVAL (a poll
++  // of the same provider job — never a resubmission; the terminal
++  // bundle already landed). If the work source can no longer
++  // produce the payload, the receipt stands and the outcome is
++  // batch_terminal_payload_unavailable — the next pass retries from
++  // the receipt.
++  async function resumeBatchCommit(jobId, occurrenceId, existing) {
++    const facts = execFacts(existing);
++    const receipt = typeof store.batchTerminalReceipt === "function"
++      ? store.batchTerminalReceipt(jobId, occurrenceId) : null;
++    const map = typeof c._latestBatchMap === "function"
++      ? c._latestBatchMap(jobId, occurrenceId) : null;
++    const providerName = receipt?.provider_name ||
++      map?.provider_name || null;
++    if (!providerName)
++      return { held: true, reason: "batch_poll_linkage_missing" };
++    let res;
++    try { res = await providers.getBatch(providerName); }
++    catch { return { held: true,
++      reason: "batch_terminal_payload_unavailable", pollError: true }; }
++    if (!res || res.done !== true ||
++        res.state !== "BATCH_STATE_SUCCEEDED" || !res.audio)
++      return { held: true,
++        reason: "batch_terminal_payload_unavailable" };
++    const ws = await workSource(jobId, occurrenceId);
++    const payload = ws?.status === "ok" ? ws.payload : null;
++    if (!payload)
++      return { held: true,
++        reason: "batch_terminal_payload_unavailable" };
++    const tail = await commitBatchAudio({
++      jobId, occurrenceId, executionId: facts.executionId,
++      fromState: facts.state, payload, audio: res.audio,
++      format: res.format || "wav", durationSec: res.durationSec });
++    if (tail.committed)
++      return { reported: "success", committed: true,
++        via: "batch_receipt", cacheKey: tail.cacheKey };
++    return { failed: true, stage: tail.stage, code: tail.code,
++      via: "batch_receipt" };
++  }
++
++  // §3.6.4 the shared poll step — ONE implementation for the queue
++  // branch, the continuation polls, and the drive-pass driver.
++  async function pollBatchStep({ jobId, occurrenceId, map }) {
++    let res;
++    try {
++      res = await providers.getBatch(map.provider_name);
++    } catch (err) {
++      return { kind: "poll_error",
++        errorName: (err && err.name) || "Error" };
++    }
++    if (!res || res.done !== true)
++      return { kind: "pending", providerState: res?.state || null };
++    if (res.state === "BATCH_STATE_SUCCEEDED" && res.audio) {
++      const bundle = batchTerminalBundle({ jobId, occurrenceId, map,
++        outcome: "success", durationSec: res.durationSec,
++        batchState: res.state });
++      if (bundle.conflict)
++        return { kind: "conflict", reason: bundle.reason };
++      const ws = await workSource(jobId, occurrenceId);
++      const payload = ws?.status === "ok" ? ws.payload : null;
++      if (!payload) return { kind: "payload_unavailable" };
++      const exec = store.executionFor(jobId, occurrenceId);
++      const tail = await commitBatchAudio({
++        jobId, occurrenceId, executionId: exec.execution_id,
++        fromState: "attempted", payload, audio: res.audio,
++        format: res.format || "wav", durationSec: res.durationSec });
++      if (tail.committed)
++        return { kind: "success", committed: true,
++          cacheKey: tail.cacheKey };
++      return { kind: "tail_failed", stage: tail.stage, code: tail.code };
++    }
++    // Terminal failure: classification FIRST (§3.2), then the
++    // terminal bundle. An adapter return without a classification
++    // (a legacy-shaped double) degrades to the unclassified known
++    // failure — never policy, never ambiguity.
++    const classification = res.classification || {
++      kind: "provider_error_unclassified", outcome: "failed_known",
++      providerCode: null, blockReason: null, finishReason: null,
++      retryable: false, source: "missing_audio" };
++    const bundle = batchTerminalBundle({ jobId, occurrenceId, map,
++      outcome: classification.outcome === "policy_block"
++        ? "policy_block" : "failed_known",
++      classification, batchState: res.state });
++    if (bundle.conflict)
++      return { kind: "conflict", reason: bundle.reason };
++    return { kind: "terminal_failure", classification,
++      batchState: res.state };
++  }
++
++  function batchPollOutcome(occurrenceId, r) {
++    switch (r.kind) {
++      case "success":
++        return { outcome: { reported: "success", committed: true,
++          via: "batch" }, committed: true };
++      case "pending":
++        return { outcome: { pending: true,
++          providerState: r.providerState, batch: true } };
++      case "poll_error":
++        return { outcome: { pending: true, pollError: true, batch: true } };
++      case "terminal_failure":
++        return { outcome: {
++          reported: r.classification.outcome === "policy_block"
++            ? "policy_block" : "provider_error",
++          classification: r.classification,
++          batchState: r.batchState, batch: true } };
++      case "tail_failed":
++        return { outcome: { failed: true, stage: r.stage,
++          code: r.code, batch: true } };
++      case "payload_unavailable":
++        return { outcome: { held: true,
++          reason: "batch_terminal_payload_unavailable" } };
++      case "conflict":
++        return { outcome: { held: true,
++          reason: r.reason || "batch_accounting_conflict" } };
++      default:
++        return { outcome: { pending: true, batch: true } };
++    }
++  }
++
++  // §3.6.5: report results are RE-DERIVED from durable rows, never
++  // taken from staged in-memory outcomes — a crash between the
++  // terminal bundle and the report loses nothing.
++  function deriveBatchResult(jobId, occurrenceId, exec) {
++    const receipt = typeof store.batchTerminalReceipt === "function"
++      ? store.batchTerminalReceipt(jobId, occurrenceId) : null;
++    if (receipt) {
++      const evidence = {
++        batchState: receipt.batch_state,
++        classificationKind: receipt.classification_kind,
++        providerCode: receipt.provider_code,
++        blockReason: receipt.block_reason,
++        finishReason: receipt.finish_reason,
++        retryable: receipt.retryable == null
++          ? null : !!receipt.retryable };
++      if (receipt.classification_outcome === "policy_block")
++        return { occurrenceId, outcome: "policy_block", evidence };
++      return { occurrenceId, outcome: "provider_error",
++        error: "batch_provider_error", evidence };
++    }
++    let detail = {};
++    try { detail = JSON.parse(exec.detail_json || "{}"); }
++    catch { detail = {}; }
++    if (exec.stage === "voice_prompt")
++      return { occurrenceId, outcome: "policy_block",
++        evidence: { voicePrompt: true,
++          provider: detail.provider || null,
++          povName: detail.povName ?? null } };
++    if (exec.stage === "submit") {
++      if (detail.quotaExceeded)
++        return { occurrenceId, outcome: "daily_limit",
++          evidence: { quotaExceeded: true,
++            httpStatus: detail.httpStatus ?? null } };
++      return { occurrenceId, outcome: "provider_error",
++        error: "batch_provider_error",
++        evidence: { httpStatus: detail.httpStatus ?? null, batch: true } };
++    }
++    return { occurrenceId, outcome: "provider_error",
++      error: "batch_provider_error",
++      evidence: { stage: exec.stage || null,
++        code: detail.code || detail.reason || null } };
++  }
++
++  // §3.6.5 cohort state for one grant: complete when EVERY
++  // occurrence in the grant's durable outbox payload is durably
++  // terminal; inFlight lists the occurrences whose live map or
++  // dispatching attempt the report rule protects.
++  function batchCohortState(jobId, grantId, fallbackIds) {
++    let ids = null;
++    if (typeof c._oneOrNull === "function") {
++      const row = c._oneOrNull(
++        `SELECT payload_json FROM outbox WHERE id = ?`, grantId);
++      if (row) {
++        try {
++          const p = JSON.parse(row.payload_json || "{}");
++          if (Array.isArray(p.occurrences)) ids = p.occurrences;
++        } catch { ids = null; }
++      }
++    }
++    if (!ids) ids = fallbackIds || [];
++    const view = c.jobView(jobId);
++    const pending = [], inFlight = [], results = [];
++    for (const oid of ids) {
++      const occ = view?.occurrences?.find((o) => o.occurrence_id === oid);
++      if (occ && ["ready", "blocked_policy", "failed"].includes(occ.state))
++        continue;
++      const exec = typeof store.executionFor === "function"
++        ? store.executionFor(jobId, oid) : null;
++      if (exec && exec.state === "committed") continue;
++      if (exec && exec.state === "failed") {
++        const derived = deriveBatchResult(jobId, oid, exec);
++        if (derived) results.push(derived);
++        continue;
++      }
++      pending.push(oid);
++      const map = typeof c._latestBatchMap === "function"
++        ? c._latestBatchMap(jobId, oid) : null;
++      if (map && !map.superseded_at &&
++          ["fenced", "submitted", "ambiguous"].includes(map.state))
++        inFlight.push(oid);
++    }
++    return { complete: pending.length === 0, pending, inFlight, results };
++  }
++
++  // §3.3: one Batch occurrence inside a queue message. Per-
++  // occurrence state is re-read fresh; the dispatch table is:
++  // recovery states -> receipt -> live map -> ambiguity gate ->
++  // preflight -> fence bundle -> the single POST -> submit
++  // outcomes -> the shared poll step.
++  async function runBatchOccurrence(msg, occurrenceId, planId) {
++    const jobId = msg.jobId, grantId = msg.grantId;
++    const existing = typeof store.executionFor === "function"
++      ? store.executionFor(jobId, occurrenceId) : null;
++    if (existing && !TERMINAL_EXECUTION_STATES.has(existing.state)) {
++      const facts = execFacts(existing);
++      if (facts.state === "flushed" || facts.state === "verified") {
++        const rec = await verifyAndCommit(existing, facts);
++        return { outcome: rec, committed: !!rec?.committed };
++      }
++      if (facts.state === "synthesized" ||
++          facts.state === "attempted") {
++        const receipt = typeof store.batchTerminalReceipt === "function"
++          ? store.batchTerminalReceipt(jobId, occurrenceId) : null;
++        if (receipt && receipt.classification_outcome === "success") {
++          const rec = await resumeBatchCommit(jobId, occurrenceId, existing);
++          return { outcome: rec, committed: !!rec?.committed };
++        }
++        if (receipt)
++          return { outcome: { terminal: true, via: "receipt" } };
++        if (facts.state === "synthesized") {
++          const rec = await reenterFlush(existing, facts);
++          return { outcome: rec, committed: !!rec?.committed };
++        }
++        // attempted with no receipt: the map step below governs.
++      }
++      if (facts.state === "unknown_billing")
++        return { outcome: { reconcileHold: true,
++          state: "unknown_billing" } };
++    }
++    const map = typeof c._latestBatchMap === "function"
++      ? c._latestBatchMap(jobId, occurrenceId) : null;
++    if (map && !map.superseded_at) {
++      if (map.state === "submitted") {
++        const r = await pollBatchStep({ jobId, occurrenceId, map });
++        return batchPollOutcome(occurrenceId, r);
++      }
++      if (map.state === "ambiguous")
++        return { outcome: { blocked: true,
++          reason: "batch_ambiguity_open" } };
++      if (map.state === "fenced") {
++        // CW-10: a fence without an outcome converts to ambiguity;
++        // it NEVER posts on a fence alone.
++        c.noteBatchAmbiguous({ jobId, occurrenceId,
++          detail: "fence_without_outcome" });
++        return { outcome: { blocked: true,
++          reason: "batch_ambiguity_open",
++          converted: "fence_without_outcome" } };
++      }
++      return { outcome: { skipped: true,
++        reason: `batch_map_${map.state}` } };
++    }
++    // The ambiguity gate: any ambiguous latest-generation map of
++    // this job blocks new submissions for the whole job (I-8) —
++    // sibling occurrences reach this same check in their own turn.
++    if (map && map.state === "ambiguous")
++      return { outcome: { skipped: true,
++        reason: "batch_ambiguity_open" } };
++    const jobMapsAmbiguous = typeof c._all === "function"
++      ? c._all(`SELECT state FROM batch_maps WHERE job_id = ?
++                  AND superseded_at IS NULL`, jobId)
++          .some((m) => m.state === "ambiguous")
++      : false;
++    if (jobMapsAmbiguous)
++      return { outcome: { skipped: true,
++        reason: "batch_ambiguity_open" } };
++
++    // Preflight: the work source and the adapter gates, BEFORE any
++    // fence write — a preflight skip writes no execution, intent,
++    // map, attempt, or dispatch row.
++    const ws = await workSource(jobId, occurrenceId);
++    if (!ws) return { outcome: { skipped: true, state: "no_content" } };
++    if (typeof ws === "object" && typeof ws.status === "string") {
++      if (ws.status === "no_content")
++        return { outcome: { skipped: true, state: "no_content" } };
++      if (ws.status === "unmapped_pov")
++        return { outcome: { skipped: true, state: "unmapped_pov",
++          povName: ws.povName ?? null } };
++      if (ws.status === "removed_provider") {
++        const created = await store.createExecution(
++          { planId, jobId, occurrenceId, grantId });
++        const executionId = created.executionId ?? created.execution_id;
++        await recordVoicePrompt(planId, occurrenceId, ws);
++        if (created.created)
++          await store.failExecution(executionId, "voice_prompt",
++            { provider: ws.provider, povName: ws.povName ?? null });
++        return { outcome: { prompt: true, povName: ws.povName ?? null,
++            provider: ws.provider,
++            recordedMapping: ws.recordedMapping ?? null },
++          reportResult: { occurrenceId, outcome: "policy_block",
++            evidence: { voicePrompt: true, provider: ws.provider,
++              povName: ws.povName ?? null } } };
++      }
++      if (ws.status !== "ok")
++        return { outcome: { skipped: true, state: ws.status } };
++    }
++    const payload = (ws && typeof ws === "object" && ws.status === "ok")
++      ? ws.payload : ws;
++    if (!payload)
++      return { outcome: { skipped: true, state: "no_content" } };
++    if ((payload.provider || "gemini") !== "gemini")
++      return { outcome: { skipped: true,
++        reason: "batch_provider_unsupported" } };
++    if (!BATCH_MODEL_RE.test(String(payload.model || "")))
++      return { outcome: { skipped: true,
++        reason: "batch_model_unsupported" } };
++
++    let bundle;
++    try {
++      bundle = batchFenceBundle(
++        { grantId, jobId, occurrenceId, planId, payload });
++    } catch (err) {
++      if (err && err.quotaBudgetRefusal) {
++        // Nothing landed (the bundle rolled back): the daily-limit
++        // outcome is staged for the message-end cohort decision.
++        return { outcome: { reported: "daily_limit",
++            quotaBudgetRefusal: err.reason },
++          stagedDailyLimit: { occurrenceId, outcome: "daily_limit",
++            evidence: { quotaBudgetRefusal: err.reason } } };
++      }
++      if (err && err.batchBundleRefusal)
++        return { outcome: { refused: err.reason } };
++      throw err;
++    }
++
++    let submitted;
++    try {
++      submitted = await providers.submitBatch(
++        { occurrenceId, payload }, bundle.displayName);
++    } catch (err) {
++      if (err && (err.code === "generation_halted" ||
++                  err.name === "GenerationHaltedError")) {
++        // The fence stands; no map transition, no outcome note. A
++        // later pass treats the still-fenced map under
++        // fence_without_outcome (B2-R3 / §8 O-4).
++        return { outcome: { halted: true }, stop: "halt" };
++      }
++      if (err && err.batchAcceptedUnnamed) {
++        c.noteBatchAmbiguous({ jobId, occurrenceId,
++          detail: "accepted_unnamed" });
++        return { outcome: { blocked: true,
++          reason: "batch_ambiguity_open", detail: "accepted_unnamed" } };
++      }
++      if (err && typeof err.httpStatus === "number") {
++        const quotaExceeded = !!err.quotaExceeded;
++        const known = batchKnownOutcomeBundle({
++          jobId, occurrenceId, executionId: bundle.executionId,
++          attemptId: bundle.attemptId, generation: bundle.map.generation,
++          httpStatus: err.httpStatus, quotaExceeded });
++        if (!known.applied) {
++          const m2 = c._latestBatchMap(jobId, occurrenceId);
++          if (m2 && !m2.superseded_at && m2.state === "fenced")
++            c.noteBatchAmbiguous({ jobId, occurrenceId,
++              detail: "known_outcome_unprovable" });
++          return { outcome: { blocked: true,
++            reason: "batch_ambiguity_open",
++            detail: "known_outcome_unprovable" } };
++        }
++        const outcome = { reported: quotaExceeded
++            ? "daily_limit" : "provider_error",
++          httpStatus: err.httpStatus, batch: true };
++        if (RETRYABLE_HTTP.has(err.httpStatus))
++          outcome.repair = { occurrenceId,
++            reason: `http_${err.httpStatus}`, retryable: true };
++        return { outcome, stop: quotaExceeded ? "quota" : undefined };
++      }
++      c.noteBatchAmbiguous({ jobId, occurrenceId,
++        detail: "submit_transport_unknown" });
++      return { outcome: { blocked: true,
++        reason: "batch_ambiguity_open",
++        detail: "submit_transport_unknown" } };
++    }
++    const noted = c.noteBatchSubmitted({ jobId, occurrenceId,
++      providerName: submitted.name });
++    if (!noted.ok)
++      return { outcome: { blocked: true,
++        reason: "batch_ambiguity_open",
++        detail: `submitted_note_${noted.reason || "failed"}` } };
++    const liveMap = c._latestBatchMap(jobId, occurrenceId);
++    const r = await pollBatchStep({ jobId, occurrenceId, map: liveMap });
++    return batchPollOutcome(occurrenceId, r);
++  }
++
++  // --- B-G2 §3.6: the drive-pass Batch poll driver ----------------
++  //
++  // pollBatchPass({ passToken }) runs ONCE per drive pass, after
++  // recover() and before driveOnce(), under the entry's halt and
++  // containment gates (the adapter halt assert is the second
++  // layer). Its authority is the CONTINUATION of already-fenced
++  // submissions: it never acquires an intent, never fences, and
++  // never submits — except the §3.6.6 continuation of an existing
++  // claimed grant. Outcomes are plan-shaped entries carrying only
++  // the recorder's allowlisted scalar keys; per-map evidence lives
++  // in the poll-observation records and the inventory surface.
++
++  function standingBatchClaims() {
++    if (typeof c._all !== "function") return [];
++    const claims = c._all(
++      `SELECT * FROM claims WHERE state = 'claimed' AND consumer_id = ?`,
++      cid);
++    const out = [];
++    for (const claim of claims) {
++      const grant = c._oneOrNull(
++        `SELECT * FROM grants WHERE grant_id = ?`, claim.grant_id);
++      if (!grant || ["reported", "voided", "superseded"].includes(grant.state))
++        continue;
++      const view = c.jobView(grant.job_id);
++      if (!view || (view.lane || "standard") !== "batch") continue;
++      out.push({ grant, view });
++    }
++    return out;
++  }
++
++  const BATCH_JOB_EXCLUDED_STATES = ["complete", "partial", "failed",
++    "cancelled", "superseded", "parked_policy"];
++
++  // §3.6.3 plan exclusions for driver actions: a linked plan in a
++  // terminal state, or a quarantine hold on the plan or the job,
++  // excludes the map for this pass; a read fault on the hold check
++  // excludes it too (never read as an all-clear).
++  function batchPlanExclusion(jobId) {
++    let planId = null;
++    try {
++      const r = resolvePlanForFence(jobId);
++      if (r.conflict) return { excluded: true, planId: null };
++      planId = r.planId;
++    } catch { return { excluded: true, planId: null }; }
++    try {
++      ensureQuarantineSchema(c.sql);
++      if (heldQuarantineStrict(c, "job", jobId))
++        return { excluded: true, planId };
++      if (planId) {
++        if (heldQuarantineStrict(c, "plan", planId))
++          return { excluded: true, planId };
++        const plan = c._oneOrNull(
++          `SELECT state FROM d6_plans WHERE plan_id = ?`, planId);
++        if (plan && ["complete", "partial", "retired",
++                     "halted_unknown"].includes(plan.state))
++          return { excluded: true, planId };
++      }
++    } catch { return { excluded: true, planId }; }
++    return { excluded: false, planId };
++  }
++
++  async function pollBatchPass({ passToken } = {}) {
++    const outcomes = [];
++    if (typeof c._all !== "function" ||
++        typeof store.recordBatchPollStarted !== "function")
++      return outcomes;
++    const nowMs = typeof c._now === "function" ? c._now() : Date.now();
++    const token = passToken || `pass-${nowMs}`;
++    const polled = new Set();
++    const standing = standingBatchClaims();
++    const standingByGrant = new Map(
++      standing.map((s) => [s.grant.grant_id, s]));
++
++    // Phase A — poll each selected `submitted` map at most once;
++    // classify `ambiguous` maps (never a provider call for them).
++    const maps = c._all(
++      `SELECT * FROM batch_maps WHERE superseded_at IS NULL
++         AND state IN ('submitted', 'ambiguous')
++         ORDER BY updated_at, job_id, occurrence_id`);
++    for (const map of maps) {
++      const s = standingByGrant.get(map.grant_id);
++      if (!s) continue;
++      const jobId = map.job_id, occurrenceId = map.occurrence_id;
++      if (BATCH_JOB_EXCLUDED_STATES.includes(s.view.state)) continue;
++      const planEx = batchPlanExclusion(jobId);
++      if (planEx.excluded) continue;
++      const occRow = s.view.occurrences.find(
++        (o) => o.occurrence_id === occurrenceId);
++      if (!occRow || occRow.state !== "granted") continue;
++      if (map.state === "ambiguous") {
++        const r = store.recordBatchAmbiguityObservation({
++          jobId, occurrenceId, generation: map.generation,
++          providerName: map.provider_name,
++          ambiguitySince: map.updated_at, now: nowMs });
++        if (r.classification === "BATCH-AMBIGUITY-OPEN")
++          outcomes.push({ planId: planEx.planId,
++            state: "BATCH-AMBIGUITY-OPEN", stopReason: null,
++            grantId: map.grant_id });
++        continue;
++      }
++      const exec = store.executionFor(jobId, occurrenceId);
++      const attempts = exec
++        ? store.attemptsForExecution(exec.execution_id) : [];
++      const attempt = attempts.length
++        ? attempts[attempts.length - 1] : null;
++      if (!exec || !attempt) continue; // linkage missing: the
++      // inventory surface classifies it; the driver never adopts.
++      if (attempt.phase === "confirmed" &&
++          attempt.outcome === "success" && exec.state === "attempted") {
++        // CW-18: the terminal bundle landed; the commit tail is
++        // owed and resumes from the receipt.
++        await resumeBatchCommit(jobId, occurrenceId, exec);
++        polled.add(`${jobId}:${occurrenceId}`);
++        continue;
++      }
++      if (exec.state !== "attempted" || attempt.phase !== "dispatching")
++        continue; // terminally consumed, or held by another path
++      const started = store.recordBatchPollStarted({
++        passToken: token, jobId, occurrenceId,
++        generation: map.generation, providerName: map.provider_name,
++        now: nowMs });
++      if (started.duplicate) continue;
++      polled.add(`${jobId}:${occurrenceId}`);
++      const prior = store.batchPollState(
++        jobId, occurrenceId, map.generation);
++      const r = await pollBatchStep({ jobId, occurrenceId, map });
++      const progress = r.kind === "success" ||
++        r.kind === "terminal_failure" ||
++        (r.kind === "pending" && prior?.last_provider_state != null &&
++         r.providerState != null &&
++         r.providerState !== prior.last_provider_state);
++      const outcomeClass = r.kind === "poll_error" ? "poll_error"
++        : (r.kind === "pending" ? "pending" : "terminal");
++      const updated = store.recordBatchPollCompleted({
++        passToken: token, jobId, occurrenceId,
++        generation: map.generation,
++        providerState: r.kind === "pending" ? r.providerState
++          : (prior?.last_provider_state ?? null),
++        outcomeClass, progress,
++        pollError: r.kind === "poll_error" ? r.errorName : null,
++        now: nowMs });
++      if (updated && (updated.classification === "BATCH-LATENCY-EXTENDED" ||
++                      updated.classification === "BATCH-STALLED"))
++        outcomes.push({ planId: planEx.planId,
++          state: updated.classification, stopReason: null,
++          grantId: map.grant_id });
++    }
++
++    // Phase C — §3.6.6 submission continuation: granted occurrences
++    // of standing claims with no live map run the queue-branch path
++    // under the same claimed grant (no requestGrant, no new
++    // reservation cohort).
++    for (const s of standing) {
++      const jobId = s.grant.job_id;
++      if (BATCH_JOB_EXCLUDED_STATES.includes(s.view.state)) continue;
++      const planEx = batchPlanExclusion(jobId);
++      if (planEx.excluded) continue;
++      for (const occRow of s.view.occurrences) {
++        if (occRow.state !== "granted") continue;
++        const occurrenceId = occRow.occurrence_id;
++        if (polled.has(`${jobId}:${occurrenceId}`)) continue;
++        const map = c._latestBatchMap(jobId, occurrenceId);
++        if (map && !map.superseded_at) continue;
++        const exec = store.executionFor(jobId, occurrenceId);
++        if (exec && ["synthesized", "flushed", "verified",
++                     "unknown_billing"].includes(exec.state))
++          continue; // recovery states belong to the recovery tails
++        await runBatchOccurrence(
++          { jobId, grantId: s.grant.grant_id }, occurrenceId,
++          planEx.planId);
++        polled.add(`${jobId}:${occurrenceId}`);
++      }
++    }
++
++    // Phase D — §3.6.5 cohort completion sweep: any standing claim
++    // whose cohort is durably terminal is reported once, from
++    // re-derived results (the terminal_unreported recovery).
++    for (const s of standing) {
++      const cohort = batchCohortState(s.grant.job_id, s.grant.grant_id,
++        s.view.occurrences.map((o) => o.occurrence_id));
++      if (!cohort.complete) continue;
++      const view = c.jobView(s.grant.job_id);
++      await c.handleReport({ grantId: s.grant.grant_id,
++        jobRevision: view ? view.revision : undefined,
++        results: cohort.results });
++      outcomes.push({ planId: null, state: "batch_cohort_reported",
++        stopReason: null, grantId: s.grant.grant_id });
++    }
++    return outcomes;
++  }
++
+   // --- message handling --------------------------------------------------
+ 
+   async function handleMessage(msg) {
+-    // Batch refusal, layer 1: a batch dispatch payload is refused
+-    // before any claim or provider contact.
++    // Batch handling, layer 1 (B-G2 §3.3): a batch dispatch payload
++    // on a lane the allowlist does not admit is refused before any
++    // claim or provider contact. On an admitted lane the message
++    // proceeds; per-occurrence routing keys on the JOB's lane.
+     if (msg && (msg.mode === "batch" || msg.lane === "batch" ||
+-                (msg.payload && msg.payload.mode === "batch"))) {
++                (msg.payload && msg.payload.mode === "batch")) &&
++        !D6_LANE_ALLOWLIST.includes("batch")) {
+       return { refused: "lane_not_allowed" };
+     }
+     const jobId = msg?.jobId, grantId = msg?.grantId;
+@@ -791,6 +1666,10 @@
+     const reportResults = [];
+     let committedCount = 0;
+     let stop = null;
++    // B-G2: routing keys on the JOB's lane (layer 2 has already
++    // refused any lane the allowlist does not admit).
++    const batchJob = !!jobAtStart && (jobAtStart.lane || "standard") === "batch";
++    const stagedDailyLimits = new Map();
+ 
+     for (const oid of msg.occurrences || []) {
+       // Fresh state read per occurrence (executor.mjs discipline).
+@@ -800,6 +1679,17 @@
+         continue;
+       }
+ 
++      if (batchJob) {
++        const r = await runBatchOccurrence(msg, oid, planId);
++        out[oid] = r.outcome;
++        if (r.reportResult) reportResults.push(r.reportResult);
++        if (r.stagedDailyLimit)
++          stagedDailyLimits.set(oid, r.stagedDailyLimit);
++        if (r.committed) committedCount++;
++        if (r.stop) { stop = r.stop; break; }
++        continue;
++      }
++
+       // Existing non-terminal execution -> recovery classification,
+       // never a fresh synthesis inside the same execution.
+       const existing = typeof store.executionFor === "function"
+@@ -854,6 +1744,37 @@
+       // machinery surfaces the uncertainty.
+       return { claimed: claim.status, occurrences: out, stoppedUnknownBilling: true };
+     }
++    if (stop === "halt") {
++      // A halt asserted mid-message (B-G2 §3.5): fences stand, no
++      // report — the durable state is exactly what a later pass
++      // resumes from.
++      return { claimed: claim.status, occurrences: out, halted: true };
++    }
++    if (batchJob) {
++      // B-G2 §3.6.5 cohort rule: the message-end Standard report
++      // does NOT apply while any occurrence of the grant's cohort
++      // is still in flight — handleReport would return a deferred
++      // `submitted` occurrence to pending and destroy the granted
++      // state its commit requires. Terminal outcomes are staged
++      // durably and reported, re-derived from the rows, only when
++      // the cohort completes. A staged fence-time daily_limit may
++      // ride the report only when nothing is in flight.
++      const cohort = batchCohortState(jobId, grantId, msg.occurrences);
++      const result = { claimed: claim.status, occurrences: out };
++      let results = null;
++      if (cohort.complete) results = cohort.results;
++      else if (stagedDailyLimits.size > 0 && cohort.inFlight.length === 0)
++        results = [...cohort.results, ...stagedDailyLimits.values()];
++      if (results) {
++        const view = c.jobView(jobId);
++        await c.handleReport({ grantId, jobRevision: view ? view.revision : undefined, results });
++        result.batchReported = true;
++      } else {
++        result.batchCohortPending = cohort.pending;
++      }
++      if (stop === "quota") result.quotaExhausted = true;
++      return result;
++    }
+     if (reportResults.length > 0 || committedCount > 0) {
+       const view = c.jobView(jobId);
+       await c.handleReport({ grantId, jobRevision: view ? view.revision : undefined, results: reportResults });
+@@ -887,5 +1808,5 @@
+     return out;
+   }
+ 
+-  return { handleMessage, recover };
++  return { handleMessage, recover, batchFenceBundle, pollBatchPass };
+ }
+--- a/v2/generation/gen-constants.mjs
++++ b/v2/generation/gen-constants.mjs
+@@ -14,6 +14,17 @@
+ export const SPLIT_MAX_DEPTH = 4;
+ export const SPLIT_MIN_PART_CHARS = 50;
+ export const SEGMENT_ATTEMPT_BUDGET = 12;
++
++// B-G2 §3.6.3 (D-4 — the values are FIXED by Rowan's ruling, not
++// tuned): Batch poll-driver observation parameters. Extended
++// latency 1h; stalled at >= 12 consecutive no-progress passes AND
++// age >= 6h; ambiguity escalation at 24h. These are OBSERVATION
++// parameters only (§8 O-1): they authorize no automatic halt,
++// failure, abandonment, or termination — escalation visibility.
++export const BATCH_EXTENDED_LATENCY_MS = 3_600_000;
++export const BATCH_STALL_PASSES = 12;
++export const BATCH_STALL_AGE_MS = 21_600_000;
++export const BATCH_AMBIGUITY_ESCALATION_MS = 86_400_000;
+ // REPAIR_MAX_RETRIES (pinned in CONTRACTS.md): retries per occurrence
+ // within one repair chain, retryable known failures only; every retry
+ // counts toward the 12-attempt segment budget.
+--- a/v2/generation/genstore.mjs
++++ b/v2/generation/genstore.mjs
+@@ -12,7 +12,10 @@
+ // never dispatched. Rows are never deleted.
+ import { randomUUID } from "node:crypto";
+ import { ensureGenSchema } from "./gen-schema.mjs";
+-import { expectedCostMicro } from "./gen-constants.mjs";
++import {
++  expectedCostMicro, BATCH_EXTENDED_LATENCY_MS, BATCH_STALL_PASSES,
++  BATCH_STALL_AGE_MS, BATCH_AMBIGUITY_ESCALATION_MS,
++} from "./gen-constants.mjs";
+ import { applyDispatchQuota } from "./quota-budget.mjs";
+ 
+ export const EXECUTION_STATES = Object.freeze([
+@@ -914,6 +917,262 @@
+     return { ...storageSeedState(), changed: true, idempotent: false };
+   }
+ 
++  // ---- B-G2 §3.6.4: Batch terminal receipts ---------------------
++  // The terminal bundle's durable receipt: written in the SAME
++  // transaction as the attempt confirmation and the spend-outcome
++  // note, it is what lets a later pass distinguish "terminal bundle
++  // landed, commit tail still owed" from every other attempted
++  // shape, and what cohort reporting re-derives results from. The
++  // table is lazily ensured beside its writer (the house pattern
++  // for B-G2 tables) — it is NEVER part of the pinned bootstrap
++  // schema set, and reads presence-check it.
++  const BATCH_RECEIPT_DDL =
++    `CREATE TABLE IF NOT EXISTS d6_batch_terminal_receipts (
++       job_id TEXT NOT NULL, occurrence_id TEXT NOT NULL,
++       generation INTEGER NOT NULL,
++       execution_id TEXT NOT NULL, attempt_id TEXT NOT NULL,
++       provider_name TEXT, batch_state TEXT,
++       classification_kind TEXT, classification_outcome TEXT NOT NULL,
++       provider_code TEXT, block_reason TEXT, finish_reason TEXT,
++       retryable INTEGER, duration_sec REAL, cache_key TEXT,
++       recorded_at INTEGER NOT NULL,
++       PRIMARY KEY (job_id, occurrence_id, generation))`;
++  function batchReceiptTableExists() {
++    return !!coord._oneOrNull(
++      `SELECT name FROM sqlite_master WHERE type = 'table'
++        AND name = 'd6_batch_terminal_receipts'`);
++  }
++  // Idempotent on an identical receipt; a differing receipt for the
++  // same (job, occurrence, generation) is a hard conflict — the
++  // terminal facts of a generation never rewrite.
++  function writeBatchTerminalReceipt(r) {
++    sql.exec(BATCH_RECEIPT_DDL);
++    const cur = coord._oneOrNull(
++      `SELECT * FROM d6_batch_terminal_receipts
++        WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
++      r.jobId, r.occurrenceId, r.generation);
++    if (cur) {
++      const same =
++        cur.execution_id === r.executionId &&
++        cur.attempt_id === r.attemptId &&
++        cur.provider_name === (r.providerName ?? null) &&
++        cur.batch_state === (r.batchState ?? null) &&
++        cur.classification_kind === (r.classificationKind ?? null) &&
++        cur.classification_outcome === r.classificationOutcome &&
++        cur.provider_code === (r.providerCode ?? null) &&
++        cur.block_reason === (r.blockReason ?? null) &&
++        cur.finish_reason === (r.finishReason ?? null) &&
++        cur.duration_sec === (r.durationSec ?? null);
++      if (!same) {
++        const e = new Error("batch_terminal_receipt_conflict");
++        e.reason = "batch_terminal_receipt_conflict";
++        throw e;
++      }
++      return { written: false, alreadyApplied: true, receipt: cur };
++    }
++    sql.exec(
++      `INSERT INTO d6_batch_terminal_receipts
++         (job_id, occurrence_id, generation, execution_id, attempt_id,
++          provider_name, batch_state, classification_kind,
++          classification_outcome, provider_code, block_reason,
++          finish_reason, retryable, duration_sec, cache_key, recorded_at)
++       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
++      r.jobId, r.occurrenceId, r.generation, r.executionId, r.attemptId,
++      r.providerName ?? null, r.batchState ?? null,
++      r.classificationKind ?? null, r.classificationOutcome,
++      r.providerCode ?? null, r.blockReason ?? null,
++      r.finishReason ?? null,
++      r.retryable == null ? null : (r.retryable ? 1 : 0),
++      r.durationSec ?? null, r.cacheKey ?? null, now());
++    return { written: true,
++             receipt: batchTerminalReceipt(r.jobId, r.occurrenceId, r.generation) };
++  }
++  function batchTerminalReceipt(jobId, occurrenceId, generation = null) {
++    if (!batchReceiptTableExists()) return null;
++    if (generation != null)
++      return coord._oneOrNull(
++        `SELECT * FROM d6_batch_terminal_receipts
++          WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
++        jobId, occurrenceId, generation);
++    return coord._oneOrNull(
++      `SELECT * FROM d6_batch_terminal_receipts
++        WHERE job_id = ? AND occurrence_id = ?
++        ORDER BY generation DESC LIMIT 1`, jobId, occurrenceId);
++  }
++
++  // ---- B-G2 §3.6.2/§3.6.3: Batch poll state + observations ------
++  // One poll-state row per (job, occurrence, generation) and one
++  // observation row per (pass token, job, occurrence, generation),
++  // lazily ensured beside their only writer (the poll machinery) —
++  // never part of the pinned bootstrap schema set; reads
++  // presence-check. Observation discipline: a `started` row is
++  // written in its own transaction BEFORE the provider GET; the
++  // completion update and the poll-state advance land in one
++  // transaction after it. A crash during the GET leaves a `started`
++  // row: the pass counts as attempted for that map, the
++  // no-progress counter does NOT advance, and no accounting state
++  // moved. A duplicate invocation with the same pass token is a
++  // no-op for that map (the observation PK enforces it).
++  const BATCH_POLL_STATE_DDL =
++    `CREATE TABLE IF NOT EXISTS d6_batch_poll_state (
++       job_id TEXT NOT NULL, occurrence_id TEXT NOT NULL,
++       generation INTEGER NOT NULL, provider_name TEXT,
++       submitted_observed_at INTEGER, last_pass_token TEXT,
++       last_observed_at INTEGER, last_provider_state TEXT,
++       consecutive_no_progress_passes INTEGER NOT NULL DEFAULT 0,
++       classification TEXT, classification_since INTEGER,
++       ambiguity_since INTEGER,
++       PRIMARY KEY (job_id, occurrence_id, generation))`;
++  const BATCH_POLL_OBS_DDL =
++    `CREATE TABLE IF NOT EXISTS d6_batch_poll_observations (
++       pass_token TEXT NOT NULL, job_id TEXT NOT NULL,
++       occurrence_id TEXT NOT NULL, generation INTEGER NOT NULL,
++       phase TEXT NOT NULL, provider_state TEXT, outcome_class TEXT,
++       progress INTEGER, classification TEXT, poll_error TEXT,
++       observed_at INTEGER NOT NULL,
++       PRIMARY KEY (pass_token, job_id, occurrence_id, generation))`;
++  function ensureBatchPollSchema() {
++    sql.exec(BATCH_POLL_STATE_DDL);
++    sql.exec(BATCH_POLL_OBS_DDL);
++  }
++  function batchPollTablesExist() {
++    const t = coord._one(
++      `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'
++        AND name IN ('d6_batch_poll_state', 'd6_batch_poll_observations')`);
++    return !!t && t.n === 2;
++  }
++  function batchPollState(jobId, occurrenceId, generation) {
++    if (!batchPollTablesExist()) return null;
++    return coord._oneOrNull(
++      `SELECT * FROM d6_batch_poll_state
++        WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
++      jobId, occurrenceId, generation);
++  }
++  // The pre-GET write. Returns { duplicate: true } when this pass
++  // token already attempted this map (the caller skips it).
++  function recordBatchPollStarted({ passToken, jobId, occurrenceId,
++                                    generation, providerName, now }) {
++    ensureBatchPollSchema();
++    return coord._tx(() => {
++      const existing = coord._oneOrNull(
++        `SELECT pass_token FROM d6_batch_poll_observations
++          WHERE pass_token = ? AND job_id = ? AND occurrence_id = ?
++            AND generation = ?`,
++        passToken, jobId, occurrenceId, generation);
++      if (existing) return { duplicate: true };
++      sql.exec(
++        `INSERT INTO d6_batch_poll_observations
++           (pass_token, job_id, occurrence_id, generation, phase,
++            observed_at)
++         VALUES (?, ?, ?, ?, 'started', ?)`,
++        passToken, jobId, occurrenceId, generation, now);
++      sql.exec(
++        `INSERT OR IGNORE INTO d6_batch_poll_state
++           (job_id, occurrence_id, generation, provider_name,
++            submitted_observed_at)
++         VALUES (?, ?, ?, ?, ?)`,
++        jobId, occurrenceId, generation, providerName, now);
++      return { duplicate: false };
++    });
++  }
++  // D-4 classification for a submitted map from its poll-state row
++  // (pure; the fixed parameters live in gen-constants.mjs).
++  function classifyBatchPollRow(row, now) {
++    if (!row || row.submitted_observed_at == null) return "BATCH-IN-FLIGHT";
++    const age = now - row.submitted_observed_at;
++    if (row.consecutive_no_progress_passes >= BATCH_STALL_PASSES &&
++        age >= BATCH_STALL_AGE_MS)
++      return "BATCH-STALLED";
++    if (age >= BATCH_EXTENDED_LATENCY_MS) return "BATCH-LATENCY-EXTENDED";
++    return "BATCH-IN-FLIGHT";
++  }
++  // The post-GET write: completion + counter advance + D-4
++  // classification in one transaction. A poll-error completion
++  // counts as an observed pass without progress. A terminal
++  // completion consumes the map: classification clears.
++  function recordBatchPollCompleted({ passToken, jobId, occurrenceId,
++                                      generation, providerState,
++                                      outcomeClass, progress,
++                                      pollError, now }) {
++    ensureBatchPollSchema();
++    return coord._tx(() => {
++      sql.exec(
++        `UPDATE d6_batch_poll_observations
++           SET phase = 'completed', provider_state = ?,
++               outcome_class = ?, progress = ?, poll_error = ?
++           WHERE pass_token = ? AND job_id = ? AND occurrence_id = ?
++             AND generation = ?`,
++        providerState ?? null, outcomeClass,
++        progress ? 1 : 0, pollError ?? null,
++        passToken, jobId, occurrenceId, generation);
++      const cur = coord._oneOrNull(
++        `SELECT * FROM d6_batch_poll_state
++          WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
++        jobId, occurrenceId, generation);
++      if (!cur) return null;
++      const terminal = outcomeClass === "terminal";
++      const noProgress = terminal || progress
++        ? 0 : cur.consecutive_no_progress_passes + 1;
++      const draft = { ...cur,
++        consecutive_no_progress_passes: noProgress };
++      const classification = terminal ? null
++        : classifyBatchPollRow(draft, now);
++      sql.exec(
++        `UPDATE d6_batch_poll_state
++           SET last_pass_token = ?, last_observed_at = ?,
++               last_provider_state = ?,
++               consecutive_no_progress_passes = ?,
++               classification = ?,
++               classification_since = ?
++           WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
++        passToken, now, providerState ?? cur.last_provider_state,
++        noProgress, classification,
++        classification === cur.classification
++          ? cur.classification_since
++          : (classification ? now : null),
++        jobId, occurrenceId, generation);
++      return batchPollState(jobId, occurrenceId, generation);
++    });
++  }
++  // Ambiguity classification (no provider call is ever made for an
++  // ambiguous map): records BATCH-AMBIGUITY-OPEN once the map has
++  // been ambiguous for the D-4 escalation age. The ambiguity clock
++  // starts at the map's own updated_at (when it became ambiguous).
++  function recordBatchAmbiguityObservation({ jobId, occurrenceId,
++                                             generation, providerName,
++                                             ambiguitySince, now }) {
++    ensureBatchPollSchema();
++    return coord._tx(() => {
++      sql.exec(
++        `INSERT OR IGNORE INTO d6_batch_poll_state
++           (job_id, occurrence_id, generation, provider_name,
++            submitted_observed_at, ambiguity_since)
++         VALUES (?, ?, ?, ?, ?, ?)`,
++        jobId, occurrenceId, generation, providerName, now,
++        ambiguitySince);
++      const cur = coord._oneOrNull(
++        `SELECT * FROM d6_batch_poll_state
++          WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
++        jobId, occurrenceId, generation);
++      const since = cur.ambiguity_since ?? ambiguitySince;
++      if (cur.ambiguity_since == null)
++        sql.exec(
++          `UPDATE d6_batch_poll_state SET ambiguity_since = ?
++            WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
++          ambiguitySince, jobId, occurrenceId, generation);
++      const open = now - since >= BATCH_AMBIGUITY_ESCALATION_MS;
++      if (open && cur.classification !== "BATCH-AMBIGUITY-OPEN")
++        sql.exec(
++          `UPDATE d6_batch_poll_state
++             SET classification = 'BATCH-AMBIGUITY-OPEN',
++                 classification_since = ?
++           WHERE job_id = ? AND occurrence_id = ? AND generation = ?`,
++          now, jobId, occurrenceId, generation);
++      return { classification: open ? "BATCH-AMBIGUITY-OPEN" : null,
++               ambiguitySince: since };
++    });
++  }
++
+   // ---- crash recovery scan -------------------------------------------
+   // Classify every non-terminal execution record for the recovery
+   // path (proposal §4 / FI-6). Classification only — the caller
+@@ -935,7 +1194,13 @@
+         const dispatching = coord._one(
+           `SELECT COUNT(*) AS n FROM d6_attempt_log
+             WHERE execution_id = ? AND phase = 'dispatching'`, execution.execution_id).n;
+-        action = dispatching > 0 ? "reconcile_hold" : "release_and_fail";
++        // B-G2 §3.6.4: an execution with a landed Batch terminal
++        // receipt is never release_and_fail — its attempt is
++        // confirmed and its commit tail / cohort recovery continues
++        // from the receipt, not from a failure verdict.
++        action = dispatching > 0 ||
++          batchTerminalReceipt(execution.job_id, execution.occurrence_id)
++          ? "reconcile_hold" : "release_and_fail";
+       }
+       return { execution, action };
+     });
+@@ -949,6 +1214,8 @@
+     commitVerified, markUnknownBilling, phaseAccounting, reconcileUnknown,
+     adjudicateEstimated, planUnverifiedAccounting, adjudicationFor,
+     storageAccounting, setStorageBaseBytes, seedStorageBase, storageSeedState,
+-    recoveryScan,
++    recoveryScan, writeBatchTerminalReceipt, batchTerminalReceipt,
++    batchPollState, recordBatchPollStarted, recordBatchPollCompleted,
++    recordBatchAmbiguityObservation,
+   };
+ }
+--- a/v2/generation/service.mjs
++++ b/v2/generation/service.mjs
+@@ -627,6 +627,213 @@
+     }
+   }
+ 
++  // ---- B-G2 §3.10/§5: Batch ambiguity adjudication ------------
++  // The service handle on the coordinator's Batch adjudicator
++  // (coordinator.batchReconcileByEnumeration /
++  // batchAdjudicationDecide). Reachable from exactly two
++  // surfaces: the operator-only POST /v2/d6-batch-reconcile and
++  // POST /v2/d6-batch-adjudicate routes in the production entry
++  // (the migration-operator fence class). The enumeration
++  // function is INJECTED by the entry handler (the adapter's
++  // listBatchesByDisplayName) so this layer makes no provider
++  // call of its own; the adapter's halt assert is the law —
++  // while halted the enumeration throws and the route surfaces
++  // generation_halted with nothing written. A
++  // batch_adjudication_schema_inconsistent refusal is NOT a
++  // settlement reason: it rethrows, exactly as the
++  // adjudication_schema_inconsistent precedent above. Each
++  // production USE remains Julie's separate authorization,
++  // recorded as the call's authorizationRef.
++  async function batchReconcile({ jobId, occurrenceId,
++      authorizationRef, note = null, enumerate } = {}) {
++    if (typeof enumerate !== "function")
++      return { outcome: "rejected", reason: "batch_enumeration_unavailable" };
++    try {
++      const r = await coord.batchReconcileByEnumeration({
++        jobId, occurrenceId, authorizationRef,
++        source: "operator-route", enumerate });
++      void note;
++      return { outcome: "applied", resolved: !!r.resolved,
++        reason: r.reason ?? null, mapState: r.mapState ?? null,
++        providerName: r.providerName ?? null, runId: r.runId ?? null,
++        matches: r.matches ?? [], exposure: r.exposure ?? null,
++        adjudicationId: r.adjudicationId ?? null };
++    } catch (e) {
++      if (e && (e.code === "generation_halted" ||
++          e.name === "GenerationHaltedError"))
++        return { outcome: "rejected", reason: "generation_halted" };
++      const msg = String((e && e.message) || e);
++      if (msg.startsWith("batch_adjudication_schema_inconsistent"))
++        throw e;
++      throw e;
++    }
++  }
++
++  // ---- B-G2 §3.12: the Batch inventory read (D-5) -------------
++  // SELECT-only: no provider call, no write, no table creation
++  // (adjudication presence is checked, never ensured, here; a
++  // half-created adjudication pair refuses loud). Keyset
++  // pagination by (job_id, occurrence_id, generation) with exact
++  // totals over ALL rows; the summary is computed over all rows,
++  // not the page. The custody derivation is §3.12's:
++  // provider_custody = a non-superseded fenced / submitted /
++  // ambiguous map whose linked attempt is still dispatching;
++  // terminal_consumed = the map's outcome landed in the ledger;
++  // closed_history = everything else (superseded, rejected,
++  // closed, or custody-less). A map lacking its execution /
++  // attempt linkage is classified batch_poll_linkage_missing —
++  // visible in the row, never silently dropped.
++  function batchInventory({ limit = 50, cursor = null } = {}) {
++    const cap = Math.max(1, Math.min(100, limit | 0)) || 50;
++    const adjRows = coord.batchAdjudicationRows();
++    const openAdj = new Map();
++    let duplicateUnledgered = 0;
++    for (const a of adjRows) {
++      if (a.status !== "open") continue;
++      openAdj.set(`${a.job_id} ${a.occurrence_id} ${a.generation}`,
++        a.adjudication_id);
++      try {
++        const ex = a.exposure_json ? JSON.parse(a.exposure_json) : null;
++        if (ex && typeof ex.unledgeredDuplicateUpperMicroCents === "number")
++          duplicateUnledgered += ex.unledgeredDuplicateUpperMicroCents;
++      } catch { /* a corrupt exposure reads as unledgered-unknown, not zero-claimed */ }
++    }
++    const maps = coord._all(`SELECT * FROM batch_maps
++      ORDER BY job_id ASC, occurrence_id ASC, generation ASC`);
++    const execCache = new Map(), attemptCache = new Map();
++    const executionFor = (m) => {
++      const k = `${m.job_id} ${m.occurrence_id} ${m.grant_id}`;
++      if (!execCache.has(k)) execCache.set(k, coord._oneOrNull(
++        `SELECT * FROM d6_execution_records WHERE job_id = ? AND
++           occurrence_id = ? AND grant_id = ? ORDER BY created_at DESC,
++           execution_id DESC LIMIT 1`,
++        m.job_id, m.occurrence_id, m.grant_id));
++      return execCache.get(k);
++    };
++    const attemptFor = (exec) => {
++      if (!exec) return null;
++      if (!attemptCache.has(exec.execution_id)) attemptCache.set(
++        exec.execution_id, coord._oneOrNull(
++          `SELECT * FROM d6_attempt_log WHERE execution_id = ?
++             ORDER BY seq DESC LIMIT 1`, exec.execution_id));
++      return attemptCache.get(exec.execution_id);
++    };
++    const all = maps.map((m) => {
++      const intent = coord._oneOrNull(
++        `SELECT * FROM spend_intents WHERE job_id = ? AND
++           occurrence_id = ? AND generation = ?`,
++        m.job_id, m.occurrence_id, m.generation);
++      const exec = executionFor(m);
++      const attempt = attemptFor(exec);
++      const dispatch = attempt ? coord._oneOrNull(
++        `SELECT * FROM d6_provider_dispatches WHERE attempt_id = ?`,
++        attempt.attempt_id) : null;
++      const reservation = coord._oneOrNull(
++        `SELECT * FROM d6_grant_reservations WHERE grant_id = ? AND
++           occurrence_id = ?`, m.grant_id, m.occurrence_id);
++      const linkage = exec && attempt ? "ok" : "batch_poll_linkage_missing";
++      let custody;
++      if (!m.superseded_at &&
++          (m.state === "fenced" || m.state === "submitted" ||
++           m.state === "ambiguous") &&
++          attempt && attempt.phase === "dispatching")
++        custody = "provider_custody";
++      else if ((exec && (exec.state === "committed" ||
++                 exec.state === "failed")) ||
++               (attempt && attempt.phase === "confirmed"))
++        custody = "terminal_consumed";
++      else custody = "closed_history";
++      return {
++        jobId: m.job_id, occurrenceId: m.occurrence_id,
++        grantId: m.grant_id, generation: m.generation,
++        displayName: m.display_name, providerName: m.provider_name,
++        state: m.state, detail: m.detail, updatedAt: m.updated_at,
++        supersededAt: m.superseded_at,
++        intentOutcome: intent ? intent.outcome : null,
++        executionState: exec ? exec.state : null,
++        attempt: attempt ? {
++          attemptId: attempt.attempt_id, phase: attempt.phase,
++          outcome: attempt.outcome,
++          upperMicroCents: attempt.upper_micro_cents,
++          settledCostMicroCents: attempt.cost_micro_cents,
++          dispatchDayKey: attempt.dispatched_day_key } : null,
++        dispatch: dispatch ? {
++          attemptId: dispatch.attempt_id,
++          dispatchDayKey: dispatch.dispatch_day_key,
++          dispatchedAt: dispatch.dispatched_at } : null,
++        reservation: reservation ? {
++          reservationId: reservation.reservation_id,
++          state: reservation.state,
++          slotsTotal: reservation.slots_total,
++          slotsConsumed: reservation.slots_consumed } : null,
++        openAdjudicationId: openAdj.get(
++          `${m.job_id} ${m.occurrence_id} ${m.generation}`) ?? null,
++        linkage, custody,
++      };
++    });
++    const countsByState = {};
++    for (const r of all) countsByState[r.state] = (countsByState[r.state] || 0) + 1;
++    const dispatchIds = new Set(all.filter((r) => r.dispatch)
++      .map((r) => r.dispatch.attemptId));
++    const summary = {
++      countsByState,
++      countedDispatches: dispatchIds.size,
++      outstandingUpperMicroCents: all
++        .filter((r) => r.custody === "provider_custody" && r.attempt)
++        .reduce((s, r) => s + (r.attempt.upperMicroCents || 0), 0),
++      duplicateUnledgeredUpperMicroCents: duplicateUnledgered,
++      knownSettledMicroCents: all
++        .filter((r) => r.custody === "terminal_consumed" && r.attempt)
++        .reduce((s, r) => s + (r.attempt.settledCostMicroCents || 0), 0),
++      lastDrivePassAt: (() => {
++        const t = coord._oneOrNull(
++          `SELECT name FROM sqlite_master WHERE type = 'table' AND
++             name = 'd6_drive_passes'`);
++        if (!t) return null;
++        const row = coord._oneOrNull(
++          `SELECT MAX(at) AS m FROM d6_drive_passes`);
++        return row ? row.m : null;
++      })(),
++      outstandingMaps: all.filter((r) => r.custody === "provider_custody").length,
++    };
++    let start = 0;
++    if (cursor) {
++      const [cj, co, cg] = cursor;
++      start = all.findIndex((r) => r.jobId > cj ||
++        (r.jobId === cj && r.occurrenceId > co) ||
++        (r.jobId === cj && r.occurrenceId === co && r.generation > cg));
++      if (start < 0) start = all.length;
++    }
++    const page = all.slice(start, start + cap);
++    const truncated = start + page.length < all.length;
++    const last = page[page.length - 1];
++    return { outcome: "applied", total: all.length, limit: cap,
++      rows: page, truncated,
++      nextCursor: truncated && last
++        ? [last.jobId, last.occurrenceId, last.generation] : null,
++      summary };
++  }
++
++  function batchAdjudicate({ adjudicationId, jobId, occurrenceId,
++      selectedProviderName, authorizationRef, evidenceRef,
++      note = null } = {}) {
++    void note;
++    try {
++      const r = coord.batchAdjudicationDecide({ adjudicationId,
++        jobId, occurrenceId, selectedProviderName,
++        authorizationRef, evidenceRef });
++      if (!r.ok) return { outcome: "rejected", reason: r.reason };
++      return { outcome: "applied", adopted: true,
++        alreadyApplied: !!r.alreadyApplied,
++        providerName: r.providerName };
++    } catch (e) {
++      const msg = String((e && e.message) || e);
++      if (msg.startsWith("batch_adjudication_schema_inconsistent"))
++        throw e;
++      throw e;
++    }
++  }
++
+   // ---- R3-2 clearance: retiring a halted_unknown plan ---------
+   // The retirement audit lives in its own lazily-ensured table
+   // (the phase-policy precedent: DDL beside its only writer,
+@@ -1894,6 +2101,7 @@
+   return { submitIntent, driveOnce, planStatus, seedStorageBase, recover,
+            bindPhaseBook, getPhaseBinding,
+            reconcileUnknownAttempt, adjudicateEstimatedAttempt, retireHaltedPlan,
++           batchReconcile, batchAdjudicate, batchInventory,
+            releaseQuarantine, getQuarantine,
+            listPlans, capabilities, eligibilityQuote, attemptDiagnostics,
+            drivePassDiagnostics };
+--- a/v2/host/adapters.mjs
++++ b/v2/host/adapters.mjs
+@@ -204,6 +204,146 @@
+ 
+ // Provider adapter factory behind the executor's seam.
+ // `fetchFn` defaults to the global fetch; `env` supplies API keys.
++// B-G2 §3.2 (D-3 prerequisite) — the Batch terminal-failure
++// classification surface. A PURE classifier: no I/O, no env, never
++// throws for a terminal shape. It decides from STRUCTURED fields
++// only (error code/status, candidate finishReason, promptFeedback
++// blockReason, metadata state, record count, audio presence /
++// decodability). Raw provider message text is never read, never
++// returned, and never persisted anywhere: every string this
++// classifier emits is a bounded token (uppercase, non-[A-Z0-9_]
++// runs collapsed to one underscore, capped at 64 chars).
++//
++// Policy is decided ONLY on structured token evidence: a token
++// equal to PROHIBITED_CONTENT or POLICY_BLOCK, or a block-reason
++// token containing PROHIBITED_CONTENT. Missing audio alone, a
++// generic failure state, and refusal-sounding free text are NOT
++// policy evidence. Any terminal shape the rules do not enumerate
++// classifies provider_error_unclassified / failed_known — never
++// policy, never ambiguity: a named terminal provider job with an
++// unusable product is a KNOWN failure.
++const BATCH_JOB_NAME_RE = /^batches\/[A-Za-z0-9_-]+$/;
++const BATCH_TERMINAL_META_STATES = new Set([
++  "BATCH_STATE_FAILED", "BATCH_STATE_CANCELLED", "BATCH_STATE_EXPIRED",
++]);
++
++export function batchToken(value) {
++  if (typeof value !== "string" && typeof value !== "number") return null;
++  const t = String(value).toUpperCase()
++    .replace(/[^A-Z0-9_]+/g, "_").slice(0, 64);
++  return t || null;
++}
++
++function errorTokens(error) {
++  if (!error || typeof error !== "object") return { code: null, status: null };
++  return { code: batchToken(error.code), status: batchToken(error.status) };
++}
++function httpStatusOf(tokens) {
++  for (const t of [tokens.code, tokens.status]) {
++    if (t && /^\d{3}$/.test(t)) {
++      const n = Number(t);
++      if (n >= 100 && n <= 599) return n;
++    }
++  }
++  return null;
++}
++function isPolicyToken(t) {
++  return t === "PROHIBITED_CONTENT" || t === "POLICY_BLOCK";
++}
++
++// classifyBatchTerminal(facts) -> classification | null.
++// facts (all optional; raw values, normalized here):
++//   batchError, itemError     — provider error objects (or null)
++//   finishReason, blockReason — structured strings (or null)
++//   metaState                 — batch metadata state string
++//   recordCount               — inlined record count (done shapes)
++//   hasAudio                  — an audio part was present
++//   audioDecodable            — the audio base64 decoded
++// Returns null when the facts do not describe a terminal failure
++// (success / not-done shapes are the caller's unchanged returns).
++export function classifyBatchTerminal(facts = {}) {
++  const batchTok = errorTokens(facts.batchError);
++  const itemTok = errorTokens(facts.itemError);
++  const finishTok = batchToken(facts.finishReason);
++  const blockTok = batchToken(facts.blockReason);
++  const metaTok = batchToken(facts.metaState);
++  const base = { blockReason: blockTok, finishReason: finishTok };
++
++  // 1) Policy: structured token evidence only, any source. The
++  // decisive source is attributed in check order: block reason,
++  // finish reason, item error tokens, batch error tokens.
++  const policyHit =
++    (blockTok && (isPolicyToken(blockTok) ||
++       blockTok.includes("PROHIBITED_CONTENT"))
++      ? { source: "item_finish", code: blockTok } : null) ||
++    (isPolicyToken(finishTok)
++      ? { source: "item_finish", code: finishTok } : null) ||
++    (isPolicyToken(itemTok.code) || isPolicyToken(itemTok.status)
++      ? { source: "item_error",
++          code: isPolicyToken(itemTok.code) ? itemTok.code : itemTok.status }
++      : null) ||
++    (isPolicyToken(batchTok.code) || isPolicyToken(batchTok.status)
++      ? { source: "batch_error",
++          code: isPolicyToken(batchTok.code) ? batchTok.code : batchTok.status }
++      : null);
++  if (policyHit) return { ...base, kind: "policy_block",
++    outcome: "policy_block", providerCode: policyHit.code,
++    retryable: false, source: policyHit.source };
++
++  // 2) Error objects: the item error is the more specific signal;
++  // the batch error describes the whole job. HTTP-like codes and
++  // canonical status tokens are provider_error / failed_known;
++  // retryable only for 5xx-class signals. An error object with no
++  // usable code/status is unclassified — still a KNOWN failure.
++  for (const [tok, source] of [[itemTok, "item_error"],
++                               [batchTok, "batch_error"]]) {
++    if (source === "item_error" && !facts.itemError) continue;
++    if (source === "batch_error" && !facts.batchError) continue;
++    const http = httpStatusOf(tok);
++    const token = tok.status || tok.code;
++    if (http !== null || token) {
++      const retryable = (http !== null && http >= 500) ||
++        token === "INTERNAL" || token === "UNAVAILABLE";
++      return { ...base, kind: "provider_error",
++        outcome: "failed_known",
++        providerCode: http !== null ? String(http) : token,
++        retryable, source };
++    }
++    return { ...base, kind: "provider_error_unclassified",
++      outcome: "failed_known", providerCode: null,
++      retryable: false, source };
++  }
++
++  // 3) A terminal metadata state with no error object: the job
++  // ended without a usable product and without provider detail.
++  if (metaTok && BATCH_TERMINAL_META_STATES.has(metaTok))
++    return { ...base, kind: "batch_terminal",
++      outcome: "failed_known", providerCode: null,
++      retryable: true, source: "metadata_state" };
++
++  // 4) Done-shape failures: the response itself is the failure.
++  if (typeof facts.recordCount === "number") {
++    if (facts.recordCount !== 1)
++      return { ...base, kind: "response_shape",
++        outcome: "failed_known", providerCode: null,
++        retryable: false, source: "record_count" };
++    if (facts.hasAudio && facts.audioDecodable === false)
++      return { ...base, kind: "response_shape",
++        outcome: "failed_known", providerCode: null,
++        retryable: false, source: "audio_decode" };
++    if (!facts.hasAudio)
++      return { ...base, kind: "response_shape",
++        outcome: "failed_known", providerCode: null,
++        retryable: false, source: "missing_audio" };
++    return null; // exactly one record, audio present and decodable
++  }
++
++  // 5) Catch-all: a terminal shape the rules do not enumerate.
++  return { ...base, kind: "provider_error_unclassified",
++    outcome: "failed_known", providerCode: null, retryable: false,
++    source: metaTok ? "metadata_state" : "missing_audio" };
++}
++
+ export function createProviderAdapters(env = {}, fetchFn = globalThis.fetch) {
+   const fetchImpl = fetchFn || globalThis.fetch;
+ 
+@@ -400,9 +540,14 @@
+     if (!response.ok) await throwProviderError("gemini", response);
+     const accepted = await response.json();
+     const name = accepted?.name;
+-    if (typeof name !== "string" || !/^batches\/[A-Za-z0-9_-]+$/.test(name))
++    if (typeof name !== "string" || !BATCH_JOB_NAME_RE.test(name))
++      // B-G2 §3.5: accepted-but-unnamed is marked distinctly so the
++      // executor checks this marker BEFORE the HTTP-error branch —
++      // the submission may exist provider-side, so the outcome is
++      // ambiguous, never a known rejection.
+       throw httpError("gemini", 502, "Gemini accepted Batch but returned no valid job ID. Manual reconciliation required.",
+-        { noRetry: true, providerInternal: true });
++        { noRetry: true, providerInternal: true,
++          batchAcceptedUnnamed: true, code: "batch_accepted_unnamed" });
+     return { name };
+   }
+ 
+@@ -419,16 +564,38 @@
+     if (!response.ok) await throwProviderError("gemini", response);
+     const batch = await response.json();
+     const metaState = String(batch?.metadata?.state || "");
++    // B-G2 §3.2: every terminal non-success return now carries a
++    // `classification` computed by the pure classifier above from
++    // structured fields only. Success and not-done returns are
++    // byte-identical to the pre-B-G2 adapter.
+     if (batch?.error || ["BATCH_STATE_FAILED", "BATCH_STATE_CANCELLED", "BATCH_STATE_EXPIRED"].includes(metaState))
+-      return { done: true, state: metaState || "BATCH_STATE_FAILED" };
++      return { done: true, state: metaState || "BATCH_STATE_FAILED",
++               classification: classifyBatchTerminal({
++                 batchError: batch?.error || null, metaState }) };
+     if (!batch?.done) return { done: false, state: metaState || "BATCH_STATE_UNKNOWN" };
+     let records = batch?.response?.inlinedResponses;
+     if (records && !Array.isArray(records)) records = records.inlinedResponses || records.inlined_responses;
+-    const first = Array.isArray(records) && records.length === 1 ? records[0] : null;
++    const recordCount = Array.isArray(records) ? records.length : 0;
++    const first = recordCount === 1 ? records[0] : null;
+     const parts = first?.response?.candidates?.[0]?.content?.parts || [];
+     const audio = parts.find((p) => p?.inlineData?.data && /audio/i.test(String(p.inlineData.mimeType || "audio/wav")));
+-    if (!first || first?.error || !audio?.inlineData?.data) return { done: true, state: "BATCH_STATE_FAILED" };
+-    const bytes = decodeBase64(audio.inlineData.data);
++    const finishReason = first?.response?.candidates?.[0]?.finishReason ?? null;
++    const blockReason = first?.response?.promptFeedback?.blockReason ??
++      first?.promptFeedback?.blockReason ?? null;
++    if (!first || first?.error || !audio?.inlineData?.data)
++      return { done: true, state: "BATCH_STATE_FAILED",
++               classification: classifyBatchTerminal({
++                 itemError: first?.error || null, finishReason, blockReason,
++                 recordCount, hasAudio: !!audio?.inlineData?.data }) };
++    let bytes;
++    try {
++      bytes = decodeBase64(audio.inlineData.data);
++    } catch {
++      return { done: true, state: "BATCH_STATE_FAILED",
++               classification: classifyBatchTerminal({
++                 finishReason, blockReason, recordCount,
++                 hasAudio: true, audioDecodable: false }) };
++    }
+     // A parsed WAV duration is real; the fallback is a conservative
+     // lower bound within the executor's plausibility check.
+     return { done: true, state: "BATCH_STATE_SUCCEEDED", audio: bytes, format: "wav",
+@@ -450,7 +617,12 @@
+     const rows = data?.batches || data?.batchJobs || data?.jobs || [];
+     return rows
+       .filter((r) => (r?.displayName ?? r?.display_name) === displayName)
+-      .map((r) => ({ name: r.name, displayName: r.displayName ?? r.display_name }));
++      // B-G2 §3.10.4: every match carries its name verbatim plus a
++      // nameValid flag; an invalid name is preserved and counted by
++      // the adjudicator, never adopted and never dropped.
++      .map((r) => ({ name: r.name,
++                    displayName: r.displayName ?? r.display_name,
++                    nameValid: BATCH_JOB_NAME_RE.test(String(r?.name || "")) }));
+   }
+ 
+   // P3 review gate, condition on the never-accepted evidence: the real
+--- a/v2/worker-entry-prod-d6.js
++++ b/v2/worker-entry-prod-d6.js
+@@ -1293,6 +1293,244 @@
+         await cache.flush();
+         return json(200, { outcome: "applied", ...result });
+       }
++      if (url.pathname === "/internal/d6/batch-reconcile" && request.method === "POST") {
++        // B-G2 §3.10/§5: the operator reconcile of ONE ambiguous
++        // Batch map (coordinator.batchReconcileByEnumeration via
++        // the service). Same operator fence as every operator
++        // surface above (operator-admitted stamp required at
++        // this class gate). The request contract is a CLOSED
++        // ALLOWLIST enforced HERE, before anything is read, with
++        // zero state movement on any refusal:
++        //   * permitted keys are exactly { jobId, occurrenceId,
++        //     authorizationRef, note };
++        //   * a caller-supplied provider-identity key
++        //     (providerName / provider_name / name / matches /
++        //     identifiers) refuses as
++        //     batch_provider_identity_caller_supplied — the
++        //     enumeration's result is the only identity source;
++        //   * a caller-supplied FIGURE key refuses as
++        //     batch_figure_caller_supplied — exposure figures
++        //     are derived server-side from persisted records;
++        //   * any other non-allowlisted key refuses as
++        //     batch_reconcile_request_key_not_allowed;
++        //   * jobId / occurrenceId / authorizationRef are
++        //     required strings, NONBLANK after trimming;
++        //     authorizationRef is capped at 2000 chars; note is
++        //     an optional string capped at 2000 chars.
++        // The enumeration itself runs through the provider
++        // adapter, whose halt assert is the law: while halted it
++        // throws and the route surfaces generation_halted with
++        // NOTHING written (no run record exists for an
++        // enumeration that never ran). The audit row (the run
++        // record) is written in the act's own transaction, in
++        // the coordinator. The recorded source is stamped
++        // server-side ("operator-route"), never taken from the
++        // caller's body. No caller-supplied parameter can close
++        // a map, mark a submission never-accepted, clear an
++        // exposure, or delete a record — no such parameter
++        // exists. Exercising this route against any production
++        // map is a separate Julie authorization, recorded as
++        // the call's authorizationRef — nothing here performs it.
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const body = await request.json().catch(() => null);
++        const reject = (reason) => json(200, { ok: false, reason });
++        if (!body || typeof body !== "object" || Array.isArray(body))
++          return reject("batch_reconcile_request_key_not_allowed");
++        const IDENTITY_KEYS = ["providerName", "provider_name", "name",
++          "matches", "identifiers", "providerJobName"];
++        const FIGURE_KEYS = ["knownCostMicro", "estimatedCostMicro",
++          "estimated_cost_micro_cents", "reservedCostMicro",
++          "reserved_cost_micro_cents", "costMicroCents", "amount",
++          "cost", "price", "exposure", "upperBoundMicro"];
++        const ALLOWED_KEYS = ["jobId", "occurrenceId", "authorizationRef", "note"];
++        for (const key of Object.keys(body)) {
++          if (IDENTITY_KEYS.includes(key))
++            return reject("batch_provider_identity_caller_supplied");
++          if (FIGURE_KEYS.includes(key))
++            return reject("batch_figure_caller_supplied");
++          if (!ALLOWED_KEYS.includes(key))
++            return reject("batch_reconcile_request_key_not_allowed");
++        }
++        const nonblank = (v) => typeof v === "string" && v.trim().length > 0;
++        if (!nonblank(body.jobId)) return reject("job_id_required");
++        if (!nonblank(body.occurrenceId)) return reject("occurrence_id_required");
++        if (!nonblank(body.authorizationRef) ||
++            body.authorizationRef.trim().length > 2000)
++          return reject("authorization_ref_required");
++        if (body.note !== undefined && body.note !== null &&
++            (typeof body.note !== "string" || body.note.length > 2000))
++          return reject("note_invalid");
++        const providers = createProviderAdapters(this.env);
++        const result = await d6Service(coord, d6HostEnv(this.env, cache))
++          .batchReconcile({
++            jobId: body.jobId.trim(),
++            occurrenceId: body.occurrenceId.trim(),
++            authorizationRef: body.authorizationRef.trim(),
++            note: typeof body.note === "string" ? body.note : null,
++            enumerate: (displayName) =>
++              providers.listBatchesByDisplayName(displayName),
++          });
++        if (result.outcome === "rejected")
++          return reject(result.reason);
++        await cache.flush();
++        return json(200, { ok: true, resolved: result.resolved,
++          mapState: result.mapState, providerName: result.providerName,
++          runId: result.runId, matches: result.matches,
++          ...(result.exposure ? { exposure: result.exposure } : {}),
++          ...(result.adjudicationId
++            ? { adjudicationId: result.adjudicationId } : {}),
++          ...(result.reason ? { reason: result.reason } : {}) });
++      }
++      if (url.pathname === "/internal/d6/batch-adjudicate" && request.method === "POST") {
++        // B-G2 §3.10.5/§5: the operator decision act on ONE open
++        // Batch adjudication (coordinator.batchAdjudicationDecide
++        // via the service). Same operator fence and closed-
++        // allowlist discipline as the reconcile route above:
++        //   * permitted keys are exactly { adjudicationId,
++        //     jobId, occurrenceId, selectedProviderName,
++        //     authorizationRef, evidenceRef, note } —
++        //     selectedProviderName is the DECISION's subject (it
++        //     must be a member of the record's preserved set),
++        //     not an identity claim, so it is allowlisted rather
++        //     than refused as caller-supplied identity;
++        //   * a caller-supplied FIGURE key refuses as
++        //     batch_figure_caller_supplied; any other extra key
++        //     refuses as
++        //     batch_adjudication_request_key_not_allowed;
++        //   * every id field, the selection, authorizationRef
++        //     AND evidenceRef are required nonblank strings
++        //     (authorizationRef / evidenceRef capped at 2000
++        //     chars; note capped at 2000).
++        // The act is one transaction in the coordinator; the
++        // record it leaves states an operator decision on a
++        // stated basis — it does NOT assert the selected job is
++        // provably the original submission. Idempotent: the
++        // same selection after success answers alreadyApplied.
++        // No parameter closes a map, marks never-accepted,
++        // clears an exposure, or deletes a record.
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const body = await request.json().catch(() => null);
++        const reject = (reason) => json(200, { ok: false, reason });
++        if (!body || typeof body !== "object" || Array.isArray(body))
++          return reject("batch_adjudication_request_key_not_allowed");
++        const FIGURE_KEYS = ["knownCostMicro", "estimatedCostMicro",
++          "estimated_cost_micro_cents", "reservedCostMicro",
++          "reserved_cost_micro_cents", "costMicroCents", "amount",
++          "cost", "price", "exposure", "upperBoundMicro"];
++        const ALLOWED_KEYS = ["adjudicationId", "jobId", "occurrenceId",
++          "selectedProviderName", "authorizationRef", "evidenceRef", "note"];
++        for (const key of Object.keys(body)) {
++          if (FIGURE_KEYS.includes(key))
++            return reject("batch_figure_caller_supplied");
++          if (!ALLOWED_KEYS.includes(key))
++            return reject("batch_adjudication_request_key_not_allowed");
++        }
++        const nonblank = (v) => typeof v === "string" && v.trim().length > 0;
++        if (!nonblank(body.adjudicationId))
++          return reject("adjudication_id_required");
++        if (!nonblank(body.jobId)) return reject("job_id_required");
++        if (!nonblank(body.occurrenceId)) return reject("occurrence_id_required");
++        if (!nonblank(body.selectedProviderName))
++          return reject("selected_provider_name_required");
++        if (!nonblank(body.authorizationRef) ||
++            body.authorizationRef.trim().length > 2000)
++          return reject("authorization_ref_required");
++        if (!nonblank(body.evidenceRef) ||
++            body.evidenceRef.trim().length > 2000)
++          return reject("evidence_ref_required");
++        if (body.note !== undefined && body.note !== null &&
++            (typeof body.note !== "string" || body.note.length > 2000))
++          return reject("note_invalid");
++        const result = d6Service(coord, d6HostEnv(this.env, cache))
++          .batchAdjudicate({
++            adjudicationId: body.adjudicationId.trim(),
++            jobId: body.jobId.trim(),
++            occurrenceId: body.occurrenceId.trim(),
++            selectedProviderName: body.selectedProviderName.trim(),
++            authorizationRef: body.authorizationRef.trim(),
++            evidenceRef: body.evidenceRef.trim(),
++            note: typeof body.note === "string" ? body.note : null,
++          });
++        if (result.outcome === "rejected")
++          return reject(result.reason);
++        await cache.flush();
++        return json(200, { ok: true, adopted: true,
++          alreadyApplied: result.alreadyApplied,
++          providerName: result.providerName });
++      }
++      if (url.pathname === "/internal/d6/batch-inventory" && request.method === "GET") {
++        // B-G2 §3.12: the Batch inventory read (D-5,
++        // INVENTORY-AND-HOLD). Same operator fence as every
++        // operator surface above (operator-admitted stamp
++        // required at this class gate). SELECT-ONLY by
++        // construction (service.batchInventory): no provider
++        // call, no write, no table creation — the adjudication
++        // pair's presence is checked, never ensured, and a
++        // half-created pair refuses loud as
++        // batch_adjudication_schema_inconsistent (HTTP 500, the
++        // house shape for a store inconsistency). NO halt fence:
++        // a read changes nothing in either halt state, exactly
++        // as the quota-reconcile read beside it. Pagination is
++        // keyset by (job_id, occurrence_id, generation): `limit`
++        // defaults to 50 and clamps at 100; `cursor` is the
++        // base64url-encoded JSON triple of the last row of the
++        // prior page. A truncated page is never presented as the
++        // complete census: the response always carries the exact
++        // total and the next cursor. READ PURITY: no cache flush
++        // on this path (the quota-reconcile precedent). Nothing
++        // here deletes, settles, or transitions any row — the
++        // inventory is evidence for a separately gated rollback
++        // decision, never the rollback itself.
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        let limit = 50;
++        const rawLimit = url.searchParams.get("limit");
++        if (rawLimit !== null) {
++          if (!/^(0|[1-9]\d*)$/.test(rawLimit))
++            return json(400, { error: "batch_inventory_pagination_invalid" });
++          limit = Number(rawLimit);
++        }
++        let cursor = null;
++        const rawCursor = url.searchParams.get("cursor");
++        if (rawCursor !== null) {
++          try {
++            const decoded = JSON.parse(Buffer.from(rawCursor, "base64url").toString("utf8"));
++            if (!Array.isArray(decoded) || decoded.length !== 3 ||
++                typeof decoded[0] !== "string" ||
++                typeof decoded[1] !== "string" ||
++                !Number.isInteger(decoded[2]))
++              throw new Error("cursor shape");
++            cursor = decoded;
++          } catch {
++            return json(400, { error: "batch_inventory_pagination_invalid" });
++          }
++        }
++        let result;
++        try {
++          result = d6Service(coord, d6HostEnv(this.env, cache))
++            .batchInventory({ limit, cursor });
++        } catch (e) {
++          if (String((e && e.message) || e)
++              .startsWith("batch_adjudication_schema_inconsistent"))
++            return json(500, { error: "batch_adjudication_schema_inconsistent" });
++          throw e;
++        }
++        return json(200, { ok: true, total: result.total,
++          limit: result.limit, rows: result.rows,
++          truncated: result.truncated,
++          nextCursor: result.nextCursor
++            ? Buffer.from(JSON.stringify(result.nextCursor), "utf8").toString("base64url")
++            : null,
++          summary: result.summary });
++      }
+       if (url.pathname === "/internal/d6/quota-reconcile" && request.method === "GET") {
+         // QUOTA ROUTES PACKAGE: the read-only reconciliation
+         // report (quota-budget.reconcileQuota — SELECT-only by
+@@ -1988,9 +2226,34 @@
+       const service = d6Service(coord, d6HostEnv(this.env, cache));
+       rec.stage = "recover";
+       await service.recover();
++      // B-G2 §3.6.1: the Batch poll driver runs ONCE per pass,
++      // after recover() and before driveOnce(), with exactly the
++      // dependencies _execute uses. While GENERATION_HALT is not
++      // "0" it is not invoked at all (the entry gate stands in
++      // front; the adapter halt assert is the second layer), and
++      // the containment gate above has already returned for
++      // suppressed passes. Poll outcomes merge into the recorded
++      // pass outcomes ahead of driveOnce's, as plan-shaped entries
++      // carrying only the recorder's allowlisted scalar keys.
++      let batchPollOutcomes = [];
++      if (this.env.GENERATION_HALT === "0") {
++        const pollExecutor = createD6Executor({
++          coord, store: createGenStore(coord),
++          providers: createProviderAdapters(this.env),
++          flushStore: createFlushStore(this.env.OPALREADER_STORAGE,
++            { keyPrefix: "" }),
++          cache, workSource: createD6WorkSource(coord, { cache }),
++          consumerId: this.env.EXECUTOR_CONSUMER_ID ||
++            "opalreader-v2-prod-d6",
++        });
++        this._batchPassSeq = (this._batchPassSeq || 0) + 1;
++        batchPollOutcomes = await pollExecutor.pollBatchPass({
++          passToken: `alarm-${rec.at}-${this._batchPassSeq}` });
++      }
+       rec.stage = "drive";
+       rec.driveInvoked = 1;
+-      rec.outcomes = await service.driveOnce();
++      rec.outcomes = [...batchPollOutcomes,
++        ...(await service.driveOnce())];
+       rec.stage = "flush";
+       await cache.flush();
+       rec.stage = "complete";
+@@ -2100,6 +2363,19 @@
+     url.pathname === "/v2/d6-quota-dispose-exception";
+   const isQuotaReconcileRoute = request.method === "GET" &&
+     url.pathname === "/v2/d6-quota-reconcile";
++  // B-G2 §5: the Batch ambiguity surfaces join the same operator
++  // fence class (the production gate skips the client token; the
++  // operator admission block below requires the migration-
++  // operator credential; the class gate re-checks the stamped
++  // admission). The inventory read is a GET in the quota-
++  // reconcile read's shape; the two acts are POSTs with closed
++  // allowlist bodies enforced at the class gate.
++  const isBatchReconcileRoute = request.method === "POST" &&
++    url.pathname === "/v2/d6-batch-reconcile";
++  const isBatchAdjudicateRoute = request.method === "POST" &&
++    url.pathname === "/v2/d6-batch-adjudicate";
++  const isBatchInventoryRoute = request.method === "GET" &&
++    url.pathname === "/v2/d6-batch-inventory";
+   // CH3 MECHANISMS (§5A / §5B): the park release, its revoke,
+   // the chapter-occurrence exemption, and its revoke join the
+   // same operator fence class (gate skips the client token; the
+@@ -2152,7 +2428,9 @@
+         || isParkReleaseRoute || isParkReleaseRevokeRoute
+         || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+         || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
+-        || isContainmentRoute || isContainmentStateRoute });
++        || isContainmentRoute || isContainmentStateRoute
++        || isBatchReconcileRoute || isBatchAdjudicateRoute
++        || isBatchInventoryRoute });
+   if (denied) return denied;
+   const instance = request.headers.get("x-opalreader-instance");
+   if (instance !== PRODUCTION_INSTANCE)
+@@ -2199,7 +2477,9 @@
+       || isParkReleaseRoute || isParkReleaseRevokeRoute
+       || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+       || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
+-      || isContainmentRoute || isContainmentStateRoute) {
++      || isContainmentRoute || isContainmentStateRoute
++      || isBatchReconcileRoute || isBatchAdjudicateRoute
++      || isBatchInventoryRoute) {
+     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+     if (!operatorToken || !env.OPALREADER_ACCESS_TOKEN ||
+         operatorToken === env.OPALREADER_ACCESS_TOKEN)
+@@ -2416,6 +2696,37 @@
+     return forward(new Request(quotaReconcileUrl.toString(),
+       { method: "GET" }));
+   }
++  // B-G2 §5: the Batch ambiguity acts (operator-admitted above;
++  // forward() stamps the admission the class gate checks). The
++  // bodies pass through minus any pretense of authority: the
++  // internal routes enforce the closed allowlists, and the
++  // recorded source is stamped server-side there.
++  if (isBatchReconcileRoute) {
++    let batchReconcileBody = null;
++    try { batchReconcileBody = await request.json(); } catch { batchReconcileBody = null; }
++    return forward(new Request("https://do.internal/internal/d6/batch-reconcile", {
++      method: "POST",
++      headers: { "content-type": "application/json" },
++      body: JSON.stringify(batchReconcileBody ?? {}),
++    }));
++  }
++  if (isBatchAdjudicateRoute) {
++    let batchAdjudicateBody = null;
++    try { batchAdjudicateBody = await request.json(); } catch { batchAdjudicateBody = null; }
++    return forward(new Request("https://do.internal/internal/d6/batch-adjudicate", {
++      method: "POST",
++      headers: { "content-type": "application/json" },
++      body: JSON.stringify(batchAdjudicateBody ?? {}),
++    }));
++  }
++  if (isBatchInventoryRoute) {
++    const batchInventoryUrl = new URL("https://do.internal/internal/d6/batch-inventory");
++    for (const k of ["limit", "cursor"])
++      if (url.searchParams.get(k) !== null)
++        batchInventoryUrl.searchParams.set(k, url.searchParams.get(k));
++    return forward(new Request(batchInventoryUrl.toString(),
++      { method: "GET" }));
++  }
+   // CH3 MECHANISMS (§5A / §5B): the park release + exemption
+   // surfaces (operator-admitted above; forward() stamps the
+   // admission the class gate checks). The bodies pass through

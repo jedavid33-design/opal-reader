@@ -1,0 +1,1446 @@
+{
+ "package": "WS2 B-G2 evidence package (EVIDENCE HOLD follow-up)",
+ "assembled": "2026-11-06",
+ "candidate_pin": "9d6f6b850960e2ea85210df2da04f8d8dce6b5ee",
+ "candidate_pin_repo": "jedavid33-design/opal-reader, branch ui1-review",
+ "spec_pin": "7e3d773c11549c8656151cd44a6c7b4120ef1c0b",
+ "reported_exit_run": {
+  "runner": "tests/run-all.sh (one invocation)",
+  "summary_timestamp": "2026-11-06T15:43:04Z",
+  "overall_exit": 0,
+  "suites": {
+   "containment": {
+    "tests": 42,
+    "pass": 42,
+    "fail": 0,
+    "exit": 0
+   },
+   "p2": {
+    "tests": 32,
+    "pass": 32,
+    "fail": 0,
+    "exit": 0
+   },
+   "r5a": {
+    "tests": 23,
+    "pass": 23,
+    "fail": 0,
+    "exit": 0
+   },
+   "v3": {
+    "tests": 5,
+    "pass": 5,
+    "fail": 0,
+    "exit": 0
+   },
+   "bg2": {
+    "tests": 110,
+    "pass": 110,
+    "fail": 0,
+    "exit": 0
+   }
+  }
+ },
+ "no_rerun_statement": "Assembled by copying and read-only hash recomputation only. No suite was rerun. All logs are the original 2026-11-06T15:43:04Z exit-run captures.",
+ "tree_association": {
+  "manifest_source": "bg2-build/MANIFEST.md (pinned in the candidate pin)",
+  "parts_checked": 31,
+  "all_parts_match_manifest": true,
+  "candidate_tree_files_beyond_manifest": [],
+  "changed_parts": [
+   {
+    "part": "v2/coordinator.mjs",
+    "class": "changed",
+    "manifest_sha256": "6e04df3301eab49f11c86458cb15e683fdfc1fa008440a24bb2faab2b6b9b0d7",
+    "recomputed_candidate_tree_sha256": "6e04df3301eab49f11c86458cb15e683fdfc1fa008440a24bb2faab2b6b9b0d7",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/executor.mjs",
+    "class": "changed",
+    "manifest_sha256": "f91ce0bda5aecac813f283d83b2b38ba2a5b8e3839bb8fbfc329f93ed3bcb666",
+    "recomputed_candidate_tree_sha256": "f91ce0bda5aecac813f283d83b2b38ba2a5b8e3839bb8fbfc329f93ed3bcb666",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/generation/d6-executor.mjs",
+    "class": "changed",
+    "manifest_sha256": "9d469bf03b1a3fdcaf8f660c4c003ecc69ba9ef5df8ee87b32f35d8c8f7ded4e",
+    "recomputed_candidate_tree_sha256": "9d469bf03b1a3fdcaf8f660c4c003ecc69ba9ef5df8ee87b32f35d8c8f7ded4e",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/generation/gen-constants.mjs",
+    "class": "changed",
+    "manifest_sha256": "a713dc35dbc13c71b777dc448a604c357ae0aa098a38f0153ea8e246fa445469",
+    "recomputed_candidate_tree_sha256": "a713dc35dbc13c71b777dc448a604c357ae0aa098a38f0153ea8e246fa445469",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/generation/genstore.mjs",
+    "class": "changed",
+    "manifest_sha256": "f8614f9df097833182061e2e08b238fc9a371b6dc6652d460e24032378ab907f",
+    "recomputed_candidate_tree_sha256": "f8614f9df097833182061e2e08b238fc9a371b6dc6652d460e24032378ab907f",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/generation/service.mjs",
+    "class": "changed",
+    "manifest_sha256": "761ac47736ec6c958f60e85a70789cd613590c274286729713b55974c246db03",
+    "recomputed_candidate_tree_sha256": "761ac47736ec6c958f60e85a70789cd613590c274286729713b55974c246db03",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "5c5183e664218b9746c497e9456af45c7467a8ace66fd1b9ef0928eccb3c7c14",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/host/adapters.mjs",
+    "class": "changed",
+    "manifest_sha256": "ee99bdf2e6d21ab1c70504e95c16f0744e1c2b3feed958083803a41164af1620",
+    "recomputed_candidate_tree_sha256": "ee99bdf2e6d21ab1c70504e95c16f0744e1c2b3feed958083803a41164af1620",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/worker-entry-prod-d6.js",
+    "class": "changed",
+    "manifest_sha256": "4087d3c7f310ebad85ac2a229cbb368d34fd4397e68eb2768e473e126add75eb",
+    "recomputed_candidate_tree_sha256": "4087d3c7f310ebad85ac2a229cbb368d34fd4397e68eb2768e473e126add75eb",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "2bb0608b589a084ca275428c3236c24680f4a4692afe2245dfcb2880257983c1",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   }
+  ],
+  "all_parts": [
+   {
+    "part": "v2/api.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d",
+    "recomputed_candidate_tree_sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/audio-route.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616",
+    "recomputed_candidate_tree_sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/coordinator.mjs",
+    "class": "changed",
+    "manifest_sha256": "6e04df3301eab49f11c86458cb15e683fdfc1fa008440a24bb2faab2b6b9b0d7",
+    "recomputed_candidate_tree_sha256": "6e04df3301eab49f11c86458cb15e683fdfc1fa008440a24bb2faab2b6b9b0d7",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/executor.mjs",
+    "class": "changed",
+    "manifest_sha256": "f91ce0bda5aecac813f283d83b2b38ba2a5b8e3839bb8fbfc329f93ed3bcb666",
+    "recomputed_candidate_tree_sha256": "f91ce0bda5aecac813f283d83b2b38ba2a5b8e3839bb8fbfc329f93ed3bcb666",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/generation/binding-projection.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654",
+    "recomputed_candidate_tree_sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/content-plane-adapter.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7",
+    "recomputed_candidate_tree_sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/d6-executor.mjs",
+    "class": "changed",
+    "manifest_sha256": "9d469bf03b1a3fdcaf8f660c4c003ecc69ba9ef5df8ee87b32f35d8c8f7ded4e",
+    "recomputed_candidate_tree_sha256": "9d469bf03b1a3fdcaf8f660c4c003ecc69ba9ef5df8ee87b32f35d8c8f7ded4e",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/generation/d6-work-source.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006",
+    "recomputed_candidate_tree_sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/eligible-set.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7",
+    "recomputed_candidate_tree_sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/flush-store.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325",
+    "recomputed_candidate_tree_sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/gen-constants.mjs",
+    "class": "changed",
+    "manifest_sha256": "a713dc35dbc13c71b777dc448a604c357ae0aa098a38f0153ea8e246fa445469",
+    "recomputed_candidate_tree_sha256": "a713dc35dbc13c71b777dc448a604c357ae0aa098a38f0153ea8e246fa445469",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/generation/gen-schema.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5",
+    "recomputed_candidate_tree_sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/genstore.mjs",
+    "class": "changed",
+    "manifest_sha256": "f8614f9df097833182061e2e08b238fc9a371b6dc6652d460e24032378ab907f",
+    "recomputed_candidate_tree_sha256": "f8614f9df097833182061e2e08b238fc9a371b6dc6652d460e24032378ab907f",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/generation/grant-finalizer.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076",
+    "recomputed_candidate_tree_sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/grant-guards.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629",
+    "recomputed_candidate_tree_sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/park-release.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd",
+    "recomputed_candidate_tree_sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/phase-policy.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f",
+    "recomputed_candidate_tree_sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/policy-split.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876",
+    "recomputed_candidate_tree_sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/prefix-range.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514",
+    "recomputed_candidate_tree_sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/quarantine.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62",
+    "recomputed_candidate_tree_sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/quota-budget.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820",
+    "recomputed_candidate_tree_sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/generation/service.mjs",
+    "class": "changed",
+    "manifest_sha256": "761ac47736ec6c958f60e85a70789cd613590c274286729713b55974c246db03",
+    "recomputed_candidate_tree_sha256": "761ac47736ec6c958f60e85a70789cd613590c274286729713b55974c246db03",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "5c5183e664218b9746c497e9456af45c7467a8ace66fd1b9ef0928eccb3c7c14",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/host/adapters.mjs",
+    "class": "changed",
+    "manifest_sha256": "ee99bdf2e6d21ab1c70504e95c16f0744e1c2b3feed958083803a41164af1620",
+    "recomputed_candidate_tree_sha256": "ee99bdf2e6d21ab1c70504e95c16f0744e1c2b3feed958083803a41164af1620",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/host/build-identity.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c",
+    "recomputed_candidate_tree_sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/p8/approved-freeze-carry.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46",
+    "recomputed_candidate_tree_sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/p8/approved-freeze-chunks.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a",
+    "recomputed_candidate_tree_sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/p8/approved-freeze-manifest.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd",
+    "recomputed_candidate_tree_sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/p8/migration-chunk-limits.mjs",
+    "class": "unchanged",
+    "manifest_sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41",
+    "recomputed_candidate_tree_sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/worker-entry-prod-d6.js",
+    "class": "changed",
+    "manifest_sha256": "4087d3c7f310ebad85ac2a229cbb368d34fd4397e68eb2768e473e126add75eb",
+    "recomputed_candidate_tree_sha256": "4087d3c7f310ebad85ac2a229cbb368d34fd4397e68eb2768e473e126add75eb",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "2bb0608b589a084ca275428c3236c24680f4a4692afe2245dfcb2880257983c1",
+    "baseline_relation": "differs_from_candidate (changed part)"
+   },
+   {
+    "part": "v2/worker-entry-prod.js",
+    "class": "unchanged",
+    "manifest_sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5",
+    "recomputed_candidate_tree_sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   },
+   {
+    "part": "v2/worker-entry.js",
+    "class": "unchanged",
+    "manifest_sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5",
+    "recomputed_candidate_tree_sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5",
+    "matches_manifest": true,
+    "baseline_tree_sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5",
+    "baseline_relation": "equals_candidate (unchanged part)"
+   }
+  ],
+  "admitted_tree_vs_candidate_tree": {
+   "differing_files": [
+    "v2/generation/gen-constants.mjs"
+   ],
+   "note": "tests/admitted-tree differs from candidate-tree only in v2/generation/gen-constants.mjs: the D6_LANE_ALLOWLIST line flipped to [\"standard\", \"batch\"] in the copy (spec 3.13 mechanism, record deviation 2). The battery rebuilds this copy at load."
+  },
+  "run_time_cross_check": "exit-run-logs/regen-fixtures.log (written during the reported run) lists the same 8 changed parts with hashes identical to the manifest; tests/fixtures/identity-bg2.json as regenerated by that step carries the identical changedParts set."
+ },
+ "copy_verification": {
+  "method": "SHA-256 walk of source and copy, both directions, at assembly (2026-11-06, before the anomaly below)",
+  "tests": {
+   "source_files_as_run": 107,
+   "copied_files": 107,
+   "all_identical": true
+  },
+  "exit_run_logs": {
+   "source_files": 12,
+   "copied_files": 12,
+   "all_identical": true
+  },
+  "standing_batteries": {
+   "containment": {
+    "files": 2,
+    "all_identical": true
+   },
+   "p2": {
+    "files": 34,
+    "all_identical": true
+   },
+   "r5a": {
+    "files": 34,
+    "all_identical": true
+   },
+   "v3": {
+    "files": 1,
+    "all_identical": true
+   },
+   "loose_files": {
+    "harness.mjs": true,
+    "regen-fixtures.mjs": true
+   },
+   "fixtures/identity-bg2.json": true
+  },
+  "current_delta_vs_live_source": {
+   "in_source_not_in_package": [
+    "containment/containment/containment-battery.test.mjs",
+    "containment/containment/harness.mjs"
+   ],
+   "in_package_not_in_source": [],
+   "content_mismatches_on_shared_paths": []
+  }
+ },
+ "assembly_anomaly": {
+  "what": "A nested duplicate directory bg2-build/tests/containment/containment/ appeared in the SOURCE tree after copy verification, containing byte-identical copies of containment-battery.test.mjs (sha256 2b2befa5291a43d4b44346f8306ae55a4b1af48002d974ea24ef6b5cd2fd4aa5) and harness.mjs (sha256 8eb4c0d6393602440cdb3e466fa4f832bbfa11734d99052573688cd0209f71b4).",
+  "observed_mtime_utc": "2026-11-06T16:04:33Z",
+  "relation_to_exit_run": "Postdates the reported exit run (2026-11-06T15:43:04Z) by ~21 minutes; the tree as run had 107 files under tests/.",
+  "handling": "Excluded from this package (the package preserves the as-run tree). Not deleted from the source: assembly does not modify the build workspace. Origin not determined by this assembly; flagged for Wren."
+ },
+ "files": [
+  {
+   "path": "ASSOCIATION.md",
+   "bytes": 5864,
+   "sha256": "8ed15e19fdb0a86bbe1f6251e214dd8e8b8fa49f6d614ae1f8f144392e02b0ab"
+  },
+  {
+   "path": "COVERAGE-INDEX.md",
+   "bytes": 15743,
+   "sha256": "955678755a8847c612b9c8b025a0ab17f2d5e3a9ff015454ccc052f7df42cd8b"
+  },
+  {
+   "path": "EVIDENCE-README.md",
+   "bytes": 8380,
+   "sha256": "0ff8ab34c9fb26c22378671d5f0476a593897be84e56683246c9ad5cde9e77b4"
+  },
+  {
+   "path": "exit-run-logs/SUMMARY.txt",
+   "bytes": 119,
+   "sha256": "35f03afcd0494393c2b95562b0ac62450bc92ceab4699a6504ed6f0be1b4063c"
+  },
+  {
+   "path": "exit-run-logs/bg2.exit",
+   "bytes": 12,
+   "sha256": "11b6b837fe76fa30076f956b41490b245cf9926c6262fac294a7acb0ff463b00"
+  },
+  {
+   "path": "exit-run-logs/bg2.log",
+   "bytes": 13809,
+   "sha256": "34afd88c9e9ebf7f8c4ce147b83f0c818ee65fb593b242fa8c4c25ae63e05da2"
+  },
+  {
+   "path": "exit-run-logs/containment.exit",
+   "bytes": 20,
+   "sha256": "4f641b1b3a38beee44a4246f4748061f70fc48603587974925bb4ab36132c5ba"
+  },
+  {
+   "path": "exit-run-logs/containment.log",
+   "bytes": 8320,
+   "sha256": "873b522494987f23dcfd99d0a500ad8dec9b7a78bfafe61ad0e8ddbd3571bc51"
+  },
+  {
+   "path": "exit-run-logs/p2.exit",
+   "bytes": 11,
+   "sha256": "0a7d7e08820f0bec49f81aaa6856a97b18af0e8f299ecbcbeeac8cf7dd9d0dde"
+  },
+  {
+   "path": "exit-run-logs/p2.log",
+   "bytes": 5153,
+   "sha256": "9d20b68a19375a3f7c1b04e35880e4c7e78ae27d930c9a73ac93bb71f5e306ca"
+  },
+  {
+   "path": "exit-run-logs/r5a.exit",
+   "bytes": 12,
+   "sha256": "f93421090a97bcbd7d938760acd51e6077506104422fecadb8e40647bfd9957e"
+  },
+  {
+   "path": "exit-run-logs/r5a.log",
+   "bytes": 3835,
+   "sha256": "39fbb94a695281f1c7b70abd3d3e75a326e4d97942c2679b8fd0528821066d63"
+  },
+  {
+   "path": "exit-run-logs/regen-fixtures.log",
+   "bytes": 782,
+   "sha256": "a932d7a5f1ece1c467a82eb1bbe768e4d0c481a6b4614f0dcb8fbb45bc1bbb83"
+  },
+  {
+   "path": "exit-run-logs/v3.exit",
+   "bytes": 11,
+   "sha256": "bf5bd47bbc2cbd3850c077721c737d5887f6cbf256af44a8745b3aa467b6fd03"
+  },
+  {
+   "path": "exit-run-logs/v3.log",
+   "bytes": 14788,
+   "sha256": "2752133a175117c31e5ed4b6f011b5c8fa23a993301fded6a193dcf91e1465da"
+  },
+  {
+   "path": "standing-batteries/containment/containment-battery.test.mjs",
+   "bytes": 67037,
+   "sha256": "2b2befa5291a43d4b44346f8306ae55a4b1af48002d974ea24ef6b5cd2fd4aa5"
+  },
+  {
+   "path": "standing-batteries/containment/harness.mjs",
+   "bytes": 17768,
+   "sha256": "8eb4c0d6393602440cdb3e466fa4f832bbfa11734d99052573688cd0209f71b4"
+  },
+  {
+   "path": "standing-batteries/fixtures/identity-bg2.json",
+   "bytes": 5905,
+   "sha256": "11030e26e212b86ff72d9327ddd81b3070347cadab5015d25ab7267996e5da8c"
+  },
+  {
+   "path": "standing-batteries/harness.mjs",
+   "bytes": 17768,
+   "sha256": "8eb4c0d6393602440cdb3e466fa4f832bbfa11734d99052573688cd0209f71b4"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/api.mjs",
+   "bytes": 13632,
+   "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/audio-route.mjs",
+   "bytes": 15965,
+   "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/coordinator.mjs",
+   "bytes": 276256,
+   "sha256": "bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/executor.mjs",
+   "bytes": 13974,
+   "sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/binding-projection.mjs",
+   "bytes": 12818,
+   "sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/content-plane-adapter.mjs",
+   "bytes": 8150,
+   "sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/d6-executor.mjs",
+   "bytes": 46660,
+   "sha256": "c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/d6-work-source.mjs",
+   "bytes": 5981,
+   "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/eligible-set.mjs",
+   "bytes": 7284,
+   "sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/flush-store.mjs",
+   "bytes": 8497,
+   "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/gen-constants.mjs",
+   "bytes": 4936,
+   "sha256": "9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/gen-schema.mjs",
+   "bytes": 5307,
+   "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/genstore.mjs",
+   "bytes": 48703,
+   "sha256": "811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/grant-finalizer.mjs",
+   "bytes": 40172,
+   "sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/grant-guards.mjs",
+   "bytes": 12936,
+   "sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/park-release.mjs",
+   "bytes": 29126,
+   "sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/phase-policy.mjs",
+   "bytes": 7299,
+   "sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/policy-split.mjs",
+   "bytes": 15074,
+   "sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/prefix-range.mjs",
+   "bytes": 3628,
+   "sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/quarantine.mjs",
+   "bytes": 15752,
+   "sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/quota-budget.mjs",
+   "bytes": 42048,
+   "sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/generation/service.mjs",
+   "bytes": 77995,
+   "sha256": "aeeee06c8af9789426ae8135bd020be77e8ef3ea350de744472743e3dd14bd1d"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/host/adapters.mjs",
+   "bytes": 39224,
+   "sha256": "f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/host/build-identity.mjs",
+   "bytes": 411,
+   "sha256": "953dbcb40a21e570f705e10ebce4774c16b05f792cd22712765361fb21764f84"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/p8/approved-freeze-carry.mjs",
+   "bytes": 57703,
+   "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/p8/approved-freeze-chunks.mjs",
+   "bytes": 6101,
+   "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/p8/approved-freeze-manifest.mjs",
+   "bytes": 467075,
+   "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/p8/migration-chunk-limits.mjs",
+   "bytes": 4733,
+   "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/worker-entry-prod-d6.js",
+   "bytes": 108022,
+   "sha256": "292ca83e892d5d675f1c107ea4adf1fed34cca6c054fcd068c51b403f79f8a31"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/worker-entry-prod.js",
+   "bytes": 14480,
+   "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5"
+  },
+  {
+   "path": "standing-batteries/p2/baseline-tree/v2/worker-entry.js",
+   "bytes": 21520,
+   "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5"
+  },
+  {
+   "path": "standing-batteries/p2/battery.test.mjs",
+   "bytes": 43390,
+   "sha256": "a20e64f9345ccc6e6efd2bc01a6a4b2149e0cdf5db9c2d5e26a15eb5de05aead"
+  },
+  {
+   "path": "standing-batteries/p2/combined.diff",
+   "bytes": 133194,
+   "sha256": "c88868274564c439ed1b2822ab7bf125ff92ff12db20cf4bd9c4a92771cd3956"
+  },
+  {
+   "path": "standing-batteries/p2/harness.mjs",
+   "bytes": 14596,
+   "sha256": "0b0507658ee253e59479a33d9734abf108e91da76455e8a69fa172d9a929a516"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/api.mjs",
+   "bytes": 13632,
+   "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/audio-route.mjs",
+   "bytes": 15965,
+   "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/coordinator.mjs",
+   "bytes": 276256,
+   "sha256": "bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/executor.mjs",
+   "bytes": 13974,
+   "sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/binding-projection.mjs",
+   "bytes": 12818,
+   "sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/content-plane-adapter.mjs",
+   "bytes": 8150,
+   "sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/d6-executor.mjs",
+   "bytes": 46660,
+   "sha256": "c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/d6-work-source.mjs",
+   "bytes": 5981,
+   "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/eligible-set.mjs",
+   "bytes": 7284,
+   "sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/flush-store.mjs",
+   "bytes": 8497,
+   "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/gen-constants.mjs",
+   "bytes": 4936,
+   "sha256": "9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/gen-schema.mjs",
+   "bytes": 5307,
+   "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/genstore.mjs",
+   "bytes": 48703,
+   "sha256": "811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/grant-finalizer.mjs",
+   "bytes": 40172,
+   "sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/grant-guards.mjs",
+   "bytes": 12936,
+   "sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/park-release.mjs",
+   "bytes": 29126,
+   "sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/phase-policy.mjs",
+   "bytes": 7299,
+   "sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/policy-split.mjs",
+   "bytes": 15074,
+   "sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/prefix-range.mjs",
+   "bytes": 3628,
+   "sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/quarantine.mjs",
+   "bytes": 15752,
+   "sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/quota-budget.mjs",
+   "bytes": 42048,
+   "sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/generation/service.mjs",
+   "bytes": 88070,
+   "sha256": "41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/host/adapters.mjs",
+   "bytes": 39224,
+   "sha256": "f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/host/build-identity.mjs",
+   "bytes": 411,
+   "sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/p8/approved-freeze-carry.mjs",
+   "bytes": 57703,
+   "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/p8/approved-freeze-chunks.mjs",
+   "bytes": 6101,
+   "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/p8/approved-freeze-manifest.mjs",
+   "bytes": 467075,
+   "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/p8/migration-chunk-limits.mjs",
+   "bytes": 4733,
+   "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/worker-entry-prod-d6.js",
+   "bytes": 127131,
+   "sha256": "45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/worker-entry-prod.js",
+   "bytes": 14480,
+   "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5"
+  },
+  {
+   "path": "standing-batteries/r5a/baseline-tree/v2/worker-entry.js",
+   "bytes": 21520,
+   "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5"
+  },
+  {
+   "path": "standing-batteries/r5a/coordinator.diff",
+   "bytes": 26997,
+   "sha256": "3daf9b475f374412885038394e7acaff769ca8476a0efd75b39be7a261ed35e9"
+  },
+  {
+   "path": "standing-batteries/r5a/harness.mjs",
+   "bytes": 14908,
+   "sha256": "c261f33486f878853a3033428cc2c3e4bf37957197ca0abe5acfd709fa1a0147"
+  },
+  {
+   "path": "standing-batteries/r5a/r5a-battery.test.mjs",
+   "bytes": 20057,
+   "sha256": "ef0e1f650f16a8907bc6be9e8393ff40d023a8d01ce973e626ee2560771cc7d1"
+  },
+  {
+   "path": "standing-batteries/regen-fixtures.mjs",
+   "bytes": 2969,
+   "sha256": "66bba7d56c73eaa116962532a0c05cec9462a7544c6ba48dc4cd170bb8c707d5"
+  },
+  {
+   "path": "standing-batteries/v3/v3-cold-restart.test.mjs",
+   "bytes": 18371,
+   "sha256": "ab218d68a339734e557a7f50e54d3704f7a5872eb03c025b5b0121f5d9d59783"
+  },
+  {
+   "path": "tests/admitted-tree/v2/api.mjs",
+   "bytes": 13632,
+   "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d"
+  },
+  {
+   "path": "tests/admitted-tree/v2/audio-route.mjs",
+   "bytes": 15965,
+   "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616"
+  },
+  {
+   "path": "tests/admitted-tree/v2/coordinator.mjs",
+   "bytes": 337030,
+   "sha256": "6e04df3301eab49f11c86458cb15e683fdfc1fa008440a24bb2faab2b6b9b0d7"
+  },
+  {
+   "path": "tests/admitted-tree/v2/executor.mjs",
+   "bytes": 15026,
+   "sha256": "f91ce0bda5aecac813f283d83b2b38ba2a5b8e3839bb8fbfc329f93ed3bcb666"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/binding-projection.mjs",
+   "bytes": 12818,
+   "sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/content-plane-adapter.mjs",
+   "bytes": 8150,
+   "sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/d6-executor.mjs",
+   "bytes": 89584,
+   "sha256": "9d469bf03b1a3fdcaf8f660c4c003ecc69ba9ef5df8ee87b32f35d8c8f7ded4e"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/d6-work-source.mjs",
+   "bytes": 5981,
+   "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/eligible-set.mjs",
+   "bytes": 7284,
+   "sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/flush-store.mjs",
+   "bytes": 8497,
+   "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/gen-constants.mjs",
+   "bytes": 5533,
+   "sha256": "883a10906899362afab8ab40bcfc0131a008d3dc7bb33ed839b50a3a20f1851c"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/gen-schema.mjs",
+   "bytes": 5307,
+   "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/genstore.mjs",
+   "bytes": 61650,
+   "sha256": "f8614f9df097833182061e2e08b238fc9a371b6dc6652d460e24032378ab907f"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/grant-finalizer.mjs",
+   "bytes": 40172,
+   "sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/grant-guards.mjs",
+   "bytes": 12936,
+   "sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/park-release.mjs",
+   "bytes": 29126,
+   "sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/phase-policy.mjs",
+   "bytes": 7299,
+   "sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/policy-split.mjs",
+   "bytes": 15074,
+   "sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/prefix-range.mjs",
+   "bytes": 3628,
+   "sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/quarantine.mjs",
+   "bytes": 15752,
+   "sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/quota-budget.mjs",
+   "bytes": 42048,
+   "sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820"
+  },
+  {
+   "path": "tests/admitted-tree/v2/generation/service.mjs",
+   "bytes": 101194,
+   "sha256": "761ac47736ec6c958f60e85a70789cd613590c274286729713b55974c246db03"
+  },
+  {
+   "path": "tests/admitted-tree/v2/host/adapters.mjs",
+   "bytes": 47371,
+   "sha256": "ee99bdf2e6d21ab1c70504e95c16f0744e1c2b3feed958083803a41164af1620"
+  },
+  {
+   "path": "tests/admitted-tree/v2/host/build-identity.mjs",
+   "bytes": 411,
+   "sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c"
+  },
+  {
+   "path": "tests/admitted-tree/v2/p8/approved-freeze-carry.mjs",
+   "bytes": 57703,
+   "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46"
+  },
+  {
+   "path": "tests/admitted-tree/v2/p8/approved-freeze-chunks.mjs",
+   "bytes": 6101,
+   "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a"
+  },
+  {
+   "path": "tests/admitted-tree/v2/p8/approved-freeze-manifest.mjs",
+   "bytes": 467075,
+   "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd"
+  },
+  {
+   "path": "tests/admitted-tree/v2/p8/migration-chunk-limits.mjs",
+   "bytes": 4733,
+   "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41"
+  },
+  {
+   "path": "tests/admitted-tree/v2/worker-entry-prod-d6.js",
+   "bytes": 153328,
+   "sha256": "4087d3c7f310ebad85ac2a229cbb368d34fd4397e68eb2768e473e126add75eb"
+  },
+  {
+   "path": "tests/admitted-tree/v2/worker-entry-prod.js",
+   "bytes": 14480,
+   "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5"
+  },
+  {
+   "path": "tests/admitted-tree/v2/worker-entry.js",
+   "bytes": 21520,
+   "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5"
+  },
+  {
+   "path": "tests/batch-bg2-battery.test.mjs",
+   "bytes": 122336,
+   "sha256": "60f2ca93a7a27b1ae0872bf0b8b0d3df1d89741ce329370d794c20378c7eee71"
+  },
+  {
+   "path": "tests/containment/containment-battery.test.mjs",
+   "bytes": 67037,
+   "sha256": "2b2befa5291a43d4b44346f8306ae55a4b1af48002d974ea24ef6b5cd2fd4aa5"
+  },
+  {
+   "path": "tests/containment/harness.mjs",
+   "bytes": 17768,
+   "sha256": "8eb4c0d6393602440cdb3e466fa4f832bbfa11734d99052573688cd0209f71b4"
+  },
+  {
+   "path": "tests/fixtures/identity-bg2.json",
+   "bytes": 5905,
+   "sha256": "11030e26e212b86ff72d9327ddd81b3070347cadab5015d25ab7267996e5da8c"
+  },
+  {
+   "path": "tests/harness.mjs",
+   "bytes": 17768,
+   "sha256": "8eb4c0d6393602440cdb3e466fa4f832bbfa11734d99052573688cd0209f71b4"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/api.mjs",
+   "bytes": 13632,
+   "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/audio-route.mjs",
+   "bytes": 15965,
+   "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/coordinator.mjs",
+   "bytes": 276256,
+   "sha256": "bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/executor.mjs",
+   "bytes": 13974,
+   "sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/binding-projection.mjs",
+   "bytes": 12818,
+   "sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/content-plane-adapter.mjs",
+   "bytes": 8150,
+   "sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/d6-executor.mjs",
+   "bytes": 46660,
+   "sha256": "c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/d6-work-source.mjs",
+   "bytes": 5981,
+   "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/eligible-set.mjs",
+   "bytes": 7284,
+   "sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/flush-store.mjs",
+   "bytes": 8497,
+   "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/gen-constants.mjs",
+   "bytes": 4936,
+   "sha256": "9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/gen-schema.mjs",
+   "bytes": 5307,
+   "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/genstore.mjs",
+   "bytes": 48703,
+   "sha256": "811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/grant-finalizer.mjs",
+   "bytes": 40172,
+   "sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/grant-guards.mjs",
+   "bytes": 12936,
+   "sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/park-release.mjs",
+   "bytes": 29126,
+   "sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/phase-policy.mjs",
+   "bytes": 7299,
+   "sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/policy-split.mjs",
+   "bytes": 15074,
+   "sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/prefix-range.mjs",
+   "bytes": 3628,
+   "sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/quarantine.mjs",
+   "bytes": 15752,
+   "sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/quota-budget.mjs",
+   "bytes": 42048,
+   "sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/generation/service.mjs",
+   "bytes": 77995,
+   "sha256": "aeeee06c8af9789426ae8135bd020be77e8ef3ea350de744472743e3dd14bd1d"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/host/adapters.mjs",
+   "bytes": 39224,
+   "sha256": "f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/host/build-identity.mjs",
+   "bytes": 411,
+   "sha256": "953dbcb40a21e570f705e10ebce4774c16b05f792cd22712765361fb21764f84"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/p8/approved-freeze-carry.mjs",
+   "bytes": 57703,
+   "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/p8/approved-freeze-chunks.mjs",
+   "bytes": 6101,
+   "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/p8/approved-freeze-manifest.mjs",
+   "bytes": 467075,
+   "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/p8/migration-chunk-limits.mjs",
+   "bytes": 4733,
+   "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/worker-entry-prod-d6.js",
+   "bytes": 108022,
+   "sha256": "292ca83e892d5d675f1c107ea4adf1fed34cca6c054fcd068c51b403f79f8a31"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/worker-entry-prod.js",
+   "bytes": 14480,
+   "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5"
+  },
+  {
+   "path": "tests/p2/baseline-tree/v2/worker-entry.js",
+   "bytes": 21520,
+   "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5"
+  },
+  {
+   "path": "tests/p2/battery.test.mjs",
+   "bytes": 43390,
+   "sha256": "a20e64f9345ccc6e6efd2bc01a6a4b2149e0cdf5db9c2d5e26a15eb5de05aead"
+  },
+  {
+   "path": "tests/p2/combined.diff",
+   "bytes": 133194,
+   "sha256": "c88868274564c439ed1b2822ab7bf125ff92ff12db20cf4bd9c4a92771cd3956"
+  },
+  {
+   "path": "tests/p2/harness.mjs",
+   "bytes": 14596,
+   "sha256": "0b0507658ee253e59479a33d9734abf108e91da76455e8a69fa172d9a929a516"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/api.mjs",
+   "bytes": 13632,
+   "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/audio-route.mjs",
+   "bytes": 15965,
+   "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/coordinator.mjs",
+   "bytes": 276256,
+   "sha256": "bca88fe92bfd316c727866f7f69817e290fc8167006d32362577010c2037e20a"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/executor.mjs",
+   "bytes": 13974,
+   "sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/binding-projection.mjs",
+   "bytes": 12818,
+   "sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/content-plane-adapter.mjs",
+   "bytes": 8150,
+   "sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/d6-executor.mjs",
+   "bytes": 46660,
+   "sha256": "c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/d6-work-source.mjs",
+   "bytes": 5981,
+   "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/eligible-set.mjs",
+   "bytes": 7284,
+   "sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/flush-store.mjs",
+   "bytes": 8497,
+   "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/gen-constants.mjs",
+   "bytes": 4936,
+   "sha256": "9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/gen-schema.mjs",
+   "bytes": 5307,
+   "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/genstore.mjs",
+   "bytes": 48703,
+   "sha256": "811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/grant-finalizer.mjs",
+   "bytes": 40172,
+   "sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/grant-guards.mjs",
+   "bytes": 12936,
+   "sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/park-release.mjs",
+   "bytes": 29126,
+   "sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/phase-policy.mjs",
+   "bytes": 7299,
+   "sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/policy-split.mjs",
+   "bytes": 15074,
+   "sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/prefix-range.mjs",
+   "bytes": 3628,
+   "sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/quarantine.mjs",
+   "bytes": 15752,
+   "sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/quota-budget.mjs",
+   "bytes": 42048,
+   "sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/generation/service.mjs",
+   "bytes": 88070,
+   "sha256": "41f27492447296f25f958836a65d8e04592c2ba3cd330a2d2854ed98433eefda"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/host/adapters.mjs",
+   "bytes": 39224,
+   "sha256": "f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/host/build-identity.mjs",
+   "bytes": 411,
+   "sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/p8/approved-freeze-carry.mjs",
+   "bytes": 57703,
+   "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/p8/approved-freeze-chunks.mjs",
+   "bytes": 6101,
+   "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/p8/approved-freeze-manifest.mjs",
+   "bytes": 467075,
+   "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/p8/migration-chunk-limits.mjs",
+   "bytes": 4733,
+   "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/worker-entry-prod-d6.js",
+   "bytes": 127131,
+   "sha256": "45daf26ca850835c698863cb08ca39a8c6f1b2f1450488d1e710f0cd87d7c4ab"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/worker-entry-prod.js",
+   "bytes": 14480,
+   "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5"
+  },
+  {
+   "path": "tests/r5a/baseline-tree/v2/worker-entry.js",
+   "bytes": 21520,
+   "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5"
+  },
+  {
+   "path": "tests/r5a/coordinator.diff",
+   "bytes": 26997,
+   "sha256": "3daf9b475f374412885038394e7acaff769ca8476a0efd75b39be7a261ed35e9"
+  },
+  {
+   "path": "tests/r5a/harness.mjs",
+   "bytes": 14908,
+   "sha256": "c261f33486f878853a3033428cc2c3e4bf37957197ca0abe5acfd709fa1a0147"
+  },
+  {
+   "path": "tests/r5a/r5a-battery.test.mjs",
+   "bytes": 20057,
+   "sha256": "ef0e1f650f16a8907bc6be9e8393ff40d023a8d01ce973e626ee2560771cc7d1"
+  },
+  {
+   "path": "tests/regen-fixtures.mjs",
+   "bytes": 2969,
+   "sha256": "66bba7d56c73eaa116962532a0c05cec9462a7544c6ba48dc4cd170bb8c707d5"
+  },
+  {
+   "path": "tests/run-all.sh",
+   "bytes": 1423,
+   "sha256": "5fde07dba6c1d8efd0697dedc512e83b5d919cdb511ecfac827e29de68eb9524"
+  },
+  {
+   "path": "tests/v3/v3-cold-restart.test.mjs",
+   "bytes": 18371,
+   "sha256": "ab218d68a339734e557a7f50e54d3704f7a5872eb03c025b5b0121f5d9d59783"
+  }
+ ],
+ "files_note": "Every file in this evidence package except association.json itself (a file cannot carry its own hash). Paths are relative to the evidence/ root."
+}

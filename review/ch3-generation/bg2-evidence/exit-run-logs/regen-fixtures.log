@@ -1,0 +1,10 @@
+changed parts: 8
+  v2/coordinator.mjs  6e04df3301eab49f11c86458cb15e683fdfc1fa008440a24bb2faab2b6b9b0d7
+  v2/executor.mjs  f91ce0bda5aecac813f283d83b2b38ba2a5b8e3839bb8fbfc329f93ed3bcb666
+  v2/generation/d6-executor.mjs  9d469bf03b1a3fdcaf8f660c4c003ecc69ba9ef5df8ee87b32f35d8c8f7ded4e
+  v2/generation/gen-constants.mjs  a713dc35dbc13c71b777dc448a604c357ae0aa098a38f0153ea8e246fa445469
+  v2/generation/genstore.mjs  f8614f9df097833182061e2e08b238fc9a371b6dc6652d460e24032378ab907f
+  v2/generation/service.mjs  761ac47736ec6c958f60e85a70789cd613590c274286729713b55974c246db03
+  v2/host/adapters.mjs  ee99bdf2e6d21ab1c70504e95c16f0744e1c2b3feed958083803a41164af1620
+  v2/worker-entry-prod-d6.js  4087d3c7f310ebad85ac2a229cbb368d34fd4397e68eb2768e473e126add75eb
+regen-fixtures exit: 0
