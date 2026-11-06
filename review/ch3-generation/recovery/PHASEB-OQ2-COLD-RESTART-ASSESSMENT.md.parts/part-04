@@ -1,0 +1,160 @@
+ctural fact that kept dispatched at 0 through 87 grants
+  (E-4).
+- **Expected fate, per path.**
+  - **V-1 (in-gate):** voided by the resume gate's first cold
+    pass, before either hold lifts; succeeded by `seg:88:full`;
+    its reservation closed and re-derived in the same cycle
+    (CR-3's observation). If the gate then proceeds, `seg:88` —
+    not `seg:87` — is the grant standing when the holds lift,
+    and the gate's ruled dispatch expectations apply to it.
+  - **V-2 (standalone micro-gate):** the same void + succession,
+    observed as the micro-gate's entire object; `seg:88` then
+    stands live and itself begins cycling (its own lease voids
+    and reissues as `seg:89`, `seg:90`, … on the chain's cadence)
+    for as long as the resulting registration stands — the
+    window-proven churn, resumed. The micro-gate's record fixes
+    the provenance of everything that follows.
+  - **V-3 (harness only):** `seg:87` is untouched in production;
+    a seeded replica of it is voided in the harness (§5.3).
+  - **No vehicle:** it stands `issued` indefinitely; nothing in
+    the system ages it out without a pass.
+
+---
+
+## 5. The candidate vehicles
+
+Each vehicle is specified as a bounded, independently reviewable
+protocol: its acts, its observation set, its stop rules, and its
+ends state. None is authorized by this document. V-1 and V-2 each
+consume exactly **one** production command (the same ruled probe)
+and no other production act; V-3 consumes none.
+
+### 5.1 V-1 — Gate-internal verification: the cold-restart checkpoint GR-2C
+
+**The argument.** The resume gate's already-ruled sequence
+places the probe at GR-2 — after the execution census and the
+voice checkpoint, **before either hold lifts** — and verifies
+the wake by its recorder-row effect within the 15-minute bound
+under paired polling (GR-2 as corrected). What OQ-2 adds is one
+observation the ruled sequence did not name: the first cold pass
+does not merely prove delivery — it necessarily performs the
+cold grant transition (CR-2), because `seg:87`'s lease row is
+due in that very pass. Under both holds, that transition is
+exposure-free by construction (M-9: the pass can churn; it
+cannot dispatch). V-1 therefore inserts **one named checkpoint,
+GR-2C, between the wake verification (GR-2) and the GR-3
+lift decision**, at which the executor must observe the cold
+transition in full before any hold moves:
+
+| # | Required observation at GR-2C (all from the gate's existing read set) | Discharges |
+|---|---|---|
+| (a) | A new recorder row, id ≥ 297, `stage complete`, `drive_invoked` 1, error fields null, `at` within the GR-2 bound of the probe | CR-1 delivery |
+| (b) | The row's `armed_after` (or the diagnostics alarm block) shows a live registration — the chain stands armed after the pass | CR-1 creation, re-verified post-pass |
+| (c) | Job read: `seg:87:full` **voided**; exactly one live grant, `seg:88:full`, `issued`, for occurrence `2a85f74f…`; occurrence `granted`; no second live grant at any poll | CR-2; CR-4 ordering |
+| (d) | Derived reserved exactly **12** at the settling polls (a transient 0 inside the void/reissue gap is the only other permitted value; 24 at any poll is a STOP) | CR-3 |
+| (e) | Dispatched 0 and provider attempts 0 on every surface, phase figures frozen, `recorderHealth.recordingFailures` still 0 | CR-4; E-4 re-verified cold |
+
+Pass (the two-complete-poll discipline of correction 2, applied
+to the job/quota reads): the transition must read consistently
+on **two consecutive complete polls** before GR-2C is declared
+met. Any element missing, unexpected, or contradicted → the
+gate's existing failure behavior, unchanged: the raw polls are
+preserved, the gate ends HELD and returns to Rowan and Julie for
+review. On that path the holds never lifted, so there is nothing
+to re-hold; the ends state is HELD with a **live, in-set churning
+chain under both holds** — the window-proven contained posture —
+and OQ-5's post-gate observation duty (as specified in the
+confirmation §8 and accepted with conditions) attaches to the
+abort path, so the churn is owned and watched, not abandoned.
+
+**What V-1 discharges, and its one honest weakness.** If the
+GR-2C observations land as specified, CR-1 through CR-4 are each
+discharged **by observation on the actual object, in the actual
+gate, before any exposure** — the strongest evidence form
+available to this program. The weakness is review timing: the
+evidence is produced inside the gate and reaches Rowan in the
+execution record, after the fact. "Independently reviewable" is
+satisfied by the protocol's pre-specification (this assessment,
+ruled on in advance, with the observation set and stop rules
+fixed before any act) plus the record — **not** by Rowan seeing
+the cold evidence before Julie's GO is sought. If Rowan prices
+pre-GO evidence review above the costs at §5.2, V-2 is the
+vehicle; §5.4 states the recommendation and its reasons.
+
+**Incremental cost over the already-ruled gate:** zero
+additional production acts (the probe is already counted, GR-4;
+the checkpoint is reads only), zero additional exposure (the
+checkpoint sits entirely inside the holds-on phase), and one
+named stage in the gate's ledger.
+
+### 5.2 V-2 — Standalone holds-on cold-restart observation (micro-gate "CR-V")
+
+A separate micro-gate, executed and reviewed **before** the
+resume gate is presented to Julie, whose entire object is the
+cold transition.
+
+**Protocol.** (1) Fresh census — the confirmation §3 read set,
+expected values = the §0 baseline of this assessment; any
+deviation STOPs before any act. (2) Julie's GO, recorded on the
+board before the census (the established ordering), naming
+exactly: one probe, both holds standing throughout, the
+observation window below, and no other act. (3) The probe:
+identical in body, route, and freshness to the gate's GR-2 probe
+(`RequestPause` against `alarm-wake-probe:nonexistent` via the
+client connector, freshly minted `command_id`), counted as
+exactly one production command. (4) Observation: paired reads of
+the §7 set at most 5 minutes apart for up to **15 minutes** from
+the probe (the GR-2 bound, adopted unchanged). **Success** =
+the §5.1 observations (a)–(e), identically specified — recorder
+row(s) showing the cold pass and the CR-2 transition as
+source-derived. **Failure** = no row within the bound, or any
+unexpected transition, state, or figure: no second probe, no
+corrective act; preserve the raw reads and return for review.
+(5) Closing census: the full §3 set repeated; ends state
+verified — both holds standing (halt `"1"` read back from the
+script settings; queue `delivery_paused` read back), containment
+NORMAL, dispatched 0, $0.
+
+**The standing-registration consequence — Rowan's choice, not a
+default.** On success, a registration **stands** and the chain
+**churns in-set at $0** (the window-proven posture, E-1–E-6)
+until some later authorized act. Two dispositions are specified;
+the micro-gate's GO wording takes whichever Rowan rules:
+
+- **(i) Leave standing, under owned observation.** The
+  micro-gate's record documents the registration's provenance
+  (created by the CR-V probe, at a stated time, by a stated
+  act), and that record then serves **verbatim** as the GR-3
+  provenance record at the resume gate's execution census —
+  closing the provenance question the confirmation §5.3 left
+  open. An owned read-only observation duty (daily checks on
+  the tail-watch precedent; classifications QUIET / MOVEMENT
+  with immediate escalation and no act) runs from CR-V's close
+  until the resume gate executes or a further ruling ends it.
+  The resume gate thereafter opens onto a **warm** chain — the
+  state the window already proved — carrying CR-V's cold
+  evidence in hand.
+- **(ii) Re-stop under a separate micro-authorization.** A
+  follow-on `stop_chain` (its own Rowan ruling + Julie GO +
+  census, on the C3 pattern) deletes the registration and
+  returns the system to the present dormant posture. Noted for
+  completeness: a stop executed against a **live, delivering**
+  chain would also produce the live-suppression evidence C3
+  could not (its chain was not delivering) — a possible
+  incidental benefit, named here only so Rowan can weigh it;
+  it is not a reason this assessment advances for choosing (ii),
+  and (ii) spends a containment episode and a further gate
+  round to buy back dormancy the resume gate will immediately
+  need to undo.
+
+**What V-2 discharges:** CR-1 through CR-4 identically to V-1 —
+the same observations on the same object — with the evidence
+**reviewed by Rowan before any resume GO is presented to
+Julie**. Its costs are the extra gate round, and — under
+disposition (i) — an open-ended interval in which the chain
+stands live and churning (contained, proven, $0 — but live)
+between CR-V and the resume gate.
+
+### 5.3 V-3 — Source + harness assessment (complement, not substitute)
+
+**What it can establish without any production act

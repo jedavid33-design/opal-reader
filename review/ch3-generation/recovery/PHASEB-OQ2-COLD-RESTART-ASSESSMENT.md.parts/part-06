@@ -1,0 +1,130 @@
+ replacement by Rowan. The
+assessment proposes; it does not rule.
+
+**If V-1 is selected:**
+
+> OQ-2 is DISCHARGED for the adopted GR-B state by the bounded
+> in-gate verification protocol GR-2C, as specified in the OQ-2
+> cold-restart assessment: the discharge is **conditional on the
+> GR-2C observations landing exactly as specified** (recorder
+> row, safe void of `seg:87`, sole successor `seg:88`,
+> reserved exactly 12, dispatched 0), is at OBSERVED-EVIDENCE
+> strength for the cold transition the gate records, and covers
+> the first cold reissuance after the C3 stop and the
+> restoration on this plan and job only. Any GR-2C deviation
+> voids the discharge for that attempt; the gate ends HELD and
+> the question returns. Nothing in the discharge asserts
+> cold-restart behavior generally, on any other plan, job, or
+> build.
+
+**If V-2 is selected:**
+
+> OQ-2 is DISCHARGED for the adopted GR-B state on the CR-V
+> micro-gate's recorded evidence, at the same strength and with
+> the same scope limit as above; the resume gate thereafter
+> opens onto the documented warm chain whose provenance the
+> CR-V record supplies for GR-3.
+
+**In either case**, the confirmation's GO wording must then be
+re-drafted against the **adopted** GR-B predicates and the
+chosen vehicle (the GR-A-only wording stands NOT APPROVED, per
+the readiness ruling item 5) and presented to Julie as a fresh
+decision. This assessment contains no GO wording and seeks none.
+
+---
+
+## 9. What remains unknown even after the recommended vehicle
+
+- **The W-4's root cause remains UNCONFIRMED.** A successful
+  cold restart would show delivery working *now*; it would not
+  explain why delivery stopped on 2026-11-04, and the
+  possibility of a recurrence during the gate's own live phase
+  is carried by the gate's existing instruments (the sliding
+  stall test, A-7, the 3-hour checkpoint) — not retired by
+  anything proposed here.
+- **Post-retry-exhaustion `getAlarm()` semantics remain
+  UNSPECIFIED** (CR-1): the discharge covers the observed
+  behavior of this DO across this stop/restoration cycle, not
+  the platform's general contract.
+- **The racing-wake recheck remains PLATFORM-UNVERIFIED**
+  (harness-proven only, C3's carried limitation): no vehicle
+  here exercises a wake racing a stop, and none should.
+- **The B-family is not closed generally.** B1 remains the
+  leading, unproven explanation of attempt 3's stall on the
+  pre-R5a build; the cold case bypasses the B-question (null
+  registration, unconditional `setAlarm`) rather than resolving
+  it.
+- **The recorder dual-failure blind spot** (a pass whose SQL
+  record and health note both fail leaves no row) bounds every
+  absence-based inference in this protocol — mitigated, not
+  removed, by requiring the row **and** its accounting-side
+  transition to agree (GR-6: a grant transition without its
+  recorder row is an R-06 discrepancy, never sufficient alone —
+  and under §6 the converse pairing is required here too).
+- **Durable Object runtime adoption generally** remains
+  unproven in the standing sense; nothing here depends on it
+  beyond the reads the censuses actually take.
+
+---
+
+## 10. Questions for Rowan
+
+- **Q-1 — Vehicle.** Does Rowan select **V-1** (in-gate GR-2C
+  checkpoint; recommended), **V-2** (standalone CR-V micro-gate),
+  or V-1/V-2 with a different composition? V-3 is proposed as a
+  complement under either selection — does she want its results
+  filed as an annex **before** she rules, or is the §5.3
+  specification sufficient at this round? (Q-6 below repeats
+  this as a sequencing question so it can be answered either
+  way.)
+- **Q-2 — Conditional discharge.** If V-1: does Rowan accept the
+  §8 construction — OQ-2 discharged by a pre-ruled protocol
+  **conditional on its observations landing exactly as
+  specified** — as satisfying item 2 of the readiness ruling
+  ("an independently reviewed, bounded verification protocol")?
+  If not, what form must the discharge take?
+- **Q-3 — GR-2C observation set.** Are observations (a)–(e) at
+  §5.1 sufficient and correctly bounded — in particular the
+  transient-0 permission in (d) and the acceptance of either
+  revision arithmetic (89 or 90) at (c)'s settling polls,
+  provided the grant/occurrence/reserved values are exact?
+- **Q-4 — Successor arithmetic.** Does Rowan confirm the §2
+  reading: the next grant issuable on this job is
+  `seg:88:full` (id from job revision 88 at issuance), and
+  `seg:87`'s id is unreachable by construction (M-1)? If her
+  reading of the issuance transaction differs, the observation
+  set must be corrected before any vehicle runs.
+- **Q-5 — If V-2: registration disposition.** Leave the
+  registration standing under owned observation (disposition
+  (i)), or direct the re-stop route (disposition (ii))? And if
+  (i): is the daily cadence + QUIET/MOVEMENT classification
+  pair, on the tail-watch precedent, the duty she wants?
+- **Q-6 — Sequencing of V-3.** Should the harness run's results
+  be filed and ruled on **before** the vehicle ruling (as a
+  check on §2's source reading), or alongside it?
+- **Q-7 — After a discharge.** May the GR-B GO wording —
+  re-drafted against the adopted predicates and the selected
+  vehicle — then be presented to Julie for her separate resume
+  GO decision? (The assessment assumes yes only on Rowan's
+  express word; the readiness ruling's item 5 stands until
+  then.)
+
+---
+
+## 11. Non-authorizations
+
+This assessment authorizes nothing. It does not authorize the
+probe, any wake, any hold lift, any SubmitJob, any grant
+mutation, any generation, any deployment, or any Batch
+activation; it does not present, and does not ask Julie for, any
+GO. Production remains HELD in NORMAL: GENERATION_HALT `"1"`,
+queue paused, containment NORMAL, the preserved plan, the
+standing grant `seg:87:full`, and the idx-26 exemption exactly
+as censused. The next act in this case is Rowan's ruling on
+§10's questions.
+
+**Turn: Rowan's** — ruling on the OQ-2 assessment (vehicle,
+discharge construction, and §10's questions), via Julie's poke.
+On her ruling, the GR-B GO wording is re-drafted accordingly
+and presented to Julie for a separate decision. Nothing is
+pending or implied in the meantime.

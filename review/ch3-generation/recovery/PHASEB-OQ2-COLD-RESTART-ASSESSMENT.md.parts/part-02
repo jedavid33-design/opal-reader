@@ -1,0 +1,155 @@
+ standing grant's
+  void returns the occurrence to `pending`.
+- **M-3 — The lease.** Issuance inserts the grant `issued` with
+  `lease_expires_at = now + LEASE_MS`, `LEASE_MS = 15 * 60 * 1000`
+  (:463; insert :2073–2075), and schedules a `lease` row at the
+  same instant (:2088). "Expiry" is not an event that happens to
+  the grant in wall-clock time; it is a **state a later pass
+  computes** when it processes the due `lease` row. A grant whose
+  lease time has passed but whose row no pass has processed
+  remains `issued` — exactly `seg:87`'s posture today.
+- **M-4 — What a pass does with a due lease row.**
+  `alarm()` processes every pending schedule row with
+  `due_at <= now`, in `due_at` order (`coordinator.mjs:3272–3301`),
+  and in its `finally` ensures a watchdog row exists and re-arms
+  (`_armAlarm`). The `lease` case of `_processScheduleRow`
+  (:3318–3410) branches on the grant's delivery posture:
+  reported/voided → skip; **outbox row present but never invoked
+  (`sent_at` null, `send_attempted_at` null) → the round-4 safe
+  void** — `_voidDispatch(..., "lease_expired_undelivered")` then
+  `_scheduleReAdvance(jobId)` (:3370–3375); outbox absent → the
+  grant is retired `voided` outright (:3376–3383); attempted but
+  unacknowledged → `handoff_uncertain`, nothing voided, nothing
+  released (:3355–3368); **delivered (`sent_at` set) → the
+  occurrence takes `lease_expired` → `outcome_unknown`**
+  (:3399–3406). A DO-internal freeze (`_frozen()`, meta key —
+  not GENERATION_HALT) tolls the lease instead (:3338–3353); no
+  freeze directive stands in production.
+- **M-5 — The void.** `_voidDispatch` (:2283–2353) refuses a
+  **claimed** grant outright (`void_refused_claimed` — a claimed
+  dispatch's reservations are never released and its work never
+  re-granted under it); otherwise it releases each attempt
+  reservation exactly once (idempotent `rel:` ledger rows),
+  applies the occurrence event `defer` (`granted` → `pending`),
+  sets the grant `voided`, closes the grant's quota reservations
+  exactly once (`closeReservationsForVoidedGrant`,
+  `generation/quota-budget.mjs:718`), voids the pending `lease`
+  schedule row, deletes the outbox row, and logs the transition.
+  The occurrence's state path out of `granted`-post-void is
+  therefore: **`granted` —(defer, at the void)→ `pending`
+  —(grant, at the successor's issuance)→ `granted`**.
+- **M-6 — Re-advancement.** `_scheduleReAdvance` (:2119–2132)
+  enqueues exactly one `retry_grant` row at +30 s after a safe
+  void (deduplicated: never two pending for one job; generating
+  jobs only). The `retry_grant` case (:3411–3423) calls
+  `requestGrant` (:2136–2143), which wakes and issues. Where the
+  retry row's +30 s due time precedes the next watchdog, the
+  re-arm at the end of the processing pass arms the alarm at the
+  earlier due — so void and successor issuance may land in
+  **consecutive passes minutes apart, or the drive sweep (M-8)
+  may re-grant within the same pass**; the observation set at §4
+  is written to accept either shape.
+- **M-7 — Reservation composition and ownership.** On issuance
+  under the D6 flag, `reserveForGrant`
+  (`generation/quota-budget.mjs:544`) reserves **worst-case 12
+  provider-attempt slots per granted occurrence** (:588; the
+  proposal §3.2.2 ×12), keyed to the issuing grant. Ownership is
+  per-grant (Gate 4's per-row rule): the standing 12 belongs to
+  `seg:87` alone; the void closes exactly those 12 exactly once
+  (M-5); the successor reserves a fresh 12 of its own. Derived
+  reserved therefore reads 12 whenever exactly one grant's
+  reservation is open, 0 in the transient between a void's close
+  and a successor's reserve, and 24 if two were ever open
+  together — the arithmetic E-3 verified 86 times warm.
+- **M-8 — The pass as a whole.** The entry's `alarm()`
+  (`worker-entry-prod-d6.js`, alarm handler) runs (1) the base
+  coordinator `alarm()` (M-4/M-6 schedule processing), then —
+  containment permitting — (2) `service.recover()` and
+  `service.driveOnce()`, the drive sweep that settles plan state
+  and re-derives grants; `driveOnce`'s only caller is this alarm
+  handler (attempt-3 diagnostic, pin `cccfea62…`). The pass is
+  recorded in `d6_drive_passes` by `_recordDrivePass`
+  (entry :1899–1944): `at`, `finished_at`, `stage`,
+  `drive_invoked`, the outcomes array, error fields, and
+  `armed_after` (a `getAlarm()` read-back taken at record time).
+  Retention is 288 rows (`DRIVE_PASS_RETENTION`, entry :459); the
+  diagnostics read returns the latest 50.
+- **M-9 — Why nothing can dispatch while the holds stand.**
+  `sendGrant` is wired **only when `GENERATION_HALT === "0"`**
+  (entry :326, :343). With the halt at `"1"`, `env.sendGrant` is
+  absent, and the watchdog case drains the outbox only
+  `if (typeof this.env.sendGrant === "function")`
+  (`coordinator.mjs:3310–3312`) — so no outbox row can ever be
+  invoked, `send_attempted_at` can never be set, and every grant
+  issued under the halt is born into the never-invoked posture of
+  M-4's safe-void branch. The queue's `delivery_paused` is a
+  second, independent fence behind it. Dispatch under both holds
+  is not merely unobserved (E-4); on this source it is
+  **structurally unavailable** at the worker layer.
+- **M-10 — The wake.** A fresh command's `handleCommand` calls
+  `wake()` before apply (replayed commands short-circuit on their
+  receipt first and never wake — the probe's freshness is its
+  mechanism). `wake()` (`coordinator.mjs:3204–3210`) ensures a
+  watchdog row exists, then `_armAlarmIfEarlier` (:3220–3271):
+  subject to the containment arm gate (NORMAL does not suppress),
+  it takes `due = MIN(due_at)` over pending schedule rows and
+  calls `setAlarm(due)` when the current registration is **null**,
+  or past-due by more than `ALARM_STALE_THRESHOLD_MS`
+  (3,600,000 ms, :144 — the R5a disjunct), or later than `due`.
+  At the resume census the registration is null, so the **null
+  branch** is the operative one: the probe's wake registers the
+  alarm at the earliest pending due time — both pending rows are
+  long past due, so the registered time is in the past, and
+  documented platform behavior for a past-due `setAlarm` is
+  prompt delivery. Prompt delivery is an **expectation**, not a
+  guarantee (§3, CR-1).
+
+---
+
+## 3. What the record does NOT establish — the cold-restart gap, decomposed
+
+The warm chain proves the mechanics run when the chain is
+**delivering**. Every cold-restart unknown below shares one root:
+since pass #296, this Durable Object has been through a verified
+`stop_chain` (registration **deleted**, read back null), a
+standalone restoration (a reasoned `clear` that by design re-arms
+nothing), and a dormancy in which no `setAlarm` has been issued
+and no `alarm()` has run. No observation in hand covers that
+combination. The gap decomposes into four separately answerable
+sub-questions.
+
+### CR-1 — Will a fresh registration be created, and will it DELIVER?
+
+Two distinct halves, with different evidence:
+
+- **Creation — SOURCE-DERIVED, high confidence.** At the probe,
+  `wake()` → `_armAlarmIfEarlier` reads `getAlarm()` = null (the
+  baseline census state) and takes the null branch (M-10):
+  `setAlarm(due)` with `due` the earliest pending due time.
+  Creation is directly observable after the fact: the diagnostics
+  read's alarm block reports the registered value, and the first
+  new recorder row carries `armed_after`. **UNRESOLVED** in one
+  narrow respect: post-retry-exhaustion `getAlarm()` semantics
+  are UNSPECIFIED (alarm-semantics assessment, pin `06bbba51…`) —
+  the platform's behavior for registrations on a DO whose alarm
+  previously exhausted retries and was then deleted is not
+  documented, and no read can distinguish "registration created"
+  from "registration created and correctly held" until delivery
+  is attempted.
+- **Delivery — UNRESOLVED, with a live counterexample class.** The
+  W-4 stands: a registration on this very DO stood **26h14m37s
+  past due** at the window's close with no delivery, for reasons
+  that remain UNCONFIRMED, temporally coincident with — not
+  attributed to — the second 1101 platform fault. Passes in fact
+  continued *inside* the fault's onset bracket until
+  2026-11-04T20:56:59Z and then stopped; no surface explains the
+  stop. The Grant 2 precedent (E-7) shows delivery working on
+  this build after a two-day dormancy — but that registration
+  had never been deleted, the DO had not been through a verified
+  stop and an episode close, and the fault had not yet occurred.
+  Attempt 3 supplies a second, older cautionary shape: a
+  registration existed and a wake could not advance it on the
+  pre-R5a build (B1 — D = A — the LEADING, unproven explanation;
+  the B-family is not closed). On the current build the cold
+  case differs from both precedents in the operative respect:
+  the registration is **null**, so the wake'

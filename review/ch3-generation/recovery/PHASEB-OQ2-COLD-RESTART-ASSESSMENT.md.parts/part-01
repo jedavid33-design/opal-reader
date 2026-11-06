@@ -1,0 +1,159 @@
+# Phase B — OQ-2 Cold-Restart Assessment (adopted GR-B state)
+
+**What this document is.** The focused OQ-2 assessment commissioned
+by Rowan's final generation-resume readiness ruling
+(`ROWAN-FINAL-RESUME-READINESS-RULING.md`, item 6), against the
+**adopted GR-B state** determined in that ruling's item 1. It
+separates what the existing 296 drive passes and 87 grants
+**establish** from what they **do not**, decomposes the
+cold-restart gap into separately answerable sub-questions, and
+proposes the smallest safe, bounded, independently reviewable way
+to establish the missing behavior. **Nothing in this document is
+an execution proposal.** Every vehicle specified here is a
+proposal for Rowan's ruling; any vehicle that touches production
+additionally requires Julie's separate GO. No wake, hold lift,
+SubmitJob, grant mutation, generation, deployment, or Batch
+activation is authorized by this assessment or by the ruling that
+commissioned it.
+
+**Strength discipline.** Every material claim is labeled
+**ESTABLISHED** (observed on production and recorded),
+**SOURCE-DERIVED** (read from the deployed composed source — the
+Grant 1 build tree at `containment-v4/composed-tree/`, build
+`fdb02395b3775dc945baa395591a73060ab146c4` — cited by file and
+line), or **UNRESOLVED** (no evidence in hand decides it).
+Source-derived expectations are predictions the specified
+observations would confirm or refute; they are never presented as
+observations.
+
+**Operative state (the adopted GR-B baseline).** From the final
+readiness confirmation (pin `ad42c9e9…`), §3.2 baseline census
+2026-11-06T02:58Z, artifacts in `resume-confirmation-baseline/`:
+
+| Element | Value |
+|---|---|
+| Containment | NORMAL both surfaces; episode 3 closed into `prevEpisode*` (3 / 1 / false / 1793933356719); `stopConfidence not_applicable` |
+| Alarm registration | **none** — `armedAt` null at every read since C3's stop deleted the standing registration; restoration re-armed nothing |
+| Pending schedule rows | 2 (one `lease` row for the standing grant, one `watchdog` row), both long past due |
+| Recorder | 296 rows, latest #296 @ 1793825819071 (2026-11-04T20:56:59.071Z), all stage `complete`; `recordingFailures` 0 |
+| Preserved plan `plan:19cad189fab54b9c804a74a6` | `active`, totals {eligible 1, done 0, failed 0, blocked 0, prompts 0}; sole entry `granted`; quarantine `held: false` |
+| Phase B job `plan:19cad189fab54b9c804a74a6:seg` | `generating`, revision **88** |
+| Grants | 87 total: `seg:1`–`seg:86` **voided** sequentially; **`grant:plan:19cad189fab54b9c804a74a6:seg:87:full` ISSUED (live)** |
+| Occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b` (569 chars) | `granted` |
+| Derived reserved | **12** (the live grant's reservation; §5.3) |
+| Dispatched / provider attempts / settled movement | **0 / 0 / 0** — across the window, C3, restoration, and the baseline census |
+| Holds | GENERATION_HALT `"1"`; queue `opalreader-generation-v2` delivery **PAUSED** |
+| Phase accounting | frozen: settled 1,029,420; estimatedUnverified 19,018; reservedUnverified 5,648; remaining 12,464,932 of 13,500,000 |
+
+**OQ-2 as originally posed** (resume package §9, pin `0946f9f2…`,
+quoted verbatim):
+
+> **OQ-2 (blocking, branch GR-B only) — re-issuance after a void.**
+> When the §7.3 grant stands voided (lease expiry under the holds)
+> and the holds later lift, does a drive pass issue a **new** grant
+> for the occurrence? With what id (the `:seg:1:full` sequence —
+> incremented, or re-used)? What is the occurrence's state path out
+> of `granted`-post-void, and the job's revision path? The records
+> establish the void state (window classifications W-2) but do not
+> establish re-issuance mechanics; §2.3.2's expectations wait on
+> this ruling.
+
+The window's course answered the *mechanics* half of that question
+for the warm chain (§1). What remains open — the subject of this
+assessment — is narrower and harder: whether the same mechanics
+run **cold**, in a Durable Object whose alarm registration was
+deleted by a verified stop, whose containment episode has closed
+through a standalone restoration, and which has recorded no drive
+pass since 2026-11-04T20:56:59Z.
+
+---
+
+## 1. What the 296 passes and 87 grants ESTABLISH
+
+All items below are **ESTABLISHED** — observed on production and
+recorded in the S1 window record (pin `f75130c6…`), the C3
+execution record (pin `b4727c40…`), or the restoration record
+(pin `304e0309…`).
+
+- **E-1 — Sequential lease-expired reissuance on a delivering
+  chain.** From the Grant 2 wake (2026-11-03T23:26:13Z; first pass
+  ~1.9 s later) to pass #296 (2026-11-04T20:56:59.071Z) — a span
+  of 21h30m44s — the chain ran 296 recorded passes and cycled the
+  preserved plan's single occurrence through 87 grants: each
+  grant, on reaching its lease-expired state, was voided, and a
+  later pass issued its sequential successor (`seg:1` → `seg:2`
+  at job revision 3, observed at the window's set 4; `seg:24`
+  live at revision 25 at +30h; `seg:87` live at revision 88 at
+  +54h). The successor's id increments with the job revision —
+  the package §9 question's "incremented, or re-used" is answered
+  for the warm chain: **incremented, never re-used**.
+- **E-2 — Never two live grants.** At no completed read in the
+  window were two grants live simultaneously; the standing member
+  was always exactly one, and the void of grant *N* always
+  preceded the issuance of grant *N+1*.
+- **E-3 — Reservation stability across 86 re-derivations.** Derived
+  reserved read **exactly 12** at every completed window check
+  from the first issuance through the close. The window record
+  states the cross-check expressly: a concurrent second grant
+  would have read 24; a leaked release would have read 0 or a
+  multiple. Eighty-six consecutive void/reissue cycles neither
+  double-counted nor leaked the reservation.
+- **E-4 — Zero dispatch and zero spend under both holds,
+  throughout.** Dispatched 0 and provider attempts 0 at every
+  read; phase accounting frozen on both surfaces; $0 across the
+  window, C3, and restoration. The churn is a grants-only motion:
+  it consumed no provider attempt, no quota dispatch, and no
+  money.
+- **E-5 — Recorder completeness for the warm chain.** All 296
+  rows read stage `complete` with null error fields;
+  `recorderHealth.recordingFailures` remained 0 at every completed
+  check. (The standing dual-failure caveat applies to any
+  inference from *absent* rows — §6 — but the 296 rows present are
+  complete as recorded.)
+- **E-6 — Pattern stability.** The cycle's period is consistent
+  with its source constants (§2): a 15-minute grant lease
+  (`LEASE_MS`) processed on a 10-minute watchdog cadence
+  (`WATCHDOG_PERIOD_MS`) — 87 grants over ~21.5 hours ≈ one cycle
+  per ~14.8 minutes of wall clock, with no drift, no acceleration,
+  and no degradation across the span.
+- **E-7 — The pre-fault wake arithmetic works on this build.**
+  The Grant 2 stimulus — the same `RequestPause` against
+  `alarm-wake-probe:nonexistent` the resume gate's probe will use
+  — produced a recorded pass ~1.9 s after dispatch on a chain that
+  had been dormant for over two days, on the current composed
+  build (R5a deployed by Grant 1 the previous day). This is the
+  design precedent for the probe. Its limits are stated at CR-1:
+  that registration had never been deleted, and delivery
+  subsequently **failed** on the same registration lineage (the
+  W-4) — E-7 establishes that the wake *can* work on this build,
+  not that it *will* work cold.
+
+---
+
+## 2. The mechanics the source prescribes (SOURCE-DERIVED)
+
+These are the code paths any cold restart will execute, read from
+the Grant 1 build source. They ground the expectations at §3 and
+the observation sets at §4.
+
+- **M-1 — Grant identity is the job revision.**
+  `_issueGrant` computes
+  ``grantId = `grant:${jobId}:${job.revision}:${probe ? "probe" : "full"}` ``
+  (`coordinator.mjs:2037`) and refuses with `grant_exists` if a
+  grant of that id already exists (:2038–2039). The grant's own
+  transition then advances the job revision by exactly one
+  (`applyJobEvent`, :776–779) and the grant row's stored revision
+  is updated to the post-transition value (:2095–2101). Hence
+  `seg:87` was issued at job revision 87 and the job now stands at
+  88; **the next grant this job can ever issue is
+  `seg:88:full`, and `seg:87`'s id can never be re-issued** —
+  re-issuance under an old id is structurally impossible, not
+  merely unobserved.
+- **M-2 — A grant can only cover `pending` occurrences.**
+  `_issueGrant` targets `occurrences WHERE state = 'pending'`
+  (:1988) and applies the occurrence event `grant`
+  (pending → `granted` per `OCC_TRANSITIONS`, :92–99) inside the
+  issuance transaction. A `granted` occurrence is not a target.
+  The single-live-grant property (E-2) is therefore emergent from
+  the state machine, not a counter: a successor for this
+  occurrence can only be issued **after** the

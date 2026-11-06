@@ -1,0 +1,136 @@
+s `setAlarm` is
+  unconditional (M-10) rather than an arithmetic no-op — but
+  whether the platform **delivers** a past-due registration
+  created fresh on this DO, after this DO's history, is exactly
+  what no record establishes. **Confirming observation:** a new
+  recorder row (id ≥ 297) appears within the ruled bound after
+  the probe. **Refuting observation:** the bound expires with no
+  row — the gate's GR-2 failure shape, already ruled: preserve
+  the raw polls, end HELD, return for review; no second probe.
+
+### CR-2 — What does the FIRST cold pass do with `seg:87`?
+
+**SOURCE-DERIVED expectation, stated precisely.** `seg:87`'s
+`lease` row is among the two pending schedule rows and is due;
+the first cold `alarm()` processes it (M-4). `seg:87` was issued
+under the halt, so by M-9 its outbox row was never invoked
+(`sent_at` null, `send_attempted_at` null) — the grant's
+`issued` state, the occurrence's `granted` state, and dispatched
+0 on every surface are jointly consistent only with that
+posture. The lease case therefore takes the **safe-void
+branch**: `_voidDispatch(..., "lease_expired_undelivered")`
+voids `seg:87` (occurrence `defer` → `pending`; its 12
+reservations closed exactly once), `_scheduleReAdvance` enqueues
+the +30 s `retry_grant`, and a successor — `seg:88:full`, the
+only id M-1 permits — is issued for the same occurrence by the
+retry path or by the same pass's `driveOnce` sweep (M-6),
+reserving a fresh 12 and returning derived reserved to exactly
+12, the occurrence to `granted`, and the job revision from 88 to
+89 (or 90 if both the void's re-advance and a drive re-derivation
+each apply a job event — the observation set at §7 accepts the
+transition by its grant/occurrence/reserved values, not by an
+exact revision count). **What would refute it:** (a) `seg:87`
+still `issued` after recorded passes have run — the lease row
+was not processed as prescribed; (b) the occurrence in
+`outcome_unknown` — the pass treated the grant as delivered,
+contradicting M-9 and E-4, a STOP-grade finding; (c) any second
+live grant at any read; (d) derived reserved ≠ 12 once the cycle
+settles, or 24 at any read. *Caveat at full strength:* the
+outbox row's internal fields are on no read surface; the
+safe-void expectation rests on the source branch structure plus
+the grant/occurrence/dispatched triad, and only the cold pass's
+observed transition converts it to ESTABLISHED.
+
+### CR-3 — Reservation ownership continuity across the stop
+
+The reservation is not a free-floating number: it is 12
+provider-attempt slots reserved **by `seg:87`** (M-7), closable
+exactly once by `seg:87`'s void, and replaceable only by a fresh
+reserve against the successor. The warm chain re-derived it 86
+times without double-count or leak (E-3) — **but all 86
+re-derivations occurred inside one continuous delivering chain,
+with no intervening stop, deletion, or restoration.** The
+cold question is whether the stop/restoration interval changed
+anything the arithmetic depends on: the reservations live in the
+quota ledger keyed by grant, untouched by containment
+transitions (C3's and restoration's censuses both read
+reservedUnverified 5,648 and derived reserved 12, frozen), and
+no source path couples them to the alarm or containment state.
+**SOURCE-DERIVED expectation:** the cold void closes `seg:87`'s
+12 exactly once and `seg:88` reserves its own 12; derived
+reserved is never observed at 24 and reads exactly 12 once the
+cycle settles. **Confirming observation:** the §7 reads across
+the transition (12 → transient 0 permitted between void and
+reissue if a poll lands inside the gap → 12). **Refuting
+observation:** 24 at any read (double-count — the successor
+reserved while the predecessor's closure failed), or a settled
+reading ≠ 12, or reservedUnverified phase movement — each a
+STOP.
+
+### CR-4 — Duplicate-dispatch prevention on the cold path
+
+The invariants, and which of them cold restart stresses in a way
+warm churn did not:
+
+| Invariant | Mechanism | Cold stress |
+|---|---|---|
+| Single live grant per occurrence | Issuance targets `pending` occurrences only (M-2); successor impossible until the void's `defer` lands | **Stressed**: the cold pass must perform the void *first*, in the same processing sweep that can also re-grant (M-6/M-8). Warm churn never combined a 26-hour-stale lease row, a past-due watchdog, and a fresh registration in one pass. The state machine's ordering — schedule rows in `due_at` order, issuance inside transactions — is the fence; the observation is E-2's property re-verified cold. |
+| Grant-id uniqueness | Id = job revision at issuance; `grant_exists` refusal (M-1) | Not stressed: the id space moved monotonically through 87 grants and the next id is forced. |
+| Job revision monotonicity | `applyJobEvent` increments by exactly 1 per applied event; expected-revision CAS available to appliers | Mildly stressed: two re-grant paths (retry row, drive sweep) converge on one job in one pass window; a revision conflict would surface as a logged rejection, visible in the transition record and as a grants-list anomaly — covered by the §7 observation set. |
+| No dispatch without a live grant under lifted holds | Dispatch consumes a grant through the queue; claims fence voids (M-5's claimed-grant refusal) | Not stressed pre-lift: under the holds, dispatch is structurally unavailable (M-9) regardless of grant state. Post-lift, the gate's own ruled sequence governs, and this assessment adds nothing to it. |
+| Quota cohort bound | `reserveForGrant` / `boundGrantTargets`: 12 worst-case slots per fresh occurrence against the 100/day cap; the day's ledger count can never exceed the limit | Stressed only arithmetically: the cold cycle consumes the same 12-slot reservation shape the warm chain consumed 87 times on prior PT days; the census-day figures (attempts 0, dispatches 0) leave full headroom. A reservation reading beyond 12 for this single-occurrence job refutes — STOP (CR-3). |
+
+**Net:** CR-4's genuinely cold-stressed element is the
+*ordering* of void-then-regrant inside the first passes. It is
+fully observable on the §7 read set (grants list + occurrence
+state + reserved at every poll), and any violation is visible
+before either hold lifts, while dispatch is still structurally
+impossible. That asymmetry — the stressed invariant is checkable
+at zero exposure — is what makes the §5 vehicles possible.
+
+---
+
+## 4. The currently issued grant — `seg:87:full`, in full
+
+- **Identity and issue context (ESTABLISHED).**
+  `grant:plan:19cad189fab54b9c804a74a6:seg:87:full`, state
+  `issued`, stored revision 88, for the preserved plan's sole
+  occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b` (FP chapter
+  index 2, idx 26, 569 chars, Alex → Gemini Charon per the Phase
+  B record). It is the 87th sequential grant of the window churn:
+  live at the +54h window check (2026-11-05T05:20:53Z) with job
+  revision 88 and `seg:1`–`seg:86` voided behind it. (The window
+  record does not separately timestamp `seg:87`'s issuing pass;
+  it was issued during the churn's final sequence on 2026-11-04,
+  within the recorded 296 passes. Stated at that strength.)
+- **Lease terms (SOURCE-DERIVED).** Issued with
+  `lease_expires_at = issuance + 15 minutes` (M-3) and a `lease`
+  schedule row at the same instant — one of the two pending
+  schedule rows at every census since. The lease **expired in
+  wall-clock terms on 2026-11-04**, minutes after issuance. But
+  per M-3, expiry is computed by a processing pass, and no pass
+  has run since #296: the grant is not "expired" in any state
+  the system records — it is `issued`, with a due lease row
+  awaiting the first cold pass. Nothing about the long interval
+  changes the branch the pass will take (M-4 keys on the outbox
+  posture, not on how stale the row is).
+- **Reservation and ownership (ESTABLISHED + SOURCE-DERIVED).**
+  The grant owns the system's entire current reservation:
+  **12 worst-case provider-attempt slots** (M-7), reserved at its
+  issuance by `reserveForGrant` and keyed to its grant id;
+  phase-surface counterpart reservedUnverified 5,648 ledger units
+  (frozen at every census). Ownership is per-grant and
+  exclusive: no other grant holds any reservation (86 predecessors
+  closed theirs at their voids), and the 12 can be released
+  exactly once — by `seg:87`'s void (M-5), by a claim-side
+  settlement if it were ever claimed (it cannot be under the
+  holds, M-9), or by no other path.
+- **Why it cannot dispatch on any holds-on path
+  (SOURCE-DERIVED).** Dispatch requires the outbox row to be
+  invoked by `sendGrant`; `sendGrant` is not wired while
+  GENERATION_HALT is `"1"` (M-9), and the queue's paused delivery
+  stands behind that. The grant can therefore be **voided and
+  succeeded** under the holds, but it cannot be **sent**: on
+  V-1 and V-2 alike (§5), the only motions available to it are
+  the M-4 safe void and the M-6 re-advancement. This is the same
+  stru

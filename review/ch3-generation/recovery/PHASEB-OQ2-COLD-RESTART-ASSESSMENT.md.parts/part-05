@@ -1,0 +1,170 @@
+.** Build the
+composed tree in the Durable Object test harness; seed storage
+to the adopted GR-B state (grants `seg:1`–`seg:86` voided +
+`seg:87` issued with a past `lease_expires_at` and an unsent
+outbox row; occurrence `granted`; job `generating` rev 88;
+pending `lease` + `watchdog` schedule rows, both past due;
+containment row NORMAL in its post-restoration form; `seg:87`'s
+12 quota reservations open; GENERATION_HALT `"1"` in env); call
+`deleteAlarm()`; drive the probe-equivalent fresh command
+through `handleCommand`; invoke `alarm()`; and assert the full
+CR-2/CR-3/CR-4 transition set against the resulting state
+(`seg:87` voided with a `lease_expired_undelivered` transition
+record; `seg:88` issued; occurrence `granted`; reserved 12;
+exactly one live grant; revision advanced monotonically). The
+lease handler's branch table on `seg:87`'s exact posture can
+additionally be enumerated source-only, as §2 does. This
+sharpens every source-derived expectation in §3 into an
+executable assertion and would catch a source misreading in
+this assessment before any production vehicle runs.
+
+**Its standing limitation — why it cannot substitute.** The
+harness *invokes* `alarm()` directly: CR-1's delivery half —
+the one sub-question with a live counterexample — is exactly
+the part a harness cannot touch, because its `getAlarm` /
+`setAlarm` are fakes and no platform delivery occurs. The
+program's precedents are uniform: harness-green is no evidence
+for platform behavior (the DO `.one()` divergence — the harness
+fake returns null where real DO SQLite throws — is the standing
+example, and C1's ruling already limits deployment evidence to
+what production reads prove). V-3 can discharge the
+**source-behavior halves** of CR-2, CR-3, and CR-4 at
+harness strength; it cannot discharge CR-1 at any strength, and
+therefore cannot alone support an OQ-2 disposition for GR-B.
+
+**Recommendation within the vehicle set:** run V-3 regardless
+(documentary; needs no production authorization) as an annex to
+whichever of V-1 / V-2 Rowan selects — its assertions either
+confirm §2's reading or falsify this assessment cheaply, before
+production is touched.
+
+### 5.4 Evaluation and recommendation
+
+| | V-1 (in-gate GR-2C) | V-2 (standalone CR-V) | V-3 (harness) |
+|---|---|---|---|
+| Discharges CR-1 (creation + delivery) | Yes — observed in the actual DO, pre-lift | Yes — same observation, earlier | **No** — delivery untestable |
+| Discharges CR-2 / CR-3 / CR-4 | Yes — observed pre-lift | Yes — observed | Source-behavior halves only, harness strength |
+| Additional production acts | **0** (probe already counted in the gate) | 1 (the probe) + a gate round | 0 |
+| Exposure at any point | None — checkpoint is holds-on | None — holds never lift | None |
+| Evidence reviewed by Rowan | In the execution record (protocol pre-ruled) | **Before** the resume GO is sought | As an annex, anytime |
+| Side consequences | Abort path leaves a live churning chain under holds (owned by OQ-5 duty) | Success leaves a live churning chain under holds for an open interval (disposition (i)) or spends a re-stop (ii) | None |
+| Rounds added | 0 | 1 micro-gate (+ possibly a re-stop gate) | 0 |
+
+**Recommended: V-1, with V-3 run as its documentary complement.**
+V-1 is the smallest vehicle that discharges every sub-question
+by observation: it adds no production act, no exposure, and no
+round to a gate whose every other element Rowan has already
+ruled, and it places the cold-restart test at the one moment
+when its failure is free — holds on, dispatch structurally
+impossible, abort already specified. Its single trade —
+evidence reviewed after execution rather than before the GO —
+is the same trade every prior gate in this program has run on
+(C1, C2, Grant 1, C3, restoration: pre-ruled protocol, evidence
+in the execution record), and the GR-2C observation set is
+specified here, in advance, at the same strictness as those
+gates' censuses. **V-2 is fully specified above as Rowan's
+alternative** if she prices pre-GO evidence review above the
+extra round and the standing-chain interval; the assessment
+takes no position that would foreclose it, and the disposition
+language at §8 is drafted for both.
+
+---
+
+## 6. Stop rules and restoration of both holds — every permitted path
+
+**Stop rules (any vehicle that touches production).** Each of
+the following, observed at any poll, is a STOP: preserve the raw
+reads exactly as taken, take no corrective or further act under
+the vehicle's authorization, and return to Rowan and Julie for
+review.
+
+- **S-1.** No new recorder row within the 15-minute bound
+  (CR-1's refuting observation).
+- **S-2.** `seg:87` still `issued` after a recorded pass has run,
+  or the occurrence in `outcome_unknown` (CR-2 refuted).
+- **S-3.** A second live grant at any read, or any grant other
+  than the standing member and its single sequential successor.
+- **S-4.** Derived reserved at 24 at any read, or settled at
+  anything other than exactly 12; any movement in
+  reservedUnverified or any phase figure.
+- **S-5.** Dispatched > 0, provider attempts > 0, or any settled
+  movement, at any read — under the holds each is a
+  structural-impossibility made real (M-9), the gravest class
+  this protocol can observe.
+- **S-6.** Any recorder row with a non-`complete` stage or
+  non-null error fields, or `recordingFailures` > 0 (with the
+  §9 dual-failure caveat stated, not smoothed).
+- **S-7.** Any deviation in the pre-act census from the §0
+  baseline, in any field — the standing executor STOP law: the
+  vehicle does not begin.
+- **S-8.** A probe receipt other than the expected
+  `{"outcome":"rejected","reason":"job_not_found"}` — the
+  command layer itself is off-design; nothing downstream of it
+  may be interpreted until Rowan classifies it.
+
+**Restoration of both holds.**
+
+- **V-1:** the checkpoint sits *before* any lift, so on every
+  GR-2C path — success or STOP — both holds stand untouched and
+  need no restoration. On paths where the gate later lifts and
+  then aborts, the gate's existing re-hold sequence governs
+  (queue re-pause, then GENERATION_HALT restored, each verified
+  by read-back, in the ruled order) — correction 2's A-7 and the
+  package §2.3.3 sequence, unchanged by this assessment. The
+  closing census verifies both holds standing on every path,
+  success included (GR-6a ends re-held by design).
+- **V-2:** the holds **never lift**; "restoration" is
+  discharge-by-verification: the closing census reads
+  GENERATION_HALT `"1"` from the script settings surface and
+  `delivery_paused: true` from the queue surface, and the
+  micro-gate record states both reads. If either read fails,
+  that is itself an S-7-class finding for the next round — the
+  micro-gate holds no act with which to repair it, and none may
+  be improvised.
+- **V-3:** no production state exists to restore.
+
+---
+
+## 7. Recorder evidence specification
+
+The evidence for CR-1 and CR-2 is the recorder, read through the
+gate's existing surfaces — `GET /v2/d6-diagnostics?drive=1`
+(operator) for the pass rows and alarm block, the client job
+read for the grants list, and the quota/diagnostics surfaces for
+reserved and dispatched. Per row and per poll, the protocol
+captures:
+
+- **Row identity and timing:** `id` (≥ 297 for the first cold
+  row), `at`, `finished_at` — establishing the probe-to-row
+  interval against the 15-minute bound and the ≤5-minute paired
+  polling cadence (poll timestamps recorded by the executor
+  alongside each read).
+- **Row quality:** `stage` (`complete` required), `drive_invoked`
+  (1 required — a `contained`-stage row would mean the drive was
+  suppressed and nothing in CR-2 was tested; under the NORMAL
+  baseline it is also an S-6-class surprise), `error_name` /
+  `error_message` (null required), and the outcomes array (the
+  preserved plan's outcome present, its state `active`).
+- **Chain state:** `armed_after` on the new row(s) — non-null
+  and in the future relative to the row's `at` (the chain stands
+  armed for its next pass) — corroborated by the diagnostics
+  alarm block (`armedAt`, `pendingSchedule`, `pendingWatchdog`)
+  at the same poll.
+- **Recorder health:** `recordingFailures` (0 required) and
+  `lastRecordedAt` advancing to the new row's `at`. The
+  two-complete-poll rule (correction 2) applies to the grant/
+  accounting side of the transition: the job and quota reads
+  must agree with the row's implication on two consecutive
+  complete polls before the transition is called observed.
+- **Retention note:** the table retains 288 rows; the read
+  returns the latest 50. All 296 warm rows remain within
+  retention at the time of writing, so the cold rows' ids
+  continue the warm sequence unambiguously (297, 298, …) — the
+  specification keys on the **latest-row id and its delta from
+  296**, not on full-table enumeration.
+
+---
+
+## 8. Proposed OQ-2 disposition language — for Rowan's ruling
+
+Drafted for adoption, amendment, or
