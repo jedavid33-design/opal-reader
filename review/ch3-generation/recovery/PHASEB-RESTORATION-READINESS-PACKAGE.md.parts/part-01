@@ -1,0 +1,133 @@
+# PHASE B — STANDALONE RESTORATION: READINESS PACKAGE
+
+**Gate:** standalone restoration — the return of containment from
+`CHAIN_STOPPED` to `NORMAL` by exactly one reasoned `clear`.
+**Status:** READINESS ONLY. This package authorizes nothing, executes
+nothing, and was prepared with no production calls. It seeks (i) Rowan's
+ruling on restoration readiness and (ii), only after that ruling, Julie's
+separate GO in the wording at §6.
+**Production state at drafting:** HELD in `CHAIN_STOPPED` (Gate C3,
+branch (d), EXECUTED AND CLOSED at PARTIAL strength); GENERATION_HALT
+`"1"`; queue `opalreader-generation-v2` delivery paused; the preserved
+Phase B plan and the idx-26 chapter exemption untouched.
+**This package's pin** is carried in the companion CP's `<RESTORE-PIN>`
+slot (a document cannot name its own commit).
+
+**Authority chain for this gate:**
+
+| # | Link | Reference |
+|---|---|---|
+| 1 | Containment design v4 REVISED — restoration policy (§6), episode law (§4.2), truth model (§2.3) | `PHASEB-CONTAINMENT-DESIGN-V4-REVISED.md` |
+| 2 | Recovery gates v4 REVISED — "Standalone restoration authorization (NOT a gate; decision 2)" | `PHASEB-RECOVERY-GATES-V4-REVISED.md` |
+| 3 | V4 corrections round — Rowan PASS (V4-1 historical-review strengthening accepted) | `ROWAN-V4-CORRECTIONS-PASS.md`; corrections package pin `621535f0456e3d61cc7bcbc2fda04f661dc63e49` |
+| 4 | Gate C3 execution record (the episode this gate closes) | `PHASEB-C3-EXECUTION-RECORD.md`, pin `b4727c408f6c446a94466594ea2cc7c59d11de8d` |
+| 5 | Rowan ruling on the C3 execution record, §A — restoration prerequisites stated; **no restoration authorized** | `ROWAN-C3-EXECUTION-OQ36-RULING.md` (board verbatim comment 6675293356) |
+
+---
+
+## 1. Scope and separateness
+
+### 1.1 What restoration is
+
+Restoration is exactly one operator act: a reasoned `clear`
+(`POST /v2/d6-containment {action:"clear", authorizationRef, reason}`)
+that takes the containment state from `CHAIN_STOPPED` to `NORMAL` and,
+inside the same commit transaction, **closes stop episode 3** — copying
+its summary into the state row's `prevEpisode*` fields and appending the
+`stop_episode_closed` audit event before the current-episode fields
+reset (design v4 revised §4.2; the deployed composed source implements
+exactly this sequence). It is the only exit from `CHAIN_STOPPED` the
+design provides: "no automatic clear anywhere; NORMAL return only via an
+explicit standalone authorization, a fresh census, and a demonstrated
+reason" (design v4 revised §6, carrying v3 §5).
+
+### 1.2 What restoration is NOT
+
+- **Not a re-arm.** The `clear` touches no alarm API. C3's `stop_chain`
+  deleted the standing registration; after restoration `armedAt` remains
+  **null** — no registration exists, and none is created by this gate.
+  The first subsequent wake can occur only through the ordinary wake
+  paths under NORMAL, inside a future authorized gate (gates v4 revised,
+  standalone restoration section: "The clear does not re-arm: the
+  registration stays absent").
+- **Not a hold lift.** GENERATION_HALT (a Worker binding) and the queue
+  delivery pause (a Cloudflare queue setting) are separate states that
+  this gate reads as preconditions and never touches. The system ends
+  restoration exactly as held as it began: HELD at NORMAL.
+- **Not generation, and not the resume gate's wake.** No SubmitJob, no
+  command, no stimulus, no probe of any kind is sent by this gate. The
+  generation-resume gate's wake remains that gate's own ruled mechanism
+  (the GR-1 probe design, accepted in principle, executed only under
+  that gate), and restoration neither performs it nor substitutes for it.
+- **Not part of C3, and not bundled with anything.** C3 ended
+  CHAIN_STOPPED **by design**; its in-gate `clear` (C3-3) applied only to
+  the DRIVE_CONTAINED mechanics leg and was expressly not a restoration
+  (C3 package §2; gates v4 revised, "Restoration rules"). Restoration is
+  a standalone authorization in the gate ladder — after C3, before the
+  generation-resume gate — and is never a step inside either.
+
+### 1.3 Preconditions, and where each is discharged
+
+| Precondition | Source | Discharged by |
+|---|---|---|
+| Rowan's ruling on this readiness package | Ruling §A ("No restoration is authorized by this ruling") + gates v4 revised | Rowan's review of this package — **sought here** |
+| Julie's separate explicit GO | Gates v4 revised (named approval by Julie after Rowan's review) | §6 wording, presented only after Rowan's ruling |
+| Fresh census at execution start | Gates v4 revised; design v4 revised §6 | §3 (the fresh closing-state confirmation, run as this gate's preflight census — see §7, Q-1 for the proposed reading) |
+| The fresh census CORROBORATES the stop record — registration absent, `stopConfidence` derived fresh at `verified_current`; a contradiction stops the gate on the record's word alone never sufficing | Gates v4 revised (V4-2 correction) | §3 STOP rules |
+| A demonstrated reason, recorded in the `clear` audit event | Design v3 §5 as carried by design v4 revised §6; gates v4 revised | §4.2 (drafted reason, quoted in the GO) |
+| **Mandatory historical audit review**, enumerating EVERY stop episode in the append-only history with its exhaustion status; R3-V naming for any exhausted episode | Design v4 revised §6 (V4-1); C3 package §2; ruling §A | **§2 of this package** (performed documentarily here; re-confirmed against the fresh surfaces at execution) |
+| Stop-record precondition: the stop stands `verified` | Design §5.3 preconditions via C3 package §2 | C3 record §3.5 (`stopStatus "verified"`, attempt 1) + §3 fresh derivation |
+| Episode disclosure: current episode id + exhausted flag, previous-episode summary if any | Design v4 revised §6; gates v4 revised | §2.2 — current episode **3**, `stopEpisodeExhausted: false`; previous-episode summary **none** (all `prevEpisode*` fields null — no episode has ever closed) |
+
+**Exhaustion / R3-V check, stated expressly:** no episode in the history
+is exhausted (episode 3 verified at attempt 1 of a bound of 3;
+`stopEpisodeExhausted: false`). The design §6 requirement to name an
+R3-V authorization therefore **does not arise** for this restoration.
+If the §3 confirmation were to read any exhaustion fact differently,
+that would be a deviation and a STOP under §3.3, not a detail to absorb.
+
+---
+
+## 2. Historical audit review — the mandatory precondition, performed
+
+Design v4 revised §6 makes this review a precondition of the
+authorization itself: the restoration request must rest on a review of
+the FULL append-only audit history (`d6_containment_events`), enumerating
+every stop episode the history contains. Rowan's ruling (§A) fixes this
+review's required contents for this gate: **episode 3, all four reported
+transitions, and the rejected C3-1 request.** This section performs the
+review documentarily, at exactly the strength the evidence supports.
+
+### 2.1 What the review rests on — and what it cannot independently show
+
+The review rests on three mutually corroborating sources:
+
+1. **The transition responses in the C3 execution record** (record pin
+   `b4727c40…`; raw evidence `c3-execution/` files `s1`, `s1b`, `s2`,
+   `s3`, `s4`, `s5`). Each applied transition's response carries the
+   post-transition state read, including `updatedAt` and the recorded
+   `authorizationRef` — so each audit row's existence and position is
+   evidenced by the act that wrote it, not merely asserted.
+2. **The state row's stop-record fields**, read at C3-7 on both surfaces
+   and agreeing in every field (record §3.7), and to be re-read at this
+   gate's §3 confirmation: `stopEpisodeId 3`, `stopVerifyAttempts 1`,
+   `stopEpisodeExhausted false`, `stopStatus "verified"`.
+3. **The episode arithmetic.** Episode 3 is keyed by its `stop_chain`
+   audit-event row id (design §4.1: the episode id is captured from
+   `last_insert_rowid()` in the committing transaction). The stop commit
+   therefore IS audit row 3 — which requires exactly two prior rows in
+   the table. The C3 census (record §2.2, D-5) established the state row
+   **absent** on both surfaces immediately before C3-1; under the design
+   the tables bootstrap lazily (DDL-only, at first touch — read or
+   transition) but reads never write rows or state, so the table's
+   entire row contents at gate end were exactly the rows C3's own
+   transitions wrote.
+
+**The limitation, at the strength Rowan accepted.** No read surface in
+the established read set enumerates `d6_containment_events` rows
+directly (C3 record E-6). This review therefore reconciles the four rows
+by the transition responses, the `updatedAt` chain, the episode
+arithmetic, and both-surface agreement at every step read-back and at
+closing — it does **not** present a literal row-by-row audit-table
+listing, and no sentence in this package claims one. Rowan accepted the
+audit-table accounting at exactly this narrowed strength (ruling �

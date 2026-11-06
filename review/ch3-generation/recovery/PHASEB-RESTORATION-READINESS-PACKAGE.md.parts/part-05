@@ -1,0 +1,85 @@
+) —
+the complete history is unaffected (Tier 1 is append-only and
+permanent), and the historical-audit-review precondition applies to
+every future restoration or R3-V request precisely so that no summary
+overwrite can hide an episode.
+
+---
+
+## 6. GO wording for Julie — DRAFTED
+
+Following the gates v4 revised ancestor wording ("GO — execute the
+standalone restoration as pinned: fresh census including the episode
+disclosure and the historical audit review of the full containment
+audit history, then exactly one clear of CHAIN_STOPPED with the
+recorded reason, read-backs only, ending HELD in NORMAL with the
+registration still absent"), adapted to this package and presented
+only after Rowan's ruling on it:
+
+> "GO — execute the standalone restoration as pinned at
+> `<RESTORE-PIN>`: the fresh closing-state confirmation census of §3
+> (both containment surfaces, the alarm registration, the production
+> holds, plan and job state, and build identity including the script
+> etag), against the historical audit review of §2 (episode 3
+> disclosed: verified at attempt 1, not exhausted; all four C3
+> transitions and the rejected C3-1 request accounted; no exhausted
+> episode anywhere in the history, so no R3-V naming arises); then
+> exactly one `clear` of CHAIN_STOPPED with the recorded reason quoted
+> in §4.2 of the package, read-backs only, no re-send in any failure
+> branch, ending HELD in NORMAL with the registration still absent. I
+> understand this restoration does not re-arm anything, does not lift
+> GENERATION_HALT or the queue pause, does not touch the preserved
+> plan or the idx-26 exemption, and does not authorize the
+> generation-resume gate or any generation."
+
+The GO is recorded on the board before the §3 confirmation runs (the
+C3 ordering), and the §4.1 `authorizationRef` takes its comment id from
+that record.
+
+---
+
+## 7. Assumptions register and open questions for Rowan
+
+### Assumptions
+
+| # | Assumption | Basis / strength |
+|---|---|---|
+| A-1 | The §3 confirmation's expected values are the C3 closing values, unchanged since 2026-11-06T02:24:16Z | No authorized act since C3 can have changed them (no containment transition, deploy, hold, or queue change is authorized or recorded); the confirmation itself falsifies this if wrong — it is an expectation, not an inheritance |
+| A-2 | Audit rows 5 and 6 will be the restoration's `clear:applied` and `stop_episode_closed`, in that order | The deployed composed source's clear path (state commit insert, then episode-close insert, one transaction); the row ids follow from §2's reconciled count of 4 — they are predictions the R-2/R-3 reads partially corroborate (the surfaces expose the summary fields, not row ids), and the execution record must state them at that strength |
+| A-3 | Row ids in §2.3 (1–4) are as the episode arithmetic + responses establish | C3 record §4's counting basis, accepted by Rowan at its narrowed strength (ruling §A) |
+| A-4 | `stopConfidence` after the clear reads `not_applicable` on both surfaces | Truth-table row 1 applied to a readable NORMAL record; no post-clear production read exists yet to confirm the surfaces' behavior (the only production clear so far, C3-3, read back `not_applicable` at NORMAL — record §3.2/§3.4 pattern, corroborating) |
+
+### Open questions
+
+- **Q-1 — Confirmation vs census.** Proposed reading: the ruling's
+  "fresh read-only closing-state confirmation" and the gates text's
+  "fresh CENSUS executed at its start" are **one act** — the §3 set,
+  run in the execution session immediately before R-1, valid only
+  within that session (if execution slips to a later session, the
+  confirmation is re-run in full; it is never carried across sessions).
+  Rowan is asked to accept or correct this reading.
+- **Q-2 — Audit-review surface.** This review rests on the reconciled
+  record (§2.1) because no established read surface enumerates the
+  audit table. Does Rowan accept the review at that strength for
+  restoration (as she accepted the accounting's narrowed strength for
+  C3's record), or does she require a literal audit-table read — which
+  would need a surface that does not exist in the current build and is
+  **not** proposed here?
+- **Q-3 — The §4.2 reason text.** Is the drafted reason accepted as the
+  demonstrated reason for this clear (what changed / why containment is
+  no longer needed), at its drafted length and visibility?
+- **Q-4 — The no-re-send rule.** §4.5 forbids any corrected re-send of
+  R-1 inside the gate, including for a paperwork-form defect of the
+  C3-1 kind. Rowan is asked to confirm this stricter-than-C3 posture is
+  the intended one for a single-act gate (C3's correction proceeded
+  inside its gate because C3's census and multi-step ledger framed it;
+  this gate's position is that a failed single act returns for ruling).
+
+---
+
+## 8. Turn
+
+**Turn: Rowan's** — review of this readiness package (via Julie's poke;
+the companion CP rides with it). On Rowan's ruling, the §6 GO wording is
+presented to Julie for her separate decision. Nothing in this package
+is an execution request, and no production act is pending or implied.

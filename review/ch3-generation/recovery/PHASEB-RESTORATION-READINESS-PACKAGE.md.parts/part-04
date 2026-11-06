@@ -1,0 +1,147 @@
+top record. CHAIN_STOPPED
+> is no longer needed: the generation-resume gate requires NORMAL as
+> its opening state and carries its own separately ruled wake. This
+> clear returns containment to NORMAL only — it re-arms nothing (no
+> alarm registration stands after it), lifts no hold (GENERATION_HALT
+> remains "1"; the generation queue remains paused), and authorizes no
+> generation."
+
+Drafted length ≈ 750 characters, inside the route bound. If Rowan or
+Julie amends the reason, the amended text is what R-1 sends and what
+the GO names — the executor does not edit it at send time.
+
+### 4.3 Expected result of R-1 and the post-clear state, field by field
+
+Expected response: HTTP 200, `{"outcome":"applied","action":"clear",
+"state":"NORMAL","idempotent":false}`, with the post-clear state read.
+Inside the single commit transaction (design §4.2; deployed composed
+source), the act: sets the state row to NORMAL with the new
+`updatedAt` and the §4.1 `authorizationRef`; appends `clear:applied`
+(detail: the reason); copies the episode summary into `prevEpisode*`
+and appends `stop_episode_closed`; then resets the current-episode
+stop-record fields — atomically, so no read can observe a reset record
+without the preserved summary.
+
+Expected post-clear state, as R-2/R-3 must read it on **both** surfaces:
+
+| Field | Expected after R-1 | Basis |
+|---|---|---|
+| `state` | `NORMAL` | the act |
+| `known` / `absent` / `verified` | `true` / `false` / `true` | the row persists (a clear restores the state, it does not un-create the row) |
+| `updatedAt` | the clear's timestamp (new; after 1793931847431) | the commit |
+| `authorizationRef` | the §4.1 restoration ref | the commit records the last transition's ref |
+| `stopStatus` | `null` | stop-record reset inside the commit (design §4.2) |
+| `stopVerifiedAt` | `null` | reset — the verified fact survives in the audit history and in `prevEpisode*`/the C3 record, not in the current-episode fields |
+| `stopVerifyAction` | `null` | reset |
+| `stopArmedBefore` | `null` | reset |
+| `stopArmedAfter` | `null` | reset |
+| `stopVerifyAttempts` | `0` | reset |
+| `stopEpisodeId` | `null` | reset — episode 3 is closed, not current |
+| `stopEpisodeExhausted` | `false` | reset |
+| `prevEpisodeId` | **3** | episode-close summary copy |
+| `prevEpisodeAttempts` | **1** | summary copy |
+| `prevEpisodeExhausted` | **false** | summary copy |
+| `prevEpisodeClosedAt` | the clear's timestamp | written inside the same transaction from its own `now()` call — expected at the clear's time; bit-equality with `updatedAt` is **not** asserted (the source takes the timestamp per statement, so a millisecond difference would not be a deviation) |
+| `stopConfidence` | **`not_applicable`** on both surfaces | truth-table row 1: a readable record with a non-stopped enum — no stop exists for a present-tense confidence to describe. The historical fact "episode 3 was verified" lives in Tier 1 (audit), Tier 2 (`prevEpisode*`, until a future authorized clear overwrites it), and the C3 record |
+| Alarm block | `armedAt null`; `pendingSchedule 2`; `pendingWatchdog 1` | the clear touches no alarm API; schedule rows preserved |
+| Everything else (R-3 vs R-0) | bit-identical: recorder 296 rows, plan/job/grant frozen as censused, phase, quota, conflicts, watermarks, holds, queue, build, etag | the gate's only delta is the containment row and its two audit rows |
+
+### 4.4 Mutation budget
+
+**Expected (no-failure path), per gates v4 revised:** **state writes 1**
+(the single commit transaction on the singleton row — state to NORMAL,
+summary preserved, record reset, as one atomic fact), **audit rows 2**
+(`clear:applied` + `stop_episode_closed`), `deleteAlarm` 0, `setAlarm`
+0, commands/reports/SubmitJob/uploads/hold flips/queue changes 0,
+**$0**.
+
+**Worst case is the same bound.** R-1 is sent exactly once and is never
+re-sent in any branch (§4.5); the transaction is atomic — it either
+committed once (1 write / 2 rows) or not at all (0 / 0). No failure
+branch of this gate can multiply writes.
+
+### 4.5 Failure branches
+
+- **Confirmation deviation (R-0):** STOP before any POST (§3.3). Zero
+  writes; the system remains CHAIN_STOPPED; return for ruling.
+- **R-1 rejected:** refused transitions write nothing (validation and
+  the transition table refuse before the commit). The expected refusal
+  shapes are named so they are recognized, not retried: a blank or
+  over-long reason → `containment_reason_required` /
+  `containment_reason_too_long` (cannot arise if §4.2 is sent as
+  drafted); a state other than CHAIN_STOPPED at send time →
+  `containment_transition_refused` (itself a deviation finding — the
+  confirmation read CHAIN_STOPPED minutes earlier). Any rejection:
+  STOP, classify, return for ruling. **No corrected re-send inside this
+  gate** — if the paperwork's form is again at fault (the C3-1 lesson),
+  that is a finding for a new ruling, not an in-gate repair.
+- **The idempotent-applied trap:** if the state were already NORMAL at
+  send time, the source returns `{"outcome":"applied",
+  "idempotent":true}` **and appends an audit row** for the no-op. That
+  response is **not** this gate's clear: it would mean the §3
+  confirmation was contradicted between R-0 and R-1. It is classified
+  as a deviation, the gate STOPs, and the extra row is reported as part
+  of the finding. The expected R-1 response has `idempotent: false`.
+- **R-1 response lost or ambiguous** (timeout, HTTP 500, response not
+  captured): the §R re-entry rule applies (gates V4-2: recorded logical
+  completion ≠ physical verification; an ambiguous outcome stays
+  UNRESOLVED until a fresh live read resolves it). Re-enter by reading
+  both surfaces fresh: if the state reads NORMAL on both, with
+  `prevEpisodeId 3` and the §4.1 `authorizationRef` recorded, the clear
+  is RECORDED-complete (a pure state-write step's completion criterion
+  is the recorded state itself, read back consistently — the C3 §R
+  step-3 rule) and the gate proceeds to R-3 without any second send. If
+  the state still reads CHAIN_STOPPED, the transaction did not commit
+  — the gate is STOPPED-unresolved and returns for ruling; **R-1 is not
+  re-sent** (a re-send after a possibly-committed act is how duplicate
+  rows happen, and a re-send landing on NORMAL would write the
+  idempotent row of the trap above). If the surfaces disagree, the step
+  is UNRESOLVED: STOP and classify.
+- **Post-clear read-back deviation (R-2/R-3):** any field in §4.3's
+  table reading otherwise — a `prevEpisode*` field wrong, a stop-record
+  field not reset, `armedAt` non-null, any out-of-gate delta — STOPs
+  the gate and classifies. **No corrective act exists inside this
+  gate**: a clear cannot be un-done here, `verify_chain_stop` belongs
+  to episodes and R3-V, and a re-stop is a different authorization.
+  The finding returns for ruling with the raw reads attached.
+
+### 4.6 Ends state
+
+Ends **HELD in NORMAL**: containment NORMAL with episode 3 closed and
+summarized; no alarm registration; GENERATION_HALT `"1"`; queue paused;
+preserved plan, job, and exemption exactly as censused; $0. Restoration
+changes exactly one thing in the world: the containment enum and its
+episode bookkeeping.
+
+---
+
+## 5. What restoration does not do — and the standing posture after it
+
+Restoration does not authorize, perform, or imply: any re-arm or alarm
+registration; any hold change (GENERATION_HALT, queue pause); any plan,
+job, grant, exemption, or conflicts action; any generation, SubmitJob,
+command, or wake of any kind; any deployment or settings change; the
+generation-resume gate or any part of its readiness. The resume gate
+remains behind its own corrected package, Rowan's ruling on it
+(including the OQ-3/OQ-6 correction now in preparation), and Julie's
+separate GO.
+
+**The standing posture after restoration, named honestly.** With
+containment at NORMAL and no registration standing, the system is
+inert: no alarm exists to deliver a drive pass, reads never wake, and
+the coordinator's gated paths stand open-but-untriggered — the holds
+(halt + queue pause) are the containment in this interval, exactly as
+the accepted design intends between restoration and the resume gate.
+The preserved plan remains a **live trigger only in the documented
+sense**: it could execute only if BOTH holds lifted AND a drive pass
+occurred. Neither lift is any part of this gate, and no drive pass can
+occur without a registration — and no registration can appear except
+through a wake under NORMAL, which happens only inside a future
+authorized gate's own acts (in the resume gate's design, its single
+ruled probe). Nothing about restoration makes an accidental execution
+possible; it removes the stop, and leaves the holds standing in its
+place.
+
+One bookkeeping consequence to name now: after this clear, episode 3's
+summary sits in Tier 2 (`prevEpisode*`). A **future** authorized clear
+would overwrite that summary with a newer episode's (design §4.2

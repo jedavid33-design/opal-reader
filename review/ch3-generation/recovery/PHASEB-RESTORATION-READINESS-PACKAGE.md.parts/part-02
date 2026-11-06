@@ -1,0 +1,151 @@
+�A:
+the narrowed claims "were not independently verified by the submitted
+evidence" and are not to be represented as directly audited). Whether
+Rowan requires a literal audit read before ruling on THIS package —
+for which no established surface exists — is put to her as Q-2 (§7)
+rather than papered over.
+
+### 2.2 Episode enumeration (from the history as reconciled)
+
+| Episode | Opened by | Attempts | Exhausted | Status at drafting |
+|---|---|---|---|---|
+| **3** | `stop_chain:applied`, audit row 3, 2026-11-06T02:24:06Z send | **1** of bound 3 (the stop act itself; no `verify_chain_stop` was ever called) | **No** | **OPEN** — no `stop_episode_closed` event exists; the only `clear` in history precedes the episode |
+
+**This is the only episode the history contains.** No episode 1 or 2
+exists (the id 3 is the audit-row id of the stop commit, not an episode
+counter — the two earlier rows are the mechanics-leg transitions). No
+episode has ever been exhausted, closed, or overwritten in the
+`prevEpisode*` summary (all `prevEpisode*` fields read null at C3-7).
+The R3-V naming requirement (design §6) is therefore not triggered —
+stated here expressly, as §6 requires the disclosure either way.
+
+### 2.3 The four reported transitions
+
+All four carried `authorizationRef` `"Gate C3 branch (d) — Julie GO,
+board comment 6675116603"` (record §3 preamble). Times are the send
+times in the execution evidence; `updatedAt` values are the state row's
+as returned in each response.
+
+| Audit row | Event | Sent (UTC) | Transition | Evidence |
+|---|---|---|---|---|
+| 1 | `contain_drive:applied` | 2026-11-06T02:23:44Z (the re-send — §2.4) | NORMAL → DRIVE_CONTAINED; state row + audit table created by this transition; `updatedAt 1793931825315` | Record §3.1; evidence `s1b`; read back agreeing on both surfaces at C3-2 (record §3.2) |
+| 2 | `clear:applied` | 2026-11-06T02:23:53Z | DRIVE_CONTAINED → NORMAL; `updatedAt 1793931834501`; **reason recorded: "Gate C3 mechanics leg: restore opening state"** (the operative ledger's exact string); no episode event — no stop episode was open | Record §3.3; evidence `s3`; read back at C3-4 (record §3.4) — this clear was a mechanics-leg reversal inside C3, **not** a restoration |
+| 3 | `stop_chain:applied` | 2026-11-06T02:24:06Z | NORMAL → CHAIN_STOPPED; **mints episode 3** (episode id = this row's id) | Record §3.5; evidence `s5` |
+| 4 | `stop_chain_verify:verified` | inside the C3-5 act (same send) | The act's verification record: observed `stopArmedBefore 1793826389431` (the adopted standing value), `deleteAlarm()` ×1, read-back null → `stopArmedAfter null`; `stopStatus "verified"`, `stopVerifiedAt 1793931847431`, `stopVerifyAction "stop_chain"` | Record §3.5 |
+
+Totals reconciled against the C3 record §4: state writes 4, audit rows
+4, `deleteAlarm` 1, `setAlarm` 0, $0 — the §3.1 no-failure expectation,
+exact.
+
+### 2.4 The rejected C3-1 request — part of the historical record
+
+Per ruling §A, the review includes it expressly:
+
+- **Sent 2026-11-06T02:23:12Z** — the first C3-1 send, body
+  `{action:"contain_drive"}` in the operative ledger's abbreviated
+  notation. **Rejected pre-act, HTTP 200
+  `{"outcome":"rejected","reason":"authorization_ref_required"}`,
+  writing nothing** (evidence `s1`; record §3.1). The deployed route's
+  closed allowlist requires a nonblank `authorizationRef` on every
+  containment transition; the abbreviation omitted it. Rowan accepted
+  the classification — a pre-act request-form rejection, not a state
+  mutation or intervening drive movement (ruling §A).
+- It is **not an audit row**: route validation refused it before any
+  store touch, and refused transitions append nothing (design:
+  rejection paths are write-free). Its place in the history is as a
+  route act with no audit event, evidenced by the response and the
+  executor's timestamp files — accounted here so the history's
+  completeness claim (§2.5) covers every containment-route act, not
+  only the applied ones.
+- The corrected re-send (02:23:44Z, 32 s later) carried the
+  `authorizationRef` and applied as audit row 1. Both sends remain part
+  of the historical record; neither is edited out of this review.
+
+### 2.5 Completeness argument
+
+The containment state row **did not exist** before
+2026-11-06T02:23:44Z (census D-5: state row absent on both surfaces).
+If the tables themselves already existed — they bootstrap lazily on
+first touch, reads included — they held no rows: no containment
+transition of any kind had ever run in production before C3 (C1
+deployed the machinery and verified it inert; it ran no transition). Every
+containment-route act since creation is therefore one of the acts
+enumerated in §§2.3–2.4: one rejected send (no write), four applied
+transitions (four audit rows), and no other act — in particular **no
+`verify_chain_stop` call** (its absence is itself reconciled:
+`stopVerifyAttempts` reads 1, the stop act alone) and **no second
+`stop_chain`** (a second stop would have minted a second episode; the
+state row carries exactly one, id 3). The §3 confirmation re-reads the
+state row before execution; any fact there inconsistent with this
+review (a different episode id, an attempt count other than 1, an
+exhaustion flag set, a `prevEpisode*` field populated) would falsify
+the completeness claim and is a STOP under §3.3 — the review is
+falsifiable at execution, not merely archival.
+
+### 2.6 Reconciliation statement
+
+**The audit history, as it can be read today, is COMPLETE and
+CONSISTENT.** Episode 3, all four reported transitions, and the rejected
+C3-1 request account for every containment-route act since the tables
+were created. Timestamps, `updatedAt` values, authorizationRefs, the
+clear's reason, and the episode arithmetic agree across the transition
+responses, the execution record, and both read surfaces at closing. **No
+inconsistency was found.** The single structural limitation — no direct
+audit-table read surface exists in the established read set — is carried
+at the narrowed strength Rowan accepted in ruling §A and is put to her
+again as Q-2 for this gate.
+
+### 2.7 Forward accounting — what restoration will add to the history
+
+So Rowan can see the history's expected post-restoration shape before
+ruling: the §4 `clear` appends **audit row 5** (`clear:applied`, detail
+carrying the restoration reason) and **audit row 6**
+(`stop_episode_closed`, outcome `closed`, detail carrying
+`{episodeId: 3, attempts: 1, exhausted: false, finalStopStatus:
+"verified", reason}`) inside its single commit transaction (design
+§4.2; gates v4 revised budget, §4.4 below). After restoration, the
+history's enumeration for any future review is: rows 1–4 as above, row
+5–6 the restoration close of episode 3, and the `prevEpisode*` summary
+holding episode 3 until a future authorized clear overwrites it
+(Tier 2) — the full history remaining permanent in Tier 1 regardless.
+
+---
+
+## 3. Fresh closing-state confirmation — preflight read set and expectations
+
+Ruling §A requires, before restoration execution, "a fresh read-only
+closing-state confirmation, including both containment surfaces, alarm
+registration, production holds, plan and job state, and available build
+identity." The gates text requires "a fresh CENSUS executed at its
+start." This package reads the two together (§7, Q-1): **the
+confirmation IS this gate's preflight census** — one complete read-only
+set, run in the execution session immediately before the `clear`, whose
+values the §4 ledger's R-0 step checks item by item. No value in this
+section is inherited from the C3 record as fact; every expected value
+below is the C3 closing value stated as an **expectation to match**,
+and the confirmation re-reads each one fresh.
+
+All `/v2/*` reads carry the production scope and instance headers.
+Operator reads use the operator connector; client reads the client
+connector; Cloudflare reads use `cf-api` (account
+`b35ff435ff24d134ff640e0099dd13fc`). Every read is a GET; no read in
+this set wakes, writes, or creates tables.
+
+### 3.1 The read set
+
+**Containment + alarm (the ruling's core):**
+
+| # | Read | Surface |
+|---|---|---|
+| 1 | `GET /v2/d6-containment` (operator) | Containment surface 1 — state row projection |
+| 2 | `GET /v2/d6-diagnostics?drive=1` (operator) | Containment surface 2 — drive projection + alarm block + recorder |
+| 3 | `GET /v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6` (operator) | Phase B plan + phase accounting (surface b) |
+
+**Holds, build identity, queue:**
+
+| # | Read | Surface |
+|---|---|---|
+| 4 | `GET /health` | Build marker, generation state, coordinator state |
+| 5 | `cf-api GET /client/v4/accounts/{acct}/workers/scripts/opalreader-api-v2-prod/settings` | Bindings (GENERATION_HALT), observability |
+| 6 | `cf-api` script GET — **etag method at §3.2** | Script identity (closes C3 note E-1) |
+| 7 | `cf-api GET /client/v4/accounts/{acct}/queues/93b6a35fb8cf4788a91a2c90b748a

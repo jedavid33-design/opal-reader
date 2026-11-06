@@ -1,0 +1,125 @@
+e66` | Queue `delivery_paused`, consumers |
+
+**Plan, job, money, registry:**
+
+| # | Read | Surface |
+|---|---|---|
+| 8 | `GET /v2/generation/capabilities` (client) | Phase accounting (surface a) + Batch state (closes C3 note E-2's surface gap for this gate) |
+| 9 | `GET /v2/d6-plans/plan:19cad189fab54b9c804a74a6` (client) | Preserved plan state |
+| 10 | `GET /v2/jobs/plan:19cad189fab54b9c804a74a6:seg` (client) | Phase B job + grants |
+| 11 | `GET /v2/jobs/1832c21fcf0425454227c4736048a8a632f422abca4a2685ddb775bb1681406a` (client) | Parked Ch 3 job |
+| 12 | `GET /v2/d6-quota-reconcile` (operator) | Reconcile ok, exceptions, dispatched totals |
+| 13 | `GET /v2/quota` (client) | Settings revision, today's attempts |
+| 14 | `GET /v2/conflicts` (client) | Conflicts baseline |
+| 15 | `GET /v2/sync/changes?family=content&sinceSeq=18` and `?family=bindings&sinceSeq=1841` (client) | Watermarks |
+| 16 | `GET /v2/d6-eligibility?bookId=5c589095-f812-48a2-8ab2-03ba2791f2b2&scope=chapter&chapterIndex=2` and `&scope=book` (client) | Definition-digest corroboration |
+
+### 3.2 Build identity — the etag method (closing E-1)
+
+C3's census identified the build by the `/health` marker and the
+settings surface only, because its read set contained no script-content
+GET (record E-1). This gate's confirmation closes that gap:
+
+- The `/health` build marker must read
+  `fdb02395b3775dc945baa395591a73060ab146c4` (read 4).
+- The script etag is read from the **response headers** of
+  `GET /client/v4/accounts/{acct}/workers/scripts/opalreader-api-v2-prod`.
+  The stock `cf-api` envelope prints only `{status, body}` and does not
+  surface headers, so this read is made with the connector's own
+  credential mechanism — an in-process GET built with
+  `dynamic_credentials.add_surrogate_to_request(..., "custom.cloudflare",
+  entry_name="access_token", allowed_hosts=("api.cloudflare.com",))`,
+  the same surrogate pattern the connector CLIs use — taking the
+  `etag` response header (quoted; quotes stripped before comparison).
+  Expected: **`bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e`**
+  (the Grant 1 build's etag, the value C3's census carried as its
+  expectation). A different etag is a deviation and a STOP: it would
+  mean the deployed script changed since C3, which no authorized act
+  since C3 can explain.
+
+### 3.3 Expected values — and the STOP rule
+
+Every item below must match **exactly**; the values are the C3 closing
+census values (record §§3.7, 6) restated as expectations.
+
+| Item | Expected |
+|---|---|
+| Containment (reads 1 AND 2, agreeing in every field) | state `CHAIN_STOPPED`; `known: true`; `absent: false`; `verified: true`; `updatedAt 1793931847431`; `authorizationRef` "Gate C3 branch (d) — Julie GO, board comment 6675116603"; `stopStatus "verified"`; `stopVerifiedAt 1793931847431`; `stopVerifyAction "stop_chain"`; `stopArmedBefore 1793826389431`; `stopArmedAfter null`; `stopVerifyAttempts 1`; `stopEpisodeId 3`; `stopEpisodeExhausted false`; all `prevEpisode*` fields null |
+| Derived confidence (both surfaces, from read 1/2's own fresh alarm observation) | `stopConfidence "verified_current"` — the V4-2 corroboration: the fresh reads re-observe the registration absent and derive confidence fresh; the C3 record alone does not carry the stop into this gate |
+| Alarm block (read 2) | `armedAt null`; `pendingSchedule 2`; `pendingWatchdog 1` (schedule rows preserved) |
+| Recorder (read 2) | table populated; latest row id **296** @ `1793825819071`; no row after 296; `recordingFailures 0` |
+| Health (read 4) | build `fdb02395b3775dc945baa395591a73060ab146c4`; generation `halted`; coordinator `armed`; scope `production` |
+| Script settings (read 5) | GENERATION_HALT `"1"`; exactly 10 bindings (the C3 census set); `OPALREADER_PHASE_POLICY "enforce"`; observability enabled with logs enabled + persisted; `compatibility_date 2026-08-29` + `nodejs_compat` |
+| Script etag (read 6) | `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e` |
+| Queue (read 7) | `delivery_paused: true`; exactly 1 consumer (`f260f2188d80426bb0588685e9d084eb`); retention 86,400 s |
+| Phase accounting (reads 8 AND 3 — BOTH surfaces, enumerated per the C2 lesson) | settled **1,029,420**; estimatedUnverified **19,018**; reservedUnverified **5,648**; inFlightUpper **0**; unknownOpen **0**; remaining **12,464,932** of 13,500,000; `provider_unverified` |
+| Capabilities (read 8) | Standard admitted; Batch `batch_not_armed`; registry `forever-pucked` ↔ bookId `5c589095-f812-48a2-8ab2-03ba2791f2b2` |
+| Preserved plan (read 9) | `plan:19cad189fab54b9c804a74a6` `active`, totals {eligible 1, done 0, failed 0, blocked 0}; sole entry (chapterIndex 2, occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b`, 569 chars) `granted`; quarantine `held: false` |
+| Phase B job (read 10) | `generating`, revision **88**; 87 grants — 86 `voided` (seg:1–86) and exactly one live: `grant:plan:19cad189fab54b9c804a74a6:seg:87:full` `issued` |
+| Parked job (read 11) | `parked_policy`, revision **1**, grants `[]`, occurrence composition as at C3 (the stored fingerprint string is not exposed on this surface — C3 note E-5's narrowed strength carries; this gate does not claim a fingerprint byte-compare either) |
+| Quota (reads 12, 13) | reconcile `ok: true`, `armed: true`, drift empty, sole exception the adjudicated straddler `att-37d63768-db4b-447d-8150-580b7c6ee257`; dispatched 0 for every PT day after 2026-11-01; settings revision **1** |
+| Conflicts (read 14) | exactly the 4 baseline `schedule_dead` lease rows (ids 1–4, all fields as pinned) |
+| Watermarks (read 15) | content **18**, bindings **1841**, zero changes on both |
+| Eligibility (read 16) | definition digest `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1` on both scopes read |
+
+**STOP rule.** Any deviation from any item — a value different in any
+field, a surface disagreement, a failed or unreadable read on either
+containment surface, or an unreadable record of any kind — **stops the
+gate before the `clear` is sent.** The system remains CHAIN_STOPPED;
+the deviation is preserved with its raw reads and returns for ruling.
+Two deviations are named in the governing texts and are stated here at
+full strength:
+
+- **A registration present** (`armedAt` non-null on any fresh read) or
+  **`stopConfidence` below `verified_current`** on either surface: the
+  fresh census contradicts the C3 record, and the restoration "does not
+  proceed on the record's word: STOP and classify" (gates v4 revised,
+  V4-2). In particular, `contested` (truth-table row 4) would mean a
+  registration physically survives or reappeared — a finding for Rowan,
+  not a restoration input.
+- **Any §2 falsifier**: an episode fact inconsistent with the historical
+  review (§2.5) ends the gate on the review, before any act.
+
+There is no re-read-until-it-matches: a confirmation that fails is a
+finding, and a new attempt requires a new ruling and a new GO.
+
+---
+
+## 4. Execution ledger
+
+Exactly one state-changing act exists in this gate. The ledger is:
+
+| Step | Act | Writes |
+|---|---|---|
+| R-0 | Fresh closing-state confirmation (§3 read set, all 16 reads) — preflight census | 0 |
+| R-1 | `POST /v2/d6-containment {action:"clear", authorizationRef: <§4.1>, reason: <§4.2>}` — **sent exactly once** | §4.4 |
+| R-2 | Read-backs on both surfaces (reads 1 and 2 repeated) | 0 |
+| R-3 | Closing confirmation (the full §3 read set repeated) — delta check against R-0 | 0 |
+
+### 4.1 The authorizationRef
+
+Per the gates text, the act is `{action: "clear", authorizationRef:
+<restoration record ref>, reason: <demonstrated reason>}`. Following
+the C3 pattern, the ref names Julie's authorization as recorded:
+**`"Standalone restoration — Julie GO, board comment <GO comment id>"`**,
+with the comment id filled at execution from the board record of the
+§6 GO (the GO is recorded on the board before execution, as C3's was).
+The ref is part of the audit event and of the state row's recorded
+`authorizationRef` after the act; it is not a free-text field to
+improvise at send time.
+
+### 4.2 The recorded reason — DRAFTED, for Rowan's and Julie's visibility
+
+The reason is a Julie-visible decision artifact: it is stored verbatim
+in the `clear:applied` audit event and in the `stop_episode_closed`
+event's detail, permanently. The route requires it nonblank and ≤ 2,000
+characters (design: reason-required clear, enforced at route and method
+level). **Drafted text** (presented to Julie inside the §6 GO wording;
+Rowan is asked to review it as part of this package):
+
+> "Standalone restoration of containment after Gate C3 (branch (d)),
+> executed and closed with the stop verified (episode 3, verified at
+> attempt 1; Rowan documentary review PASS AT PARTIAL STRENGTH). The
+> stop's purpose is complete: the standing W-4 registration is deleted
+> and read back null, no drive pass has occurred since pass 296, and
+> the chain stands frozen under a verified s
