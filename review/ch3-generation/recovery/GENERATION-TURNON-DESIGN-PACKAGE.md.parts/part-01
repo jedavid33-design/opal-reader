@@ -1,0 +1,61 @@
+# GENERATION TURN-ON — REVISED DESIGN PACKAGE (Workstream 1): per-book budget onboarding, the state-to-resumption matrix, legacy plan-less jobs, emergency re-hold, and the amended Standard gate (A1–A6)
+
+_Design document, drafted by Wren 2026-11-06. It AMENDS the generation turn-on scoping package (pin `a6e5dd380eed9ad6edc4331c163eb22e588fdcfe`, board summary 6686506767) in response to Rowan's scoping ruling (verbatim board 6686726351; local record `ROWAN-TURNON-SCOPING-RULING.md`: SCOPING PASS WITH REQUIRED AMENDMENTS). The scoping package's structure and census are kept: §2 below carries its census forward with a dated refresh; Workstream 2 (Batch) is NOT amended by this package — the B-G1 design proposal is a separate parallel document, and the scoping package's §4 gap analysis stands as accepted at source-documentary strength. Sources: the live build source tree (the Grant 1 composed tree, `containment-v4/composed-tree/`, coordinator SHA-256 `5303cb63…`, the tree that produced live build `fdb02395b3775dc945baa395591a73060ab146c4`); the scoping package and its census; the resume gate's execution evidence (`resume-execution/`); and Wren's fresh read-only production reads of 2026-11-06 (§2.2). File:line citations are to the composed tree's `v2/` directory unless another source is named. This package is pinned at `<DESIGN-PIN>` (the pin is carried in the companion CP file, per the established slot pattern)._
+
+---
+
+## 1. Purpose, authority, and the ruling map
+
+Julie decided on 2026-11-06 (board comment 6686374302) to scope both generation workstreams in one program, Workstream 1 (Standard turn-on) first. Rowan's scoping ruling accepted the program structure and the Standard gate in principle, and required amendments before any GO presentation. Her "next authorized work" authorizes exactly this document: a revised DESIGN package addressing A1–A6, the per-book budget onboarding approach, and the parked-plan state matrix, returned for her review. **This package authorizes nothing** — no production mutation, no staging deployment, no provider call, no generation, no GO presentation (ruling §6). Where this package proposes figures, thresholds, or terms the ruling left to the package, they are labeled **PROPOSAL** and are Rowan's and Julie's to rule on; source mechanics are stated at source strength and cited.
+
+How the ruling is answered:
+
+| Ruling item | Disposition | Where |
+|---|---|---|
+| Q1 AMEND — per-book budget required; phase-null not accepted as the default | Onboarding design with three options weighed and one recommended | §4 |
+| Q2 CONDITIONAL PASS — routine parked plans may auto-resume after fresh guard evaluation; safety / quarantine / billing-uncertainty / operator-held must NOT | Exact state-to-resumption matrix (22 state rows + 3 overlay rows) + live inventory mapped | §5 |
+| Q3 PASS — parked Chapter 3 job preserved unchanged | Carried as a census predicate and a GO bar | §5.4, §8.1 P-6, §9 |
+| Q4 AMEND — legacy plan-less job inventory feasibility; else fail-closed proof + residual uncertainty | Feasibility: NOT FEASIBLE on the current build (proven from the route surface); fail-closed behavior proven from source; residual uncertainty stated in three parts | §6 |
+| Q5 AMEND — Julie's general re-hold; Wren's preauthorized emergency re-hold under enumerated triggers, bounded verified procedure, immediate report; fresh GO for re-turn-on | Emergency re-hold design: 9 objectively checkable triggers, a 2-act bounded procedure, reporting, the fresh-GO rule | §7 (and in-gate at §8.2/A2) |
+| Q6 PASS — the four `schedule_dead` rows preserved | Carried as census predicate P-4 and a GO bar | §8.1, §9 |
+| Q7 PASS WITH CONDITION — complete OQ-5 verification/termination; define a separate normal-operations observation arrangement | OQ-5 status carried honestly (leg (iii) pending at drafting; a gate preflight predicate, §8.1 P-14); the normal-ops arrangement designed at §8.5 (A5) | §8.5 |
+| Q8 PASS — `geminiLane` non-operative, no mutation | Noted; no act anywhere in this package touches it | §3 |
+| A1 — exact preflight predicates, drift rules, STOP conditions | 15 predicates with per-predicate drift rules + the STOP set | §8.1 |
+| A2 — emergency re-hold inside the gate | §7 incorporated by reference into the gate + the GO wording | §8.2, §9 |
+| A3 — smoke limits, completion evidence, failure handling, playback acceptance | §8.3 | §8.3 |
+| A4 — soak permissions and restrictions, incl. additional app submissions | §8.4 — the package PROPOSES additional submissions allowed (onboarded books only), with the alternative stated | §8.4 |
+| A5 — daily observation, accounting checks, anomaly handling, named responsibility | §8.5 — owner Wren; `normal-ops-daily-check`; three classifications | §8.5 |
+| A6 — declaration criteria + the prohibition on smoke-alone acceptance | §8.6 | §8.6 |
+
+Preserved from the ruling without change: the program structure (WS1 before WS2, separately gated); the Batch source assessment; Julie's GR-B GO stands consumed; production remains HELD at NORMAL.
+
+---
+
+## 2. Census — carried forward, with a dated refresh
+
+### 2.1 The scoping census (2026-11-06T13:52Z–13:56Z) stands
+
+The scoping package's §2 census (pin `a6e5dd38…`) is incorporated by reference and not repeated: production HELD at NORMAL; build `fdb02395…`; containment NORMAL with the standing registration; recorder at pass 360, all complete, `recordingFailures` 0; five plans, all terminal; the parked job `parked_policy` rev 1; conflicts exactly 4; quota reconcile ok with the sole adjudicated straddler; queue paused; `GENERATION_HALT` `"1"`; settings revision 1; phase settled 1,037,880 / remaining 12,456,472; FP book quote 314 eligible ≈ $5.84, digest `7d76a053…`. The turn-on gate re-runs the full census as its preflight (§8.1) — this section is a design-time baseline, not a substitute.
+
+### 2.2 Refresh reads (Wren, read-only, 2026-11-06 ~14:0xZ)
+
+| Surface | Read | Value |
+|---|---|---|
+| Capabilities | `GET /v2/generation/capabilities` | Unchanged from the scoping census: `halted`; standard admitted; batch `batch_not_armed`; configuredLane null; FP settled 1,037,880, remaining 12,456,472 |
+| Plans | `GET /v2/d6-plans` | The same five plans, all terminal (Phase B, Ch 3, Ch 2, smoke `complete`; old Ch 2 `retired`), totals as censused |
+| Drive recorder | `GET /v2/d6-diagnostics?drive=1` | `recordingFailures` 0; `lastRecordedAt` advanced past the scoping census (chain alive and passing under the holds); alarm `armedAt` non-null (standing registration), pendingSchedule 1, pendingWatchdog 1 |
+| **Smoke candidate quote — FP Chapter 4** | `GET /v2/d6-eligibility?bookId=5c589095…&scope=chapter&chapterIndex=3` | **20 eligible, 26,638 chars, expected 375,535 units (≈ $0.38)**, digest `7d76a053…` (the book digest); exclusions: bound_already 1, voice_prompt 0, parked 0, other 0 |
+| Comparison quote — FP Chapter 5 | same surface, `chapterIndex=4` | 21 eligible, 29,145 chars, expected 410,880 units (≈ $0.41) — quoted so the largest-chapter math in §4.4 uses a real figure |
+
+No production state was changed by these reads.
+
+---
+
+## 3. Turn-on mechanics (carried from the scoping package §3.1, condensed)
+
+Turn-on remains two proven acts, performed once and not reversed at gate end:
+
+1. **Halt lift** — the metadata-only envelope upload, proven at the resume gate's GR-3 step (evidence `resume-execution/flip/`): the multipart upload carries all 31 script parts byte-identical to the live build (manifest-compared before upload) and a metadata part whose bindings are the live set with exactly one text changed — `GENERATION_HALT` plain_text `"1"` → `"0"` (the flip evidence's metadata names the full binding set: `ALLOWED_ORIGIN`, `COORDINATOR`, `GENERATION_HALT`, `OPALREADER_GENERATION_V2`, `OPALREADER_PHASE_POLICY` `"enforce"`, `OPALREADER_V2_SCOPE`, `OPALREADER_STORAGE`, with `GEMINI_API_KEY`, `OPALREADER_ACCESS_TOKEN`, `OPALREADER_MIGRATION_OPERATOR_TOKEN` as `inherit` — no secret value is read or carried by the act); `main_module` `v2/worker-entry-prod-d6.js`, compatibility preserved. Script etag unchanged; observability re-checked after the upload and re-applied by the multipart settings PATCH if reset (the standing post-upload rule). Effect in source: `generationEnabled = env.GENERATION_HALT === "0"` (worker-entry-prod-d6.js:326) wires `sendGrant` (:343) and the entry's halt admission fence (`isHaltRefusedCommand`, :296-312 — it refuses RequestSynthesis / RequestResume / RequestRepair / plain SubmitJob while halted) stops refusing.
+2. **Queue unpause** — cf-api `PUT` queue `opalreader-generation-v2` with `queue_name` + `settings.delivery_paused: false`, then read back `delivery_paused: false`.
+
+No code deploy. No settings-record write. No containment transition. The settings record's legacy `geminiLane` key is non-operative (Q8 PASS) and is touched by nothing in t

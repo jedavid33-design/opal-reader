@@ -1,0 +1,54 @@
+his package.
+
+The off-switch is the same pair in reverse order (re-pause first, then re-halt — the resume gate's §2.3.3 closing order), designed as a standing instrument at §7.
+
+---
+
+## 4. Q1 — Per-book budget onboarding design (AMEND answered)
+
+**The ruling**: initial normal operations require a per-book budget; phase-null, unbudgeted generation is not accepted as the default library-wide policy. This section designs the minimal, safe way a book becomes generatable. Nothing here is implemented or deployed under the ruling.
+
+### 4.1 What a "phase" is today — the machinery as it stands (source)
+
+A budgeted book = TWO records, which must exist together (phase-policy.mjs header law):
+
+1. **A budget figure** — an entry in the frozen code constant `PHASE_BUDGET_MICRO_CENTS = Object.freeze({ "forever-pucked": 13_500_000 })` (generation/gen-constants.mjs:74-76). The constant is the whole universe of budgeted phases: capabilities renders phases ONLY from its entries (service.mjs capabilities, per the scoping package §2), admission rejects a phase outside it (`phase_not_budgeted`, service.mjs:442/470), the binding writer throws for it (below), and the grant guard looks the budget up in it (grant-guards.mjs, `PHASE_BUDGET_MICRO_CENTS[plan.phase]`).
+2. **A binding row** — `d6_phase_bindings` (phase PRIMARY KEY, book_id), written ONLY by `recordPhaseBinding` (phase-policy.mjs), exposed on the service as `bindPhaseBook` and wired in the pinned production entry to exactly one surface: the operator-only `POST /v2/d6-phase-binding` route (migration-operator credential; no client path exists). Its semantics are the safety core of onboarding: insert-if-absent; the same (phase, book) pair re-recorded is an idempotent no-op (`changed: false`); a phase already bound to a DIFFERENT book **throws `phase_binding_conflict` and the recorded binding stands**; a phase outside the budget constant throws `phase_not_budgeted`; malformed input throws `phase_binding_shape`. There is NO unbind, rebind, or delete writer anywhere in the source.
+
+Once both records exist, admission derives the book's phase from its registry row (a submission naming no phase is rejected `phase_required`; a different phase, `phase_mismatch` — service.mjs:435-437), an unbound book cannot claim a budgeted phase (`phase_bound_to_other_book`, :444), a budgeted phase with no recorded book fails closed (`phase_unbound`, :445), and the grant guard enforces the figure per grant (§4.4). The one production pair (forever-pucked ↔ `5c589095-f812-48a2-8ab2-03ba2791f2b2`) was itself recorded through this route at the gen-pkg-1 deploy gate — **Forever Pucked was onboarded by exactly the O1 procedure below**, which is the option's strongest evidence.
+
+What onboarding must therefore supply: a phase NAME (unique, one book per phase, one phase per book — `phaseBindingForBook` returns at most one row), a budget FIGURE Julie sets, a code change for the constant (under O1/O3-variant), and one operator route call (under every option — the binding writer already exists).
+
+### 4.2 Option O1 — Budgets stay code constants; onboarding = a reviewed micro-deploy + the existing binding route (RECOMMENDED)
+
+**What changes**: one line added to `PHASE_BUDGET_MICRO_CENTS` per book (its phase name + Julie's figure), deployed under the program's ordinary deploy discipline (source review, the standing batteries, census, Julie's GO — a build gate, not an operator act); then the binding recorded via the existing `POST /v2/d6-phase-binding` with an authorizationRef naming that GO. Multiple books whose figures Julie has ready MAY batch into one deploy. No new machinery of any kind.
+
+**Sequence per book** (each step verified before the next):
+1. Julie sets the figure (§4.4's rule proposed as her aid; the figure is hers).
+2. Paperwork: phase name, the book's id read from the book's own read surface (never typed from memory), the figure in BOTH units and dollars.
+3. The deploy gate (Rowan source review folded in; the delta is one constant entry — the review surface is deliberately tiny).
+4. Post-deploy read-back: capabilities renders the new phase with the figure as its budget (settled 0 / remaining = figure) BEFORE any binding is recorded — a wrong figure is caught here, while it is still only a constant.
+5. The binding record (operator route, authorizationRef = the GO). Idempotent on the correct pair; a conflict throw stops the sequence.
+6. Read-back: capabilities now links phase ↔ the intended book id, character-for-character against the paperwork.
+7. Eligibility re-quote for the book; a first submission's plan carries the derived phase (checked on the plan read at creation).
+Only then is the book generatable.
+
+**What can go wrong, and the controls**:
+- *A binding recorded against the wrong book.* The sharpest hazard in the whole design, because it is IRREVERSIBLE in current machinery: the conflict throw prevents overwrite, and no unbind writer exists — a wrong (phase, book) pair would stand, fencing the phase to the wrong book permanently, with remedy only via a future code-level disposition gate. Controls: step 2's read-from-surface rule, step 6's character-for-character read-back BEFORE any submission exists, and the fact that the error is inert until someone submits the wrong book under that phase (admission would derive it; the daily check's plan cross-check, §8.5, would flag the first such plan as unexplained). The control set is procedural, and the package says so plainly.
+- *A budget typo* (a figure 10× off, in either direction). Controls: the figure appears in the gate paperwork in units AND dollars; step 4 renders the deployed constant's value on capabilities before the binding exists; too-small is self-limiting (plans park on `phase_budget`, §5); too-large is bounded by the monthly cap, the daily quota, and Julie's prepay balance — and is correctable only by another deploy, which is why step 4 exists.
+- *The guard's behavior on any inconsistency* is fail-closed throughout: a budgeted phase with no binding refuses at admission (`phase_unbound`); a binding for an unbudgeted phase cannot be written; the budget check refuses a malformed accounting shape (`phase_accounting_incomplete`, grant-guards.mjs) rather than coercing it.
+
+### 4.3 Option O2 — An operator-managed budget registry (a real build; carried as the alternative)
+
+**What changes**: a new table (phase, budget, authorizationRef, timestamps — the phase-bindings DDL-beside-its-writer pattern), an operator write route in the phase-binding route's fence class, and every reader of the constant re-pointed or unioned: the grant guard's lookup, admission's `phase_not_budgeted` test, the binding writer's `Object.hasOwn` test, and capabilities' phase iteration. The FP entry must migrate or be dual-read in the same build, and the disagreement rule must be designed (the package's position, if O2 is ever built: while both sources exist, the LOWER figure governs — fail-closed — and the constant is retired in the same deploy that proves the table, so two sources of truth never persist). Batteries: admission/guard/capabilities against the table, the throw-safe real-DO discipline for every new read, the migration of the standing FP pair proven on staging first.
+
+**What can go wrong**: a silent constant/table divergence (the two-sources hazard above); a bad registry write is a settings-class error, so CAS/audit discipline must be built, not assumed; and the build itself is Workstream-2-sized, inserted BEFORE Workstream 1 can onboard its second book — it delays the library, though not the FP turn-on (FP is already onboarded).
+
+**When O2 wins**: if onboarding becomes frequent. At the current library (7 books, onboarded rarely, in batches Julie chooses), O1's per-batch micro-deploy is proportionate. The package proposes a stated revisit trigger: if Julie onboards books more often than the deploy cadence comfortably serves — or asks for self-serve figures — O2 returns as its own design.
+
+### 4.4 The figure — a rule proposed for Julie's decision (PROPOSAL)
+
+Julie sets each book's figure; the package proposes the aid she asked the budget system to be: the figure should clear BOTH tests, computed from the book's fresh whole-book eligibility quote at onboarding:
+
+- **(a) The precedent test**: figure ≥ 2 × the book's expected remaining cost. (Julie's FP precedent: $13.50 against a total-book expected ≈ $6.88 — ≈ 1.96×. The factor absorbs policy-block splits and repairs, which settle at realized rates but multiply attempts.)
+- **(b) The projection floor**: figure ≥ projected final settled + 270 × (the largest remaining chapter's char count). The 270 is not a mood: at each chapter-job's first grant the guard sums the job's pending occurrence uppers — `upperBoundOccurrenceMicro(chars)` = 12 attempts × round(chars/10 × 225) = 270 × chars (gen-constants.mjs) — over settled + reserved + in-flight (grant-guards.mjs 

@@ -1,0 +1,54 @@
+*INERT** at the driver (in the selection exclusion list) — NOT a resumption: the remaining occurrences can only be worked by a NEW plan from a fresh intent, under admission + the overlap fence | A fresh Julie submission (which creates a new plan; it does not revive this one) | Plan read; a later plan's read |
+| P9 | `retired` | `retireHaltedPlan` (stop_reason `retired_unknown_billing`), or the Gate-6-class retirement of the old Chapter 2 plan | **INERT** — terminal everywhere; its fence ownership was cleared by the retirement itself | n/a | Plan read; retirement audit |
+
+### 5.3 Job states (11 rows)
+
+Plan-linked jobs move only inside their plan's driver gauntlet (§5.1); plan-less jobs are never touched by the driver at all (it iterates plans) and can move only when a command names their id — which is why their rows read differently.
+
+| # | State | Cause / meaning (source) | Resumes at turn-on? | What unblocks it (whose act) | Evidence surface |
+|---|---|---|---|---|---|
+| J1 | `queued` (plan-linked) | Created by the service for a plan's chapter; awaiting its first grant | **AUTO** — via its plan's row (the grant step acts on the plan's current job every pass) | n/a | `GET /v2/jobs/<id>`; plan read |
+| J2 | `queued` (plan-less, legacy) | A job with no `d6_plan_jobs` link (pre-D6 or legacy-command births) | **NO** — nothing drives it; it cannot self-start. If a legacy command names it (RequestResume probe, a repair follow-up), its first guarded grant attempt meets the §6 fence: halt-era births are marked + refused `job_quarantined`; pre-epoch births pass the D6 guard into the coordinator's standing money checks (quota park, daily quota, monthly cap) | Only a commanded act by someone holding its id — and for fenced jobs, the operator per-subject release (Julie's separate approval) | `GET /v2/jobs/<id>` (by id only — §6); diagnostics by jobId |
+| J3 | `generating` | A grant is live (issued) against it | **n/a — mid-flight, not parked.** Its completion path is the report path; at turn-on the outbox drains because the halt lift wires `sendGrant` (§3) — in-flight work finishing is the design, not a resumption | n/a | Job read (grants[]); recorder outcomes |
+| J4 | `paused_quota` | The job-level quota park (`park` event from `generating`) | **NO** — its only outbound lifecycle edge is `resume_probe` → `generating`, a COMMANDED probe (RequestResume), refused at the entry while halted and fully guarded whenever it runs. Not automatic. (The D6 plan-level analogue is P2, which IS automatic — the two shapes are distinct and the matrix keeps them so) | A RequestResume command (Julie's client, or an authorized act), then the guard chain | Job read; command receipts |
+| J5 | `paused_user` | A `pause` event (RequestPause) | **NO** — resumes only on the `resume` event: the user's own commanded act, by design | RequestResume (Julie's) | Job read; receipts |
+| J6 | `outcome_unknown` | A granted occurrence's outcome could not be validated (`unknown` event; occurrence-level `outcome_unknown` likewise) — the job-level billing-uncertainty state | **NO** — the ruling's floor: billing-uncertainty never resumes on a lift. Its edges are `resolve` (→ `queued`) and the settle reports, all commanded/operator paths | `ResolveOutcomeUnknown` / the reconcile machinery, under Julie's authorization; a `resolve` into `queued` then faces the ordinary guard chain | Job read; diagnostics by jobId; attempt log |
+| J7 | `complete` | Settle: all occurrences reported complete | **INERT** | n/a | Job read |
+| J8 | `partial` | Settle: some occurrences complete, some not | **INERT to the driver.** One commanded edge exists (`resume` → `queued`); for a plan-linked job whose plan is terminal this is a noted edge, NOT a turn-on behavior — a probe grant against it would still meet its (terminal) plan's phase/budget guard via `d6PlanForJob`, and this package proposes no act on it | A commanded resume (Julie's), fully guarded; no act proposed | Job read |
+| J9 | `failed` | Settle: reported failed | **INERT** (only `supersede` remains, a bookkeeping act) | n/a | Job read |
+| J10 | `cancelled` | A `cancel` event landed | **INERT** — empty transition row | n/a | Job read |
+| J11 | `superseded` | Replaced by a successor job/intent | **INERT** — empty transition row | n/a | Job read |
+| J12 | `parked_policy` | The migration-carried policy park: INSERTED by `MigrateImportJobs`, never submitted, never queued; its occurrences are fenced out of every eligible set upstream | **NO — structurally never.** Empty transition table row: EVERY event against it (resume, pause, cancel, resolve, park, grant, supersede, settle reports) is an explicit logged rejection. Generation over it is impossible by construction, not policy | Nothing resumes the JOB. Its occurrences move only through the two operator fence mechanisms, each under its own authorization: the park release (`POST /v2/d6-release-park`, definition-set ids only) and the chapter exemption (`POST /v2/d6-exempt-chapter-occurrence`, beyond-definition ids only) — the mechanisms that produced Chapter 3's completion. **Q3 PASS: the job itself is preserved unchanged** | `GET /v2/jobs/1832c21f…` (state, revision, grants []); the release/exemption journals |
+
+### 5.4 Overlay rows (3) — holds that sit on top of states
+
+| # | Overlay | Meaning (source) | Resumes at turn-on? | What unblocks it | Evidence surface |
+|---|---|---|---|---|---|
+| X1 | Quarantine hold on a PLAN (any non-terminal state) | A `d6_quarantine_holds` row (D7-2 birth-mark for plans born while halted, or a guard-recorded hold). The driver SKIPS a held plan entirely — no grant step, no advancement, no state transition — and stamps `approvalRequired`; a FAILED hold read is treated as held (fail-closed) | **NO** — operator-held, the ruling's floor. The lift does not touch it; NO generic act clears it (not a re-arm, a binding, a settings change, a plan retry, or another subject's release — grant-guards.mjs D7-2 law) | The operator-only per-subject release `POST /v2/d6-release-quarantine`, Julie's separate per-plan approval; it REFUSES a `halted_unknown` plan (`release_refused_halted_unknown` — release is not a reconciliation) | `GET /v2/d6-diagnostics` quarantine view per subject; drive outcomes (`quarantined`, `approvalRequired`) |
+| X2 | Quarantine hold on a JOB | Same table, job subject (guard-recorded: `grant_attempt_while_halted`, `born_while_halted`) | **NO** — the grant guard refuses `job_quarantined` before every other check but the plan hold | The same per-subject release route (job subject), Julie's separate approval | Same surfaces |
+| X3 | Phase-level unknown-billing halt (`d6_phase_state.halted_unknown_billing`) | The phase itself is flagged (an attempt settled `unknown` against it) | **NO** — while it stands, every selected plan on that phase transitions INTO `halted_unknown` (P6) and stops; the flag is a billing-uncertainty hold on the whole phase | Clearing the phase's open unknown attempts via reconcile/adjudicate (the flag clears in the same transaction as the last one's disposition — genstore), each act Julie's separate authorization | Capabilities phase block; plan diagnostics |
+
+### 5.5 The live inventory, mapped (at the §2 census)
+
+| Live object | Matrix row | At turn-on |
+|---|---|---|
+| Phase B plan `plan:19cad189…` — `complete` | P7 | Inert |
+| Ch 3 plan `plan:e377a555…` — `complete` | P7 | Inert |
+| Ch 2 plan `plan:b2dc2a3d…` — `complete` | P7 | Inert |
+| Smoke plan `plan:3183ecbf…` — `complete` | P7 | Inert |
+| Old Ch 2 plan `plan:603ab416…` — `retired` | P9 | Inert |
+| Parked Ch 3 job `1832c21f…` — `parked_policy` rev 1, grants [] | J12 | Preserved unchanged (Q3); never resumes |
+| Non-terminal plans of any state | — | **None exist.** Turn-on starts nothing by itself; the first work in the live system is the smoke Julie submits (§8.3) |
+| Quarantine holds (plan or job subjects) | X1/X2 | None stand against the five plans or the parked job on any surface the census reads; the gate census (P-5/P-6) re-verifies per-subject before the lifts |
+
+---
+
+## 6. Q4 — Legacy plan-less jobs (AMEND answered)
+
+### 6.1 Feasibility of a reliable read-only inventory: NOT FEASIBLE on the current build
+
+Established from the route surface, exhaustively:
+
+- Plans ARE enumerable: `GET /v2/d6-plans` (keyset-paginated list) + `GET /v2/d6-plans/<id>`. Plan-linked job ids are therefore enumerable through each plan's reads.
+- Jobs are NOT: the only job read is `GET /v2/jobs/<id>` (api.mjs:231-235) — a single-id read returning 404 `job_not_found` for an unknown id. There is **no list route, no search, and no enumeration of the coordinator's `jobs` table on any surface**. Job ids are UUIDs, not sequential — there is no id space to walk.
+- `GET /v2/d6-diagnostics` cannot enumerate either: it requires exactly ONE target (`planId` XOR `jobId`, else `diagnostics_target_required`, service.mjs 

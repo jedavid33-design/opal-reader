@@ -1,0 +1,55 @@
+attemptDiagnostics) or the `drive=1` recorder mode, whose outcomes name plan ids and grant ids only.
+- The remaining surfaces carry no job inventory: `GET /v2/conflicts` lists schedule lease rows; `GET /v2/quota` is aggregate (its parked field names a quota-park context, not jobs); the sync families are content/bindings only — there is no jobs family.
+- The bounded probe sets that DO exist: (a) plan-linked job ids (via the plans list), (b) ids preserved in the program's records (the parked job's id is known only because the migration record preserved it), (c) ids in recorder outcomes (plan-linked only). A probe of "all other jobs" has no candidate set to probe.
+
+**Conclusion**: without new code (an operator list route — a build, outside WS1's no-code premise and not proposed here), a reliable read-only inventory of plan-less jobs cannot be produced. The census therefore does NOT claim "no plan-less jobs exist" — it claims the narrower, true statement at §6.3(c).
+
+### 6.2 The fail-closed behavior, proven from source
+
+A plan-less job can reach a grant ONLY through a grant-producing command naming its id (RequestSynthesis creates a NEW job; RequestResume drives a `resume_probe`/`resume`; RequestRepair drives repair follow-ups). Every such grant passes `d6GrantGuard` inside the grant transaction (grant-guards.mjs), behind the coordinator's own quota-park / daily-quota / monthly-cap checks. The fence, in evaluation order:
+
+1. **Hold first**: a recorded quarantine hold on the job refuses `job_quarantined` — before phase, budget, or storage checks, and no generic act clears it (D7-2).
+2. **While halted**: under the production entry's halt fence, a plan-less grant attempt while `GENERATION_HALT !== "0"` is refused `generation_halted` AND the job is durably marked in the same transaction (hold reason `grant_attempt_while_halted`). The mark, not the flag, is what fences it after any later re-arm.
+3. **The epoch fence (D8-2)**: on the FIRST guarded attempt whenever it occurs — including after turn-on — a plan-less job still in `queued` whose birth falls inside a recorded halt epoch, with no prior hold row, is marked (`born_while_halted`) and refused `job_quarantined` in that same transaction. A job that already HAS a hold row is not re-adjudicated (a released row is the operator's completed clearance, never silently re-imposed).
+4. **At the door**: while halted, the entry refuses the staging command types outright (`isHaltRefusedCommand`: RequestSynthesis, RequestResume, RequestRepair, plain SubmitJob) before the coordinator is reached — during the current halt era those commands never arrived from a client at all. (The D6 intent shape is not refused at the door; it routes to admission, where its plan is birth-marked if born halted — §5.4 X1.)
+5. **The epoch ledger is live**: `noteHaltObservation` runs on every drive pass and every guarded attempt; the current halt era is a recorded, still-open epoch (its `closed_at` is NULL while the halt stands). Halt-era births are therefore inside the fence's coverage by construction.
+
+And the structural bound underneath all of it: **the driver iterates plans only** — a plan-less job can never self-start, wake, or advance on any pass, at any time, under any hold state.
+
+### 6.3 Residual uncertainty, stated plainly
+
+- **(a) Pre-epoch births.** A plan-less job born BEFORE any recorded epoch (e.g., under the pre-D8 entry), never commanded since, would pass `d6GrantGuard` if commanded by id after turn-on — the D6 guard is `{ ok: true }` for it. It remains bounded by the coordinator's standing money checks (quota park, the 100/day provider-attempt cap, the $50 monthly cap), and commanding it requires knowing its id AND holding a valid token. It cannot self-start (§6.2). Its spend, if ever commanded, would surface on the daily check (§8.5) as movement with no explaining plan — a NORMAL-OPS-ANOMALY, and dispatch under it meets trigger T-1 (§7).
+- **(b) Epoch coverage.** The ledger covers births from its first recorded observation forward, with unobserved slivers bounded by the pass cadence (the quarantine.mjs design note). A halt that began AND ended entirely between observations in the pre-recorder era cannot be proven covered. The current era is covered (§6.2.5); the uncertainty attaches to deep-history halts only.
+- **(c) The unprovable negative.** No surface can prove the set of plan-less jobs is exactly {the parked job}. What IS claimed: none are visible on any surface; none can self-start; halt-era births are fenced fail-closed at their first attempt; any first attempt is either refused-and-fenced or passes only through the standing money guards and is visible to observation the same day. The consequence bound is therefore: at worst, bounded, capped, observed spend by a deliberately commanded legacy job — never silent, never unbounded, never self-starting.
+
+**Answer to the scoping package's Q4 question, as amended**: surfacing-by-refusal is not merely accepted — on the current build it is the ONLY behavior available, and this section is its proof and its residual-uncertainty statement, returned for Rowan's ruling as the ruling requires.
+
+---
+
+## 7. Q5 / A2 — Emergency re-hold design (AMEND answered)
+
+### 7.1 Authority
+
+- **Julie's general authority is unlimited**: she may order a re-hold at any time, for any reason or none, in chat. Wren executes §7.3 and reports per §7.4. No trigger is needed and none is asked for.
+- **Wren's preauthorized emergency authority is narrow**: Wren may execute §7.3 WITHOUT waiting for Julie ONLY when one of the §7.2 triggers is observed on a read surface, at the strength stated there. Anything outside the triggers is report-and-wait (the post-gate watch's precedent: movement is reported, never acted on).
+- A re-hold is not a gate and authorizes nothing else. **Re-turn-on after any re-hold requires Julie's FRESH GO through a new turn-on gate** (§8's shape; no abbreviated re-entry is assumed anywhere in this package — if Rowan wants one designed, that is a further ruling).
+
+### 7.2 Triggers (each objectively checkable from read surfaces; PROPOSAL thresholds marked)
+
+| # | Trigger | Objective check (surface) |
+|---|---|---|
+| T-1 | **Foreign / unexplained dispatch** — provider dispatches or settled movement with no plan explaining them | `GET /v2/quota` (`providerDispatchesToday` > 0) or a phase settled delta, against `GET /v2/d6-plans` showing no non-terminal or newly-terminal plan that accounts for them (§6.3(a)'s backstop) |
+| T-2 | **Loop signature** — a plan burning the day without producing: ≥ 100 provider dispatches in one PT day (the cap itself) with zero new bindings in the same window | Quota read + bindings watermark (`GET /v2/sync/changes?family=bindings`) |
+| T-3 | **Reconcile drift** — `reconcileQuota.ok === false` or a drift list beyond the sole known adjudicated straddler | `GET /v2/d6-quota-reconcile` (operator) |
+| T-4 | **R-06-class recorder discrepancy** — an in-set accounting transition with the expected recorder row missing at the A-7 observation point (the transition's poll + one further complete poll) | Drive recorder (`drive=1`) against plan/job accounting reads |
+| T-5 | **Conflicts change** — the conflicts set differs from the four baseline `schedule_dead` rows | `GET /v2/conflicts` |
+| T-6 | **Storage boundary pressure** — recorded base + D6 bytes ≥ 95% of the 10 GB free-tier boundary (PROPOSAL figure), or `storage_boundary` refusals appearing across successive passes for multiple plans | Storage accounting surfaces; drive outcomes (`parked_storage`) |
+| T-7 | **Containment deviation** — containment state ≠ NORMAL, or any containment field inconsistent with the baseline, not commanded under an authorization | `GET /v2/d6-containment` (both surfaces) |
+| T-8 | **Hold-state inconsistency** — capabilities/health generationState inconsistent with the last authorized hold state (e.g., `halted` while turn-on stands and no re-hold was commanded; or `enabled` after a re-hold's verified read-backs) | Capabilities + health |
+| T-9 | **Provider-fault storm** — ≥ 10 consecutive provider-error-class attempt outcomes across plans in one PT day with zero successes (PROPOSAL figure) — the 1101 lesson: do not keep feeding a platform fault | Attempt diagnostics across the day's plans; quota reads |
+
+### 7.3 The bounded procedure (exactly two production acts, in the proven order)
+
+1. **Re-pause the queue** — cf-api `PUT` with `delivery_paused: true`; read back `delivery_paused: true`.
+2. **Re-halt** — the metadata-envelope flip of `GENERATION_HALT` to `"1"` (§3's method, against the THEN-CURRENT build: parts manifest-compared to the live build at that moment, whatever it is); read back the settings binding `"1"`, health `generation: halted`, capabilities `generationState: halted`; observability re-checked after the upload (standing rule).
+3. **Stop.** Nothing else. Expressly NOT in the procedur

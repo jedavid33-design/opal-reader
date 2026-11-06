@@ -1,0 +1,48 @@
+e: no deploy beyond the flip envelope itself, no code change, no plan or job command, no containment transition, no quarantine release, no settings-record write, no SubmitJob, no provider call.
+
+### 7.4 Reporting and escalation
+
+Immediate, in the same turn the read-backs land: a message to Julie in the Coding Projects chat naming the trigger, the surface values that fired it, and the verified re-hold read-backs; a board note filed in the same working session (the gate record's anomaly entry); the daily check (§8.5) logs it as NORMAL-OPS-ANOMALY (re-hold). If a read-back in §7.3 cannot be verified, Wren escalates at once in the same message (what was attempted, what the surfaces show) rather than retrying blindly — and the state is treated as NOT safely held until Julie and Rowan disposition it.
+
+---
+
+## 8. The Standard gate, amended (A1, A3–A6; A2 incorporated from §7)
+
+The gate's skeleton is as accepted in principle: census → halt lift → queue unpause → a bounded Julie-submitted Standard smoke → a seven-day soak → execution record → Rowan review → declaration. This section supplies the required additions. On success the gate's end state is deliberately NOT the program's usual HELD: the holds stay lifted and the system stands **turned on under observation** until §8.6's declaration — a distinct named state. On any STOP before the lifts, the gate ends HELD untouched; on an abort after the lifts, §7.3 runs and the gate ends HELD with the soak void (§8.6.4).
+
+### 8.1 A1 — Preflight predicates, drift rules, STOP conditions
+
+The execution census repeats the §2 read set in full. **Identity predicates are byte/value-exact; accounting predicates admit only movement explained by a named authorized act in the gate record; time-dependent surfaces are judged by shape (fresh, complete, zero-failure), never by frozen values** — the drift rules generalize the resume gate's discipline.
+
+| # | Predicate (expected value) | Drift rule |
+|---|---|---|
+| P-1 | Live build `fdb02395b3775dc945baa395591a73060ab146c4`; script etag `bb90f182…` CAPTURED AND SAVED as an evidence artifact before any lift (Rowan R4) | Exact. Any difference = an intervening deploy: STOP and re-baseline the paperwork — never proceed on a traced explanation (the executor STOP law) |
+| P-2 | BOTH holds standing at census: `GENERATION_HALT` `"1"` (script settings) and queue `delivery_paused: true`, sole consumer `f260f218…` | Exact. Either already lifted = unexplained state: STOP |
+| P-3 | Containment NORMAL on both surfaces, known/verified true, `stopConfidence: not_applicable`, closed-episode summary prevEpisode 3 / 1 / false | Exact. Any new episode or transition = STOP |
+| P-4 | Conflicts = exactly the four baseline `schedule_dead` rows (ids 1–4, their pinned occurrence ids) | Exact set. Any addition or change = STOP (Q6) |
+| P-5 | Plans inventory = exactly the five baseline plans, all terminal, totals as censused; ZERO non-terminal plans; per-subject quarantine reads show no hold on any of the five | Exact. Any non-terminal or held plan would be live at turn-on and needs its own disposition first: STOP |
+| P-6 | Parked job `1832c21f…` = `parked_policy`, revision 1, grants [] | Exact (Q3 PASS — preserved; any change = STOP) |
+| P-7 | Settings revision 1; monthly cap $50; the record otherwise as censused | Exact. A revision change = a settings write outside the gate: STOP |
+| P-8 | Quota reconcile `ok: true`, drift [], sole exception the adjudicated straddler `att-37d63768…` (`estimated_unverified`) | Exact. New drift or a new exception = STOP |
+| P-9 | Phase accounting: settled 1,037,880; estimatedUnverified 19,018; reservedUnverified 5,648; unknownOpen 0; remaining 12,456,472 | Explained-movement-only — and no act since the design census is authorized to move it, so in practice: any movement = STOP |
+| P-10 | Sync watermarks: content 18, bindings 1842 | Exact. Movement = activity outside the gate: STOP |
+| P-11 | Day counters consistent with no generation since the resume close: `providerDispatchesToday` 0; attemptsToday explicable solely by the ledger's grant-counter bookkeeping | Shape-judged against the PT day; anything unexplained = STOP |
+| P-12 | Recorder healthy and current: latest pass stage `complete`, `recordingFailures` 0, `lastRecordedAt` within ~2 pass cadences of census time; `armedAt` non-null (the standing registration) | Shape-judged. A null registration or a recorder failure = STOP — the chain that must advance the smoke cannot be shown alive |
+| P-13 | The smoke chapter's fresh eligibility quote: digest equal to the design quote (`7d76a053…` book digest), eligible count and expected cost as quoted at §8.3 for Julie's chosen chapter | A moved quote = re-quote in the record; if the smoke target's numbers materially moved, STOP for a ruling before lifting |
+| P-14 | OQ-5 CLOSED: the post-gate watch's leg (iii) verified from its first scheduled run's log, and the watch terminated per its terms (Rowan's acceptance already given) — the turn-on gate may not proceed while that duty is still open (Q7's condition) | Exact precondition. Pending at this package's drafting (the first scheduled run is 2026-11-06 18:28 ET); by gate time it must read verified-and-terminated, else STOP until it does |
+| P-15 | Julie's GO for THIS gate recorded on the board BEFORE the census runs (the established ordering), naming this package's pin | Exact precondition |
+
+**STOP conditions** (any one stops the gate; the state is preserved and the deviation reported to Julie and Rowan; proceeding requires a fresh GO or a Rowan ruling for that deviation): any predicate failure; any unexplained movement on any surface; a platform fault of the 1101 class during the gate (WAIT per Julie's standing decision — no deploy, restart, or mutation as a "fix"); a smoke-chapter quote that cannot be reproduced; Julie's or Rowan's word.
+
+### 8.2 A2 — Emergency re-hold, in-gate
+
+§7 is incorporated whole: the triggers, the 2-act bounded procedure, the reporting, and the fresh-GO rule apply from the moment of the halt lift (not only during the soak), and the GO wording (§9) carries the authority expressly so no in-the-moment interpretation is ever needed.
+
+### 8.3 A3 — The smoke
+
+- **Who submits**: Julie, from her own app, Standard lane — no Wren-submitted intent (the resume gate's discipline, kept: the smoke proves the NORMAL path, which is Julie's).
+- **Target (PROPOSAL)**: Forever Pucked **Chapter 4** (chapterIndex 3) — freshly quoted (§2.2): **20 eligible segments, 26,638 chars, expected 375,535 units (≈ $0.38)**; exclusions bound_already 1 (Segment 1, already generated), voice_prompt 0, parked 0. It is the natural smoke: the next ungenerated chapter of the phase's own book, a full chapter's real shape, small enough that its worst case is bounded by the phase budget guard itself. Alternatives Julie may choose at GO presentation: Chapter 5 (21 eligible, ≈ $0.41), or a single segment for a minimal proof. The choice is recorded in the GO.
+- **Shape**: chapter scope, **`keepGoing` OFF** — the plan is exactly one chapter. (Book scope with keepGoing would roll into Chapter 5 automatically on completion; the smoke must be bounded by construction, not by someone watching.)
+- **Exposure limits**: the plan's own guards are the caps (phase budget projection, quota, storage). Deviation SIGNALS (signals, never caps — the Gate 4 law): settled for the chapter exceeding **2× expected (751,070 units)**; provider dispatches for the chapter exceeding **60** in a day (PROPOSAL figure — observed history: Gate 4's policy-heavy 15 segments took 76 attempts across its run; a 20-segment chapter materially past 60 same-day dispatches is worth a human look); either signal = the observation duty reports to Julie the same day; neither auto-stops Julie's plan — stopping is §7's triggers or Julie's word.
+- **Expected completion evidence** (all required): the plan's totals reach done 20 / failed 0 (any failed entry individually explained — a segment exhausting its 12-attempt budget is a plan outcome to report, not to silently retry); the plan's job `complete`; exactly **20 new bindings** (watermark 1842 → 1862); content watermark unchanged (18); the phase settled delta reported in the three-line form (verified charges — none, no such surface / unverified ledger estimate — the settled delta against the 375,535 quote / remaining room); a recorder row accompanying every accounting transition (the A-7 discipline — a missing row at the ruled observation point is an R-06 discrepancy and a §7 trigger evaluation, T-4).
+- **Failure handling**: the sliding ≥35-minute no-progress stall test (Gate 4 law) governs observation; on a declared stall Wren observes and reports — no act beyond §7 — and the gate record carries the stall for Rowan. A policy_block outcome is NOT a failure (the F3 recursive split is design behavior; the resume's own segment comple
