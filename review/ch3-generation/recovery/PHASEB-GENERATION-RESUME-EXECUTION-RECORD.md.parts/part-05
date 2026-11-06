@@ -1,0 +1,150 @@
+UTC) | Receipt / read-back |
+|---|---|---|---|
+| 1 | GR-2 probe — `RequestPause` vs `alarm-wake-probe:nonexistent` (client `POST /v2/commands`, id `resume-wake-20261106-657db59b`) | 2026-11-06T03:43:35.686Z | HTTP 200 `{"outcome":"rejected","reason":"job_not_found"}` |
+| 2 | GR-3 halt lift — metadata-only envelope flip, GENERATION_HALT `"1"` → `"0"` (31 parts byte-identical) | PUT start 03:46:09Z | HTTP 200; read-backs §5 |
+| 3 | GR-4 queue unpause — cf-api PUT `delivery_paused: false` | sent 03:46:23.201Z; queue `modified_on` 03:46:24.510Z | read-back `delivery_paused: false` |
+| 4 | GR-6a re-pause — cf-api PUT `delivery_paused: true` | queue `modified_on` 03:54:48.543Z | read-back `delivery_paused: true` |
+| 5 | GR-6a re-halt — restore envelope, GENERATION_HALT `"0"` → `"1"` | PUT start 03:54:51Z | HTTP 200; read-backs §7 |
+
+**SubmitJob: 0. Exemption calls: 0. Containment transitions: 0.
+Code deploys: 0** (the two envelopes re-uploaded byte-identical
+parts; the flips were metadata-only and are counted above as
+commands 2 and 5). **Second wake: none.** No act of any kind was
+taken outside this ledger.
+
+### 8.2 Observed effects (GR-4 — accounted separately, never merged into the command count)
+
+- Recorder rows **297** (the cold pass: `seg:87:full` safe-voided
+  on lease expiry; `seg:88:full` issued — the reservation released
+  once and re-derived, never 24, never two live grants), **298**
+  (idle continuation), **299** (the dispatch/completion pass); the
+  chain standing armed at close (`armedAt` 1793937517068).
+- Provider dispatches: **3**, this grant only — 1 `policy_block`
+  (cost 0, F3 split) + 2 successes; the audio object written to R2
+  under the idx-26 key (1,804,844-byte WAV) and its binding
+  published at seq 1842.
+- Quota ledger: `ledgerSeq` 329 → 331 during the cold transition
+  (reservation bookkeeping, §4.1); month `spentMicroCents`
+  unchanged at 302,292 — the settled delta (+8,460) is carried on
+  the phase ledger and reported in §9 at ledger strength.
+
+## 9. Exposure — the three-line form (standing budget rule)
+
+- **Verified charges: $0.00 provider-confirmed.** No
+  provider-confirmed charge surface exists in this system; nothing
+  in this record is represented as provider-verified.
+- **Unverified estimates (ledger-recorded, `provider_unverified`):
+  settled +8,460 units ≈ $0.0085** for the segment (attempts 4,932
+  + 3,528; the `policy_block` attempt cost 0), inside phase
+  `forever-pucked`: settled now **1,037,880** of 13,500,000;
+  pre-existing estimatedUnverified 19,018 unchanged.
+- **Remaining room:** phase remaining **12,456,472 units ≈ $12.46**
+  of the $13.50 phase budget; the Gemini prepay balance stands as
+  the physical backstop (last Julie-verified figure $17.83,
+  Oct 29, 2026 — historical, not re-verified by this gate).
+
+## 10. End state
+
+**COMPLETED — ends HELD.** Production stands: containment NORMAL;
+GENERATION_HALT `"1"`; queue paused; no live grants; the preserved
+plan's single entry **done** — Chapter 3's final segment generated,
+committed, and bound. The alarm chain stands registered under the
+holds (`armedAt` 1793937517068 at the closing census; Wren's
+post-close spot check read **1793937817126**, the chain's own cycle
+continuing under the holds) and is owned by the post-gate
+observation duty in the REVIVED-UNSTOPPED / OWNED posture until
+that duty terminates (§7.4). Julie's GO (board comment 6676200473)
+is consumed by this attempt.
+
+## 11. What this record does NOT establish
+
+- **OQ-2 is discharged for this attempt only.** The discharge rests
+  on this execution's GR-2C observation set (§4). It is not a
+  general cold-restart safety result: it does not prove that a
+  future cold restart, under other state, will void and reissue
+  safely, and it retires no part of the standing risk register.
+- **Alarm delivery is proven for this wake, by observation — not
+  in general.** This gate observed exactly what its design
+  required it to observe: one probe, one recorder-row effect
+  1.38 s later, a registered chain thereafter. It does not
+  establish a platform delivery guarantee, and it does not disturb
+  the acceptance's standing caution (harness success, and now one
+  production success, do not amount to a delivery proof in
+  general).
+- **W-4 remains UNRESOLVED as a diagnosis.** The stall that froze
+  the chain after pass 296 — a registration standing past due with
+  no observed delivery across the S1 window's close — is not
+  explained by anything in this record. This gate's wake was a
+  **fresh command receipt** under a null registration, a different
+  posture from W-4's standing-registration case; that this wake
+  delivered is observed fact **for this wake**, and no claim is
+  made that it explains, or is even the same mechanism as, the
+  W-4 non-delivery. Neither 1101 fault is attributed; the
+  racing-wake recheck remains **PLATFORM-UNVERIFIED**;
+  post-retry-exhaustion `getAlarm()` semantics remain
+  **UNSPECIFIED** — all carried at full strength.
+- **No provider-confirmed cost exists in this record.** The
+  settled delta (+8,460 units) and every cost figure are ledger
+  values at `provider_unverified` strength (§9); the
+  `policy_block` attempt's cost is the ledger's 0, and no
+  provider-side request identifiers were returned on the attempt
+  records (`providerRequestId` null on all three) by which a
+  provider-side reconciliation could be made.
+- **The plan row's own state label** reads `active` at closing
+  (§6's precision note); completion is claimed on the completion
+  set's surfaces, not on that label.
+- **The post-gate watch's first scheduled run is unverified**
+  (§7.4(iii)); the duty's setup is reported at the strength the
+  evidence supports, and the remaining leg is named, not assumed.
+- **Runtime adoption generally remains unproven** (the standing
+  C1-2 limitation): this gate's reads are the production surfaces'
+  own reports at the moments read; no claim about every Durable
+  Object instance is made.
+
+## 12. What this record does not authorize
+
+This record is evidence, not authority. It authorizes nothing, and
+nothing in it advances any other work:
+
+- **The GO is consumed.** Julie's generation-resume GO (board
+  comment 6676200473) authorized exactly this one attempt; it
+  executed and is spent. No second attempt, no retry, and no
+  further wake is authorized by it or by this record.
+- **No Batch work and no rest-of-book generation** is authorized:
+  Batch remains unarmed, and generation beyond the preserved
+  plan's single entry was expressly barred by the GO and none
+  occurred. Any Batch arming or further generation requires its
+  own readiness, Rowan's review, and Julie's separate GO.
+- **No further hold change** (no halt lift, no queue unpause), no
+  containment transition, no deployment, and no plan or exemption
+  action is authorized. The chain's standing registration under
+  the holds is owned by the post-gate observation duty (§7.4),
+  whose own authority is read-only observation, escalation, and
+  termination as specified — it authorizes no act.
+- **Julie's playback acceptance remains hers**: the chapter
+  header reading "Complete 27/27" is the acceptance of Chapter
+  3's completion, outside this record's verdict and unaffected
+  by Rowan's review of it.
+
+## 13. Evidence index
+
+Raw evidence: `~/workspace/ch2-program/ch3-recovery/resume-execution/`
+(238 files in total, ~14.5 MB, including the two ~1.5 MB envelope
+binaries). The executor's running log is `EXECUTION-LOG.md`
+(19,129 bytes); the census checker is `tools/check_census.py`.
+Every envelope `status` in the read series is 200. The
+load-bearing files:
+
+| File | Content | Bytes |
+|---|---|---|
+| `census/g06-etag.json` | GR-0 build-identity capture (etag artifact, saved before the wake decision) | 769 |
+| `census/b01.json` / `b02.json` | containment surface 1 / `drive=1` projection (recorder window, alarm block: `armedAt` null) | — / 47,579 |
+| `census/b03.json` / `b08.json` | plan diagnostics (phase surface b) / capabilities (phase surface a) — settled 1,029,420 both | — |
+| `census/b10.json` | Phase B job at census (rev 88; `seg:87:full` issued) | 18,525 |
+| `census/b13.json` | quota at census (`attemptsToday` 0; `ledgerSeq` 329) | — |
+| `census/b14.json` | conflicts (exactly the 4 baseline rows) | — |
+| `census/b15a/b15b.json` | sync changes, content (18) / bindings (watermark 1841, zero changes) | — |
+| `census/b16a.json` / `b16b.json` / `b16c-elig-segment.json` | eligibility chapter / book / segment — digest `cdef2c7e…` on all three | 822 / 838 / 896 |
+| `gr2c/probe-request.json` / `probe-response.json` / `probe-meta.json` | the single probe: request, receipt (`rejected` / `job_not_found`), dispatch + bound stamps | 141 / 243 / 223 |
+| `gr2c/c1-p6-drive.json` | **item (i)** — first recorder-row capture (rows 297, 298) | 47,723 |
+| `gr2c/c1-p1…p9` / `c2-p1…p9` | **items (ii) + (iv)** — the two consecutive complete settling polls |

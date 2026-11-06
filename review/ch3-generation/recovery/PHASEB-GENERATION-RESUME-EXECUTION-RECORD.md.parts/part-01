@@ -1,0 +1,117 @@
+# PHASE B — GENERATION-RESUME (branch GR-B): EXECUTION RECORD
+
+**Gate:** the generation-resume gate — exactly one resume attempt
+under branch GR-B, riding the preserved Phase B plan
+`plan:19cad189fab54b9c804a74a6` to generate Chapter 3's final segment
+(idx 26, occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b`), under a
+single wake probe, the GR-2C cold-restart checkpoint verified before
+either hold lifted, and a mandatory ends-HELD close.
+**Authorization:** Julie's GO in the amendment §6 wording as conformed
+by the correction, given by button tap in the Coding Projects chat
+2026-11-05 ~10:36 p.m. ET and **recorded on the board before the
+execution census** — board comment **6676200473**, opal-roundtable
+issue #15.
+**Execution window:** 2026-11-06 — census 03:41–03:43Z; probe
+dispatched 03:43:35.686Z; GR-2C declared MET 03:45:07Z; lifts
+03:46:09Z–03:46:24Z; dispatch T0 and completion observed in the same
+poll, 03:54:15Z; holds restored and verified by 03:58:02Z (all times
+UTC; 2026-11-05 late evening, America/New_York).
+**Result:** **GENERATION-RESUME EXECUTED — COMPLETE.** The preserved
+plan's single entry is done: the segment generated, committed, and
+bound (bindings watermark 1842, exactly one new binding). GR-2C was
+met in full inside its 15-minute hard bound, and **OQ-2 stands
+discharged for this attempt only**. Counted production commands:
+exactly **5 of ≤ 5**. The system ends **HELD** — GENERATION_HALT
+`"1"`, queue paused, containment NORMAL — with the alarm chain
+standing registered under the holds, owned by the post-gate
+observation duty. Closure of the gate awaits Rowan's documentary
+review of this record; **Julie's playback acceptance (chapter header
+"Complete 27/27") is hers and outstanding**, outside this record's
+verdict.
+**Spend:** $0.00 provider-confirmed (no provider-confirmed charge
+surface exists in this system); ledger-recorded settled delta
+**+8,460 units ≈ $0.0085**, `provider_unverified` — the three-line
+exposure statement is §9.
+**Raw evidence:** `~/workspace/ch2-program/ch3-recovery/resume-execution/`
+— 234 raw evidence files across six folders (`census/` 24, `gr2c/` 25,
+`flip/` 90, `gr5/` 44, `close/` 28, `watch-check0/` 23), the
+executor's running log `EXECUTION-LOG.md`, and 3 checker/reader tools
+(`tools/`), 238 files in total. Every figure in this record was
+re-derived from those files; §12 indexes the load-bearing ones. This
+record's own pin is carried in the companion CP's `<EXEC-PIN>` slot
+(a record cannot name its own commit).
+
+---
+
+## 1. Authority chain
+
+The gate executed under the following chain, in order. No link was
+skipped, and Julie's GO was recorded on the board **before** the
+execution census opened — the ordering the GO wording itself
+requires.
+
+| # | Link | Reference |
+|---|---|---|
+| 1 | Generation-resume package (operative protocol §2.3: lift mechanics and order, the P-1..P-9 polling protocol, the completion set, the §2.3.3 abort sequence), as corrected | `PHASEB-GENERATION-RESUME-PACKAGE.md`, pin `0946f9f2…`; OQ-1 analysis pin `60da50c3…`; correction pin `8ca683bd…` |
+| 2 | Resume correction 2 — OQ-3 (abort condition A-7; completed-with-discrepancy carve-out) and OQ-6 (three-hour review checkpoint from dispatch) as corrected; Rowan PASS | `PHASEB-GENERATION-RESUME-CORRECTION-2.md`, pin `91bb9c44…` |
+| 3 | Final readiness confirmation — §3 execution-census spec and expected values (= the post-restoration baseline), §5 wake rules, §6 sequence, §7 limits, §8 OQ-5 duty spec | `PHASEB-GENERATION-RESUME-FINAL-READINESS-CONFIRMATION.md`, pin `ad42c9e9…` |
+| 4 | **Rowan final readiness ruling** — branch determined: **GR-B adopted, reading (i)**; GR-A foreclosed, never to be manufactured; the §9 GR-A-only GO wording NOT APPROVED; OQ-2 open, blocking | `ROWAN-FINAL-RESUME-READINESS-RULING.md` (verbatim board 6675820250) |
+| 5 | OQ-2 cold-restart assessment — the gap decomposed (CR-1..CR-4); the V-1 + V-3 recommendation | `PHASEB-OQ2-COLD-RESTART-ASSESSMENT.md`, pin `91c0731e…` |
+| 6 | **Rowan OQ-2 ruling** — PASS WITH CONDITIONS ON DESIGN; V-1 (gate-internal checkpoint GR-2C) + V-3 (mandatory harness) selected; V-2 rejected; the conditional discharge: OQ-2 discharges for this attempt only on full GR-2C success under both holds, with the five observations, the two-consecutive-complete-poll rule, and the 15-minute hard bound | `ROWAN-OQ2-RULING.md` (verbatim board 6675941309) |
+| 7 | GR-B / GR-2C readiness amendment — §2 the GR-2C checkpoint inserted between the wake and the halt lift; §4 the completed V-3 annex (harness PASS 5/5, exit 0, at harness strength); §5 the OQ-5 feasibility answer; §6 the revised adopted-GR-B GO proposal | `PHASEB-GRB-GR2C-READINESS-AMENDMENT.md`, pin `74c5c525ab7de539396aa24f29c5b54084c73c49` |
+| 8 | Narrow correction — §2.3's evidence model corrected to the ordered-transition-records form (same-pass void + reissue; the four-item preservation set; no inference from settled state); §6's GO passage conformed in place | `PHASEB-GRB-GR2C-CORRECTION.md`, pin `d1182c873cbe2b2bad1fbc111f7f4ba2b8453683` |
+| 9 | **Rowan GR-B / GR-2C FINAL READINESS ACCEPTANCE — PASS** (verbatim board 6676183453): the same-pass correction and evidence requirements accepted; safety requirements unchanged (15-minute bound, reservation checks, zero-dispatch verification, stop rules, five-command ceiling, ends-HELD); V-3 accepted at harness strength; OQ-5 accepted; **the §6 GO proposal APPROVED FOR PRESENTATION to Julie**; OQ-2 open pending production observation; no production action authorized by the acceptance itself | `ROWAN-GRB-GR2C-ACCEPTANCE.md` |
+| 10 | **Julie's GO**, in the §6 wording exactly as presented (below, §1.1), given by button tap 2026-11-05 ~10:36 p.m. ET and **recorded on the board before the census** | Board comment **6676200473**, opal-roundtable issue #15 |
+| 11 | GR-0 execution census opened | 2026-11-06T03:41Z (evidence series `census/`) — after link 10 |
+
+Production state entering the gate: build `fdb02395…` live;
+containment NORMAL (restoration executed and closed separately,
+before this GO); GENERATION_HALT `"1"`; queue
+`opalreader-generation-v2` delivery paused; no alarm registration
+(`armedAt` null — the registration C3's stop deleted was never
+restored); the Phase B plan active with its single entry `granted`;
+the Phase B job `generating` rev 88 mid-churn (`seg:87:full` issued,
+86 grants voided, derived reserved 12, dispatched 0) exactly as
+Grant 2's revival left it and the W-4 stall froze it; the idx-26
+chapter exemption live and preserved.
+
+### 1.1 The GO wording, as given
+
+Julie's GO adopted the amendment §6 wording with `<AMEND-PIN>`
+resolved to `74c5c525ab7de539396aa24f29c5b54084c73c49` and with §6's
+GR-2C passage as conformed by the correction at pin
+`d1182c873cbe2b2bad1fbc111f7f4ba2b8453683` (the conformed passage is
+the one executed in §4 below):
+
+> "GO — execute exactly one generation-resume attempt under branch
+> GR-B as pinned at `74c5c525ab7de539396aa24f29c5b54084c73c49`:
+> fresh execution census on both phase surfaces, with the script
+> etag captured and saved as an evidence artifact before any wake
+> decision, verifying the adopted GR-B predicates exactly — the
+> preserved plan active, totals {eligible 1, done 0, failed 0,
+> blocked 0}, its sole entry granted; the Phase B job generating at
+> revision 88 with 87 grants, `seg:1`–`seg:86` voided and
+> `grant:plan:19cad189fab54b9c804a74a6:seg:87:full` issued and live;
+> the occurrence granted; derived reserved 12; dispatched 0; the
+> phase figures at their frozen values; containment NORMAL; the
+> alarm registration absent (`armedAt` null — any non-null value
+> stops the attempt before any act) — and any other census state
+> stops the attempt and returns for ruling; branch GR-A is
+> foreclosed and must not be manufactured; a fresh read-only voice
+> checkpoint (Alex → Gemini Charon, quote digest `cdef2c7e…`);
+> exactly one wake — a single fresh `RequestPause` probe against
+> `alarm-wake-probe:nonexistent`, counted as one production command,
+> verified only by an observed recorder-row effect within the ruled
+> 15-minute bound — never a second wake, never a
+> deploy-as-stimulus; then **checkpoint GR-2C, with both holds still
+> standing**: the first cold pass's recorder row and the settled
+> successor grant evidenced **separately**, intermediate polls
+> preserved, the void of `seg:87:full` and the sequential issuance
+> of `seg:88:full` each established by the ordered transition
+> records — the two events may complete inside one pass, in which
+> case no intermediate poll is required and the first completed
+> poll may already show `seg:87:full` voided and `seg:88:full`
+> issued; if the ordered transition evidence is unavailable, the
+> events are not inferred from the settled state and the attempt
+> stops, both holds standing — derived reserved exactly 12 at the
+> settling polls (a transient 0 only as an obser

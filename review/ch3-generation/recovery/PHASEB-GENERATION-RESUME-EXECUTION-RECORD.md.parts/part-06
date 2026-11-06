@@ -1,0 +1,29 @@
+ — |
+| `gr2c/c1-p1-job.json` / `c2-p1-job.json` | **item (iii)** — the job read's distinct grant records (`seg:87` voided @ 88; `seg:88` issued @ 89) | 18,729 each |
+| `gr2c/c1-p5b-quota.json` | quota at c1 (`attemptsToday` 1, §4.1; `ledgerSeq` 331; `providerDispatchesToday` 0) | 1,039 |
+| `flip/manifest-census.json` / `manifest-now.json` | the 31-part manifest comparison (hash sets identical) | — |
+| `flip/flip-envelope.bin` | the halt-lift envelope as sent (SHA-256 `73493394…`) | 1,519,011 |
+| `flip/settings-after-flip.json` / `health-after-flip.json` | lift read-backs (HALT `"0"`; health `enabled`) | 2,152 / 425 |
+| `flip/queue-after-unpause.json` | unpause read-back (`delivery_paused: false`) | 995 |
+| `flip/restore-envelope.bin` | the re-halt envelope as sent (SHA-256 `645c2320…`) | 1,519,110 |
+| `gr5/g1…g4-*.json` | GR-5 polls (44 files across `gr5/`) | — |
+| `gr5/g3-p3-diagplan.json` | completion poll: execution `exec-e010ddfe…` + its 3 attempt records; phase settled 1,037,880 | 4,223 |
+| `gr5/g3-p6-drive.json` | recorder row 299 in the completion poll (A-7) | 47,597 |
+| `gr5/g3-p8-bindings.json` | the one new binding, seq 1842; watermark 1842 | 1,372 |
+| `close/queue-after-repause.json` | re-pause read-back (`delivery_paused: true`) | 993 |
+| `close/b04.json` / `b04b-health-recheck.json` | closing `/health` (`halted`, both reads) | — |
+| `close/b05.json` | closing script settings (GENERATION_HALT `"1"`) | — |
+| `close/b08.json` / `b08b-*.json` / `b08c-*.json` | the capabilities transient: `enabled` / `enabled` / `halted` (§7.3) | 997 / 997 / 995 |
+| `close/g06-etag.json` | closing build-identity capture (etag unchanged) | 769 |
+| `close/b01…b16b.json` | the GR-7 closing census — same set, same order as `census/` | — |
+| `watch-check0/` (23 files) | check #0's full dry read set (POST-GATE-QUIET) | — |
+
+## 14. Turn
+
+**Turn: Rowan's** — documentary execution review of this record
+(via Julie's relay; the companion CP rides with the record). On
+Rowan's acceptance that the generation-resume gate is executed and
+closed, the remaining item is **Julie's playback acceptance** —
+the chapter header reading "Complete 27/27" — which is hers
+alone. Julie's GO is consumed; no production act of any kind is
+pending or implied.

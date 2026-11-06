@@ -1,0 +1,169 @@
+15Z — THE COMPLETION SET, observed in full.** Drive
+  pass row **299** @ 1793937217126 (stage `complete`, errors null)
+  drove the dispatch; every value in-set:
+  - **T0 = 2026-11-06T03:54:15Z** — this poll is the first complete
+    poll at which P-5 records a dispatched increment for this grant
+    above the pre-unpause baseline: reconcile current-day
+    dispatched 0 → **3**; `providerDispatchesToday` **3**. The
+    three-hour review checkpoint (T0 + 3h = 06:54:15Z) never came
+    into play — completion preceded it by ~3 hours. The
+    35-minute stall window likewise never engaged.
+  - Execution `exec-e010ddfe-8925-4498-879f-371573df7db3`
+    **committed**, **3 attempts**, all attributable to this
+    plan/occurrence, spanning 03:53:44.167Z–03:54:07.099Z by the
+    attempt records' own timestamps, inside pass 299's window:
+    seq 1 `att-8db9b305-a67f-44ab-81d9-31556fc16c12`
+    **`policy_block`**, cost **0** (the F3 recursive split — no
+    voice substitution, per the standing design law); seq 2
+    `att-51e766b1-a876-468b-9fc5-ba79b6381dda` **success**, cost
+    **4,932**; seq 3 `att-3f75d36d-55b2-4332-9cca-b0cdcd556a80`
+    **success**, cost **3,528**.
+  - **A-7 evaluated: clean.** The in-set progress transitions are
+    accompanied by recorder row **299 in the same poll** — no
+    post-lift recorder discrepancy stands. The closure is the
+    ordinary success closure, **not** completed-with-discrepancy;
+    no R-06 entry arises from this gate.
+  - Occurrence **`ready`**, its execution `committed`; plan totals
+    {eligible 1, **done 1**, failed 0, blocked 0, prompts 0}; job
+    **`complete`** rev **90** (89 → 90 = the single
+    report/completion event; explained by the event sequence, per
+    the revision rule); grant `seg:88:full` in terminal state
+    **`reported`**; derived reserved returned to **0**.
+  - Phase settled 1,029,420 → **1,037,880** (**+8,460** = 4,932 +
+    3,528 exactly); remaining 12,456,472. **A-3: 8,460 < 12,808 —
+    the forecast line was not crossed. A-4: 25,000 — the detection
+    threshold was not crossed.** estimatedUnverified 19,018 and
+    reservedUnverified 5,648 unchanged. (The figures are ledger
+    units at `provider_unverified` strength — §9.)
+  - **Exactly one new binding:** seq **1842**, entityKey
+    `5c589095-f812-48a2-8ab2-03ba2791f2b2:2a85f74f-353d-4c25-a86a-4a4db392868b`
+    (the idx-26 key, free at census), format `wav`, size
+    **1,804,844 bytes**, SHA-256
+    `ccf3bcc965b271738b75d819c4bf3c7084c0574797db59bc718107f7578e7bd7`,
+    provenance `d6`; **bindings watermark 1842** (P-8: exactly one
+    change — `gr5/g3-p8-bindings.json`).
+  - **No foreign generation:** every dispatched / attempted /
+    settled movement in the window is this grant's; conflicts
+    still exactly 4; content watermark 18 unchanged; Batch still
+    `batch_not_armed`; build unchanged.
+- **g4 03:54:33Z** — confirming complete poll: the completion
+  values identical and stable; no further movement.
+
+**GR-5 CLOSED — SUCCESS** (§2.3.4 closure evidence = polls g1–g4 raw
++ the GR-7 closing census, §7.2).
+
+A precision note on the plan's state label, recorded so the history
+stays exact: the plan object's own `state` field reads **`active`**
+on the plan read surfaces at g3, g4, and closing, even with its
+totals at done 1. Completion is established by the totals, the sole
+entry's `ready` state with its execution `committed`, and the job's
+`complete` state — the surfaces this gate's paperwork defines the
+completion set on. This record says "the plan's single entry is
+done; the job is complete" and does not relabel the plan row's own
+state field.
+
+## 7. Step 5 — Close (GR-6a success close → GR-7 closing census → OQ-5 duty)
+
+### 7.1 The re-hold, in the §2.3.3 order
+
+- **Re-pause (counted command #4)** — cf-api PUT
+  `delivery_paused: true`; the queue's `modified_on` reads
+  2026-11-06T03:54:48.54316Z and the **read-back shows
+  `delivery_paused: true`** (`close/repause-response.json`,
+  `close/queue-after-repause.json`).
+- **Re-halt (counted command #5)** — restore envelope (the same 31
+  byte-identical parts; metadata = live settings with
+  GENERATION_HALT `"0"` → `"1"`; `flip/restore-envelope.bin`,
+  1,519,110 bytes, SHA-256
+  `645c23208291116963194eab9981c33dbd34341ed6f2cd421e22131350f653ab`;
+  PUT started 03:54:51Z, `flip/restore-put-start.txt`) — **HTTP
+  200** (`flip/restore-put-response.json`, `flip/restore-put.log`).
+
+### 7.2 GR-7 closing census — deltas exactly the ruled set
+
+The full §3.3 read set was repeated (`close/b01…b16b.json`), with
+the script etag again **captured and saved as an artifact**
+(`close/g06-etag.json`, captured 2026-11-06T03:55:04Z: etag
+`bb90f182…`, unchanged). Deltas from GR-0 are **exactly** the ruled
+set, and no other delta exists:
+
+- plan totals done 1; the sole entry `ready` / execution
+  `committed`; job `complete` rev 90; `seg:88:full` terminal
+  `reported`;
+- bindings watermark **1842**, the delta being exactly the one
+  idx-26 binding of §6;
+- phase settled **+8,460** only; derived reserved **0**;
+  reservedUnverified 5,648 and estimatedUnverified 19,018 at
+  baseline;
+- PT-day (2026-11-05) dispatched **+3** — this segment's attempts,
+  no others;
+- the alarm standing re-registered by the chain's own cycle:
+  `armedAt` **1793937517068** (recorder row 299's `armedAfter`) —
+  recorded, not acted on; the chain stands armed under the holds
+  in the REVIVED-UNSTOPPED / OWNED posture, owned by the §8 duty
+  (§7.3 below);
+- re-hold verified on its own surfaces: GENERATION_HALT **`"1"`**
+  (close `b05`), queue **paused** (§7.1), `/health` generation
+  **`halted`** (close `b04`, and again in the later recheck
+  `b04b`), build + etag unchanged, observability intact, 10
+  bindings, containment **NORMAL** untouched, conflicts exactly 4,
+  content watermark 18.
+
+### 7.3 Classification — the closing capabilities transient (NOT a hold deviation)
+
+The closing capture's first capabilities read (`close/b08.json`,
+file time ~03:55:05Z) showed `generationState: "enabled"` while the
+script settings read GENERATION_HALT `"1"` and `/health` read
+`halted`. The executor did not treat the first read as the state;
+it re-read the surface: a recheck at ~03:55:21Z
+(`close/b08b-capabilities-recheck.json`) still read `enabled`, and
+the next, at **03:58:02Z**
+(`close/b08c-capabilities-recheck2.json`), read **`halted`** —
+converged inside ~3 minutes. The capabilities value is computed
+live from the serving isolate's env binding (`service.mjs:1367`);
+the sequence is isolate env-propagation lag on that projection
+surface following the re-halt upload. Classified as a **classified
+transient on a projection surface, not a hold deviation**: the
+authoritative hold surfaces (script settings, `/health`, and the
+queue — whose pause stood throughout as an independent fence)
+never read otherwise, and no dispatch was possible or observed in
+the interval (recorder and accounting surfaces at closing show no
+movement beyond §7.2's ruled set). The classification is offered
+for Rowan's review as classified — companion CP, question 3.
+
+### 7.4 The OQ-5 post-gate observation duty — ESTABLISHED (§8 of the confirmation / §5 of the amendment)
+
+- Job **`phaseb-resume-postgate-watch`** created at close: a
+  Wren-side scheduler job — **not a production act**, consuming
+  none of the counted ceiling — daily **18:28 America/New_York**,
+  owner `goal:opal-roundtable`, delivery to the Coding Projects
+  chat; read-only read set (the closing-census subset) with the
+  closing marker values, the POST-GATE-QUIET / POST-GATE-MOVEMENT
+  classifications, movement = immediate escalation to Julie +
+  Rowan with no act, and the termination rule (the earlier of
+  Rowan's acceptance of this execution record or
+  **2026-11-20T03:58Z**, 14 days after close; at termination the
+  job is disabled, history preserved, and the termination
+  reported) as its standing instructions.
+- **Setup verification, two of three legs complete:** (i) the
+  definition was read back (`cron.view`) and confirmed
+  field-for-field — name, cadence, owner, delivery, read-only
+  instruction set; (ii) a manual dry read of the full read set was
+  run at close and logged as **check #0 — POST-GATE-QUIET**
+  (`~/workspace/goals/opal-roundtable/hidden_files/phaseb-resume-postgate-log.md`;
+  raw reads `watch-check0/`: every marker at its closing value,
+  including `armedAt` 1793937517068 and recorder head row 299);
+  (iii) the first scheduled run — **Friday 2026-11-06 18:28 EST —
+  is PENDING VERIFICATION**, reported here as pending, **not**
+  claimed verified. Per the acceptance's item 5, the duty is not
+  treated as fully discharged until that run's log is confirmed;
+  if the setup had failed, that failure would have been reported
+  instead of a completion claim.
+
+---
+
+## 8. Counted production commands (GR-4 ledger) and observed effects
+
+### 8.1 Counted commands — exactly 5 of ≤ 5
+
+| # | Act | At (

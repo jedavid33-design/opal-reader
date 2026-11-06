@@ -1,0 +1,167 @@
+ned 03:45:02Z, complete
+03:45:07Z), raw envelopes preserved (`gr2c/c1-p1…p9`, `gr2c/c2-p1…p9`;
+the `*-timestamp.txt` files stamp each series' opening, the log its
+completion). The cold transition completed inside the **first**
+post-probe pass. The five required observations:
+
+- **(a) Valid new recorder row ✓** — Row **297** @ **1793936617068**
+  (2026-11-06T03:43:37.068Z, **1.38 s after probe dispatch**): stage
+  `complete`, `driveInvoked` true, error fields null, its outcomes
+  carrying the preserved plan (`active`). Row 298 @ 1793936647070
+  (stage complete, no grant outcome) corroborates chain
+  continuation; `recorderHealth.recordingFailures` 0,
+  `lastRecordedAt` advanced 1793825819071 → 1793936647070.
+- **(b) Confirmed registration ✓** — Row 297's `armedAfter` is
+  1793936647068 (non-null, and exactly row 298's `at`); row 298's
+  `armedAfter` is 1793937217068; the diagnostics alarm block at
+  **both** settling polls reads `armedAt` **1793937217068**,
+  `pendingSchedule` 2 / `pendingWatchdog` 1 — the chain stands
+  armed after the pass, on the paired surfaces.
+- **(c) Safe void + sequential reissue ✓** — At both settling polls
+  the job read shows: `seg:87:full` **voided** (grant revision 88 —
+  the void applied **no job event**); exactly **one** live grant,
+  `grant:plan:19cad189fab54b9c804a74a6:seg:88:full`, **issued**,
+  grant revision **89**, for the same occurrence
+  `2a85f74f-353d-4c25-a86a-4a4db392868b`; occurrence `granted`; job
+  revision **89** — exactly one issuance transition, the V-3 T1
+  shape; `seg:87` never reissued; never two live grants at any
+  poll.
+- **(d) Reservation continuity ✓** — Derived reserved exactly
+  **12** at both settling polls (reconcile current-day totals
+  reserved 12; `/v2/quota` `providerReservedToday` 12). **No
+  transient 0 was observed** — the void and reissue completed
+  within one pass, so under the corrected §2.3 no intermediate 0
+  need exist and its absence is not a gap. **24 was never
+  observed**; no unexplained reservation movement.
+- **(e) Zero dispatch / spend ✓** — Dispatched **0** on every
+  surface at every poll (reconcile totals and dayTotals;
+  `providerDispatchesToday` 0); phase figures frozen on both
+  surfaces (settled 1,029,420; estimatedUnverified 19,018;
+  reservedUnverified 5,648; remaining 12,464,932); conflicts still
+  exactly 4; bindings watermark 1841, no changes; `/health` build
+  unchanged, generation still `halted`; Batch still
+  `batch_not_armed`.
+
+**The preservation set (corrected §2.3, items (i)–(iv))** stands as
+follows, each item distinct:
+
+- **(i) First recorder-row capture:** `gr2c/c1-p6-drive.json` — the
+  c1 drive read carrying row 297, preserved and relied on **before**
+  any successor observation.
+- **(ii) First available accounting capture:** the c1 poll set
+  (`gr2c/c1-p1…p9`) — the first complete poll of the checkpoint
+  read set taken after the probe.
+- **(iii) Distinct void/reissue event evidence — the ordered
+  transition records:** recorder row 297's plan outcome itself
+  names `"grantId": "grant:plan:19cad189fab54b9c804a74a6:seg:88:full"`
+  — the cold pass's own record identifies the successor it issued —
+  read together with the job read's **distinct grant records**
+  (`seg:87:full` voided @ grant revision 88, no job event;
+  `seg:88:full` issued @ grant revision 89, exactly one job
+  revision step), which establish the two events **separately and
+  in order**. A completed pass alone was not treated as proof of
+  the successor; the issuance is proved by its transition record,
+  preserved distinctly from item (i). The events were **not**
+  inferred from the settled grant state — the guard of corrected
+  §2.3 was satisfied on its own terms, and its STOP branch was
+  never engaged.
+- **(iv) Two consecutive complete settled-state polls:** c1 and c2,
+  every surface read, both showing (a)–(e) identically.
+
+Same-pass shape, as the correction provides: because the void and
+the reissue completed within one drive pass, the first completed
+poll already showed `seg:87:full` voided and `seg:88:full` issued;
+**no separately observable intermediate `pending` state was
+required**, and the occurrence's `granted` → `pending` → `granted`
+path within the pass is evidenced by the transition records of item
+(iii) rather than by a poll.
+
+**GR-2C DECLARED MET at 2026-11-06T03:45:07Z** — 91 seconds after
+probe dispatch, **~13.5 minutes inside the 15-minute hard bound**,
+with both holds standing throughout. Per the OQ-2 ruling's
+conditional discharge (Q-2/Q-3) and the GO wording, **OQ-2 stands
+DISCHARGED FOR THIS ATTEMPT ONLY**. The attempt proceeded to the
+lifts in the ruled order.
+
+### 4.1 Classification — the `/v2/quota` `attemptsToday` 0 → 1 movement (NOT a deviation)
+
+At the settling polls, `/v2/quota` read `attemptsToday` **1** where
+the census read 0. This is recorded at full strength, and classified
+as the **expected companion of GR-2C(d)'s reservation**, not a
+provider attempt and not a deviation:
+
+- The composed source defines the field as the estimate-ledger
+  **grant counter**: `attemptsToday` counts `ledger_ops` of kind
+  `attempt` minus `attempt_release` for the day — expressly
+  "grants today" (`coordinator.mjs:3558`), computed separately from
+  `providerDispatchesToday`, "Reader D6 provider requests today"
+  (`coordinator.mjs:2265`). The two counters are never merged.
+- Pass 297's issuance of `seg:88:full` wrote today's reservation
+  `attempt` row (+1), with the paired release bookkeeping: the quota
+  ledger's `ledgerSeq` moved **329 → 331** between the census
+  (`census/b13.json`) and c1 (`gr2c/c1-p5b-quota.json`); `seg:87`'s
+  release carries its original 2026-11-04 day key, per the source's
+  day-keying. Month `spentMicroCents` was **unchanged** (302,292 at
+  both reads).
+- `providerDispatchesToday` read **0** at every GR-2C poll, and
+  derived reserved read exactly **12** — the counter movement is
+  precisely what a reservation re-derivation under a successor
+  grant looks like on this surface, and nothing else moved.
+
+No §2.2/§2.3 stop condition names this field; the zero-exposure law
+of (e) is stated on dispatched and provider attempts, both 0
+throughout. The classification is offered for Rowan's review as
+classified — see the companion CP, question 2.
+
+---
+
+## 5. Step 3 — The lifts (ruled order: halt lift, then unpause)
+
+**GR-3 halt lift (counted command #2)** — 2026-11-06T03:46:09Z (PUT
+start, `flip/flip-put-start.txt`). Executed as a **metadata-only
+operative-envelope flip** on the attempt-3 pattern:
+
+- A fresh script download (etag `bb90f182…`, 1,516,052 bytes) was
+  parsed to its 31 parts and compared against the census download
+  by manifest: **all 31 part hashes identical as a set**
+  (`flip/manifest-census.json` vs `flip/manifest-now.json`) — only
+  the GET's part order differed. No code changed; none was
+  uploaded differently.
+- The flip metadata was built from the fresh live `/settings` read
+  (`flip/settings-now.json`) with the **single** change
+  GENERATION_HALT `"1"` → `"0"` (secrets carried as `inherit`), and
+  cross-checked identical to attempt 3's proven flip metadata,
+  order-insensitive. The assembled envelope is preserved
+  (`flip/flip-envelope.bin`, 1,519,011 bytes, SHA-256
+  `734933948323227ef1059305d6e6edceae838706b8defc469425fdcaef379ce1`)
+  and was PUT via the surrogate path — **HTTP 200**.
+- Read-backs, all exact (`flip/settings-after-flip.json`,
+  `flip/health-after-flip.json`, `flip/script-after-flip-meta.json`,
+  `flip/queue-after-flip.json`): GENERATION_HALT **`"0"`**; 10
+  bindings; **observability intact** (enabled, logs enabled +
+  persisted — the standing post-upload check was performed and no
+  repair PATCH was needed); `/health` generation **`enabled`**,
+  build unchanged `fdb02395…`, coordinator `armed`; **etag
+  unchanged** `bb90f182…`, script bytes unchanged 1,516,052; queue
+  **still paused** at that instant.
+
+**GR-4 queue unpause (counted command #3)** — cf-api PUT
+`delivery_paused: false`, sent 03:46:23.201Z (`flip/unpause-start.txt`);
+the queue's `modified_on` reads 2026-11-06T03:46:24.510324Z and the
+**read-back shows `delivery_paused: false`**, 1 consumer
+(`flip/unpause-response.json`, `flip/queue-after-unpause.json`).
+The PT day was unchanged since GR-0 (2026-11-05; rolls 07:00Z), so
+no quota re-check was triggered; headroom stood. **The §2.3
+protocol clock keys from this read-back (~03:46:25Z).**
+
+## 6. Step 4 — GR-5 monitored generation (package §2.3, P-1..P-9)
+
+Complete polls at ≤ 5-minute cadence, raw envelopes in `gr5/`; the
+executor sent nothing during GR-5.
+
+- **g1 03:46:47Z / g2 03:49:52Z** — system open (`/health` +
+  capabilities `enabled`), no dispatch yet; `seg:88:full` standing
+  issued; next pass armed at 1793937217068 (03:53:37Z). No progress
+  events; no abort condition approached (the sliding 35-minute
+  stall window runs from the unpause read-back, 03:46:25Z).
+- **g3 03:54:

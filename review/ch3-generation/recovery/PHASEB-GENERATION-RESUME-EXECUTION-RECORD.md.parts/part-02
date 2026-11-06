@@ -1,0 +1,143 @@
+ved, explainable
+> intermediate bracketed by the identified void and reissue event
+> evidence; 24 at any poll stops the attempt), dispatched and
+> provider attempts 0 throughout, and **two consecutive complete
+> polls** confirming the settled state — the full checkpoint inside
+> the same 15-minute bound, with **no extension**; on GR-2C's
+> success OQ-2 stands discharged **for this attempt only**; on any
+> checkpoint failure the attempt ends there, both holds standing,
+> and returns for review; then one halt lift and one queue unpause,
+> **in that order**; the post-unpause protocol with its sliding
+> 35-minute stall window, the adopted three-hour review checkpoint
+> from dispatch, and abort condition A-7 (a post-lift recorder
+> discrepancy re-holds and returns for review; a completed segment
+> stands as completed-with-discrepancy); **NO SubmitJob of any
+> scope — ever — NO exemption call, NO containment transition, NO
+> Batch, NO rest-of-book, NO other generation**; counted production
+> commands ≤ 5 on every path; the segment's expected cost ≈ $0.008,
+> the 12,808-unit forecast line and the 25,000-unit detection
+> threshold standing as deviation signals, never caps, the 12-slot
+> reservation bounding attempts and the Gemini prepay balance as
+> the physical backstop; on success, abort, checkpoint, GR-2C
+> failure, or wake failure alike, the attempt ends **HELD** —
+> re-pause and re-halt wherever the holds were lifted, each
+> verified by read-back — with exposure reported in the three-line
+> form, and the named post-gate observation duty
+> (`phaseb-resume-postgate-watch`) opened at close on every path. I
+> understand that success ends with exactly one new binding and the
+> bindings watermark at 1842; that my playback check — the chapter
+> header reading 'Complete 27/27' — is the acceptance, outside the
+> executor's verdict; that one GO covers one attempt, and a stall,
+> an abort, a checkpoint, or a checkpoint failure consumes it; and
+> that restoration was authorized, executed, and closed separately,
+> before this GO."
+
+### 1.2 The acceptance's requirements, and how each was discharged
+
+| Requirement (acceptance / GO wording) | Discharged |
+|---|---|
+| Census against the adopted GR-B predicates exactly, etag captured as a saved artifact before any wake decision | §2 — 46/46 predicates matched; `census/g06-etag.json` saved at 03:43:10Z, before the probe |
+| `armedAt` null at census (any non-null stops the attempt before any act) | §2 — null on both surfaces; the probe branch taken, as ruled |
+| Exactly one wake, counted, verified only by an observed recorder-row effect; never a second wake | §3 (the probe) and §4(a) (row 297, 1.38 s after dispatch) |
+| GR-2C: the five observations (a)–(e), the corrected §2.3 evidence model, two consecutive complete settling polls, the full checkpoint inside the 15-minute bound with no extension | §4 — all five met; declared at 03:45:07Z, ~13.5 min of the bound to spare |
+| OQ-2 discharge, this attempt only, on GR-2C success before either hold lifts | §4 — both holds stood throughout the checkpoint; discharge recorded there |
+| Lifts in the ruled order: halt lift, then queue unpause | §5 |
+| Post-unpause protocol: sliding 35-minute stall window, three-hour checkpoint from dispatch (T0), abort condition A-7 | §6 — completion preceded every control; A-7 evaluated and clean |
+| Express bars: no SubmitJob, no exemption call, no containment transition, no Batch, no rest-of-book, no other generation | §8 — all zero |
+| Counted production commands ≤ 5 on every path | §8 — exactly 5, each receipted |
+| Ends HELD on every path; re-pause and re-halt verified by read-back | §7 |
+| Exposure in the three-line form | §9 |
+| Post-gate observation duty opened at close (OQ-5) | §7.3 — established; first scheduled run expressly pending verification |
+| Playback acceptance is Julie's, outside the executor's verdict | §10/§11 — outstanding; not claimed |
+
+---
+
+## 2. Step 0 — GR-0 execution census + GR-1 voice checkpoint
+
+The confirmation §3 read set was run fresh in the execution session,
+2026-11-06T03:41–03:43Z (raw envelopes `census/b01…b16b.json`; script
+capture `census/script.bin`, 1,516,052 bytes, + `census/script-meta.json`).
+The executor's checker (`tools/check_census.py`) returned **PASS —
+all 46 predicates match the adopted GR-B baseline**, including:
+
+- **Build identity, captured (R4).** `census/g06-etag.json`
+  (captured 2026-11-06T03:43:10Z, **before any wake decision**): the
+  in-process script GET returned HTTP 200, etag header
+  `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e`,
+  script 1,516,052 bytes — the Grant 1 build `fdb02395…` identity,
+  as a saved, reproducible artifact (the forward requirement of
+  Rowan's restoration-execution ruling, discharged in form here —
+  see the closing census, §7.2, for the same capture repeated).
+- Containment **NORMAL** on both surfaces; closed-episode summary
+  `prevEpisodeId 3 / prevEpisodeAttempts 1 / prevEpisodeExhausted
+  false / prevEpisodeClosedAt 1793933356719`; `stopConfidence
+  not_applicable`; **alarm `armedAt` null on both surfaces** —
+  GR-3's provenance condition for a no-probe branch cannot be met
+  for any post-restoration registration, so the probe branch is the
+  branch, as ruled; `pendingSchedule` 2 / `pendingWatchdog` 1.
+- Recorder latest row **296 @ 1793825819071**, stage complete,
+  `recordingFailures` 0 — the frozen W-4 head, unchanged.
+- `/health`: build `fdb02395b3775dc945baa395591a73060ab146c4`,
+  generation `halted`, coordinator `armed`. Script settings:
+  GENERATION_HALT `"1"`, 10 bindings, `OPALREADER_PHASE_POLICY
+  "enforce"`, observability enabled + logs persisted, compatibility
+  2026-08-29 + nodejs_compat. Queue `delivery_paused: true`, sole
+  consumer `f260f2188d80426bb0588685e9d084eb`.
+- Plan `plan:19cad189fab54b9c804a74a6` **active**, totals {eligible
+  1, done 0, failed 0, blocked 0, prompts 0}; sole entry (chapter
+  index 2, 569 chars, occurrence
+  `2a85f74f-353d-4c25-a86a-4a4db392868b`) `granted`; quarantine
+  `held: false`.
+- Job `plan:19cad189fab54b9c804a74a6:seg` **generating rev 88**: 87
+  grants on the read — `seg:1`–`seg:86` **voided**, and
+  `seg:87:full` **issued** at grant revision 88, the single live
+  grant — occurrence `granted`. **Derived reserved 12**;
+  dispatched 0. Parked Ch 3 job `parked_policy` rev 1, grants [].
+- Phase accounting, **both surfaces agreeing**: settled 1,029,420 /
+  estimatedUnverified 19,018 / reservedUnverified 5,648 /
+  inFlightUpper 0 / unknownOpen 0 / remaining 12,464,932 of
+  13,500,000, `provider_unverified`.
+- Quota: reconcile `ok: true`, `armed: true`, drift empty, sole
+  exception the adjudicated straddler
+  `att-37d63768-db4b-447d-8150-580b7c6ee257`; settings revision 1;
+  PT day 2026-11-05 (rolls 07:00Z): dispatched 0, `attemptsToday` 0,
+  `providerDispatchesToday` 0 — headroom 100 ≥ 12.
+- Conflicts: exactly the 4 baseline `schedule_dead` rows (ids 1–4).
+  Watermarks: content 18 / bindings **1841**, zero changes.
+
+**GR-1 voice checkpoint: PASS** (fresh reads in this session). The
+eligibility digest
+**`cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1`**
+agrees on all three scopes: chapter (`census/b16a.json` — eligible 1,
+569 chars, expected 8,022, `bound_already` 26, exclusions otherwise
+zero), segment (`census/b16c-elig-segment.json` — eligible 1, 569,
+8,022, exclusions all zero including `voice_prompt` 0), book
+(`census/b16b.json`). The segment's POV resolves through its recorded
+cast voice (Alex → Gemini Charon, no prompt), per the plan's
+recorded assignment — the GO wording's voice checkpoint.
+
+Branch: **GR-B confirmed by the census** (adopted predicates,
+reading (i)). GR-A foreclosed, not manufactured. No census deviation
+arose; the attempt proceeded to the probe.
+
+## 3. Step 1 — GR-2 the single probe (counted command #1)
+
+- **Dispatched 2026-11-06T03:43:35.686Z** via the client connector:
+  `POST /v2/commands {"command_id":"resume-wake-20261106-657db59b",
+  "type":"RequestPause","payload":{"jobId":"alarm-wake-probe:nonexistent"}}`
+  — a fresh id minted for this gate (request, response, and meta
+  preserved: `gr2c/probe-request.json`, `gr2c/probe-response.json`,
+  `gr2c/probe-meta.json`).
+- **Receipt: HTTP 200 `{"outcome":"rejected","reason":"job_not_found"}`**
+  — exactly the expected Grant-2 shape: a fresh, well-formed command
+  that apply refuses, whose receipt wakes the coordinator. No STOP
+  condition at the command layer.
+- The 15-minute hard bound for GR-2/GR-2C runs from this dispatch:
+  deadline **03:58:35.686Z** (epoch 1793937515686, recorded in
+  `gr2c/probe-meta.json`). No extension exists.
+
+## 4. Step 2 — GR-2C, the cold-restart checkpoint (both holds standing) — MET
+
+The checkpoint was evaluated on two consecutive complete paired
+polls of the full read set — **c1** (series opened 03:44:25Z,
+complete 03:44:30Z) and **c2** (ope
