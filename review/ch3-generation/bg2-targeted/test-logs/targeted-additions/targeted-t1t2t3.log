@@ -1,0 +1,18 @@
+▶ BG2-T1 — cohort quota refusal (targeted addition T1)
+  ✔ T1: a fence-time quota refusal with an in-flight sibling stages without reporting, orphaning, duplicating, or losing custody — and the refused occurrence re-fences when the cohort completes (101.124681ms)
+✔ BG2-T1 — cohort quota refusal (targeted addition T1) (102.722069ms)
+▶ BG2-T2 — immediate poll observation (targeted addition T2)
+  ✔ T2: immediate polls create zero drive-pass observation rows and never advance the D-4 counter; a drive pass (control) records exactly one (22.044156ms)
+✔ BG2-T2 — immediate poll observation (targeted addition T2) (22.341852ms)
+▶ BG2-T3 — CW-09 (targeted addition T3)
+  ✔ CW-09 (T3): the injection fires on the first statement after the slot increment and the entire bundle rolls back byte-identical (80.446006ms)
+  ✔ CW-09 control (T3): the identical bundle unfaulted lands the stamp and the slot together (8.736165ms)
+✔ BG2-T3 — CW-09 (targeted addition T3) (89.69396ms)
+ℹ tests 4
+ℹ suites 3
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 351.533247

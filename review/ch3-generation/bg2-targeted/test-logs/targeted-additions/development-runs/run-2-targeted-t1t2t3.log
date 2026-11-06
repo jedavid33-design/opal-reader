@@ -1,0 +1,39 @@
+▶ BG2-T1 — cohort quota refusal (targeted addition T1)
+  ✔ T1: a fence-time quota refusal with an in-flight sibling stages without reporting, orphaning, duplicating, or losing custody — and the refused occurrence re-fences when the cohort completes (97.929415ms)
+✔ BG2-T1 — cohort quota refusal (targeted addition T1) (99.256828ms)
+▶ BG2-T2 — immediate poll observation (targeted addition T2)
+  ✔ T2: immediate polls create zero drive-pass observation rows and never advance the D-4 counter; a drive pass (control) records exactly one (16.690829ms)
+✔ BG2-T2 — immediate poll observation (targeted addition T2) (17.001485ms)
+▶ BG2-T3 — CW-09 (targeted addition T3)
+  ✔ CW-09 (T3): the injection fires on the first statement after the slot increment and the entire bundle rolls back byte-identical (57.54245ms)
+  ✖ CW-09 control (T3): the identical bundle unfaulted lands the stamp and the slot together (9.53172ms)
+✖ BG2-T3 — CW-09 (targeted addition T3) (67.622774ms)
+ℹ tests 4
+ℹ suites 3
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 397.94719
+
+✖ failing tests:
+
+test at tests/batch-bg2-targeted-t1t2t3.test.mjs:505:3
+✖ CW-09 control (T3): the identical bundle unfaulted lands the stamp and the slot together (9.53172ms)
+  AssertionError [ERR_ASSERTION]: {"executionId":"exec-318581d0-990b-4614-b1a1-26b971124c2c","attemptId":"att-e4df06f3-a0f7-4d5e-93de-fa495c1988ae","attempt":{"attempt_id":"att-e4df06f3-a0f7-4d5e-93de-fa495c1988ae","execution_id":"exec-318581d0-990b-4614-b1a1-26b971124c2c","plan_id":null,"occurrence_id":"occ-b1","seq":1,"phase":"dispatching","outcome":null,"cost_micro_cents":null,"upper_micro_cents":1035,"provider_request_id":null,"detail_json":null,"created_at":1762000000000,"updated_at":1762000000000,"dispatched_day_key":"2025-11-01"},"intent":{"job_id":"bg2-job-1","occurrence_id":"occ-b1","grant_id":"grant:bg2-job-1:1:full","consumer_id":"bg2-consumer","acquired_at":1762000000000,"outcome":null,"generation":1},"map":{"job_id":"bg2-job-1","occurrence_id":"occ-b1","grant_id":"grant:bg2-job-1:1:full","display_name":"opalreader-grant:bg2-job-1:-occ-b1","provider_name":null,"state":"fenced","generation":1},"displayName":"opalreader-grant:bg2-job-1:-occ-b1","dispatchDay":"2025-11-01"}
+  + actual - expected
+  
+  + undefined
+  - true
+  
+      at TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/bg2-build/tests/batch-bg2-targeted-t1t2t3.test.mjs:510:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
