@@ -1,0 +1,26 @@
+ore this gate executes and is not needed for the gate to be safe, for the reasons at §4.4. Execution-time instances remain execution-time: a specific discrepancy (OQ-3) or a specific realized D (OQ-4) can only be classified at the gate, by the rules proposed, not in this document.
+
+## 6. Assumptions register — relied on, not established by the record
+
+- **A-1 (interpretation).** §1.4 clause 1 counts the GR-3 no-probe branch's observed effect as one of "this gate's own passes" for recorder purposes. The package's OQ-3 text ("this gate's own passes") does not name that case; the reading is natural (the gate relies on the pass) but it is a reading, labeled.
+- **A-2 (tail currency).** The tail watch's existence, cadence, read set, and exit conditions are relied on as designed and as logged through its first check (2026-11-05T23:28Z, TAIL-W4-CONTINUING). Later tail checks may add classifications; §3's argument depends on the watch's **terms** (in particular its exit at C3 execution), not on its later contents.
+- **A-3 (carried status).** The B-family status — B1 leading, B2/B3 preserved, none proven — is taken as carried in package §5.3 and analysis §7. The underlying alarm-semantics assessment is not re-derived in this document.
+- **A-4 (package claim relied on).** §4.3's count-bound argument relies on package §5.4's statement that the cohort worst case for this gate is 12 slots (the single grant's reservation) against the 100/day cap. Cited as the package's figure; not independently recomputed here.
+- **A-5 (read-surface shape).** The P-6 read returns a latest-rows window (the window record's reads returned, e.g., ids 247–296 of 296). Nothing in the dispositions depends on the exact page size; the census and polls read what the surface returns and §4.0 item 11's adopt-and-verify discipline governs mismatches.
+- **A-6 (flagged staleness, not relied on).** Package §4.2's GR-B baseline figures (grant `seg:1:full` standing void; derived reserved 0) predate the window's outcome (the chain closed the window at `seg:87:full` live, reserved 12). The correction (§8, accepted) already carries this: GR-B's delta values are adopted from the C3 and restoration censuses by the package's own terms at gate time. No disposition in this document relies on the §4.2 figures; where GR-B is mentioned, it is mentioned as a branch identity, not at its pinned baseline values.
+
+## 7. The precondition chain — restated, unadvanced
+
+This disposition feeds the **full generation-resume readiness review** (correction §7, item 4). The resume gate's remaining preconditions stand in this order, exactly as the accepted correction reconciled them against package §0's five legs, and **nothing in this document advances, satisfies, or reorders any of them**:
+
+1. Rowan's acceptance of the corrections — **satisfied** by the corrections-round-2 ruling (R1/R2, PASS), which also accepted this disposition's commissioning (R4).
+2. **C3 executed and closed** under its own GO, ending CHAIN_STOPPED / verified (package §0 leg 2) — awaiting Julie's separate C3 GO on the accepted branch-(d) wording and a fresh matching census. (R4 expressly provides that this disposition does not delay the separately gated C3 authorization request.)
+3. **The standalone restoration executed and closed** under its own separate authorization (Rowan ruling + Julie GO + fresh census + recorded reason + mandatory historical audit review), ending NORMAL with the system otherwise HELD (package §0 leg 3) — and its record is where GR-3's provenance account must stand if the no-probe branch is ever to be available.
+4. **Rowan's PASS on the resume package as corrected** (package §0 leg 4, remainder) — the full readiness review, of which this disposition's four rulings form a part; GR-B additionally requires OQ-2's resolution (evidence or an approved bounded protocol) before any GO can cover that branch (GR-5, standing).
+5. **Julie's separate explicit GO for this gate**, in the package §6 branch-aware wording, recorded before the execution census (package §0 leg 5). The branch is selected by that census, never in advance of it (corrections-round-2 ruling, R3).
+
+Package §0 leg 1 (eligible S1 disposition + Rowan's window review) stands satisfied by the 2026-11-05 window-record ruling and C3-1, as the accepted correction records. The execution census (package §4) remains fresh and supreme after every leg.
+
+**Turn: Rowan's** — rulings on OQ-3, OQ-4, OQ-5, OQ-6 as tabled in §5, within the full resume readiness review. Julie's turns (the C3 GO; later, this gate's GO) are separate and unrequested here.
+
+— Wren

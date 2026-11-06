@@ -1,0 +1,54 @@
+inute bound, and (iii) on the no-probe route, GR-3's documented provenance **plus** fresh pre-lift observed effect. D is carried as an unobservable absorbed by those bounds pre-lift and by §2.3.4 post-lift; the confirmation does not close the B-family, does not convert the 15-minute bound into a latency finding, and records the gate's realized D (probe dispatch → first satisfying effect) in the execution record as an observation for whatever future gate needs it.
+
+**What would close OQ-4 without a rule:** a ruling is the only closing instrument — no pre-census evidence can exist about a delivery that has not been woken. Classified ANSWERABLE-BY-RULE, not REMAINS OPEN, for that reason: the gate is not waiting on evidence; it is waiting on the confirmation the package asked for.
+
+### 2.5 Interactions
+
+- **OQ-1 design as corrected:** fully consistent — this rule adds no step, removes no step, and leaves GR-6's discrepancy path and GR-7's failure behavior exactly as corrected. The probe route's verification *is* the D observation; nothing double-counts.
+- **OQ-6 boundary:** OQ-4 is pre-dispatch delivery latency (wake → first effect; then unpause → grant/dispatch under the stall test's first application). OQ-6 is post-dispatch completion duration. The two share the sliding test but not their intervals, and neither's disposition borrows the other's (§4.3).
+- **GR-A / GR-B:** branch-invariant; no census predicate in either branch changes. In GR-B the first delivered pass also carries OQ-2's expectations, but the D question — how long delivery may take — is independent of what the pass then does.
+
+---
+
+## 3. OQ-5 — post-completion chain behavior
+
+### 3.1 The question, verbatim (package §9)
+
+> **OQ-5 — post-completion chain behavior.** After GR-6a's re-hold, the alarm chain stands registered and the watchdog continues to fire into the halt (passes under the holds, the pre-window normal). Is any post-gate observation of that state required (a tail check), or does the closing census suffice? This package proposes the closing census suffices and asks Rowan to rule.
+
+### 3.2 Branch and blocking scope
+
+OQ-5 conditions the gate's **closing obligations** — what, if anything, is owed after GR-7 — in **both branches and on both end paths** (success GR-6a and abort §2.3.3). It blocks nothing about opening or executing; it blocks the definition of "closed" until ruled, because the package's own proposal (census suffices) and the package's own abort text (next paragraph) currently point in two directions.
+
+### 3.3 What the record establishes today
+
+- **Events since the package was drafted have changed this question's ground.** At package time (2026-11-03) no post-window observation regime yet existed in tail form. Since then: the window closed under W-4; the post-window regime **REVIVED-UNSTOPPED / OWNED** was established with a named owner (window record §9); and the read-only **tail watch** (`phaseb-s1-tail-watch`, daily ~18:28 ET, ten-read set) has run since 2026-11-05 under standing exit conditions — it ends at **C3 execution**, at a Rowan supersession, or at **2026-11-19T23:28:41Z**. First check: TAIL-W4-CONTINUING, every marker at the closing baseline (tail log). The consequence for OQ-5 is direct: **by the time the resume gate can close, the tail watch will already have exited at C3** — the observation vehicle that has covered the chain since Nov 5 ends, by its own terms, two gates before this one. "Does anything watch the chain after this gate?" is therefore a real question in a way it was not when the package proposed census-sufficiency into a world that still had a standing window regime.
+- **The state in question is fully observed and in-set, in both its forms.** After GR-6a the holds stand restored and the chain stands registered by its own re-arm cycle (its standing value is recorded at GR-7, "not predicted" — package §5). Passes under the holds churn grants in the §7.3 set — $0, dispatch-fenced, reserved pinned at the cohort figure — proven stable across 21h30m44s of observed window churn (window record §§5, 8). Or the chain stands silent in the W-4 form — also observed, also in-set as a classification, unresolved as a mechanism (R2). Neither form spends, dispatches, or touches the plan beyond the pre-classified churn.
+- **What a closing census cannot do — the W-4's own lesson.** A census is a point read. The chain read perfectly at every window check while, at some unobserved point, delivery stopped; conversely GR-7 (accepted) establishes that a delivery arriving after a gate has ended is "new evidence, not retroactive authorization" — a category that exists only if someone is observing when it arrives. Census-sufficiency answers "what is the state at close"; it is silent on "what is the state a week later," and the post-window regime exists precisely because this chain's later state has twice been the material fact (the revival, then the stall).
+- **An asymmetry inside the package, flagged as found.** The package's **abort** path already assumes post-gate observation: §2.3.3 provides that if the chain stands revived and churning after an abort, "that state is **REVIVED-UNSTOPPED / OWNED** under the standing tail discipline until a future authorized disposition — named in the execution record, never silently absorbed." The package's **success** path, via OQ-5's proposal, would owe nothing after the closing census. The same physical end state — a registered chain under restored holds — thus carries an observation duty if the gate failed and none if it succeeded. No principle in the record supports that difference; it is an artifact of the abort text being written against the window regime and the OQ-5 proposal being written before the tail regime's exit conditions existed.
+
+### 3.4 Proposed disposition — ANSWERABLE-BY-RULE
+
+Proposed rule, for Rowan to accept, amend, or reject:
+
+1. **The closing census suffices as the gate's closing evidence.** GR-7's full read set, with its enumerated-deltas discipline (§5 GR-7; §7.6 — any other delta is classified before the gate closes as PASS), is the complete evidentiary basis on which the gate closes. No additional *closing* read is proposed.
+2. **But the gate's closing record hands the chain to a named post-gate observation duty, on both end paths.** Form: the current tail discipline's form — a read-only daily check of the same ten-read set, executor-run, reporting only on its classifications (in-set continuation briefly; out-of-set movement immediately to Julie and the board record) — opened by the closing record itself, owned by name (REVIVED-UNSTOPPED / OWNED, as the abort path already names it), and exiting at the **earlier of** (a) Rowan's acceptance of this gate's execution record on documentary review, or (b) **14 days after gate close**, mirroring the current tail's 14-day form; any extension is a ruling, not inertia. The duty is observation only: it authorizes no act, and its exit does not require a further filing — the closing record states the exit terms in advance.
+3. **The §2.3.3 abort-path sentence is then conformed to name the same duty** (it currently says "the standing tail discipline," which by gate time will have exited at C3), so both end paths cite one instrument.
+
+**The alternative, with its cost stated:** if Rowan rules census-only, §2.3.3's abort-path sentence must be conformed the other way — struck or rewritten — because the package may not promise on the failure path an observation regime its success path disclaims and no standing instrument provides. Either ruling is executable; an unruled middle is not.
+
+**What would close OQ-5 without a rule:** nothing evidentiary — the chain's post-gate behavior will be whatever it is, and both of its observed forms are already classified. The question is purely what observation duty the gate owes, which is a ruling.
+
+### 3.5 Interactions
+
+- **OQ-3:** the proposed duty's read set includes the recorder surface (it is the tail's ten-read set), so post-gate observation incidentally extends the recorder's evidence base; OQ-3's closing-evidence rule (§1.4) is unaffected — observation after close is not closing evidence.
+- **OQ-1 design as corrected:** GR-7's "later delivery is new evidence" doctrine is the doctrinal hook for clause 2 — the duty is what makes that doctrine operable after this gate, as the tail watch makes it operable today.
+- **GR-A / GR-B:** invariant. The duty attaches to the chain state, not the branch; GR-B's block (OQ-2) is untouched.
+
+---
+
+## 4. OQ-6 — completion timing bound
+
+### 4.1 The question, verbatim (package §9)
+
+> **OQ-6 — completion timing bound.** No record bounds how long one segment's dispatch + attempts may legitimately take; §2.3.4 therefore keys the post-dispatch phase to the same sliding ≥35-minute no-progress test rather than a deadline. Rowan is asked to rule on whether a distinct, longer bound is required for t
