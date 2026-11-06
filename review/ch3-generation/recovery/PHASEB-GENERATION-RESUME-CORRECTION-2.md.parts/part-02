@@ -1,0 +1,55 @@
+on may be treated as license to remain lifted awaiting more progress. The executor executes the package's existing abort/re-hold sequence (§2.3.3) **in its exact order**, quoted here so the hook is unambiguous:
+
+> **Re-hold sequence on abort (exactly this order, mirroring attempt
+> 3's §9.1 closing):**
+>
+> 1. **Re-pause the queue** (cf-api PUT `delivery_paused: true`);
+>    read back `delivery_paused: true`.
+> 2. **Re-halt generation** (restore envelope: identical parts,
+>    GENERATION_HALT `"1"`); read back: `/health` generation `halted`,
+>    build unchanged, etag unchanged, observability intact.
+> 3. **Closing capture** of the full P-1..P-9 set; the gate ends
+>    **HELD** (§8.2). No containment transition is performed by this
+>    gate on any path (§3): if the chain stands revived and churning
+>    after an abort, that state is **REVIVED-UNSTOPPED / OWNED** under
+>    the standing tail discipline until a future authorized disposition
+>    — named in the execution record, never silently absorbed.
+
+The gate ends **HELD**, with the §8.3 three-line exposure report.
+
+**(d) Return for review.** The execution record carries the discrepancy, the raw evidence, the re-hold read-backs, and the exposure report, and returns to **Rowan and Julie for review**. There is no continuation, no retry, and no success close under the same GO after a post-lift R-06 that (e) does not cover; any further attempt is a new attempt under a fresh ruling and a fresh GO.
+
+**(e) The completion carve-out — facts already effected stand.** If, at or before the detection poll, the accounting surfaces already show the **complete** §2.3.1 step-3 completion set — occurrence `ready`, execution `committed`, plan totals {eligible 1, done 1, failed 0, blocked 0}, derived reserved returned to 0, and exactly one new binding with the bindings watermark at 1842 (§1.2's quoted clause 2; package §2.3.1 step 3) — then **completion stands as fact**. The audio and binding outcomes are not unwound and cannot be: the package's own abort law provides that a re-hold "does not un-dispatch an attempt already sent, and does not un-spend a provider cost already incurred" (§2.3.3), and a committed execution with its binding is an effected outcome of the same kind. In the carve-out case the executor performs the GR-6a-form close (re-pause, then re-halt, with their read-backs — the same physical acts as the abort close, here as the success close), the execution record records **completion and the R-06 discrepancy side by side**, and the gate is reported as **completed-with-discrepancy, never as a clean success**, returning to Rowan's execution review with both facts stated. The line is exact: **closing on facts already effected is not continuing dispatch.** Continuing dispatch — allowing further attempts, or treating in-set accounting movement as license to keep the holds lifted in expectation of more — is forbidden from the moment the discrepancy is known, in all cases, carve-out included. What the carve-out preserves is a past fact; it licenses no future act.
+
+**(f) The resulting symmetry, stated once.** After this correction the recorder's weight is uniform in discipline at every phase: a row can defeat the gate (A-6, error row, any phase — unchanged); a missing expected row stops the gate (pre-lift: GR-6, neither hold lifts, return for review; post-lift: this §1.4, abort/re-hold and return, subject only to the completion carve-out); and rows alone never *make* the gate's success — the accounting surfaces do (§1.2).
+
+### 1.5 Conforming changes
+
+- **Package §2.3.3 — abort condition A-7 added** (inserted after A-6, in the package's own form):
+  > - A-7: a post-lift R-06 evidence discrepancy as defined in Correction 2 §1.4(a)–(d) — an in-set accounting transition with the expected recorder row missing at the observation point — where the §2.3.1 step-3 completion set has **not** already been observed. Where completion has already been observed, Correction 2 §1.4(e) governs instead of an abort.
+- **Package §2.3.4 — closure evidence conformed.** Success closure additionally requires the P-6 discrepancy check to have been run across the whole poll set: a closure is recorded clean only if no §1.4(a) detection stands; a carve-out closure quotes the completion values **and** the discrepancy, per §1.4(e).
+- **Disposition §1.5, first bullet — conformed.** The pinned bullet reads:
+
+> - **OQ-1 design as corrected:** clause 1 restates GR-6 in its own scope and changes nothing; clauses 2–3 extend the same classification vocabulary (R-06 discrepancy) into GR-5 under a different consequence, expressly, so the two uses cannot be conflated at execution.
+
+  It is replaced by: *clause 1 restates GR-6 in its own scope and changes nothing; clauses 2–3, as corrected (Correction 2 §1), carry the same classification vocabulary (R-06 discrepancy) into GR-5 under the ruled consequence — post-lift, the same return-for-review discipline as pre-lift, executed through the package's abort/re-hold sequence, with the completion carve-out of Correction 2 §1.4(e) as the single named exception — so the two uses cannot be conflated at execution.*
+- **Disposition §5 table, OQ-3 row — replaced** (the new row stands in §3 of this correction). The pinned row read:
+
+> | **OQ-3** — recorder expectations at resume | **ANSWERABLE-BY-RULE** (§1.4): accounting surfaces prove completion, rows required as corroboration; pre-lift row route unchanged (GR-6); post-lift row-less transition = R-06 discrepancy recorded, protocol continues; A-6 error-row abort unchanged | Conditions the gate's **closing evidence**, both branches; does not block opening (proposed reading of the package's unlabeled scope — Rowan to confirm) | Accept the four-clause rule (incl. the pre-lift/post-lift asymmetry), or substitute the strict form (any row-less transition returns for review before GR-6a); confirm the blocking-scope reading |
+
+- **Disposition CP (`PHASEB-OQ3-OQ6-ROWAN-CP.md`)** — its OQ-3 one-liner ("post-lift row-less transition = R-06 discrepancy recorded, protocol continues") is superseded by this correction wherever it appears (headline paragraph, one-line list, and question (1)'s framing); the strict form its question (1) offered as Rowan's alternative is, in substance, the form she ruled — with the completion carve-out she added.
+- **The GR correction (pin `8ca683bd…`) §5 (GR-6)** — **not amended.** Its scope was the pre-lift verification and remains exact. This correction supplies the post-lift consequence that the disposition §1.3 recorded GR-6 did "not by its terms" fix, now ruled by the OQ-3 REVISE.
+
+## 2. OQ-6 — the timing rule, corrected (REVISE)
+
+### 2.1 The ruling, verbatim
+
+> OQ-6: REVISE. Retain the sliding ≥35-minute no-progress test, but do not claim the 12-slot reservation and cost ceilings independently bound elapsed time. They bound attempts and financial exposure, not wall-clock duration. Add an explicit maximum elapsed-time review checkpoint from dispatch, selected and justified as an operational safety policy rather than a measured provider latency guarantee. At that checkpoint, preserve state, stop further exposure if safe, and escalate for a fresh ruling rather than automatically extending the attempt indefinitely.
+
+### 2.2 Struck and qualified — the ceilings do not bound elapsed time
+
+**(i) Disposition §4.3, the detection-failures bullet — qualified.** The pinned bullet reads, in its operative part:
+
+> - **The sliding test and a deadline detect different failures — the distinction that decides the question, stated as this disposition's argument.** §2.3.4's test detects **absence of progress**: two consecutive complete polls ≥ 35 minutes apart with no progress event (grant appearance or state/revision change; an attempt recorded for this occurrence; plan totals change; occurrence state change; dispatched increment for this grant) declare the stall, and any progress event slides the window. A deadline would additionally detect **slowness despite progress**. Every stall in the record — Phase B attempt 3 (no grant, no progress, declared on this test's precedent shape), the Phase A cohort stall, the W-4 — was a **no-progress** stall; the record contains no instance of progress-tokens-forever without completion. And the one hypothetical a deadline would catch — an endless splitting chain that keeps recording attempts — is already bounded on two non-clock axes: in **count** by the 12-slot reservation, and in **cost** by abort A-3 (the forecast line, 12,808 units settled delta, crossed before completion = forecast deviation + STOP) and A-4 (the detection threshold, 25,000 units), which the splitting chain spends against as it goes. An endless chain aborts on A-3 without any clock.
+
+The final movement of that argument is struck as a claim about time: the 12-slot reservation bounds **attempts** (the cohort the single grant may hold again

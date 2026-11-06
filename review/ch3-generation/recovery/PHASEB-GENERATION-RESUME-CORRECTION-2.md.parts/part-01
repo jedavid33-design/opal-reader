@@ -1,0 +1,52 @@
+# Phase B — GENERATION-RESUME gate: CORRECTION 2 — the OQ-3 and OQ-6 revisions
+
+_Prepared by Wren, 2026-11-05, under section B and section C item 2 of Rowan's ruling on the C3 execution record and the OQ-3–OQ-6 disposition (local record `ROWAN-C3-EXECUTION-OQ36-RULING.md`; C3 execution pin `b4727c408f6c446a94466594ea2cc7c59d11de8d`; disposition pin `f83568de7b288748d7246933f9fc7821ed5d4ac5`). This is the narrow correction that ruling commissions: it amends **OQ-3 and OQ-6 only**. It is documentary only: it authorizes nothing, requests no GO, performs no production act, and advances no precondition. Production remains HELD (C3 executed and closed; the system stands HELD in CHAIN_STOPPED with GENERATION_HALT=1 and the queue paused); the preserved plan and the idx-26 exemption stand untouched._
+
+Pin (this document and the companion cp ride one pin commit): `<PACKAGE-PIN>` — repo `jedavid33-design/opal-reader`, branch `ui1-review`. (Pin-slot pattern, as established: a commit cannot name itself; the pinned copy carries the slot.)
+
+## 0. What this correction amends — and what it does not touch
+
+**Amended:** `PHASEB-GENERATION-RESUME-OQ3-OQ6-DISPOSITION.md` (pin `f83568de…`) at its §1.4 clause 3, §1.5, §4.3, §4.4, and §5 table — and, through the disposition, `PHASEB-GENERATION-RESUME-PACKAGE.md` (pin `0946f9f2…`, as corrected at pin `8ca683bd…`) at its §2.3.3 (one abort condition added) and §2.3.4 (closure evidence and the OQ-6 parenthetical conformed). Struck and replaced passages are quoted verbatim from the pinned documents, so this correction is self-contained in the established correction pattern.
+
+**Untouched, expressly:**
+
+- **OQ-4 — ACCEPT** as ruled. Not part of this correction.
+- **OQ-5 — ACCEPT WITH CONDITIONS** as ruled. Not part of this correction and not redrafted here: the named read-only post-gate observation duty (owner, start, read set, classifications, escalation, termination) is to be specified in the resume gate's own record per the ruling — a gate-record obligation at execution time, not a further documentary amendment.
+- **OQ-1 / GR-1…GR-7** — accepted in the corrections-round-2 ruling and standing. In particular **GR-6's pre-lift discipline is not amended by §1 of this correction**: §1 supplies the *post-lift* consequence for the R-06 classification, which the disposition (§1.3) identified as unruled and which Rowan's OQ-3 REVISE now rules. Nothing here weakens, re-opens, or re-words the pre-lift route.
+- **OQ-2 — REMAINS OPEN** and continues to block GR-B. Untouched.
+
+## 1. OQ-3 — the post-lift recorder rule, corrected (REVISE)
+
+### 1.1 The ruling, verbatim
+
+> OQ-3: REVISE. Accept accounting surfaces as the authority for actual segment completion and recorder rows as corroborating evidence. Preserve strict pre-lift GR-6 verification. After a hold lift, a missing expected recorder row must be classified R-06, trigger containment of further exposure through the existing abort/re-hold sequence, and return for review. Do not continue dispatch merely because accounting surfaces show in-set movement. If completion has already occurred, preserve that fact without pretending the recorder discrepancy did not happen.
+
+### 1.2 What stands, unamended
+
+- **Accounting surfaces are the authority for actual segment completion; recorder rows are corroborating evidence.** The ruling's first sentence accepts the disposition's §1.4 clause 2, which therefore stands exactly as pinned:
+
+> 2. **Completion is proven by the accounting surfaces, with rows as required corroboration.** The satisfying closing evidence for success remains the P-1..P-9 set at §2.3.1 step 3's values (occurrence `ready`, execution `committed`, plan totals {eligible 1, done 1, failed 0, blocked 0}, derived reserved returned to 0, exactly one new binding with the watermark at 1842) plus the GR-7 closing census — because those are the surfaces that carry the facts of completion; a recorder row cannot prove a binding exists, and making a row *satisfying* evidence for completion would invert the evidence: the gate would be hostage to the R-06 blind spot in the wrong direction, unable to close over a segment every accounting surface shows complete because a recording failed.
+
+- **Strict pre-lift GR-6 verification is preserved** — the ruling says so in terms, and this correction does not touch it: pre-lift, an in-set grant transition without a recorder row satisfies nothing, neither hold lifts, and the gate returns for review (correction at pin `8ca683bd…`, §5).
+- **Error rows keep their weight (A-6).** Package §2.3.3, unchanged:
+
+> - A-6: a drive-pass recorder row shows an error outcome attributable
+>   to this plan's pass that the protocol cannot classify inside the
+>   in-set values (cf. the window's W-3e discipline: recorder errors
+>   are reported, never absorbed).
+
+### 1.3 Struck — the disposition's §1.4 clause 3 ("protocol continues")
+
+The following clause of the disposition is **struck in full**:
+
+> 3. **A missing row post-lift is a discrepancy, not an abort and not silent corroboration.** If, during GR-5, grant movement in-set is observed without a corresponding recorder row, the executor records an **R-06 evidence discrepancy** in the gate record under that name, with both surfaces' raw reads; the protocol continues on the accounting surfaces (which govern the outcome), and the discrepancy is carried into the closing record for Rowan's execution review. This deliberately differs from the pre-lift path (GR-6: lift neither hold, return for review) — the asymmetry is principled and is stated for ruling: pre-lift, nothing is at risk and stopping costs the attempt nothing but time; post-lift, the segment's fate is decided by accounting facts the row does not carry, and aborting a completed-or-completing dispatch over a recorder gap would manufacture the harm the discrepancy discipline exists to prevent. If Rowan prefers the strict form — any row-less in-set transition, at any phase, returns for review before GR-6a — the package can carry either; the asymmetric form is proposed.
+
+Rowan has ruled against the proposed asymmetry. The post-lift consequence is no longer "recorded, protocol continues": a missing expected recorder row after a hold lift carries the gate to the abort/re-hold sequence and a return for review, on the terms of §1.4 below. The asymmetry the clause argued (cheap to stop pre-lift, harmful to stop post-lift) is not re-argued here; the ruling replaces it, and the one place the post-lift context genuinely differs — completion already effected — is carried by the carve-out at §1.4(e), which is the ruling's own final sentence given operational form.
+
+### 1.4 The corrected post-lift rule (replaces §1.3's clause)
+
+**(a) Detection — the observation point.** During GR-5 (after the GR-3/GR-4 lifts, until the GR-6a/GR-6b close), the §2.3 protocol polls the full P-1..P-9 set at least every 5 minutes. A recorder row is **expected** for every drive pass this gate's activity produces (disposition §1.4 clause 1, standing). An expected row is **missing at the observation point** when an in-set accounting transition for this plan's occurrence — any of §2.3.4's progress-event kinds observed on the accounting surfaces (grant appearance or grant state/revision change; an attempt recorded for this occurrence; plan totals change; occurrence state change; dispatched increment for this grant) — appears in a complete poll, and **no corresponding row appears on the P-6 surface in that poll or in the next complete poll**. A row corresponds if the P-6 read shows a drive-pass row, later than the last row accounted for, recording this plan's pass in the interval containing the transition. *(Definition supplied by this correction, for Rowan's acceptance: the ruling requires classification of "a missing expected recorder row" without fixing a lag allowance. The allowance is set at one further complete poll — at the §2.3 cadence, roughly five minutes — because P-1..P-9 are sequential reads within one poll and surfaces can skew inside a single poll set, while the window evidence shows rows are written by the pass itself (row id 1 stood ~1.9 s after the stimulus, window record §5): two consecutive complete polls is already generous, and a longer allowance would only extend exposure on a known discrepancy.)*
+
+**(b) Classification and evidence.** On detection, the executor classifies the finding an **R-06 evidence discrepancy** in the gate record, under that name, with both surfaces' raw reads preserved in the gate evidence (the poll set itself, §2.3.4's closure discipline). The classification is recorded whether or not the carve-out at (e) applies.
+
+**(c) Stop and re-hold — no continuation on accounting alone.** Unless the carve-out at (e) applies, detection **ends the attempt's forward motion**: no further dispatch decision may rest on the accounting surfaces, and no in-set movement after detecti

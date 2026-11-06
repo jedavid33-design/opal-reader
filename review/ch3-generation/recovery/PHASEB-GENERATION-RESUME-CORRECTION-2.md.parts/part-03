@@ -1,0 +1,51 @@
+st the 100/day provider-attempt cap — package §5.4: "The cohort worst case for this gate is 12 slots (the single grant's reservation)"), and abort A-3 (forecast line, 12,808 units settled delta) and A-4 (detection threshold, 25,000 units) bound **financial exposure** (settled units this segment may accumulate). An endless chain aborts on A-3 only when it has *spent* to the forecast line; neither ceiling says anything about how long the gate may *wait*. Restated at the ruling's exact strength: **they bound attempts and financial exposure, not wall-clock duration.**
+
+**(ii) Disposition §4.3, the attempt-count bullet — scope made explicit.** The pinned bullet opens:
+
+> - **The attempt count for this segment is mechanically bounded even though its duration is not.** The segment is 569 chars, expected cost 8,022 units ≈ $0.008 (package §5.4). The cohort reservation for the single grant is **12 slots** against the 100/day provider-attempt cap (package §5.4; census headroom ≥ 12, §4.0 item 6) — the reservation mechanics bound how many attempts can be in flight against this occurrence. Recursive `POLICY_BLOCK` splitting without voice substitution (feature law F3) means a single segment's attempt chain can legitimately lengthen — Gate 4's 23 policy-block outcomes are the observed shape of that — so a short deadline would risk aborting legitimate progress, which is exactly the failure mode the sliding test was designed (Gate 4's ruling) to avoid.
+
+Its reservation sentence ("the reservation mechanics bound how many attempts can be in flight against this occurrence") is accurate for in-flight concurrency and is retained at that scope only; it supports no elapsed-time conclusion, and its closing caution — a short deadline risks aborting legitimate progress — is answered not by a tight bound but by the generous, policy-set checkpoint of §2.3, whose consequence is escalation and re-hold, not a failure declaration.
+
+**(iii) Disposition §4.4, the proposed rule — struck and replaced.** The pinned rule reads:
+
+> Proposed rule, for Rowan to accept, amend, or reject: **no distinct longer bound is required for the post-dispatch phase.** The sliding ≥35-minute no-progress test (§2.3.4) remains the sole timing control in both the pre-dispatch and post-dispatch phases; progress events of §2.3.4's enumerated kinds slide the window **without limit of count**; the post-dispatch phase is backstopped on its non-clock axes by A-3 (forecast line), A-4 (detection threshold), and the 12-slot cohort reservation. If Rowan nonetheless requires a hard outer bound, the proposed route is that she set it **expressly at the readiness review, with its basis stated in the ruling** — an act of judgment on latency tolerance, recorded as such — rather than accepting any figure derived in this document, because none can be.
+
+It is replaced in full by §2.3 of this correction.
+
+**(iv) Disposition §4.4, closing paragraph — final sentence struck.** The pinned paragraph ends:
+
+> **What would close OQ-6 without a rule:** a measured per-attempt duration series for this provider path (which only a future generation gate's execution record can produce — i.e., evidence that cannot exist before this gate executes, and that this gate's own record will in fact create for its successors). The disposition is ANSWERABLE-BY-RULE rather than REMAINS OPEN because the gate does not need that evidence to be safe: the no-progress test plus the count/cost backstops bound the exposure the deadline would guard, at every duration.
+
+The claim that the backstops "bound the exposure the deadline would guard, **at every duration**" is struck. What stands in its place: the count/cost bounds bound the exposure's **size** at every duration; they do not bound the duration itself. Bounding the duration is the checkpoint's job (§2.3), and the paragraph's evidentiary point is untouched — the duration series that could close OQ-6 without a rule still cannot exist before this gate executes (§2.4).
+
+**(v) Package §2.3.4 — the OQ-6 parenthetical conformed.** The pinned text reads:
+
+> After grant + dispatch, the same sliding test keys on
+> attempt/completion progress (OQ-6, §9: no record bounds a single
+> segment's delivery duration, so the test — not a deadline — is the
+> control).
+
+The parenthetical is conformed to read subject to this correction: the sliding test remains the control for *progress*; a maximum elapsed-time **review checkpoint** from dispatch (Correction 2 §2.3) is added as a backstop. The checkpoint is not a completion deadline and declares no failure — §2.3(d).
+
+**(vi) Disposition §5 table, OQ-6 row — replaced** (new row at §3). The pinned row read:
+
+> | **OQ-6** — completion timing bound | **ANSWERABLE-BY-RULE** (§4.4): no distinct longer bound; the sliding ≥35-minute test is the sole timing control in both phases, backstopped by A-3, A-4, and the 12-slot reservation; **no new evidence has arrived for this question since drafting** (stated plainly) | Conditions GR-5's post-dispatch phase, both branches | Accept the no-deadline rule — or set a hard outer bound expressly in the ruling, with its basis stated, there being no record figure to derive one from |
+
+**(vii) Disposition CP** — its OQ-6 one-liner ("no distinct longer bound; the sliding ≥35-minute test remains the sole timing control in both phases") is superseded by this correction.
+
+### 2.3 The corrected rule — sliding test retained; a maximum elapsed-time review checkpoint added
+
+**(a) Primary control, unchanged.** The sliding ≥35-minute no-progress test (package §2.3.4, Gate 4's durable ruling) remains the timing control in both the pre-dispatch and post-dispatch phases, exactly as pinned: two consecutive complete polls ≥ 35 minutes apart with no progress event between them declare the stall (abort A-1); any progress event slides the window, **without limit of count**. That last property is precisely why a backstop is required: a chain that produces a progress event inside every window — attempts trickling, splits recurring — never trips the test, however long it runs.
+
+**(b) The ceilings, at their true scope.** The 12-slot cohort reservation bounds **attempts**; abort A-3 (12,808 units) and A-4 (25,000 units) bound **financial exposure**; the Gemini prepay balance is the physical financial backstop (package §5.4). None of them bounds elapsed time, and no passage downstream of this correction may cite them as doing so.
+
+**(c) The checkpoint — PROPOSED VALUE: 3 hours from dispatch.** A maximum elapsed-time **review checkpoint** is added to the post-dispatch phase:
+
+- **T0 (dispatch), defined.** T0 is the timestamp of the **first complete poll** (the full P-1..P-9 set, package §2.3) at which **P-5 records a dispatched increment for the current PT day attributable to this gate's grant** above the pre-unpause baseline — the instant the post-dispatch phase of §2.3.4 begins. (Cross-check: P-1 shows the grant in its post-dispatch state at the same poll; a P-5 increment with no attributable grant is out-of-set under §2.3.1 and aborts under A-2, not a T0.)
+- **The checkpoint fires at T0 + 3 hours** if the §2.3.1 step-3 completion set has not been observed at or before that moment. If completion is observed first, the checkpoint is moot and never fires. If dispatch never occurs, the checkpoint never starts: the pre-dispatch phase remains governed by GR-2's ruled 15-minute bound, the sliding test, and A-1 — OQ-6's scope is post-dispatch only (package §9).
+- **The value is a PROPOSAL for Rowan's ruling** — hers to accept, amend, or replace. She required the checkpoint to be "selected and justified as an operational safety policy rather than a measured provider latency guarantee"; 3 hours is Wren's selection, justified below on policy anchors only. It must not be cited downstream as a measured bound on provider latency, nor as a completion deadline.
+
+**Justification (operational safety policy; no latency measurement is claimed or exists):**
+
+1. **Scale against the record's generation episodes.** The gate's entire work is **one segment: 569 chars, expected cost 8,022 units ≈ $0.008** (package §§5, 5.4), with expected realized attempts "far below the reservation" (§5.4). The record's comparable episodes are far larger and closed inside single attended sittings: **Gate 4 generated 15 segments — 76 attempts in total, including 23 `policy_block` outcomes — and closed within its execution session** (Gate 4 record, cited at disposition §4.3); Chapter 2's 18 segments completed within one run. Three hours for one 569-char segment is generous by well over an order of magnitude against everything the record contains — argued from the *scale of work*, expressly not from any per-attempt duration measurement, of which the record contains none (disposition §4.3).
+2. **Relationship to the primary control.** Three hours is ≈ 5.1 stall windows (35 minutes). A 
