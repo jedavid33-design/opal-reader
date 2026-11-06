@@ -1,0 +1,50 @@
+# Phase B — GENERATION-RESUME gate: OQ-1 ANALYSIS — an explicit, verifiable wake mechanism after a C3 stop and a restoration clear
+
+_Analysis filed by Wren, 2026-11-05, under Rowan's ruling on the Phase B S1 window record (R4), as a companion to `PHASEB-C3-BRANCH-D-RECONCILIATION.md`. It amends nothing by itself: it proposes the fill for the generation-resume package's GR-2 slot and asks Rowan to rule. Documentary only — no production act is performed, requested, or authorized by this filing. Production remains HELD (ruling R5)._
+
+OQ-1 analysis pin: `<PACKAGE-PIN>` — repo `jedavid33-design/opal-reader`, branch `ui1-review` (one pin commit carries this analysis, the C3 branch-(d) reconciliation, and the companion cp; the slot is shared accordingly).
+
+---
+
+## 1. OQ-1, restated precisely — and why it blocks every branch
+
+The generation-resume package (`PHASEB-GENERATION-RESUME-PACKAGE.md`, pin `0946f9f2fb978a46b562c738d8ac6d9d4ee977a6`) states the question at its §9:
+
+> **OQ-1 (blocking, all branches) — the wake mechanism.** §5.3: after a verified stop + a non-re-arming clear, which single act legitimately re-registers the alarm? Sub-questions: (a) does a replayed command `wake()` or short-circuit on the composed build (the records conflict — diagnostic P1 text vs later ladder source summaries)? (b) If a fresh command is required, which command is fresh, well-formed, and side-effect-free on its expected refusal, in every state this gate can open into? (c) If GR-0 reads a non-null, restoration-accounted `armedAt`, is GR-2 satisfied without any act? (d) What mutation accounting does the ruled mechanism carry into §3?
+
+**Why a wake is needed at all** (resume package §5.3, restated): the resume gate opens, by construction, into a state no earlier gate has produced. C3's stop **deleted** the alarm registration (`deleteAlarm()` + null read-back). The standalone restoration's `clear` — by design law (containment design §5.2; battery CT12) — **never re-arms**. Neither hold lift reaches the coordinator: the halt flip (GR-3) is a Cloudflare-side metadata act and the queue unpause (GR-4) is a queue act. At GR-0 the expected `getAlarm()` is therefore **null**, and the deployed source is unambiguous about the consequence: `driveOnce` has exactly one caller — the DO alarm handler — so **without a registration there is no drive pass, no grant, and no generation**: the Phase B attempt-3 stall shape, this time by construction rather than by fault.
+
+**Why it blocks every branch:** the gate's branches (GR-A / GR-B) differ in the preserved plan's execution state, not in the alarm state — both open after the same stop + clear sequence, into the same null registration. The execution sequence (§5 of the resume package) places the wake at **GR-2**, before both hold lifts, and states in terms: "Until OQ-1 is ruled, GR-2 is an unfilled slot and this gate cannot execute." R4 keeps OQ-1 **OPEN** and names what an answer must contain: "an explicit, verifiable wake mechanism after C3 stop and restoration clear, **including failure behavior when alarm delivery does not occur**," with the standing caution: "**Do not treat persisted `armedAt` as proof of delivery.**"
+
+This analysis supplies that answer in the form R4 requires: a named mechanism (§2), its verification protocol (§3), its failure behavior (§4), the rejected alternatives (§5), its interaction with OQ-2 (§6), the residual unprovables (§7), and the specific rulings requested (§8).
+
+---
+
+## 2. The proposed mechanism — a fresh probe command (the Grant 2 precedent, generalized)
+
+### 2.1 The mechanism
+
+**Exactly one fresh, well-formed client command whose apply-path refusal is total and side-effect-free by construction: a `RequestPause` against a job that does not exist.**
+
+| Element | Value |
+|---|---|
+| Route | `POST /v2/commands`, via the **client connector** `~/workspace/custom-connectors/custom.opalreader-v2-prod/bin/v2prod-api`, with headers `X-OpalReader-Scope: production` and `X-OpalReader-Instance: account` |
+| Body | `{"command_id":"<FRESH-ID>","type":"RequestPause","payload":{"jobId":"alarm-wake-probe:nonexistent"}}` |
+| `<FRESH-ID>` | A **new** command_id, minted for this gate, never previously used. (The precedent's was `s1-stimulus-20261103232613`; reusing that id — or any previously used id — would make the command a **replay**, which short-circuits before `wake()` — §5. Freshness is not a formality; it is the mechanism.) |
+| Expected response | HTTP 200, `{"outcome":"rejected","reason":"job_not_found"}` — the refusal **is** the success criterion at the command layer. Any other outcome is a STOP-and-classify event (an `applied` outcome would mean the target existed — a contradiction of the gate's census, not a variation) |
+| Count | **Exactly one.** Never re-sent blindly; never followed by a second, improvised wake (§4) |
+
+**Why it wakes (the source facts, as established):** `wake()`'s call sites in the deployed source are exactly three — `handleCommand` (`coordinator.mjs:521`), `requestGrant` (:1806), and `handleReport` (:2064). `handleCommand` calls `wake()` **before** apply runs, on every fresh well-formed command — including commands apply will refuse. Replayed commands are the exception: they short-circuit at the receipt check **before** `wake()`. GETs and reads never call `wake()` at all. A fresh `RequestPause` for a nonexistent job therefore traverses exactly the path needed — receipt check passes (fresh id), `wake()` runs (the coordinator ensures a pending watchdog row exists and calls `_armAlarmIfEarlier()`, which sets the alarm when `getAlarm()` returns null — the precise condition the resume gate opens into), and then apply refuses `job_not_found` because there is no such job to pause. The refusal is total: `RequestPause` against a nonexistent job has no state to change, and the probe target is nonexistent **by construction**, in every state this gate can open into (OQ-1(b)'s requirement) — no census outcome makes `alarm-wake-probe:nonexistent` a real job.
+
+**A note on OQ-1(a) — the replay conflict does not need resolving for this mechanism.** The records conflict on replayed commands (the diagnostic's P1 text says "even a rejected or replayed command wakes first"; later ladder source summaries record the receipt-check short-circuit). The proposal depends on **neither** side: both records agree that a **fresh** command wakes (`handleCommand` wakes before apply), and the mechanism uses only a fresh command. The conflict is recorded here as it stands — unresolved in the records — because a future executor must never be tempted to "re-send" the probe under the P1 reading: under the short-circuit reading, a re-send does nothing at all, and under either reading a re-send is outside this mechanism's discipline (§4).
+
+### 2.2 The evidence — Grant 2, accepted by R1
+
+This mechanism is not a construction from source alone. It has been executed once, live, under authorization, and its review is closed:
+
+- **Grant 2 (Julie's separate GO, board comment 6618087797), 2026-11-03T23:26:13Z:** exactly one stimulus of exactly this shape — `command_id` `s1-stimulus-20261103232613`, `RequestPause`, `{"jobId":"alarm-wake-probe:nonexistent"}` — sent via the client connector after a fresh complete pre-send census at baseline with NO DEVIATION (window record §5).
+- **Response:** HTTP 200 `{"command_id":"s1-stimulus-20261103232613","outcome":"rejected","reason":"job_not_found"}` — the expected refusal.
+- **Effect:** recorder row **id 1** at **1793748374899** (2026-11-03T23:26:14.899Z) — a drive pass **~1.9 s after dispatch**, stage complete, `driveInvoked` true, no error — issuing exactly the pre-classified grant `grant:plan:19cad189fab54b9c804a74a6:seg:1:full`; job `queued` rev 1 → `generating` rev 2; occurrence `pending` → `granted`; derived reserved 0 → 12; `armedAt` 1793562576104 → **1793748974899** (the pass time + the 600 s watchdog period); dispatched 0; phase frozen; containment NORMAL (window record §5).
+- **Rowan's R1 (2026-11-05)** accepts the event: "The single authorized fallback stimulus produced the expected rejected command and subsequent drive activity… This establishes **successful wake and observed drive activity**."
+
+**The differences between the precedent and the proposed use — stated, not smoothed over.** (i) *Platform state:* the Grant 2 wake acted on a chain that had **never been stopped** — a stale registration stood (`armedAt` 1793562576104), and the wake's delivery produced a pass against a coordinator whose alarm machinery had never been deleted-and-cleared. The resume use acts after a **verified stop** (registration deleted) and a **restoration clear** (no re-arm): `getAlarm()` null by a different route. The source path is the same (`wake()` arms when `getAlarm()` returns null — resume package §5.3), but **no live precedent exists for the wake in the post-stop, post-clear state** (

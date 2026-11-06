@@ -1,0 +1,45 @@
+ 2 h; the standing registration's actual overdue age reached 26h14m37s). A bound must exist — an unbounded wait is a stall by another name — and it must be short enough that its expiry is a *decision point inside the gate*, before any hold lifts. 15 minutes is proposed at exactly that reasoning; **it is a proposal, not a settled constant** — no record fixes it, and Rowan's ruling sets it.
+- **The bound is pre-lift only.** It governs GR-2's verification, while both holds stand. It does not replace the resume package's post-unpause controls: once GR-3/GR-4 lift the holds, the §2.3 protocol runs from the unpause read-back, and its sliding ≥35-minute stall test (Gate 4's durable ruling) governs the generation phase (OQ-4/OQ-6 territory, untouched by this analysis).
+
+### 3.3 What the protocol does not do
+
+It does not poll the alarm into existence (reads never wake — §5); it does not treat the probe's HTTP 200 as evidence about the alarm (the 200 evidences the refusal, i.e. that `handleCommand` ran — the wake's *initiation* — and nothing about delivery); and it does not extend, retry, or escalate on its own (§4).
+
+---
+
+## 4. Failure behavior — when alarm delivery does not occur (R4's explicit requirement)
+
+The W-4 is the standing lesson: a wake can be sent, a registration can stand, and delivery can simply not occur — for more than a day, with no surface explaining why. The resume gate's failure behavior is written for that world, not for the 1.9-second world.
+
+### 4.1 Failure at GR-2 (no observed effect within the §3.2 bound)
+
+1. **The gate STOPS at GR-2.** GR-3 and GR-4 are never reached. **No hold has been lifted**, so there is nothing to re-apply: the queue stands paused, GENERATION_HALT stands `"1"`, containment stands NORMAL (post-restoration), the preserved plan and exemption stand untouched. The gate ends **HELD** — in the precise sense that its end state is identical to its opening state on every surface the census reads.
+2. **Exactly one wake was sent, and no second wake is sent.** Not a re-send of the same command_id (a replay — it would short-circuit before `wake()` on the ladder source summaries, and under the P1 reading it is still outside discipline); not a fresh second probe; not any other command improvised as a wake. **One wake per gate attempt is the mechanism's whole discipline** — a second wake would convert a clean negative observation into an uncontrolled variable (if delivery then occurred, the record could not attribute it; if it did not, nothing further would have been learned that a ruling needs).
+3. **No deploy-as-stimulus, no restart, no manual drive, no queue/halt touch** — §5's rejected alternatives stay rejected under failure pressure; failure is not a scope expansion.
+4. **The failure is recorded as a new W-4-class observation** — wake sent (command_id, dispatch timestamp, the refusal response), registration state as read (`armedAt` value or null, per surface), no pass and no grant transition within the bound, polls preserved raw — and the gate's record **returns to Rowan and Julie**. The observation is UNRESOLVED in the same posture as the window's W-4: it does not classify its own cause, presumes neither that a later delivery will arrive nor that none will, and proposes no remedy. What happens next — a revised mechanism, a fresh window, platform escalation, or nothing — is a ruling, not an executor improvisation.
+5. **A late delivery after the bound** (a pass arriving after the gate has ended HELD on the §4.1 failure) is a **tail-observation fact**, handled exactly as the post-window regime handles the chain's behavior: observed, logged, reported — the pass can only churn the grant under the standing holds ($0, no dispatch), and it does not retroactively satisfy GR-2 for a gate attempt that has ended. A new attempt is a new authorization.
+
+### 4.2 Failure after the lifts (distinct case — the package's existing law, unchanged)
+
+If the wake verified at GR-2 (a pass was observed) but the §2.3 protocol then stalls or aborts after GR-3/GR-4, the failure is **not** a §4.1 case: the resume package's §2.3.3 governs — abort conditions A-1…A-6, and the **exact re-hold sequence: (1) re-pause the queue** (cf-api PUT `delivery_paused: true`, read back), **(2) re-halt generation** (restore the envelope with GENERATION_HALT `"1"`; read back halted, build and etag unchanged, observability intact), **(3) closing capture** of the full P-1..P-9 set — ending HELD, with any revived-churn state named REVIVED-UNSTOPPED / OWNED in the record, never silently absorbed. This analysis changes nothing in §2.3.3; it names the boundary so the two failure shapes are never conflated: **pre-lift wake failure ends where it started; post-lift failure re-holds in the package's order (re-pause, then re-halt).**
+
+### 4.3 What failure never triggers
+
+No containment transition is performed by the resume gate on any path (resume package §3); a failed wake does not manufacture a reason to stop a chain that is not running. No R3-V, no restoration-reversal, no C3 re-entry arises from a GR-2 failure — the system is already in the state those instruments exist to reach or leave.
+
+---
+
+## 5. Alternatives considered and rejected
+
+Each alternative is rejected **from the record**, with the reason named. None is rejected on preference.
+
+| # | Alternative | Why rejected |
+|---|---|---|
+| 1 | **A replayed command** (re-send a previously used command_id, e.g. Grant 2's own) | Source: replayed commands short-circuit at the receipt check **before** `wake()` (ladder source summaries; the diagnostic's P1 text conflicts — "even a rejected or replayed command wakes first" — and the conflict is in the records, unresolved). A mechanism that works only if one side of an unresolved record conflict is right is not a mechanism. Rejected; the proposal needs no replay |
+| 2 | **A GET or read** (poll a route; read diagnostics until something moves) | Source: no GET/read path calls `wake()`; reads never re-arm (diagnostic §§1–2; resume package §5.3). Proven empirically as well: two weeks of read-only watches (the window, the tail) moved nothing — the only wake in the entire record is Grant 2's command. Rejected |
+| 3 | **Deploy / redeploy as stimulus** | The accepted alarm-semantics record struck redeploy-as-stimulus (its R3) from the escalation sequence, retaining it only as a considered speculative alternative. A deploy is also a production mutation with its own gate weight — grotesquely disproportionate as a doorbell — and the resume package proposes no deploy anywhere. Rejected as a mechanism; retained in this table only as the record retains it |
+| 4 | **`SubmitJob` as the wake** | It would very likely wake (`handleCommand` runs for it), and it is forbidden for an independent reason that has nothing to do with waking: resume rides the **preserved plan only** — a SubmitJob would submit a new intent and duplicate the plan (resume package §1.1, HARD LAW; the attempt-3 disposition: resume rides the preserved plan, never a resubmission). Rejected absolutely |
+| 5 | **A real command against a real job** (e.g. `RequestPause` on the preserved job or the parked job) | Side effects: a real command's apply can succeed, and success here means mutating the very state the gate exists to preserve (pausing the preserved job; touching the parked Ch 3 job, which is never a target). The probe target must be **nonexistent by construction** so that refusal is guaranteed in every state — that guarantee is what makes the wake side-effect-free, and only the nonexistent-target form has it. Rejected |
+| 6 | **Relying on Julie's app use** (a position push constructing a fresh `PushPositionEvents` command) | It does reach `wake()` (resume package §5.3), and §2.4 of this analysis accepts its possible *effect* if the census finds one. As the gate's *mechanism* it is rejected on the package's own ground: Julie's app use "is not an executor-controlled step, and this gate does not schedule her behavior." A gate step must be performable by the executor, on the record, at its point in the sequence. Rejected as a mechanism; preserved as a census contingency (OQ-1(c)) |
+| 7 | **Relying on the GR-3 halt flip or the GR-4 unpause to wake** | Rejected on source (resume package §5.3, candidate (iii)): the flip is Cloudflare metadata and the unpause is a queue act; neither reaches the coordinator. Carried here so the rejection set matches the package's |
+| 8 | **Doing nothing — accept the stall shape** (lift the holds and let the §2.3.4 stall test discover the missing registration) | This is Phase B attempt 3's exact shape, whose disposition is the reason step-0 had to be resolved by design: verification would attach only after the system had been opened, the stall would burn the attempt's exposure window, and the record would show a gate that proceeded knowing its drive path was unregistered. R4 requires an explicit mechanis

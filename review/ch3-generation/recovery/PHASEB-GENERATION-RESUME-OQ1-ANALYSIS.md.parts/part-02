@@ -1,0 +1,47 @@
+§7). (ii) *What stood behind the wake:* under Grant 2, both holds stood and stayed standing; the pass could only churn the grant. Under the resume gate the same is true **at GR-2** (both holds still stand — §2.3), which is the point of the slot's placement. (iii) *Authorization:* Grant 2 was a separately granted, single-use stimulus inside an observation window; this proposal is a step inside the resume gate's own execution sequence, under that gate's GO. The precedent evidences the **mechanism**; it does not authorize the **use** — authorization is the resume gate's GO, after Rowan rules here.
+
+### 2.3 The slot — where the wake belongs in the resume sequence
+
+**GR-2, exactly where the resume package already places it:** after GR-0 (fresh execution census) and GR-1 (voice checkpoint), **before** GR-3 (halt lift) and GR-4 (queue unpause). No reordering is proposed. Three reasons, each grounded:
+
+1. **The package's own design.** §2.3's protocol note: "The wake step (GR-2) precedes the lifts (§5), so the alarm chain is expected to be registered before the system opens; the protocol nonetheless keys all timing to the unpause read-back." The step-0 resolution (§2.2 of the package) rests pre-lift containment on the holds and attaches verification to the first observable effect; GR-2-before-lifts is that design's shape.
+2. **The wake's effect is fenced at GR-2.** With GENERATION_HALT `"1"` and the queue paused, a delivered pass can do exactly what the window's passes did: cycle the preserved plan's grant inside the §7.3 invariants — dispatch is halt-fenced, delivery is queue-fenced, spend is $0 (window record §§5–6: 296 passes, dispatched 0 throughout). Waking **before** lifting anything means the wake is *tested while nothing can run away*: if delivery does not occur, the failure is discovered with the system exactly as held as it was (§4) — no hold has to be re-applied to recover from a failed wake.
+3. **The wake's verification is separable at GR-2.** The first pass is observable on the `drive=1` surface (P-6) while the plan's grant state is at its census values, so the wake's effect is attributable to the wake alone — not confounded with the lifts' effects, which the §2.3 protocol then verifies from the unpause read-back forward.
+
+**Ordering assumptions flagged:** (a) the analysis assumes the restoration has completed and its record stands (GR-0's census reads containment NORMAL — §4.0 of the resume package keys on the restoration record where it names one; a GR-0 that reads anything else stops before GR-2 is reached, under the package's own §7). (b) It assumes GR-2's single command is sent by the executor in session (as Grant 2's was), not by any scheduled job — the tail watch is read-only and no job carries command authority. (c) It assumes no other wake intervenes between the restoration and GR-2; if one has (OQ-1(c), §2.4), the census sees its effect first.
+
+### 2.4 OQ-1(c) — if GR-0 reads a non-null `armedAt`
+
+The sub-question: if the GR-0 census reads a **non-null** `armedAt`, accounted for by the restoration record, is GR-2 satisfied without any act?
+
+**Proposal: yes, conditionally — and the condition is evidentiary, not formal.** A non-null `armedAt` at GR-0 after a verified stop + clear can only have arisen from a wake reaching the coordinator in the interval (the clear does not re-arm; the stop deleted what stood). Candidate sources exist in the record — ordinary app use reaches `wake()` (a fresh `PushPositionEvents` command per position push; resume package §5.3) — but the source is not the executor's to certify. What GR-2 exists to establish is not "a command was sent" but "**a registration stands from which delivery can proceed**," and that is exactly what the §3 verification protocol tests. The proposal is therefore:
+
+- If GR-0 reads non-null `armedAt`, GR-2 is recorded **satisfied-by-observation** — no probe is sent (sending one would add a second wake whose only certain effect is noise in the evidence; the mechanism's discipline is *exactly one wake act by this gate*, and an act whose precondition is absent is not performed) — **provided** the restoration record accounts for the state (the value is consistent with a registration re-armed against the surviving schedule rows, i.e. a past-due or imminent due under R5a's past-due disjunct) **and** the §3 verification still runs in full: the observed-effect proof (a pass, or the in-set grant transition) is **not waived** by satisfaction-by-observation. If no delivery follows within the §3 bound, the gate treats the case under §4 exactly as a failed wake — the registration, however it arose, did not deliver.
+- If GR-0 reads non-null `armedAt` that the restoration record does **not** account for, that is a census deviation under the resume package's own law (STOP at GR-0, §7.1) — not a GR-2 question at all.
+
+This disposes of OQ-1(c) as a proposal; Rowan's ruling is requested on it (§8, Q3), including what accounting suffices.
+
+### 2.5 OQ-1(d) — mutation accounting for the mechanism
+
+Proposed ledger treatment for the resume package's §3, for Rowan's ruling (Q4): the wake is **one client command** (the GR-2 ledger line), with these expected effects and no others:
+
+- **Alarm:** one re-registration (the platform's `setAlarm` inside `_armAlarmIfEarlier`, initiated by the coordinator's `wake()`, not by the executor directly) — the act the slot exists for.
+- **Coordinator state:** the wake's own ensures (a pending watchdog row exists — the schedule rows **survive the stop** per the C3 package §8, so in the expected case the row already exists and nothing is written) and, on delivery, the pass's own effects (recorder row; the grant cycle), which the §2.3 protocol — not the wake's ledger line — accounts.
+- **Everything else: zero.** No plan/job/phase/quota/conflict/binding movement is attributable to the command itself; the Grant 2 precedent's read set confirms the command's refusal changed nothing on any of those surfaces (window record §5).
+- **Accounting note, flagged honestly:** commands are receipted by the coordinator (the receipt check is what makes replays short-circuit), so the command's receipt is a durable internal record by design. The window record neither reads nor quantifies the receipt store, and no read surface in the gate's set exposes it; the proposal counts the wake as the one command it is and names the receipt as part of that command's ordinary machinery — if Rowan requires the receipt store accounted differently in §3, the ruling should say so.
+
+---
+
+## 3. Verification protocol — the wake is proven by its effect, or not at all
+
+**Governing rule (R4, adopted verbatim as the protocol's standard): persisted `armedAt` is NOT proof of delivery.** A changed `armedAt` after the probe is a **consistency marker** — it corroborates; it never satisfies. The wake is verified only by an **observed effect** on the drive path.
+
+### 3.1 The satisfying evidence (either form, both in-set)
+
+- **Primary — a drive-pass recorder row.** A new row in `d6_drive_passes` on the P-6 surface (`GET /v2/d6-diagnostics?drive=1`) with id greater than GR-0's latest recorded row, timestamped after the probe's dispatch, `stage` complete, `driveInvoked` true, error fields null. This is the Grant 2 signature (row id 1, ~1.9 s after dispatch) and the direct observation that the alarm was **delivered** and `driveOnce` ran.
+- **Secondary cross-check — the in-set grant transition.** The P-1/P-5 surfaces showing the preserved plan's grant cycle move exactly inside the branch's expected set (GR-A: the named grant appears, reserved 0 → 12; GR-B: as §6 leaves it for Rowan's OQ-2 ruling). A pass moves the grant state whether or not its recorder row survives — the recorder has a known dual-failure blind spot (register R-06: a pass and its recording failing together is invisible on the row surface). The cross-check exists so the protocol does not declare a wake failed on a recording failure; **whether the cross-check alone satisfies GR-2 is a question for Rowan (Q6)** — the conservative default this analysis proposes is: row **or** cross-check satisfies, and a cross-check-only satisfaction is recorded **as an R-06-class observation** in the gate record, at that strength, never silently as a clean pass.
+
+### 3.2 The observation bound (proposal — Rowan rules, Q2)
+
+- **Probe-to-first-effect bound: 15 minutes**, polled on the P-6 + P-1 read pair at a cadence of at least one complete poll every 5 minutes (the §2.3 protocol's cadence discipline), starting at the probe's dispatch.
+- Justification from the evidence: the one live precedent delivered in **~1.9 s**. The chain's watchdog period is **600 s** (window record §5: the re-arm is the pass time + 600 s), so 15 minutes covers one full watchdog period beyond the wake with margin, while remaining far inside the window the W-4 made familiar (the W-4 classification threshold is

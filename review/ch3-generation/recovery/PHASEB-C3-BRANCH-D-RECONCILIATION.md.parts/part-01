@@ -1,0 +1,72 @@
+# Phase B — Gate C3: BRANCH-(d) RECONCILIATION AMENDMENT to the operative C3 readiness package
+
+_Amendment filed by Wren, 2026-11-05, under Rowan's ruling on the Phase B S1 window record (R3). Documentary only: this amendment authorizes nothing, requests no GO, and performs no production act. Production remains HELD under the INVESTIGATION HOLD (ruling R5)._
+
+C3 reconciliation pin (this amendment): `<PACKAGE-PIN>` — repo `jedavid33-design/opal-reader`, branch `ui1-review`. (Pin-slot pattern, as established: a commit cannot name itself; the pinned copy carries the slot.)
+
+---
+
+## 1. Operative inputs, and what this amendment is
+
+**Operative inputs:**
+
+| Input | Identity |
+|---|---|
+| C3 readiness package, REBASED (the operative C3 specification) | `PHASEB-C3-READINESS-PACKAGE-REBASED.md`, pin `46112a03…` |
+| Correction C3-R1 (branch-(c) consistency) | `PHASEB-C3-R1-CORRECTION.md`, pin `aba681a0…` |
+| C3 readiness ruling | Rowan, 2026-11-02: **PASS — READINESS DESIGN ACCEPTED.** Operative package = `46112a03…` + `aba681a0…` |
+| S1 window record | `PHASEB-S1-WINDOW-RECORD.md`, pin `f75130c6e3f36fad702b117b85dde3bb09f48c1c` |
+| Rowan's ruling on the window record | 2026-11-05: **PASS WITH CONDITIONS** — R1 (S1 event accepted), R2 (W-4 accepted as observation, not resolution), R3 (C3 CONDITIONAL BRANCH (d)), R4 (resume documentary review permitted; OQ-1 open), R5 (no mutation authorized), R6 (this amendment is a named deliverable) |
+| Post-window ownership basis | Window record §9; tail log `~/workspace/goals/opal-roundtable/hidden_files/phaseb-s1-tail-log.md`; tail watch `phaseb-s1-tail-watch` (daily, read-only) |
+
+**What this amendment is.** Rowan's R3 selects branch **(d) — REVIVED-UNSTOPPED (POST-WINDOW)** — as the proposed C3 branch, *conditionally*: "subject to reconciliation with the operative C3 specification and a fresh execution census," with three demonstrations required — (i) the stop procedure is independent of future alarm delivery; (ii) the expected post-stop state is verifiable; (iii) the existing W-4 blocker is explicitly addressed — and with "any necessary amendments" returned for Rowan's review **before** Julie's separate C3 GO is requested.
+
+This document is that reconciliation. It is an **amendment to the operative package, not a rewrite of it**. The operative package (`46112a03…` + `aba681a0…`) remains the C3 specification in full; this amendment changes **only**:
+
+1. the **branch selection** — branch (d) is the executing branch, on the disposition basis stated in §2 of this amendment;
+2. the **branch-(d) census delta** (§5 of this amendment) — the operative §4.4 adopts §4.1's branch-(a) delta with substitutions written for a chain *live at gate time*; the chain the window actually left behind is revived-but-not-delivering, and two of §4.1's expectations (A-3, A-4) and one value form (A-1) do not describe it. This amendment replaces the (d) delta with a delta written for the state as dispositioned, at the same hardness;
+3. the **between-census-and-stop movement rule** for branch (d) (§6 of this amendment);
+4. the **branch-(d) GO wording** (§9 of this amendment), replacing the branch-generic form of operative §6 for this branch.
+
+**The C3 readiness PASS of 2026-11-02 stands.** Nothing in this amendment re-opens, re-argues, or weakens any part of the operative package it does not name. Where this amendment and the operative package could be read to differ on a matter this amendment does not name, the operative package governs and the difference is to be reported, not resolved by the executor.
+
+**Dependency-leg accounting (operative §0), as this amendment leaves it:**
+
+- Leg 1 (R5a-D closed): **SATISFIED** (unchanged).
+- Leg 2 (the S1 event dispositioned in exactly one eligible form): the window record as reviewed carries the event in the form **EXPECTED-REVIVED**, and the post-window regime stands **REVIVED-UNSTOPPED / OWNED** — together the substance of the eligible form **EXPECTED-REVIVED (POST-WINDOW)**. But R3's selection of branch (d) is expressly **conditional on this reconciliation**, so leg 2 is satisfied in that form **only when Rowan accepts this amendment**. Until then leg 2 stands **conditionally satisfied — pending Rowan's acceptance of this amendment**, and no GO may be requested on it.
+- Leg 3 (Rowan has reviewed the window record): **SATISFIED** — the 2026-11-05 ruling is that review (R1 accepts the event; R2 dispositions the W-4 in the form stated in §2 below).
+- Leg 4 (Rowan's PASS on the operative package + Julie's GO recorded before the execution census): the package PASS stands; **Julie's GO is not requested by this amendment** and may be requested only after Rowan accepts this amendment (R3's ordering). The execution census remains fresh at gate time and supreme over every value quoted anywhere (operative §0, unchanged).
+
+---
+
+## 2. The W-4 blocker — explicitly addressed (operative §4.5; ruling R2 + R3)
+
+### 2.1 The blocker as written
+
+Operative §4.5 lists, among the states in which C3 may NOT open in any branch:
+
+> **W-4 unresolved** (wake observed, delivery not observed, undispositioned) — *The event itself is unclassified — there is no branch whose census describes this state* — Path onward: *Rowan's disposition required; observation continues meanwhile.*
+
+### 2.2 The disposition Rowan has now given
+
+- **R1** accepts the S1 event: **W-2 EXPECTED S1 EVENT** — "successful wake and observed drive activity," expressly **not** "durable alarm-delivery reliability."
+- **R2** accepts the W-4 **as observation, not resolution**: "Accept W-4 WAKE OBSERVED, DELIVERY NOT OBSERVED. The registration was 26h14m37s overdue at close. Root cause remains UNCONFIRMED. Do not attribute the stall to the 1101 fault without evidence, and do not presume that the registration will either fire or remain permanently inert."
+- **R3** then selects branch (d) for this state, conditional on this reconciliation "explicitly address[ing]" the blocker.
+
+**This amendment does not claim the W-4 is resolved.** It is not. The root cause is unconfirmed; the standing registration's future is unclaimed in both directions (R2, in terms). What has changed since §4.5 was written is not the W-4's resolution but its **disposition status and the fit of a branch census to the state** — the two things the blocker, read precisely, actually guards. §2.3 argues that discharge at exactly that strength, and no stronger.
+
+### 2.3 Why the blocker's predicate no longer holds — argued precisely
+
+The §4.5 row blocks on a compound predicate: the W-4 is (i) **undispositioned**, and therefore (ii) the event is **unclassified**, so (iii) **no branch's census describes the state**. Each element is addressed in turn:
+
+**(i) "Undispositioned" is now false, in the only sense the row requires.** The row's own path-onward is "Rowan's disposition required." Rowan has dispositioned: R2 accepts the W-4 observation at full strength (and refuses resolution), and R3 routes the dispositioned state into branch (d) subject to this reconciliation. A disposition that says "accepted as observation, root cause open" **is** a disposition — the row never required the W-4 to be *explained*, only *dispositioned by Rowan rather than carried unexamined into a gate*. This amendment is the instrument R3 named for completing that routing; if Rowan does not accept this amendment, the blocker stands exactly as written (§2.4).
+
+**(ii) The event is classified.** The window's classifications stand accepted: the event is **W-2 EXPECTED** (R1) and its terminal condition is **W-4** (R2). "Unclassified" described a state in which the executor would have had to guess what the window meant. No guessing remains about what was observed: the classification is Rowan's, not the executor's.
+
+**(iii) A branch census now describes this state — this amendment writes it.** At package time no §4 delta described a revived chain that had *stopped delivering* under a standing past-due registration: §4.1/§4.4 describe a chain "turning ~10-minute halt-fenced passes" at gate time (A-3 expects accruing rows; A-4 expects a live registration moving through the re-arm cycle). §5 of this amendment replaces the (d) delta with expectations written for the state as it stands — non-delivering chain, standing past-due registration, one live grant in its churn position — at undiminished hardness (any deviation is a §7 STOP, as before). The state is therefore censused, not assumed.
+
+### 2.4 What the W-4 does and does not leave ambiguous
+
+**It does not leave the current observable state ambiguous.** At the window closing census (2026-11-05T23:21:06Z–23:21:18Z) and at the tail check that followed it (2026-11-05T23:28:42Z), every marker of the state was read, on both surfaces where two surfaces exist, and agreed:
+
+- one live grant, `grant:plan:19cad189fab54b9c804a74a6:seg:87:full`, in issued state; seg:1–seg:86 all voided; never two live a
