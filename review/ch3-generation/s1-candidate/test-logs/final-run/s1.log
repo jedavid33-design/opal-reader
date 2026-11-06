@@ -1,0 +1,30 @@
+T-BOUND evidence: planId=plan:04aea95788cc29f1404484b0 stored phase=forever-pucked book=book-battery
+T-UNBOUND-NAMED evidence: phase_bound_to_other_book + phase_not_budgeted, byte-identical to pre-change behavior
+T-NULL-REFUSAL evidence: both the explicit-null and field-omitted calls refused book_not_onboarded
+T-NO-MUTATION evidence: snapshot sha256 before=3632ac4d97be3ba2994bfac6ec6796ec3517e5dba96ab4b8b62c5a911dc33666
+T-NO-MUTATION evidence: snapshot sha256 after =3632ac4d97be3ba2994bfac6ec6796ec3517e5dba96ab4b8b62c5a911dc33666
+T-NO-MUTATION evidence: d6_plans rows=1 (the one seeded FP plan); watermarks/accounting tables inside the identical snapshot
+T-QUOTE-OPEN evidence: eligibleCount=3 expectedCostMicroCents=16917 totalChars=1200 digest=4ae3998530088cffaf6e1b2d94666e0441fc1e7966c62275df6e57d5e9490b14
+T-LEGACY evidence: legacy construction admitted planId=plan:9dcddeec435cd4af9003e241 with stored phase=null over the same coordinator
+T-REGRESSION evidence: lane_not_allowed for batch on both the bound and the unbound/null-phase intent
+T-THROWSAFE evidence: sentinel propagated by identity; zero plans while faulted; same intent admitted after disarm
+T-BOOTSTRAP evidence: phase_binding_required while the registry is empty; book_not_onboarded for the identical intent once established
+▶ S1 enforcement battery
+  ✔ T-BOUND — bound book admitted; plan stores the DERIVED phase (71.240861ms)
+  ✔ T-UNBOUND-NAMED — unbound book, named phase: pre-existing refusals unchanged (5.385628ms)
+  ✔ T-NULL-REFUSAL — unbound book, null phase (and phase omitted): book_not_onboarded (3.680751ms)
+  ✔ T-NO-MUTATION — the refusal moves nothing (full-store byte identity) (6.895013ms)
+  ✔ T-QUOTE-OPEN — eligibility quotes remain available for the unbound book (4.711678ms)
+  ✔ T-LEGACY — a legacy construction over the SAME coordinator still admits phase-null (7.766019ms)
+  ✔ T-REGRESSION — the lane fence precedes admission; batch still refused (3.349704ms)
+  ✔ T-THROWSAFE — an unreadable registry fails closed (sentinel identity, nothing created) (4.753199ms)
+  ✔ T-BOOTSTRAP — the bootstrap gate precedes the branch; the branch arms when the registry establishes (3.372609ms)
+✔ S1 enforcement battery (113.546529ms)
+ℹ tests 9
+ℹ suites 1
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 345.459076

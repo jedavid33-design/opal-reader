@@ -1,0 +1,15 @@
+--- a/v2/generation/service.mjs
++++ b/v2/generation/service.mjs
+@@ -444,6 +444,12 @@
+         return { ok: false, reason: "phase_bound_to_other_book" };
+       return { ok: false, reason: "phase_unbound" };
+     }
++    // E1 (S1 enforcement): in an enforcement-bound construction, a
++    // book with no registry row may not submit unbudgeted. The
++    // per-book-budget policy (Q1 ruling) is enforced HERE, at the
++    // only admission gate, on the row already read above.
++    if (enforcePhasePolicy)
++      return { ok: false, reason: "book_not_onboarded" };
+     return { ok: true, phase: null };
+   }
+ 

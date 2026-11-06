@@ -1,0 +1,7 @@
+run-all summary 2026-11-06T16:06:55Z
+containment exit: 0
+p2 exit: 0
+r5a exit: 0
+s1 exit: 0
+v3 exit: 0
+overall exit: 0
