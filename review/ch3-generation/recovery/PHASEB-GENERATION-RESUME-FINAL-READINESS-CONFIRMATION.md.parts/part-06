@@ -1,0 +1,159 @@
+ervation — which bounds **attempts**; the census
+requires **headroom ≥ 12** on the executing PT day, re-checked at
+GR-4 if the day rolls (§3.3). Expected realized attempts for one
+569-char segment are far below the reservation; the reservation is
+a bound, not a forecast.
+
+### 7.4 Scope
+
+Exactly **one segment**, through exactly **one** resume of the
+preserved plan: no Batch (Batch stands unarmed and its arming is a
+separate later gate chain), no rest-of-*Forever Pucked*, no other
+book, plan, or job; no plan action (no retirement, revocation,
+release, or quarantine change); no exemption change; no second
+SubmitJob ever (§1.1 of the package is HARD LAW: the preserved plan
+is a live trigger, and a duplicate intent would corrupt the
+exclusivity this gate's verification rests on). The parked Chapter 3
+job is a census fact only and is never touched.
+
+---
+
+## 8. OQ-5 — the named post-gate observation duty (ACCEPT WITH CONDITIONS, specified here)
+
+Rowan's condition (ruling 4, §B): the closing census suffices as
+closing evidence; **establish a named read-only post-gate
+observation duty for both success and abort paths, ending at
+acceptance of the execution record or 14 days after close,
+whichever occurs first**, with its owner, start, read set,
+classifications, escalation, and termination specified. The
+disposition (§3.4) proposed the tail discipline's form; this
+section specifies the duty in full. **It authorizes no production
+mutation, at any point, on any path.**
+
+- **Name:** the **Phase B resume post-gate observation duty**,
+  carried out by a scheduled read-only job named
+  **`phaseb-resume-postgate-watch`**, created by the executor as
+  part of the gate's closing acts (its creation, schedule, and read
+  set are recorded in the execution record; the job does not exist
+  before the gate closes and is not created by this filing).
+- **Owner:** **Wren** — the executor owns the duty: the job's
+  creation at close, its daily review, its classifications'
+  reporting, and its termination. The standing end-state name for
+  the chain under this duty is **REVIVED-UNSTOPPED / OWNED** (the
+  package §2.3.3 form), whatever the gate's closing classification.
+- **Start:** at **gate close** — the GR-7 closing census timestamp
+  (success path) or the abort/checkpoint/wake-failure closing
+  capture timestamp (every other path). The duty attaches on
+  **both** end paths and on the checkpoint and wake-failure closes:
+  every close leaves a registered or registerable chain whose later
+  state has twice been the material fact in this programme (the
+  revival; the W-4).
+- **Cadence:** **daily**, at approximately **18:28 ET** — the
+  retired tail watch's slot and form (`phaseb-s1-tail-watch`, daily
+  ~18:28 ET, read-only), adopted so the two regimes read alike
+  across the handover. Each check is reads only.
+- **Read set** (the closing-census subset): `GET
+  /v2/d6-containment` (both containment facts via this surface and
+  the next); `GET /v2/d6-diagnostics?drive=1` (containment surface
+  2, the alarm block, the recorder — latest row, failures); `GET
+  /v2/d6-diagnostics?planId=plan:19cad189fab54b9c804a74a6` (phase
+  surface 2); `GET /v2/generation/capabilities` (phase surface 1,
+  generation state, Batch still `batch_not_armed`); `GET
+  /v2/d6-plans/plan:19cad189fab54b9c804a74a6`; `GET
+  /v2/jobs/plan:19cad189fab54b9c804a74a6:seg`; `GET
+  /v2/d6-quota-reconcile`; `GET /v2/quota`; `GET
+  /v2/sync/changes?family=content` and `?family=bindings` since
+  the closing watermarks; `GET /health`; plus the cf-api script
+  settings read (GENERATION_HALT still `"1"`) and the cf-api queue
+  read (still paused) — the holds verified on their own surfaces,
+  as at census.
+- **Classifications:**
+  - **POST-GATE-QUIET** — every marker at its closing value, or
+    moving only inside the in-set forms the closing record names:
+    the chain registered and passes running under the holds with
+    grant churn confined to the §7.3 set (one live grant at a time,
+    reserved at the cohort figure, dispatched 0, $0), or the chain
+    silent with every other marker frozen at the matching values
+    (the W-4 form, classified as observation, never as resolution).
+    Logged in the duty's log; reported briefly — in-set
+    continuation is a log line, not an escalation.
+  - **POST-GATE-MOVEMENT** — **any** marker outside the closing
+    values and outside the in-set forms: any dispatch or settled
+    movement; a binding or content change; a plan/job state change
+    beyond churn; a hold, build, settings, or queue change; a
+    containment transition; a recorder error row attributable to
+    this plan. (A late first delivery after a wake-failure close is
+    recorded under this duty as a tail-observation fact per GR-7 —
+    POST-GATE-QUIET if its effects stay inside the §7.3 set, and
+    reported in the check's log either way.)
+- **Escalation:** a POST-GATE-MOVEMENT check is reported
+  **immediately** — to Julie in the Coding Projects chat and as a
+  record on the Roundtable board — with the raw reads preserved.
+  The duty **never acts**: no command, no transition, no hold or
+  queue change, no wake. Any response is a future authorization's
+  business. A check whose reads fail (e.g., a 1101-form outage) is
+  recorded as an unobserved check with its evidence, under the
+  window's discipline — never read as quiet.
+- **Termination:** the **earlier of** (a) Rowan's acceptance of this
+  gate's execution record on documentary review, or (b) **14 days
+  after gate close**. At termination the job is **disabled**
+  (history preserved) and the termination — which condition fired,
+  the final check's classification, and the closing marker values —
+  is **reported** to Julie and recorded. Any extension is a ruling,
+  not inertia.
+
+---
+
+## 9. Exact proposed GO wording (for Julie's future decision — NOT requested here)
+
+This wording **supersedes the package §6 wording** for this gate:
+the package's form contemplated proceeding "against whichever
+branch the execution census verifies (GR-A …, or GR-B … with
+Rowan's OQ-2 ruling in hand)". No OQ-2 ruling is in hand, GR-5
+holds GR-B blocked, and §4.2–4.3 of this confirmation establish the
+position the wording must carry. When Julie chooses to authorize
+one resume attempt — after Rowan's final readiness ruling on this
+confirmation — the operative wording proposed is:
+
+> "GO — execute exactly one generation-resume attempt as pinned at
+> `<CONFIRM-PIN>`: fresh execution census on both phase surfaces,
+> with the script etag captured and saved as an evidence artifact
+> before any wake decision, against the post-restoration baseline
+> the confirmation censuses; the attempt proceeds **only if the
+> census verifies branch GR-A's predicates exactly** (package
+> §4.1) — if the census reads the §7.3 churn state, or any state
+> matching neither branch, the attempt does not proceed and returns
+> for ruling (branch GR-B remains blocked while OQ-2 stands open;
+> no branch is selected in advance); a fresh read-only voice
+> checkpoint (Alex → Gemini Charon, quote digest `cdef2c7e…`);
+> exactly one wake — a single fresh `RequestPause` probe against
+> `alarm-wake-probe:nonexistent`, counted as one production
+> command, verified only by an observed recorder-row effect within
+> the ruled 15-minute bound — never a second wake, never a
+> deploy-as-stimulus; then one halt lift and one queue unpause, in
+> that order; the post-unpause verification protocol with its
+> sliding 35-minute stall window, the adopted three-hour review
+> checkpoint from dispatch, and abort condition A-7 (a post-lift
+> recorder discrepancy re-holds and returns for review, a completed
+> segment standing as completed-with-discrepancy); **NO SubmitJob
+> of any scope — ever — NO exemption call, NO containment
+> transition, NO Batch, NO rest-of-book, NO other generation**;
+> counted production commands ≤ 5 on every path; the segment's
+> expected cost ≈ $0.008, the 12,808-unit forecast line and the
+> 25,000-unit detection threshold standing as deviation signals,
+> never caps, with the Gemini prepay balance as the physical
+> backstop; on success, abort, checkpoint, or wake failure alike,
+> re-pause and re-halt so the attempt ends HELD, exposure reported
+> in the three-line form, and the named post-gate observation duty
+> opened at close. I understand no pre-unpause grant verification
+> exists or is claimed — the holds are the pre-unpause containment
+> and verification attaches to the grant as the first observable
+> effect after the lift; that success ends with exactly one new
+> binding and the bindings watermark at 1842, and that my playback
+> check — the chapter header reading 'Complete 27/27' — is the
+> acceptance, outside the executor's verdict; that one GO covers
+> one attempt, and a stall, an abort, or a checkpoint consumes it;
+> and that restoration was authorized, executed, and closed
+> separately, before this GO."
+
+The GO is r

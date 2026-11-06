@@ -1,0 +1,153 @@
+# Phase B — GENERATION-RESUME gate: FINAL CONSOLIDATED READINESS CONFIRMATION
+
+**Prepared by Wren, 2026-11-05, under Rowan's standalone restoration
+execution ruling** (local record `ROWAN-RESTORATION-EXECUTION-RULING.md`;
+board comment 6675637721): "Wren shall prepare the final consolidated
+generation-resume readiness confirmation against the actual
+post-restoration baseline, incorporating all accepted corrections and
+the three-hour checkpoint. … No generation-resume execution is
+authorized by this ruling. The final readiness review must return to
+Rowan before any separate GO is requested from Julie."
+
+- **What this document is.** A CONSOLIDATION, not another correction.
+  It restates the generation-resume gate exactly as it now stands
+  after every ruling in its chain — the package, the OQ-1 analysis as
+  corrected, both corrections, the OQ-3–OQ-6 disposition as ruled and
+  as corrected — measured against a fresh post-restoration baseline
+  census captured for this filing (§3, artifacts saved). Rowan's
+  final readiness review reads this one document; the underlying
+  documents remain the operative texts, and where any summary here
+  and an operative text differ, **the operative text governs**.
+- **What it is not.** It authorizes nothing, requests no GO, and
+  performs no production act. The baseline census of §3 was a
+  read-only capture under the standing read discipline; nothing else
+  in this filing touched production. Production remains **HELD**:
+  containment NORMAL, GENERATION_HALT `"1"`, queue paused, no alarm
+  registration standing, the preserved plan and the idx-26 exemption
+  untouched.
+- **NO SPOILERS:** structural metadata and digests only. No segment
+  text is read, printed, or quoted anywhere in this filing.
+
+Pin (this document, the companion cp, and the baseline census
+artifacts ride one pin commit): `<CONFIRM-PIN>` — repo
+`jedavid33-design/opal-reader`, branch `ui1-review`. (Pin-slot
+pattern, as established: a commit cannot name itself; the pinned
+copy carries the slot.)
+
+---
+
+## 1. Authority and status map
+
+### 1.1 The operative documents, with pins
+
+| Document | Pin (`ui1-review`) | Status |
+|---|---|---|
+| Generation-resume package (`PHASEB-GENERATION-RESUME-PACKAGE.md`) | `0946f9f2fb978a46b562c738d8ac6d9d4ee977a6` | Base design; amended by both corrections below |
+| OQ-1 analysis (`PHASEB-GENERATION-RESUME-OQ1-ANALYSIS.md`) | `60da50c3a6da36e42dd8e93fa67bc8673737613e` | The wake design; amended by correction 1 |
+| Correction 1 (`PHASEB-GENERATION-RESUME-CORRECTION.md`, with the companion C3 correction) | `8ca683bdfe2967b1e23a99b9eded99b065478a00` | GR-1…GR-7 as ruled; **accepted** (corrections-round-2 ruling) |
+| OQ-3–OQ-6 disposition (`PHASEB-GENERATION-RESUME-OQ3-OQ6-DISPOSITION.md`) | `f83568de7b288748d7246933f9fc7821ed5d4ac5` | As ruled; amended by correction 2 at OQ-3/OQ-6 |
+| Correction 2 (`PHASEB-GENERATION-RESUME-CORRECTION-2.md`) | `91bb9c44b8b6a1a80310b14c2668e85cf110ad98` | OQ-3/OQ-6 as ruled; **PASS** (restoration-readiness + correction-2 ruling) |
+| C3 execution record | `b4727c408f6c446a94466594ea2cc7c59d11de8d` | C3 EXECUTED AND CLOSED, PASS AT PARTIAL STRENGTH |
+| Restoration readiness package | `e6359a2183d431b3598c83f11c60d61cd29d13fd` | Readiness PASS WITH CONDITIONS (Q-1…Q-4 accepted) |
+| Restoration execution record | `304e030948aac998ef278daf221ab9aae6497970` | RESTORATION EXECUTED AND CLOSED, PASS |
+
+### 1.2 The rulings in the chain (relayed by Julie; verbatim on the board)
+
+1. **S1 window record ruling** (board 6672659161): S1 event ACCEPTED
+   (W-2); W-4 accepted as observation, root cause UNCONFIRMED; C3
+   branch (d); resume documentary review permitted, OQ-1 OPEN.
+2. **C3-(d)/OQ-1 ruling** (board 6674941519): GR-1 ACCEPT IN
+   PRINCIPLE; GR-2 ACCEPT WITH QUALIFICATION; GR-3/GR-4/GR-6 REVISE;
+   GR-5 OQ-2 REMAINS OPEN, GR-B blocked; GR-7 PASS WITH CONDITIONS.
+3. **Corrections-round-2 ruling** (board 6675099399): PASS — both
+   corrections accepted; OQ-1 accepted as a readiness design.
+4. **C3 execution + OQ-3…OQ-6 ruling** (board 6675293356): C3
+   EXECUTED AND CLOSED at PARTIAL strength; OQ-3 REVISE; OQ-4
+   ACCEPT; OQ-5 ACCEPT WITH CONDITIONS; OQ-6 REVISE.
+5. **Restoration readiness + correction-2 ruling** (board
+   6675488303): restoration readiness PASS WITH CONDITIONS;
+   correction 2 PASS (OQ-3 as corrected; the three-hour checkpoint
+   ADOPTED as policy).
+6. **Restoration execution ruling** (board 6675637721): PASS —
+   RESTORATION EXECUTED AND CLOSED; R4's forward requirement (a
+   captured build-identity observation wherever the script etag is a
+   mandatory predicate) is discharged by design at §3.3 of this
+   confirmation.
+
+### 1.3 Disposition of the open questions
+
+| Question | Disposition | Where it stands in this confirmation |
+|---|---|---|
+| **OQ-1** — the wake mechanism | **CLOSED as a readiness design** (GR-1…GR-7 as corrected and accepted) | §5 |
+| **OQ-2** — re-issuance after a void (cold restart) | **OPEN** — GR-B blocked | §4 |
+| **OQ-3** — recorder expectations | **RULED as corrected** (correction 2 §1; abort condition A-7) | §6.2 |
+| **OQ-4** — the D-value at the wake | **ACCEPT** — no additional pre-lift observation; the 15-minute bound is a failure-decision rule, not a latency guarantee; the B-family remains unresolved | §5.2 |
+| **OQ-5** — post-completion chain behavior | **ACCEPT WITH CONDITIONS** — closing census suffices as closing evidence; the named post-gate observation duty is specified here | §7 |
+| **OQ-6** — completion timing bound | **RULED as corrected** (correction 2 §2; the three-hour checkpoint ADOPTED as operational safety policy) | §6.1 |
+
+### 1.4 The package §0 dependency legs — all satisfied but two
+
+Leg 1 (eligible S1 disposition, reviewed): **satisfied** (ruling 1;
+correction 1 §7's reconciliation). Leg 2 (C3 executed and closed,
+CHAIN_STOPPED / verified): **satisfied** (ruling 4). Leg 3
+(restoration executed and closed, ending NORMAL, system otherwise
+HELD): **satisfied** (ruling 6). Leg 4 (Rowan's PASS on the package
+as corrected, including the open questions): OQ-1, OQ-3, OQ-4, OQ-5,
+OQ-6 are ruled; **the leg completes only with Rowan's final
+readiness ruling on this confirmation** — and for branch GR-B it
+additionally requires OQ-2's resolution, which stands OPEN (§4).
+Leg 5 (Julie's separate GO): **not requested by this filing**; the
+exact proposed wording stands at §8 for the decision that follows
+Rowan's ruling.
+
+---
+
+## 2. The GR-3 provenance record — the alarm registration's documented history
+
+GR-3 (correction 1 §2, as ruled) makes the no-probe branch depend on
+provenance **documented in the restoration record**. This section
+writes the provenance facts into this gate's record, from the C3 and
+restoration records, so the wake decision rules of §5 have their
+predicate in one place.
+
+1. **The standing registration and its deletion.** Before C3, one
+   alarm registration stood: `armedAt` **1793826389431** (due
+   2026-11-04T21:06:29Z) — the registration whose delivery was never
+   observed in the W-4 period (an UNRESOLVED observation; its root
+   cause is UNCONFIRMED and nothing in this filing attributes it).
+   C3's single `stop_chain` act (2026-11-06T02:24:06Z) **deleted**
+   it: the act's own read-back recorded `stopArmedBefore`
+   1793826389431 and `stopArmedAfter` **null**, `stopStatus`
+   verified at attempt 1, episode 3. The registration the W-4
+   concerned no longer exists.
+2. **The restoration re-armed nothing.** Restoration's single
+   `clear` (2026-11-06T02:49:15Z, Julie GO board 6675499312) returned
+   containment CHAIN_STOPPED → NORMAL. By design law a `clear` never
+   re-arms, and none occurred: the restoration closing census read
+   `armedAt` **null**, and the execution ruling (R2) accepts that
+   state.
+3. **Every read since reads null.** The restoration preflight
+   census, its closing census, and this confirmation's baseline
+   census (§3) all read `armedAt` **null** on the `drive=1` surface,
+   with `pendingSchedule` 2 / `pendingWatchdog` 1 (the schedule rows
+   a stop preserves) unchanged throughout.
+
+**Consequence for §5.** There is **no standing registration whose
+provenance needs explaining**: the documented history accounts for
+the registration's deletion and for the absence that followed. The
+wake decision at execution therefore starts from `armedAt` null at
+census, and **the probe branch is the expected path**. The GR-3
+no-probe branch is addressed at §5.3, including what this record
+means for its first condition.
+
+---
+
+## 3. The post-restoration baseline census — and the execution census it specifies
+
+### 3.1 The baseline capture
+
+Captured **2026-11-06T02:58Z**, read-only, in one session, after the
+restoration execution ruling — the first complete read set taken
+against the post-restoration state for this gate. Artifacts are
+saved in `resume-confirmation-baseline/` (18 files, enumerated with
+sizes and SHA-256 in the compa

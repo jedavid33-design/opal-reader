@@ -1,0 +1,118 @@
+nion cp) and are pinned with this
+confirmation. The read set is the restoration package §3.1 set,
+unchanged — the same surfaces the execution census (§3.3) re-reads.
+
+### 3.2 Baseline values (verified from the artifacts)
+
+| Item | Baseline value (artifact) |
+|---|---|
+| Containment, surface 1 (operator route, b01) | state **NORMAL**; `known: true`; `absent: false`; `verified: true`; `updatedAt` **1793933356719**; `authorizationRef` "Standalone restoration — Julie GO, board comment 6675499312"; all current-episode stop fields reset (`stopStatus`/`stopVerifiedAt`/`stopVerifyAction`/`stopArmedBefore`/`stopArmedAfter` null, `stopVerifyAttempts` 0, `stopEpisodeId` null, `stopEpisodeExhausted` false); `prevEpisodeId` **3**, `prevEpisodeAttempts` **1**, `prevEpisodeExhausted` **false**, `prevEpisodeClosedAt` **1793933356719**; `stopConfidence` **"not_applicable"** |
+| Containment, surface 2 (`drive=1` projection, b02) | Field-agreeing with surface 1 (projection-shape note: surface 1 nests the alarm block inside the containment object; surface 2 carries it top-level — values identical, as at every prior census) |
+| Alarm (b01/b02) | `armedAt` **null**; `pendingSchedule` **2**; `pendingWatchdog` **1** |
+| Recorder (b02) | Table populated; latest row id **296** @ **1793825819071** (the pass list is a 50-row descending window, ids 296→247); `recordingFailures` **0**; `recorderHealth.lastRecordedAt` 1793825819071 |
+| Health (b04) | build **`fdb02395b3775dc945baa395591a73060ab146c4`**; generation `halted`; coordinator `armed`; scope `production` |
+| Script settings (b05) | GENERATION_HALT **`"1"`**; exactly **10** bindings; `OPALREADER_PHASE_POLICY` `"enforce"`; observability enabled, logs enabled + persisted |
+| **Script etag (b06-etag.json)** | **`bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e`** — CAPTURED AS A SAVED ARTIFACT: the §3.2 in-process surrogate GET, response header recorded raw and stripped, `capturedAt` 2026-11-06T02:58:34Z (restoration ruling R4 discharged for this census) |
+| Queue (b07) | `delivery_paused: true`; exactly 1 consumer (`f260f2188d80426bb0588685e9d084eb`) |
+| Phase accounting, BOTH surfaces (b08 capabilities + b03 plan diagnostics) | settled **1,029,420**; estimatedUnverified **19,018**; reservedUnverified **5,648**; inFlightUpper **0**; unknownOpen **0**; remaining **12,464,932** of 13,500,000; `provider_unverified` (the surfaces' projections carry different field sets — capabilities omits `settledBasis`/`unknownOpen`/`unverifiedStatus`, plan diagnostics omits `bookId` — compared on the shared fields, all equal; the C2 two-surface discipline) |
+| Capabilities (b08) | Standard admitted; Batch **`batch_not_armed`**; registry `forever-pucked` ↔ bookId `5c589095-f812-48a2-8ab2-03ba2791f2b2` |
+| Preserved plan (b09) | `plan:19cad189fab54b9c804a74a6` **active**, totals {eligible 1, done 0, failed 0, blocked 0, prompts 0}; sole entry (chapterIndex 2, occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b`) `occurrenceState` **granted**; quarantine `held: false` |
+| Phase B job (b10) | `generating`, revision **88**; 87 grants: **86 voided** (seg:1–86) + exactly one live, `grant:plan:19cad189fab54b9c804a74a6:seg:87:full` **issued**; derived reserved **12** |
+| Parked Ch 3 job (b11) | `parked_policy`, revision **1**, grants [] (the stored fingerprint string is not exposed on this surface — the standing narrowed strength; no fingerprint byte-compare is claimed) |
+| Quota (b12, b13) | reconcile `ok: true`, `armed: true`, drift empty, sole exception the adjudicated straddler `att-37d63768-db4b-447d-8150-580b7c6ee257`; settings revision **1**; PT day 2026-11-05 attempts 0, provider dispatches 0 |
+| Conflicts (b14) | exactly the **4** baseline `schedule_dead` lease rows (ids 1–4) |
+| Watermarks (b15a/b15b) | content **18**, bindings **1841**, zero changes on both |
+| Eligibility (b16a chapter / b16b book) | digest **`cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1`** on both scopes; chapter: eligible 1, 569 chars, expected cost **8,022** units, exclusions {bound_already 26, voice_prompt 0, parked 0, other 0} |
+
+Nothing in the baseline deviates from the restoration closing
+census: the post-restoration state is the state the restoration
+record left, unchanged — as it must be, since no act of any kind has
+been authorized or taken between the two captures.
+
+### 3.3 The execution census specification (GR-0)
+
+At execution — after Rowan's final readiness ruling (§1.4 leg 4) and
+Julie's GO (§8), recorded before the census (the established
+ordering) — the executor re-runs **this same read set** fresh. Its
+specification:
+
+- **Expected values = §3.2's baseline, item for item.** The baseline
+  supersedes every older quoted value in the package's §4 (whose
+  opening baseline predates the window, C3, and the restoration);
+  package §4's *forms* — the branch-invariant core's structure, the
+  two-surface phase discipline, the adopt-and-verify recorder
+  treatment (§4.0 item 11: the recorder's adopted state is now
+  **populated, latest row 296 @ 1793825819071, failures 0**, and the
+  live read must match it) — stand as written.
+- **Deviation = STOP before any mutation** (executor STOP law;
+  package §7.1). A failed or unreadable read on either containment
+  surface, a surface disagreement, or any value differing in any
+  field stops the gate; the deviation is preserved with its raw
+  reads and returns for ruling. There is no re-read-until-it-matches.
+- **Build identity, R4 discharged by design.** The script etag is a
+  mandatory predicate of this census (package §4.0 item 1). The
+  execution capture therefore includes the etag read by the
+  restoration package §3.2 method (in-process surrogate GET; the raw
+  response header and the stripped value both recorded), **saved as
+  an artifact in the gate's evidence set before the wake decision is
+  taken**: file `g06-etag.json` in the execution evidence directory
+  (`resume-execution/`, mirroring `b06-etag.json`'s fields:
+  purpose, capturedAt, method, etagHeaderRaw, etagStripped). The
+  restoration record's E-1 gap — an etag value carried at
+  executor-assertion strength for want of a saved artifact — does
+  not recur in this gate: an execution census whose etag artifact
+  was not captured and saved is an incomplete census, and the gate
+  does not proceed on it.
+- **Quota-day check (package GR-0/§5.4).** The census names the
+  executing PT day (rolls 07:00Z), reads its dispatched count, and
+  verifies **headroom ≥ 12** against the 100/day cap; if the PT day
+  rolls before GR-4, the check is re-read immediately before the
+  unpause (package GR-4 note). Headroom < 12 defers the gate that
+  day (package §4.3) — a deferral, recorded as such, not a failure.
+- **The census selects the branch** (§4) — by the plan/job values it
+  reads, never by executor choice.
+
+---
+
+## 4. Branch determination — GR-A / GR-B, decided only at the execution census
+
+### 4.1 The predicates, exactly as the package defines them
+
+**GR-A (package §4.1)** is selected when the census reads the
+preserved plan/job **exactly at their attempt-3 closing values**:
+
+> - Plan `active`, totals {eligible 1, done 0, failed 0, blocked 0,
+>   prompts 0}, `updatedAt` at its creation value; entry disposition
+>   `eligible`, `occurrenceState: pending`, `executionState: null`;
+>   quarantine `held: false`.
+> - Job `queued` rev 1, **grants []**; occurrence `pending`,
+>   `cache_key: null`.
+> - In-set protocol values: §2.3.1 verbatim.
+
+**GR-B (package §4.2)** is selected when the window/C3 records
+establish — and the census confirms — that the pre-classified §7.3
+set was entered:
+
+> grant `grant:plan:19cad189fab54b9c804a74a6:seg:1:full` issued and
+> standing in its lease-expired **void** state; occurrence
+> `granted`; job `generating` rev ≥ 2; derived reserved returned to
+> **0** …; phase figures otherwise exactly §4.0 item 5; dispatched
+> for every window day **0**; provider attempts **0**; settled delta
+> across the window **0**.
+
+with §4.2's own adoption clause: "The branch's delta values are
+**adopted from the C3 closing census and the restoration census**,
+quoted in the execution record with their sources; values those
+records do not establish are not estimated here." And its standing
+bar: "Execution in GR-B additionally requires Rowan's ruling on
+OQ-2" — which GR-5 declined to give (OQ-2 REMAINS OPEN; correction 1
+§4).
+
+### 4.2 The baseline measured against both branches — stated factually
+
+| Predicate element | GR-A (§4.1) | GR-B (§4.2 as pinned) | **Baseline as censused (§3.2)** |
+|---|---|---|---|
+| Plan state / totals | active / {1,0,0,0,0} | (§4.0 core) | **active / {1,0,0,0, prompts 0}** |
+| Entry / occurrence state | `eligible` / `pending` | `granted` | **`granted`** |
+| Job state / revision | `queued` rev 1 | `generating` rev ≥ 2 | **`generating` rev 88** |
+| Grants | [] | the one §7.3 grant, void | **87 grants: seg:1–86

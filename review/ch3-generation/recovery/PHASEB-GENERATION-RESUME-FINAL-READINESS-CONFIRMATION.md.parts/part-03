@@ -1,0 +1,158 @@
+ voided; seg:87:full ISSUED (live)** |
+| Derived reserved | (n/a; 0 at issuance) | **0** (void released it) | **12** |
+| Phase figures | §4.0 item 5 | §4.0 item 5 | **§4.0 item 5 exactly** |
+| Dispatched / attempts / settled delta across the window | — | 0 / 0 / 0 | **0 / 0 / 0** |
+
+Three conclusions follow from the records, stated at their exact
+strength:
+
+1. **GR-A's census form cannot obtain on this plan.** Its predicates
+   are the attempt-3 closing values, and the state moved off them
+   irreversibly on 2026-11-03T23:26:14Z, when the Grant 2 wake's
+   first drive pass issued `seg:1:full` (job `queued` rev 1 →
+   `generating` rev 2; occurrence `pending` → `granted`). Grants,
+   once issued and later voided, remain in the job's `grants[]`; no
+   act in any operative document returns the plan/job to §4.1's
+   values, and every operative document forbids the plan/job
+   mutations that could. GR-A's expectations (§2.3.1 — an *initial*
+   issuance, needing no OQ-2) remain exactly as specified and would
+   govern if a census ever read §4.1's form; on the preserved plan
+   as it stands, it cannot. (Stated for Rowan's confirmation as part
+   of the branch question, §4.3 — the confirmation asserts the
+   record arithmetic, not a ruling.)
+2. **The baseline is the §7.3 churn state in substance** — a wake
+   issued the grant under the holds; the chain churned in-set
+   (sequential lease-expired re-issuance, one live grant at a time,
+   reserved pinned at 12, dispatched 0, $0) through pass 296; the
+   passes then stopped with the final grant, `seg:87:full`, still
+   standing **issued** (no later pass ever processed its lease
+   expiry, and C3's stop and the restoration changed none of the
+   plan/job state). Every §4.2 element that describes the set's
+   *character* holds: occurrence `granted`, job `generating` rev
+   ≥ 2, phase exact, dispatched/attempts/settled-delta all 0 across
+   the window.
+3. **But §4.2's pinned values do not describe the state the window
+   actually produced.** §4.2 was written on 2026-11-03, before the
+   window ran, against the anticipated single-grant churn: it names
+   `seg:1:full` standing void and reserved returned to 0. The
+   window's actual course (296 passes) produced an 87-grant
+   sequence whose standing member is `seg:87:full` in state
+   **issued**, with reserved **12**. Correction 1 §8 already named
+   the route by which these values reach the branch question: "the
+   window's churn outcome (successor grants to `seg:87:full`,
+   reserved 12 at the window's close) reaches GR-B, if at all,
+   through those censuses and the D-delta form" — i.e., through
+   §4.2's own adoption clause, from the C3 closing census and the
+   restoration census, both of which read exactly the state §3.2
+   re-reads.
+
+### 4.3 The branch rule for execution — and the question this confirmation puts to Rowan
+
+The determination happens **only at the execution census**, by its
+reads, under these rules:
+
+- **If the census verifies §4.1's predicates exactly → GR-A**, and
+  the gate proceeds under §2.3.1's expectations (no OQ-2 dependency).
+- **If the census reads the churn state → the gate does NOT
+  proceed.** GR-B remains **BLOCKED while OQ-2 stands open** (GR-5):
+  package §2.3.2's expectations "wait on" the OQ-2 ruling, and no
+  ruling has filled them. The executor does not execute on the
+  delivering-chain pattern as a conditional expectation, does not
+  re-characterize the census into GR-A, and does not interpolate a
+  branch (package §4.3). The census reads are preserved and the
+  branch question returns to Rowan.
+- **Any state matching neither branch → STOP** (package §4.3),
+  before any mutation.
+
+**The question for Rowan (the confirmation's central ask).** Because
+§4.2's pinned values and the window's actual outcome diverge in the
+particulars tabled at §4.2 — while its adoption clause and
+correction 1 §8 both route the actual values into the branch — the
+branch status of the actual churn state is **not resolved by the
+documents' own force**, and this confirmation does not resolve it
+silently. Rowan is asked to rule, as part of the final readiness
+review, which of these holds:
+
+- **(i)** The actual churn state, as adopted through §4.2's adoption
+  clause from the C3 and restoration censuses (and re-read at
+  §3.2), **is** GR-B's census form — with the consequence that
+  stands either way: GR-B is blocked by OQ-2, and the gate cannot
+  execute until OQ-2 is resolved by sufficient evidence or by a
+  separately reviewed, bounded verification protocol (GR-5's two
+  routes); **or**
+- **(ii)** §4.2 requires amendment to describe the multi-grant churn
+  state before any branch determination can be made against it —
+  in which case the amendment is a further documentary round, and
+  the same OQ-2 block applies to execution regardless.
+
+Either ruling leaves the practical position identical today: **on
+the baseline as censused, no branch is executable** — GR-A's form
+cannot obtain, and GR-B is blocked. The GO wording at §8 is written
+to that position: it authorizes proceeding **only** on an exact
+GR-A census, and a stop-and-return on every other reading. If Rowan
+prefers that no GO be presented until the branch question and OQ-2
+resolve, the wording stands ready for the later decision; nothing
+in this filing requests it now.
+
+---
+
+## 5. The wake decision rules (GR-2, as corrected — GR-1…GR-7)
+
+### 5.1 The mechanism (GR-1, accepted in principle; correction 1 §§3, 7)
+
+Exactly **one** fresh probe command, at the GR-2 slot — after the
+execution census (GR-0) and the voice checkpoint (GR-1), **before
+either hold lifts**, while both holds stand:
+
+| Element | Value (analysis §2.1, as corrected) |
+|---|---|
+| Route | `POST /v2/commands` via the **client connector**, production scope + instance headers |
+| Body | `{"command_id":"<FRESH-ID>","type":"RequestPause","payload":{"jobId":"alarm-wake-probe:nonexistent"}}` |
+| `<FRESH-ID>` | Newly minted for this gate, never previously used (a reused id makes the command a replay, which short-circuits **before** `wake()` — freshness is the mechanism, not a formality) |
+| Expected receipt | HTTP 200 `{"outcome":"rejected","reason":"job_not_found"}` — the refusal is the success criterion at the command layer; **any other outcome is a STOP-and-classify event** |
+| Count | **Exactly one** production command (GR-4: counted as one, including its rejected receipt; §7.1). Never re-sent; never followed by an improvised second wake |
+
+The precedent (Grant 2, 2026-11-03T23:26:13Z) supports the design;
+it **does not prove the post-stop/post-clear case** — no live
+precedent exists for the wake in that state, and none is claimed
+(GR-1, at its ruled strength). The refusal proves `handleCommand`
+ran and apply refused; it is **never** represented as proof of zero
+downstream effects (GR-4; effects are accounted as observed, §7.1).
+
+### 5.2 Verification — by observed recorder-row effect only (GR-2 as qualified; GR-6; OQ-4 ACCEPT)
+
+**Governing rule: persisted `armedAt` is NOT proof of delivery.** A
+changed `armedAt` after the probe is a consistency marker only. The
+wake is verified **only** by the recorder-row route (analysis §3.1
+as corrected by GR-6):
+
+> a new `d6_drive_passes` row on the P-6 surface
+> (`GET /v2/d6-diagnostics?drive=1`) with id greater than GR-0's
+> latest recorded row, timestamped after the probe's dispatch,
+> `stage` complete, `driveInvoked` true, error fields null —
+
+or by an independently adequate verification route Rowan has
+approved **in advance**. No other route exists by default.
+
+- **Bound (GR-2):** **15 minutes** from the probe's dispatch, polled
+  on the P-6 + P-1 pair as **complete paired polls at least every
+  5 minutes** (both surfaces read at every poll; a poll with a
+  failed surface is a failed poll, not a negative observation). The
+  bound is a **failure-decision bound, not a latency finding** — no
+  wording in this gate presents it as an upper bound on alarm
+  delivery latency. No additional waiting is appended on executor
+  authority; a longer bound would be a ruling. Per OQ-4 (ACCEPT),
+  **no additional pre-lift observation** beyond the complete census,
+  this paired-poll verification, and the §5.3 route where applicable
+  is required; the B-family remains unresolved.
+- **The R-06 discrepancy path (GR-6).** If, within the bound, an
+  in-set grant transition is observed **without** a corresponding
+  recorder row, the executor classifies an **R-06 evidence
+  discrepancy** (both surfaces' raw reads recorded under that name)
+  and **lifts neither hold** on that evidence; the gate does not
+  proceed to the lifts, and the discrepancy returns for review. It
+  is not recorded as a wake failure — the record states exactly what
+  was seen and exactly what was not established. Symmetrically, a
+  recorder row without its expected grant movement is classified,
+  never resolved by preferring one surface.
+- *

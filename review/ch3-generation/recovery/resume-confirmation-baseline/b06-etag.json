@@ -1,0 +1,7 @@
+{
+ "purpose": "Captured build-identity observation for the generation-resume final readiness confirmation baseline census (Rowan restoration-execution ruling R4: a captured, reproducible build-identity observation is required wherever the script etag is a mandatory predicate).",
+ "capturedAt": "2026-11-06T02:58:34Z",
+ "method": "In-process GET of GET /client/v4/accounts/{acct}/workers/scripts/opalreader-api-v2-prod with the connector credential surrogate; etag response header recorded raw and stripped.",
+ "etagHeaderRaw": "\"bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e\"",
+ "etagStripped": "bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e"
+}

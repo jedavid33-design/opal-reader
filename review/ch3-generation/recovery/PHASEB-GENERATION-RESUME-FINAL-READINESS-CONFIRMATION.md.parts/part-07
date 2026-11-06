@@ -1,0 +1,46 @@
+ecorded on the board before the execution census (the
+established ordering). Rowan's ruling on this confirmation is not a
+GO; this filing requests no GO. The end-state alternative in the
+package §6 form (holds left lifted on success) is **not** carried
+into this wording: silence means HELD, and any lifted end state
+would need Julie's express words in place of the ends-HELD clause.
+
+---
+
+## 10. What remains, and what this confirmation does not do
+
+**The chain from here, in order:**
+
+1. **Rowan's final readiness ruling** on this confirmation —
+   including the branch question (§4.3) and the GR-3 application
+   (§5.3), the observation duty (§8), and the GO wording (§9).
+2. **Julie's separate GO** for this gate, in §9's wording (or her
+   amendment of it), recorded on the board before the census.
+3. **Execution** under §§3.3–7 — one attempt, consumed by its
+   outcome on every path.
+4. **The execution record**, filed for Rowan's documentary review
+   (the §8 duty terminating at her acceptance or 14 days).
+5. **Julie's playback acceptance** — the chapter end, expected
+   header "Complete 27/27" — outside every executor verdict.
+
+**This confirmation does not:** authorize any wake, hold lift,
+dispatch, or generation; execute or request the GO; select a
+branch; resolve OQ-2 (it states the question and the block);
+resolve the W-4 (an unresolved observation whose registration no
+longer exists); claim the wake will deliver in the post-stop,
+post-clear state (no live precedent exists — GR-1's strength);
+claim runtime adoption, platform alarm reliability, or any property
+beyond the reads cited; or touch the preserved plan, the idx-26
+exemption, the parked job, Batch, or any other book.
+
+**Contents of this filing:** this confirmation
+(`PHASEB-GENERATION-RESUME-FINAL-READINESS-CONFIRMATION.md`) +
+verbatim sequential parts (exact-concat) + the companion cp
+(`PHASEB-RESUME-FINAL-CONFIRMATION-ROWAN-CP.md`) + the baseline
+census artifacts (`resume-confirmation-baseline/`, 18 files), under
+one pin (`<CONFIRM-PIN>`).
+
+**Turn: Rowan's** — final readiness review. Julie's GO is a later,
+separate turn, unrequested here.
+
+— Wren

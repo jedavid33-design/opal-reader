@@ -1,0 +1,166 @@
+age
+  §2.3.4; Gate 4's durable ruling). A **progress event** is any of:
+  grant appearance or grant state/revision change; an attempt
+  recorded for this occurrence; plan totals change; occurrence
+  state change; dispatched increment for this grant. **Two
+  consecutive complete polls ≥ 35 minutes apart with no progress
+  event between them declare the stall** (abort A-1); any progress
+  event slides the window, without limit of count; the window runs
+  from the last observed progress, never from the unpause.
+- **Backstop — the maximum elapsed-time review checkpoint: 3 hours
+  from dispatch** (correction 2 §2.3(c), **ADOPTED as operational
+  safety policy** in Rowan's correction-2 ruling — no longer a
+  proposal; it is not a measured provider-latency bound and not a
+  completion deadline). **T0** is the timestamp of the first
+  complete P-1..P-9 poll at which P-5 records a dispatched
+  increment for the current PT day attributable to this gate's
+  grant above the pre-unpause baseline. If the §6.5 completion set
+  has not been observed at or before **T0 + 3 hours**, the
+  checkpoint fires: (1) **preserve state** — a full closing capture,
+  the raw poll set preserved; (2) **stop further exposure if safe**
+  — the §2.3.3 re-hold in its exact order; if any re-hold read-back
+  cannot be verified, escalate at once in the same report rather
+  than retrying silently; (3) **escalate** — the record classifies
+  the end **CHECKPOINT-ESCALATED** (no failure and no fault
+  declared) and returns to Rowan and Julie for a fresh ruling.
+  **The attempt never extends past the checkpoint under the same GO
+  under any wording.** If dispatch never occurs, the checkpoint
+  never starts (the pre-dispatch phase is governed by the 15-minute
+  bound, the sliding test, and A-1).
+- **The ceilings' true scope** (correction 2 §2.2/§2.3(b), at the
+  ruling's exact strength): the 12-slot cohort reservation bounds
+  **attempts**; A-3 (12,808 units) and A-4 (25,000 units) bound
+  **financial exposure**; **none of them bounds wall-clock
+  duration**, and no passage of this gate's record may cite them as
+  doing so.
+
+### 6.2 Abort conditions — A-1…A-7 as they now stand
+
+Package §2.3.3's A-1…A-6, **plus A-7** as inserted by correction 2
+§1.5:
+
+- **A-1:** the stall test of §6.3 is met.
+- **A-2:** any out-of-set value (the branch's in-set expectations),
+  including any foreign-generation signal. **Foreign generation is
+  a STOP at any point** (Gate 4 law).
+- **A-3:** the forecast line (12,808 units) crossed by this
+  segment's cumulative settled delta before completion — a forecast
+  deviation + STOP, reported at exactly that strength.
+- **A-4:** the detection threshold (25,000 units) crossed —
+  reported as a threshold crossing, never as a cap breach.
+- **A-5:** any hold, build, settings, observability, conflicts, or
+  parked-job value moves outside its census expectation at any
+  poll.
+- **A-6:** a drive-pass recorder row shows an error outcome
+  attributable to this plan's pass that the protocol cannot
+  classify inside the in-set values (recorder errors are reported,
+  never absorbed).
+- **A-7 (correction 2 §1.4/§1.5):** a post-lift R-06 evidence
+  discrepancy — an in-set accounting transition (any §6.1
+  progress-event kind) observed in a complete poll with **no
+  corresponding recorder row in that poll or the next complete
+  poll** — where the completion set (§6.3) has **not** already been
+  observed. On detection: classify **R-06** with both surfaces' raw
+  reads; **no further dispatch decision rests on the accounting
+  surfaces**; run the §2.3.3 re-hold in its exact order; end HELD;
+  return to Rowan and Julie for review. No continuation, no retry,
+  no success close under the same GO.
+  **The completion carve-out (correction 2 §1.4(e)):** if, at or
+  before the detection poll, the accounting surfaces already show
+  the **complete** §6.3 completion set, **completion stands as
+  fact** — it is not unwound; the executor performs the GR-6a-form
+  close; and the record carries **completion and the R-06
+  discrepancy side by side — completed-with-discrepancy, never a
+  clean success** — returning to Rowan's execution review with both
+  facts stated. Closing on facts already effected is not continuing
+  dispatch; continuing dispatch after the discrepancy is known is
+  forbidden in all cases, the carve-out included.
+  (Pre-lift, GR-6's discipline is untouched and stricter in form:
+  §5.2's discrepancy path lifts neither hold at all.)
+
+### 6.3 The completion set and closure evidence
+
+**Completion is proven by the accounting surfaces; recorder rows
+corroborate** (OQ-3 as ruled; disposition §1.4 clause 2, standing).
+Success closure requires the poll set to show, complete: occurrence
+`ready`; execution `committed`; plan totals {eligible 1, **done
+1**, failed 0, blocked 0}; derived reserved returned to 0; and
+**exactly one new binding** for
+`5c589095-f812-48a2-8ab2-03ba2791f2b2:2a85f74f-353d-4c25-a86a-4a4db392868b`
+with the **bindings watermark at 1842** (P-8: exactly one change)
+— **plus** the P-6 discrepancy check run across the whole poll set
+(a closure is recorded clean only if no A-7 detection stands; a
+carve-out closure quotes the completion values **and** the
+discrepancy) — **plus** the GR-7 closing census. The verification is
+closed by the raw poll set itself; no summary substitutes for the
+raw polls.
+
+---
+
+## 7. Exposure limits, consolidated
+
+### 7.1 The counted-command ledger (package §3, as corrected by GR-4)
+
+| Step | Act | Counted |
+|---|---|---|
+| GR-0 | Execution census (§3.3) — reads only | 0 |
+| GR-1 | Voice checkpoint (§6) — reads only | 0 |
+| GR-2 | **The wake** (§5.1) — exactly one fresh probe command (`RequestPause` vs `alarm-wake-probe:nonexistent`, fresh command_id, client connector), including its expected rejected receipt | **1** |
+| GR-3 | Halt lift (§6) — settings-only envelope flip | 1 |
+| GR-4 | Queue unpause (§6) — cf-api PUT | 1 |
+| GR-5 | Verification protocol (§6) — polls, reads only | 0 |
+| GR-6a / GR-6b | Close (exactly one of): re-pause + re-halt | 2 |
+| GR-7 | Closing census — reads only | 0 |
+
+**Ceiling: counted production commands ≤ 5 on every path** (GR-4,
+as corrected). The probe's count of one is the command itself
+including its receipt — never zero, never more than one.
+**Observed effects are accounted separately, never as mutations and
+never as zero-proof** (correction 1 §3.3): the registration state,
+drive activity, and grant churn are recorded per poll with their
+read sources (P-6, P-1, P-5), as observed or not claimed. The
+execution record must carry the probe line (command type, target,
+fresh command_id, dispatch timestamp, connector route), its receipt
+verbatim, and each observed effect with its read source (GR-4's
+record requirement).
+
+**Explicit zero budgets (unchanged):** SubmitJob **0** — of any
+scope, ever (§9 restates it); exemption calls **0** (the exemption
+stands applied); containment transitions **0** (restoration is
+closed; re-stopping a revived chain after an abort is a future
+gate); settings changes beyond the two halt envelopes **0**;
+deploys **0**; queue changes beyond GR-4/GR-6 **0**; conflicts
+changes **0**.
+
+### 7.2 Money (Gate 4 law, at correction 2's restated scope)
+
+- Expected cost of the one segment: **8,022 units ≈ $0.008** (the
+  eligibility surface's live quote, re-read at §3.2 b16a and again
+  at GR-1). **Forecast line 12,808 units ≈ $0.013** (abort A-3);
+  **detection threshold 25,000 units ≈ $0.025** (abort A-4). Per
+  Gate 4's durable ruling: the forecast line is a deviation signal
+  and the threshold a DETECTION THRESHOLD — **neither is a cap**,
+  and no wording in this gate presents either as one. A-3/A-4 bound
+  **financial exposure**; they do not bound elapsed time (§6.1).
+- **Phase budget:** the segment's settled cost lands inside phase
+  `forever-pucked`'s frozen 13,500,000-unit budget (remaining
+  12,464,932 at baseline); the per-grant phase guard applies as
+  shipped; the $50 settings cap is an outer backstop, untouched.
+- **Physical backstop:** the Gemini prepay balance (Julie's AI
+  Studio prepay; $17.83 as of her Oct 29, 2026 screenshot —
+  HISTORICAL, not freshly verified by this filing, which makes no
+  calls to it). No automatic top-up exists or is authorized.
+- **Exposure reporting (package §8.3, all end states, three lines,
+  always):** (1) verified charges — the settled delta on both phase
+  surfaces, in units and dollars; (2) unverified estimates — any
+  attempt standing `estimated_unverified` at closing, stated
+  separately, never merged into line 1; (3) remaining phase room —
+  13,500,000 minus the closing settled/reserved position, from the
+  closing census.
+
+### 7.3 Quota
+
+The provider-attempt cap is **100/day** (PT day, boundary 07:00Z),
+an app-selected Reader policy cap (b13's provenance line). The
+cohort worst case for this gate is **12 slots** — the single
+grant's res

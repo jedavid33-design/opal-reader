@@ -1,0 +1,1 @@
+{"status": 200, "body": {"family": "bindings", "changes": [], "nextSeq": 1841, "highWatermark": 1841, "hasMore": false, "cursor": {"family": "bindings", "seq": 1841, "watermark": 1841}}, "body_raw": "{\"family\":\"bindings\",\"changes\":[],\"nextSeq\":1841,\"highWatermark\":1841,\"hasMore\":false,\"cursor\":{\"family\":\"bindings\",\"seq\":1841,\"watermark\":1841}}"}

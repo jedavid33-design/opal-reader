@@ -1,0 +1,1 @@
+{"status": 200, "body": {"family": "content", "changes": [], "nextSeq": 18, "highWatermark": 18, "hasMore": false, "cursor": {"family": "content", "seq": 18, "watermark": 18}}, "body_raw": "{\"family\":\"content\",\"changes\":[],\"nextSeq\":18,\"highWatermark\":18,\"hasMore\":false,\"cursor\":{\"family\":\"content\",\"seq\":18,\"watermark\":18}}"}

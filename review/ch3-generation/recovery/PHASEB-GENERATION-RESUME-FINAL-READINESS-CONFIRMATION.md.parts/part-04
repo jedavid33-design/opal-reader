@@ -1,0 +1,163 @@
+*The census is never shortened** by the wake's outcome: GR-0's
+  full read set, the containment/restoration verification, and the
+  grant-state checks remain mandatory in full whether the wake
+  verifies, fails, or is not needed (correction 1 §1.1).
+
+### 5.3 The non-null `armedAt` branch (GR-3, as ruled) — and its application to this record
+
+GR-3 as corrected (correction 1 §2.1): a non-null `armedAt` at
+GR-0, by itself, **satisfies nothing and omits nothing**. Exactly
+one no-probe branch exists, opening only when **both** hold:
+
+> **(i) Documented provenance** — the standing registration's
+> provenance is documented in the **restoration record**, written at
+> restoration time and standing before this gate opens, naming
+> (a) that a registration stands at the restoration's close (or
+> arose at an identified point the record covers), (b) its value as
+> read at the restoration's closing census, and (c) the identified
+> wake that produced it. A value merely consistent with a re-arm is
+> not documentation; an executor inference is not documentation.
+>
+> **(ii) A fresh, independently observed drive effect, pre-lift** —
+> after GR-0 and before either hold lifts, a drive effect
+> satisfying the **same** wake-verification requirement (the §5.2
+> recorder-row route), independently observed under the §5.2 polling
+> discipline and bound.
+
+If both hold, GR-2 is recorded satisfied-by-observation under GR-3
+and no probe is sent. If either fails, **the default is the probe** —
+unless the package's census law stops the gate first. No second
+wake is ever improvised.
+
+**Application to the actual record (§2).** The restoration record
+documents the opposite of a standing registration: the prior
+registration was deleted by C3's verified stop, the restoration's
+closing census read `armedAt` **null**, and the clear re-arms
+nothing. Two consequences, stated for Rowan's confirmation as part
+of the final review (the rule is quoted above at full strength; the
+application is this confirmation's reading of it against §2's
+facts):
+
+- **Condition (i) cannot be met for any registration arising after
+  the restoration.** A registration that appeared post-restoration
+  (e.g., through ordinary app use — a `PushPositionEvents` command
+  reaching `wake()`, package §5.3) arose after the restoration
+  record was written; that record contains no account of it, no
+  closing-census value for it, and no identified wake that produced
+  it. The no-probe branch is therefore **unavailable on this
+  baseline**, however plausible such a registration's origin looks.
+- **A non-null `armedAt` at the execution census is consequently a
+  STOP, not a branch.** It is a value the restoration record cannot
+  account for (package §4.0 item 4: "An `armedAt` the restoration
+  record cannot account for = STOP"; package §7.1; correction 1
+  §2.1's closing paragraph: the unaccounted case "remains what the
+  package's law already made it: a census deviation, STOP at
+  GR-0"). The gate preserves the reads and returns for ruling.
+
+And the expected case needs no branch at all: **`armedAt` null at
+census (the §3.2 baseline) → the single probe of §5.1**, verified
+under §5.2.
+
+### 5.4 Wake failure behavior (GR-7, PASS WITH CONDITIONS, as tightened)
+
+- **No observed effect within the bound** → STOP **before the
+  lifts**. Both holds stand (none was lifted; no re-hold is needed
+  or performed). The failure is recorded as a new W-4-class
+  observation — probe command_id, dispatch timestamp, the refusal
+  response, the registration state as read per surface, no pass and
+  no grant transition within the bound — with the **raw poll
+  evidence itself preserved unedited and returned with the record**
+  to Rowan and Julie (a summary of the polls is not a substitute
+  for the polls).
+- **Exactly one wake attempt.** No automatic retry; no
+  deploy-as-stimulus (struck from the escalation sequence in the
+  alarm-semantics line and never restored); no hold lift following
+  failed pre-lift verification.
+- **Later delivery is new evidence, not retroactive authorization:**
+  a pass arriving after the attempt has ended is observed, logged,
+  and reported as a tail-observation fact (under the standing holds
+  it can only churn the grant — $0, no dispatch); it does not
+  satisfy GR-2 for the ended attempt, does not revive the consumed
+  GO, and authorizes nothing. A new attempt is a new authorization.
+  (The §8 duty is the instrument that observes such a late arrival
+  on this gate's paths.)
+- Package §7 item 3 stands **as replaced by correction 1 §1.2**
+  (the 15-minute recorder-row test above — a readable registration
+  alone never satisfies it), and OQ-1 standing unruled is no longer
+  a live form of that item: OQ-1 is ruled (§1.3).
+
+---
+
+## 6. The execution sequence, consolidated (package §5, as corrected)
+
+Any STOP condition, at any step, ends the sequence where it stands;
+if the holds have been lifted, the §2.3.3 re-hold sequence runs
+first, in its order, before anything else. The executor's own
+tracing never clears its own stop.
+
+- **GR-0 — Fresh execution census** (§3.3). Branch selected by the
+  census (§4.3). STOP on any deviation before any mutation.
+- **GR-1 — Voice checkpoint** (package §5.2; reads only). Fresh
+  re-verification: chapter quote bound **26** / parked 0 / eligible
+  **1**; segment quote eligible **1** / **569** chars / expected
+  **8,022**, exclusions zero, `voice_prompt 0`; the segment's POV
+  resolving through its recorded cast voice (Alex → Gemini Charon,
+  no prompt). The quote digest is compared against `cdef2c7e…`:
+  agreement is corroboration; **disagreement is a STOP** (package
+  §7.2). The §3.2 baseline eligibility reads (b16a/b16b) already
+  stand at exactly these values; GR-1 re-reads them fresh in the
+  gate session — a baseline reading never substitutes for the
+  checkpoint.
+- **GR-2 — The wake** (§5). Exactly one probe, verified by the
+  recorder-row route within the 15-minute bound, or the gate stops
+  pre-lift under §5.4. (Branch outcomes from §4.3 apply first: on a
+  churn-state or neither-branch census the sequence never reaches
+  GR-2.)
+- **GR-3 — Halt lift.** Settings-only operative-envelope flip:
+  metadata = the live `/settings` read with only GENERATION_HALT
+  `"1"` → `"0"`; identical parts. Read-backs, all exact: `/health`
+  generation `enabled`, build unchanged; **etag unchanged**; parts
+  byte-identical; observability intact (if the flip resets
+  observability, the standing deploy-law PATCH is applied inside
+  this step's single counted mutation, as the flip's own repair,
+  and reported); GENERATION_HALT `"0"`; 10 bindings; queue still
+  paused.
+- **GR-4 — Queue unpause.** cf-api PUT `delivery_paused: false`;
+  read-back confirms. Immediately before this step, the quota-day
+  re-check if the PT day has rolled since GR-0 (§3.3). **The lifts
+  run in this order — halt lift, then unpause** — as the package's
+  sequence fixes them; the §2.3 protocol's clock keys to the
+  unpause read-back, "the second hold lift," the last
+  executor-controlled instant. From that read-back, the protocol
+  runs.
+- **GR-5 — Monitored generation (package §2.3).** Polls of the full
+  P-1..P-9 set at least every 5 minutes, preserved raw. The
+  executor sends **nothing** during GR-5: no command, no second
+  wake, no nudge. Controls, all live simultaneously:
+  - **The sliding stall test** (§6.1);
+  - **The three-hour checkpoint** (§6.1);
+  - **Abort conditions A-1…A-7** (§6.2) — any one, at any poll,
+    fires the §2.3.3 re-hold **in its exact order** (re-pause and
+    read back; re-halt and read back; closing capture; ends HELD;
+    §7.3 three-line exposure report).
+- **GR-6a — Success close** (on §6.3's closure): re-pause the queue
+  (read-back), then re-halt (restore envelope; read-backs mirrored
+  from GR-3: generation `halted`, etag unchanged, observability
+  intact). The default, and the only form proposed, is **holds
+  restored**; a lifted end state would require Julie's GO to name
+  it expressly (§9), and this confirmation does not propose it.
+- **GR-7 — Closing census.** The full §3.3 read set repeated.
+  Expected deltas from GR-0, and **only** these (package §5 GR-7):
+  plan totals done 1 (§6.3); job/occurrence at their completion
+  values; bindings watermark **1842** with exactly the one idx-26
+  binding; phase settled increased by exactly this segment's
+  recorded cost, reserved figures returned to baseline; quota
+  dispatched for the PT day increased by exactly this segment's
+  attempt count; the alarm standing re-registered by the chain's
+  own re-arm cycle (value recorded, not predicted). Any other delta
+  is classified in the record before the gate is called closed
+  (package §7.6). The closing record opens the §8 observation duty.
+
+### 6.1 The two timing controls (OQ-6 as ruled — correction 2 §2; checkpoint ADOPTED)
+
+- **Primary — the sliding ≥35-minute no-progress test** (pack
