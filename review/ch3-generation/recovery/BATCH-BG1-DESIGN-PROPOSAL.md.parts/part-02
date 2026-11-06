@@ -1,0 +1,167 @@
+AILED` /
+  `BATCH_STATE_CANCELLED` / `BATCH_STATE_EXPIRED`, or a done response
+  whose single record carries an error or no audio) →
+  `noteSpendOutcome(failed_known, detail: batchState)` + report
+  `provider_error` with the batch state (§4.2), subject to the
+  error-classification surface in §4.3.
+- Done + `BATCH_STATE_SUCCEEDED` with audio → S7.
+**Adapter EXISTING; the drive-pass poll hook TO-BUILD.**
+
+**S7 — Commit through the shared machinery.** A successful poll's
+audio (WAV bytes + parsed duration — the format pin already matches)
+enters the D6 executor's existing terminal path: execution record →
+flush to R2 → verify → `store.commitVerified` →
+`coord.validateAndBind` + binding projection
+(generation/binding-projection.mjs), with `noteSpendOutcome(success)`
+— the identical flush-before-commit discipline Standard uses
+(generation/d6-executor.mjs header; commit sites :640-675 area).
+Successes are never re-reported through `handleReport` (the standing
+D6 rule). **Machinery EXISTING; the connection from a batch-sourced
+result TO-BUILD.**
+
+**S8 — Completion accounting.** `handleReport` closes the grant;
+`settleReservationsForGrant` settles the grant's quota reservations
+at report (coordinator.mjs:2502-2509); settled cost is computed from
+the produced audio's actual duration under the lane-blind model
+(225 units per audio second, gen-constants.mjs:64-65) — identical to
+Standard, because B-1 is open and no differential is asserted.
+**EXISTING.**
+
+**S9 — Reconciliation (ambiguity adjudication).** The legacy
+`reconcileBatch` (executor.mjs:224-240) — enumeration by display
+name, adoption on match, nothing on no-match — exists but has **no
+caller in any entry of the tree** (verified by search: no call site
+outside its own definition). The D6 design wires adjudication as an
+operator-invoked procedure (§3.4), not as an automatic executor
+behavior. **Procedure EXISTS as code; its wiring TO-BUILD.**
+
+**S10 — Halt behavior.** Every adapter method begins with
+`assertGenerationEnabled(env)` (adapters.mjs:365, :410, :443): with
+`GENERATION_HALT = "1"`, submissions, polls, and enumerations all
+throw before any provider contact. A halt therefore freezes batch
+progress in place — maps durable, no spend, no state corruption —
+and progress resumes from the durable rows when the halt lifts.
+**EXISTING**, and load-bearing for §6.
+
+---
+
+## 2. Quota semantics — the B-G1 settlement
+
+The ruling requires B-G1 to settle what Batch calls count against
+the provider-attempt cap. The cap itself: `PROVIDER_ATTEMPT_DAILY_LIMIT
+= 100` authorized provider dispatches per Pacific-Time day
+(generation/gen-constants.mjs:20-31) — an app-selected Reader policy
+cap, pinned as a constant, explicitly **not** a verified Google
+limit. It counts a different thing from the coordinator's
+grants-per-day quota. Day totals are *derived* from the
+`d6_provider_dispatches` ledger (generation/quota-budget.mjs), which
+is what makes the count reconcilable after the fact: the reconcile
+surface recomputes consumption from dispatch rows, so any call class
+that must count must write a dispatch row, and any class that writes
+none is verifiably uncounted.
+
+### 2.1 What the cap protects (the principle the rules follow)
+
+The cap exists to bound (a) provider-side synthesis volume the
+account can be billed for in a day, and (b) spend authorization —
+the rate at which the system may commit Julie's prepay. It does not
+exist to bound read traffic. The counting rule therefore keys on
+**authorized segment-syntheses, not HTTP calls**:
+
+### 2.2 The rules (PROPOSAL — decision D-1 for Rowan)
+
+- **R-Q1 — A batch submission counts as its segment count.** The
+  POST that submits a batch authorizes the synthesis of every
+  segment in it. Under the current adapter the segment count is
+  exactly 1 (§1.0), so a submission counts as **1 dispatch** —
+  precisely parallel to a Standard `synthesize` call, which is 1
+  call authorizing 1 segment. The rule is stated in segment terms so
+  it survives any future grouped adapter unchanged: dispatches
+  counted = segments submitted. The submission also consumes **1
+  unit of the segment's 12-attempt budget**
+  (`SEGMENT_ATTEMPT_BUDGET`, gen-constants.mjs:13-14: "≤ 12 attempted
+  calls per segment across split tree + repair chain") and one slot
+  of its grant's cohort reservation — the reservation machinery
+  (`reserveForGrant` / cohort bounding in quota-budget.mjs) is
+  already lane-blind and needs no change.
+- **R-Q2 — The count is recorded at the fence step, before the
+  POST.** The dispatch-ledger row and the genstore attempt record
+  (reserved → dispatching) are written bound to `fenceBatchSubmit`,
+  ahead of the provider call. Reasons: (a) the fence is the last
+  durable moment before the one paid action — it exists precisely
+  to cover the crash window after it (coordinator.mjs:3743-3745);
+  counting there means every possibly-executed submission is
+  counted, including one whose POST outcome is never learned;
+  (b) the failure direction is safe — a crash between fence and
+  POST over-counts by at most 1 (a dispatch recorded that may never
+  have happened), while counting after the POST under-counts in
+  exactly the ambiguous cases the cap most needs to see; (c) it
+  makes the invariant *every live-or-ambiguous batch map has exactly
+  one counted dispatch* mechanically checkable by the reconcile
+  surface. The alternative (count at POST attempt, Standard-style)
+  was considered and rejected for (b): Standard can afford
+  dispatch-time counting because its unknown outcomes are surfaced
+  by the lease machinery against an attempt row written at the same
+  moment; Batch's ambiguity can persist indefinitely (§3), so its
+  count must be durable *before* the uncertainty begins.
+- **R-Q3 — Polls count 0.** `getBatch` authorizes no synthesis and
+  moves no spend; the legacy code already treats polling as free
+  (executor.mjs:142). Polls are instead bounded *structurally*: at
+  most one poll per submitted map per drive pass (§5.2), and every
+  poll's outcome is recorded on the pass outcome — so poll volume is
+  fully observable even though uncounted, and if observed volume
+  ever argues for a count, that is a new ruling on evidence, not a
+  silent change.
+- **R-Q4 — Retrieval counts 0, because there is no retrieval
+  call.** In this adapter the successful poll *is* the retrieval:
+  the audio rides the terminal `getBatch` response
+  (adapters.mjs:425-439). Generalized rule, stated for any future
+  adapter that splits retrieval out: a call that only moves
+  already-authorized results counts 0 — it authorizes nothing.
+- **R-Q5 — Reconciliation enumerations count 0.**
+  `listBatchesByDisplayName` (adapters.mjs:441-457) is a read. It is
+  bounded procedurally instead: enumerations run only inside the
+  adjudication procedure (§3.4), at most once per ambiguous map per
+  adjudication run, and each run is recorded.
+- **R-Q6 — Known-rejected submissions stay counted.** A submission
+  the provider refuses with an HTTP answer was still an authorized
+  dispatch attempt (the provider processed a synthesis request and
+  refused it); its dispatch row stands, exactly as a Standard
+  dispatch that returns an HTTP error stays counted. Only the
+  segment's *cost* settles to its evidenced outcome (§3.2); the
+  day-cap count does not refund. (This matches the cap's purpose:
+  it bounds attempts, not successes.)
+
+### 2.3 Reconcile verifiability
+
+Under R-Q1..R-Q6, the existing reconcile derivation needs no new
+concepts: batch dispatch rows join `d6_provider_dispatches` under
+the same schema (attempt/grant/occurrence/plan/execution/day keys),
+`derivedDayTotals` counts them identically, and the §2.2 invariant
+(one counted dispatch per fence generation) is a checkable
+reconciliation assertion for B-G2's accounting tests (§8). No
+batch-specific counter exists anywhere in the design — deliberately:
+a second counter is a second thing to drift.
+
+---
+
+## 3. Ambiguity accounting
+
+Batch's defining risk is the submission whose outcome is unknown.
+The design treats ambiguity as an *accounting state with a governed
+lifecycle*, built entirely on machinery that already exists.
+
+### 3.1 How ambiguity arises (complete enumeration)
+
+1. **Transport loss on the POST** — no HTTP answer:
+   `noteBatchAmbiguous(submit_transport_unknown)` (legacy shape,
+   executor.mjs:203-206).
+2. **Crash between fence and outcome note** — a row found `fenced`
+   with no outcome on a later pass is converted:
+   `noteBatchAmbiguous(fence_without_outcome)` (executor.mjs:
+   174-180). The POST may or may not have happened.
+3. **Accepted but unnamed** — the provider accepted, but returned no
+   valid job name (adapter throws `noRetry` 502, adapters.mjs:
+   403-406): `noteBatchAmbiguous(accepted_unnamed)` per §1.1 S5.
+4. **Crash between provider acceptance and `noteBatchSubmitted`** —
+   externally indistinguishable from (2); same treatment. (Cases 

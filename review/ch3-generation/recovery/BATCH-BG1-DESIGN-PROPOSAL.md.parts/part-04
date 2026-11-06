@@ -1,0 +1,173 @@
+Standard POLICY_BLOCK enters the F3 design: recursive splitting
+without voice substitution (generation/policy-split.mjs —
+`synthesizeSegment` / `synthesizeLongSegment`, split ceilings
+`SPLIT_MAX_DEPTH 4`, `SPLIT_MIN_PART_CHARS 50`, gen-constants.mjs:
+11-14), and occurrences that remain blocked are advanced by the
+server-owned repair chain — repair jobs (kind `repair`) whose
+completion spawns follow-on repair jobs server-side
+(coordinator.mjs:2516-2550).
+
+For Batch, two facts gate the design:
+
+1. **The classification does not currently survive the adapter.**
+   `getBatch` collapses a done response whose single record carries
+   an error — of any kind — into `BATCH_STATE_FAILED`
+   (adapters.mjs:431-436). A provider policy block and a provider
+   fault are indistinguishable at the terminal poll today.
+   **TO-BUILD (B-G2):** the terminal poll must surface the item
+   error's classification on the attempt's terminal record (at
+   minimum: policy-block vs other), without changing any success
+   shape. Until that surface exists, a batch item failure can only
+   be `provider_error`, and F3 entry for Batch is impossible — this
+   is a hard prerequisite, named here so B-G2 cannot silently skip
+   it.
+2. **Repair follow-ons inherit the parent lane.**
+   coordinator.mjs:2536 creates the follow-on repair job with
+   `lane: jobRow.lane`. Followed literally, a Batch job's blocked
+   occurrence would spawn Batch repair jobs.
+
+**PROPOSAL:** a batch occurrence reported `policy_block` (via the
+new classification surface) enters the *same* server-owned chain,
+but the repair job for a batch-blocked occurrence is created on the
+**Standard lane**, as an explicit, designed deviation from lane
+inheritance at coordinator.mjs:2536 (a TO-BUILD change, fenced to
+the batch-parent case). Reasons: (a) F3's split machinery is an
+inline split-and-synthesize loop in the Standard executor path —
+it has no batch analog, and a ≤16-leaf split tree on the Batch lane
+would be ≤16 separate fenced submissions, each carrying its own
+ambiguity surface, for work whose entire virtue is being small and
+immediately verifiable; (b) repair volume is rare and small by
+construction (bounded by REPAIR_MAX_RETRIES inside the 12-attempt
+budget), so Batch's asynchrony buys nothing there; (c) one repair
+semantics for both lanes keeps the chain's accounting — one budget,
+one retry bound, one commit path — single and auditable. The
+alternative (batch-resubmit the split leaves) was considered and
+rejected for (a) and (c). Repairs on the Standard lane count
+against the same day cap and segment budget as any Standard
+dispatch — the accounting never forks by lane (§2.3).
+
+### 4.4 Exactly-once commit discipline for retries
+
+Retries are safe because commit is fenced at four independent
+layers, all EXISTING: the spend intent (primary key (job,
+occurrence, generation); a known-outcome intent is never re-spent —
+executor.mjs:120-138); the batch fence (§3.1 — an occurrence's
+re-grant polls its existing map, never a second submission,
+coordinator.mjs:3743-3745); generation supersession (a succeeded
+generation requires an explicitly audited superseding resolution —
+the original permit is never reused, coordinator.mjs:3830-3843);
+and the binding gate itself (commit runs `validateAndBind` with
+create-if-absent semantics and revision-key validation — a second
+commit for the same occurrence meets the conflict gate and never
+overwrites, coordinator.mjs binding section; flush-before-commit
+means bytes are verified in R2 before any binding exists). A repair
+job in a new job scope therefore *cannot* double-commit an
+occurrence the original job already bound; the worst case is a
+conflict row, which is visible, not silent.
+
+---
+
+## 5. Latency and stall classification
+
+### 5.1 What the record does and does not say
+
+No document in the local record states a provider batch latency
+figure, window, or SLA — the design record's only characterization
+is the client's own wording, "Batch waits for a batch window"
+(scoping §4.2). B-G1 invents none. Everything below is parametric:
+thresholds are Reader-side operational choices, proposed as
+PARAMETERs for Rowan to fix, and the classification works for any
+values chosen.
+
+### 5.2 The polling driver (PROPOSAL)
+
+Polls ride **drive passes** — the coordinator alarm's pass, which
+runs `driveOnce` (worker-entry-prod-d6.js:1939-1962; the pass is
+recorded per pass in `d6_drive_passes`). There is no second engine:
+no cron, no per-batch queue messages, no polling loop inside a
+request. Rules:
+
+- A non-terminal batch plan is selected by `driveOnce` like any
+  non-terminal plan (service.mjs:1047-1049); each pass polls each
+  `submitted` map of the driven job **at most once** (R-Q3's
+  structural bound).
+- The pass cadence while work is outstanding is the coordinator's
+  schedule cadence (production-observed at roughly ten minutes
+  across the S1 window and the post-resume watch — recorder
+  evidence, not a provider fact). The latency floor of any batch
+  completion is therefore one pass interval; the design accepts
+  this rather than adding a poller.
+- **W-4 degradation, designed-in:** every clock in §5.3 counts
+  *observed passes* (recorder rows) and wall-clock since the last
+  observed pass — never assumed passes. If alarm delivery fails
+  (the W-4 class: registration standing, delivery unobserved), no
+  polls occur, no spend occurs, no stall clock advances, and no
+  timeout fires: batch work is *inert, not endangered*, while the
+  chain is silent. On chain recovery, polling resumes from the
+  durable map rows exactly where it left off. Batch correctness
+  never depends on alarm punctuality — only on durable rows — which
+  is the W-4 lesson applied as a design constraint.
+
+### 5.3 Progress signals
+
+Per submitted map, each pass records: the provider state string
+(from `getBatch`'s `metadata.state`), whether the map transitioned,
+and the poll outcome class (pending / poll-error / terminal). A
+map's `updated_at` (coordinator.mjs batch_maps) and the per-pass
+recorder rows are the durable evidence. "Movement" for the stall
+test means: a provider-state change, a map transition, or a
+terminal outcome — recorded on an observed pass.
+
+### 5.4 Classifications (PROPOSAL — parameters are decision D-4)
+
+- **BATCH-IN-FLIGHT** — map `submitted`, non-terminal provider
+  state, age below P-EXT. Normal; no action, no reporting beyond
+  pass outcomes.
+- **BATCH-LATENCY-EXTENDED** — age ≥ **P-EXT** (PARAMETER; Wren
+  proposes 1 hour) without a terminal state. Informational: named
+  on drive outcomes so normal Batch latency is never misread as an
+  anomaly by normal-ops observation (the scoping package's R-B5
+  concern, answered by naming the normal case).
+- **BATCH-STALLED** — no movement (§5.3) across **P-STALL-PASSES**
+  consecutive *observed* passes (PARAMETER; Wren proposes 12) AND
+  wall-clock age ≥ **P-STALL-AGE** (PARAMETER; Wren proposes 6
+  hours). Effect: escalation to observation (the normal-ops watch
+  surfaces it to Julie + Rowan); the plan is **not** auto-halted,
+  the job is **not** failed, and the provider job is **not**
+  abandoned — EXPIRED is the provider's own bound and remains the
+  only latency-driven terminal. Standard operations are untouched.
+  A stalled classification clears on any subsequent movement.
+- **BATCH-AMBIGUITY-OPEN** — an `ambiguous` map aged ≥ **P-AMB**
+  (PARAMETER; Wren proposes 24 hours) without adoption. The §3.3
+  job block made visible at program level; adjudication (§3.4) is
+  the only action it calls for.
+- **NO-PASS-OBSERVED** — no drive pass recorded in the observation
+  window while batch work is outstanding. Explicitly **not** a
+  provider stall and not a batch classification failure: it is the
+  alarm-chain class (W-4 family), handled by the chain's own
+  observation, and batch clocks provably do not advance under it
+  (§5.2). Naming it here prevents the category error of blaming
+  the provider — or the batch design — for a silent chain.
+
+---
+
+## 6. Rollback disposition
+
+"Roll back" means something different at each stage, and one fact
+constrains all of them: **a submitted provider batch job cannot be
+un-submitted.** There is no cancel method in the adapter, and a
+submission the provider accepted will run (or expire) provider-side
+regardless of what any Reader build does. Rollback design is
+therefore about Reader-side state and future behavior, never about
+recalling spend already authorized.
+
+### 6.1 Per-stage disposition
+
+- **B-G1 (this design)** — paper. Rollback is deletion of the
+  proposal. Nothing live exists.
+- **B-G2 (local build)** — the build is discarded or simply never
+  deployed. Production is untouched by construction.
+- **B-G3 (staging)** — rollback is redeployment of the prior staging
+  build under the staging build-identity discipline. Staging's
+  batch state lives in staging's own coordinator store and under
+  the `smoke-p8/` R2 key prefix (host/adapt

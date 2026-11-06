@@ -1,0 +1,163 @@
+
+   (Wren proposes 12 synthetic segments — enough for the §8-forced
+   cases: success, known failure, policy block, ambiguity, adoption)
+   and a unit ceiling **P-TEST-UNITS** computed at the lane-blind
+   upper bound (`upperBoundAttemptMicro` summed over the test
+   segments, so the ceiling is honest before any provider fact
+   exists), drawn — under the fail-safe default — against the
+   production prepay balance and reported in the B-G3 record in the
+   three-line form. No staging provider call of any kind occurs
+   before that GO. (Staging's `GENERATION_HALT` also stands at "1";
+   B-G3's deploy act must handle staging's own halt under its own
+   authorization — production's holds are not staging's and are
+   never touched by a staging act.)
+
+---
+
+## 8. B-G2 test list (preview — named intents, not code)
+
+The ruling names B-G2's required families: throw-safe, crash-window,
+reconciliation, accounting, repair, and Standard regression. B-G1
+enumerates the intents B-G2 must discharge; the battery itself is
+B-G2's deliverable. (Standing caveat, carried from the program's
+lessons: the DO test harness is no evidence for empty-result paths —
+real DO SQLite `.one()` throws where fakes may not — so throw-safe
+coverage of batch read paths is explicit, not assumed.)
+
+**Throw-safe family**
+- T-1: Every new batch read path (map lookup, workView batch
+  projection, terminal-record read) behaves correctly on
+  empty-result throws — no null-fallback assumptions.
+- T-2: Fence transaction atomicity: a throw inside the fence step
+  (including the R-Q2 quota write) leaves neither a map row nor a
+  dispatch row — both or neither.
+- T-3: Every `note*` transition against a missing, superseded, or
+  wrong-state map refuses cleanly and writes nothing.
+- T-4: Adapter throws at every stage (submit transport, submit
+  HTTP, poll, enumeration) leave coordinator state exactly as the
+  relevant §3/§4 rule prescribes.
+
+**Crash-window family**
+- C-1: Crash between fence insert and POST → next pass converts
+  `fence_without_outcome` to ambiguous; a POST is provably never
+  attempted on the fence alone.
+- C-2: Crash during the POST (transport ambiguity) → ambiguous;
+  zero reports filed; spend intent open; block in force (§3.3).
+- C-3: Crash between provider acceptance and `noteBatchSubmitted`
+  → indistinguishable from C-1 by construction, and resolved only
+  by adoption (§3.4) — the test proves no other exit is taken.
+- C-4: Crash between terminal poll and commit → recovery resumes
+  from the execution record; the map is not re-polled into a
+  second commit and the submission is never repeated.
+- C-5: Crash between commit and report → binding stands; report
+  recovery does not double-bind (§4.4's conflict gate).
+
+**Reconciliation family**
+- R-1: Enumeration match → adoption with evidence string; polling
+  resumes; cost settles from actual duration on completion.
+- R-2: Enumeration no-match → byte-identical state before/after
+  (state, spend, counts, exposure) — absence proves nothing,
+  enforced as a test, not a hope.
+- R-3: Multiple matches → the D-6 rule as Rowan fixes it (adopt-
+  first, or adopt-earliest if the adapter is extended) is the
+  behavior pinned; the adjudication record carries the exposure
+  note either way.
+- R-4: Never-accepted resolution remains non-callable: no route,
+  no flow in the build can invoke `resolveBatchNeverAccepted`
+  with satisfiable evidence; the fail-closed throw is exercised.
+
+**Accounting family**
+- A-1: One submission writes exactly one dispatch row, consumes
+  exactly one segment-attempt unit and one reservation slot,
+  recorded before the POST (R-Q1/R-Q2 ordering asserted from the
+  ledger, not from logs).
+- A-2: N polls and M enumerations move no counter (R-Q3/R-Q5),
+  while every poll outcome is present on pass outcomes.
+- A-3: An ambiguous fence ledgers at upper bound in the
+  unverified-exposure surfaces from the moment it fences (§3.2).
+- A-4: Mixed Standard+Batch day: derived day totals equal the
+  stored counters; reconcile is clean; the PT day-boundary case
+  (fence minutes before midnight, POST after) attributes the
+  dispatch to the fence's day under R-Q2, with the straddler
+  discipline applying at adoption (§3.4).
+- A-5: A known-rejected submission's dispatch stays counted
+  (R-Q6) while its cost adjudicates to the evidenced outcome.
+
+**Repair family**
+- F-1: A batch item failure carrying the policy-block
+  classification (the §4.3 TO-BUILD surface) reports `policy_block`
+  and enters the server-owned chain; without the classification it
+  reports `provider_error` only — the prerequisite is tested, not
+  assumed.
+- F-2: The repair job for a batch-blocked occurrence is created on
+  the Standard lane (the D-3 deviation), its split leaves commit
+  through the inline split machinery, and the occurrence reaches
+  ready.
+- F-3: The shared 12-attempt budget and REPAIR_MAX_RETRIES bound
+  hold across the lane crossing (batch submission + repair
+  attempts counted in one budget).
+- F-4: A chain that exhausts its budget leaves the occurrence
+  blocked and visible — never silently dropped, never resubmitted
+  on the batch lane by the chain itself.
+
+**Standard regression family**
+- S-1: The standing batteries (containment, P2 instrumentation,
+  R5A, V-3 cold-restart shapes) pass unchanged on the candidate
+  tree.
+- S-2: Standard end-to-end (intent → grant → dispatch → commit →
+  binding → settle) is behaviorally identical with the batch
+  branch present.
+- S-3: On a Standard-only build of the same tree, the three
+  refusal layers refuse batch dispatches exactly as today — the
+  B-G4 inertness proof, rehearsed in harness before it is claimed
+  in production.
+- S-4: Halt mid-flight: with `GENERATION_HALT` flipped to "1"
+  while maps are `submitted`, no provider call of any class occurs
+  (S10), maps wait durably, and progress resumes on lift with no
+  re-submission.
+
+---
+
+## 9. Decisions requested of Rowan
+
+- **D-1** — The quota counting rules R-Q1..R-Q6 (§2.2): submissions
+  count as their segment count (today: 1), recorded at the fence
+  step; polls, retrievals, and enumerations count 0 and are bounded
+  structurally/procedurally instead.
+- **D-2** — The ambiguity settlement (§3): upper-bound ledgering,
+  the per-job fail-closed submission block, adoption as the only
+  designed exit, and no dependency on never-accepted resolution.
+- **D-3** — The repair-lane deviation (§4.3): batch-blocked
+  occurrences repair on the Standard lane despite lane inheritance
+  at coordinator.mjs:2536 — plus confirmation that the §4.3
+  error-classification surface is a B-G2 prerequisite.
+- **D-4** — The stall parameters (§5.4): P-EXT (proposed 1 h),
+  P-STALL-PASSES (proposed 12 observed passes), P-STALL-AGE
+  (proposed 6 h), P-AMB (proposed 24 h).
+- **D-5** — The rollback standing disposition (§6.1):
+  INVENTORY-AND-HOLD for in-flight maps, adopted in advance at the
+  arming gate; and whether B-G2 should additionally design an
+  explicit terminal map state for abandoned submissions.
+- **D-6** — The multiple-match adoption rule (§3.4): adopt-first
+  (legacy behavior, exposure note carried) vs adopt-earliest
+  (requires extending the adapter's match shape in B-G2).
+
+---
+
+## 10. What B-G1 does NOT do
+
+No implementation. No allowlist change — `D6_LANE_ALLOWLIST` stands
+at `["standard"]` and this proposal never touches it. No staging
+deployment, no staging secret provisioning, no provider call of any
+kind, no production read beyond the read-only binding/health checks
+cited in §7.3. No GO is presented to Julie by this document; B-G1's
+own acceptance is Rowan's design ruling, and B-G2's build, B-G3's
+staging proof (with its own GO and test budget), and B-G4's arming
+act each remain separately gated under the ruling. **B-1 remains
+OPEN:** provider Batch pricing is nowhere assumed, the cost model
+stays lane-blind, and if pricing is ever to be settled it is
+settled at B-G3 on evidence gathered under the bounded test budget
+— or it remains open, and Batch's case continues to rest on its
+execution shape, not on savings.
+
+— Wren (drafted 2026-11-06; B-G1 design only)

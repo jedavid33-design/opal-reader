@@ -1,0 +1,169 @@
+2
+   and 4 are one case to every later observer; the design does not
+   pretend to separate them.)
+
+In all cases: the fence stands, the map is `ambiguous`, the spend
+intent stays open with no outcome noted, and **the map may never be
+resubmitted** (coordinator.mjs:3784-3788, in terms).
+
+### 3.2 How an ambiguous submission is ledgered
+
+- **Day-cap:** already counted — exactly 1 dispatch, recorded at the
+  fence step (R-Q2). Ambiguity never creates a second count and
+  never erases the first.
+- **Cost:** the attempt's cost is held at its **upper-bound
+  estimate** (`upperBoundAttemptMicro(chars)` =
+  `round(chars/10 × 225)`, gen-constants.mjs:78-84) under the
+  existing unknown-billing accounting class — the same posture as a
+  Standard attempt whose billing is unknown: the phase projection
+  carries it as unverified exposure (the `estimated_unverified`
+  accounting the genstore maintains and the operator dispositions
+  through `reconcileUnknown` / `adjudicateEstimated`,
+  generation/genstore.mjs:521, :594-600, exposed at the operator
+  route with an `authorizationRef`). An ambiguous batch attempt is
+  therefore *visible in every accounting surface at its worst-case
+  value* from the moment it fences — never invisible, never
+  settled-at-a-guess.
+- **Segment budget:** the fenced submission has consumed 1 of the
+  segment's 12 attempts (R-Q1). It stays consumed while ambiguous —
+  the budget, like the cap, fails closed.
+
+### 3.3 The fail-closed block (PROPOSAL — decision D-2)
+
+While **any** `batch_maps` row of a job is `ambiguous`, that job
+makes **no further batch submissions**. Other occurrences of the job
+already `submitted` continue to poll and commit normally (their
+spend is already fenced and counted); no *new* spend is authorized
+under unresolved uncertainty. Reasons: the job is the chapter-scope
+unit of work; ambiguity is a statement that the account may already
+have been charged for work we cannot see, and compounding it
+segment after segment converts a one-segment unknown into a
+chapter-sized one. The block is per-job, never global: other jobs —
+and the entire Standard lane — are unaffected. An ambiguous map
+whose age exceeds the adjudication-surfacing parameter (§5.4,
+PARAMETER P-AMB) is reported on drive outcomes under the
+classification **BATCH-AMBIGUITY-OPEN** — an enduring, named,
+observable state in the spirit of `halted_unknown`, not a silent
+stall.
+
+### 3.4 Adjudication — the only exits from `ambiguous`
+
+1. **Adoption (the designed exit).** An operator-invoked
+   adjudication run (the wiring of S9: an authorizationRef-carrying
+   operator act, mirroring the `/v2/d6-reconcile-unknown`
+   discipline) enumerates the provider's batches by the map's
+   display name. On a match, `adoptBatchByLookup` transitions the
+   map to `submitted` with the provider name and the evidence
+   string `display_name:<name>` (coordinator.mjs:3795-3800), the
+   dispatch's day attribution is confirmed against the fence
+   timestamp under the quota ledger's existing straddler discipline
+   (a day is assigned only where the surviving evidence proves it;
+   never guessed — quota-budget.mjs bootstrap/straddler law), and
+   normal polling resumes. The adopted job's eventual completion
+   settles its cost from actual audio duration exactly like any
+   success (§1.1 S8); a terminal failure on the adopted job
+   adjudicates its cost to the evidenced known-failure outcome
+   through the same operator machinery. No-match changes **nothing**
+   — no state, no spend, no count (executor.mjs:224-240 contract:
+   "a missing match proves nothing").
+   **Multiple matches (flagged, decision D-6):** the legacy
+   procedure adopts `matches[0]`. All matches share one display
+   name — one grant, one occurrence — so any match is the same
+   logical submission's audio; but the adapter returns only
+   `{name, displayName}` per match, with no creation time
+   (adapters.mjs:450-457), so "first" is enumeration order, not
+   proven earliest. B-G1 records the residual honestly: if the
+   provider executed the POST twice (the only way two live matches
+   exist), adopting either yields this segment's audio and the
+   other becomes an orphaned provider job whose cost, if any, is
+   inside the one upper-bound exposure already ledgered only if it
+   equals one job's cost — a second executed job could exceed it.
+   Rowan is asked to fix the rule: adopt-first as legacy does, or
+   require B-G2 to extend the adapter to return creation timestamps
+   and adopt-earliest. B-G1 proposes adopt-first **with the
+   exposure note carried on the adjudication record**, because the
+   double-execution precondition itself requires a provider-side
+   retry invisible to us — but this is Rowan's call, not settled
+   here.
+2. **Never-accepted resolution — NOT available, by design.**
+   `resolveBatchNeverAccepted` exists in the coordinator
+   (coordinator.mjs:3801-3855) but its evidence gate cannot be
+   satisfied: the adapter's `verifyNeverAcceptedEvidence` throws
+   unconditionally, because no public provider API proves
+   non-acceptance (adapters.mjs:459-469), the route is not exposed
+   over HTTP, and Rowan's Part 1 decisions record accepts the
+   fail-closed posture for dark staging only and requires it be
+   "addressed explicitly before Batch rescue is enabled or any flow
+   depends on a 'never accepted' assertion" (gen-pkg-1
+   part1-decisions.md, item 3). **B-G1 therefore designs no
+   dependency on it:** a never-matched ambiguous map has no
+   designed exit other than a future evidence ruling outside this
+   gate's scope. The job stays blocked (§3.3), the exposure stays
+   ledgered at upper bound (§3.2), and the state stays named and
+   observable (§5.4). This is stated plainly because it is the
+   strongest argument for the fence discipline and the per-job
+   block: under current evidence law, **ambiguity can be terminal
+   for a job**, and the design's job is to make that outcome cheap,
+   bounded, visible, and non-contagious — which §§3.2-3.3 do.
+
+---
+
+## 4. Retry behavior
+
+### 4.1 The three retry questions, kept separate
+
+"Retry" conflates three unlike things; the design rules each on its
+own:
+
+**(a) Re-submitting the same submission — NEVER.** A fenced
+submission is never posted twice (coordinator.mjs:3784-3788;
+executor.mjs:174-180). There is no retry of a POST whose outcome is
+unknown, at any layer, under any flag. Adoption (§3.4) is a
+continuation, not a retry.
+
+**(b) A known-rejected submission.** The provider's HTTP refusal is
+a known outcome: map `rejected`, intent `failed_known`, occurrence
+reported `provider_error` (executor.mjs:193-202). The `rejected`
+map is terminal *within its job and generation* — a later pass
+skips it (executor.mjs:170-171). Any further attempt at the
+occurrence happens the way known failures are retried everywhere in
+D6: as a **new job in the server-owned repair chain** (§4.3), whose
+fresh job scope carries fresh intent and fence rows keyed to the
+new job — no mutation of the rejected map, no reuse of its permit.
+Retryability classification follows the existing repair law:
+retryable known failures (the HTTP 5xx class and stage failures)
+return repair markers; the chain is bounded by `REPAIR_MAX_RETRIES
+= 3` within the shared 12-attempt segment budget
+(gen-constants.mjs:12-18; d6-executor.mjs:52-58).
+
+**(c) A submitted batch that reaches a terminal provider state.**
+`BATCH_STATE_FAILED` / `BATCH_STATE_EXPIRED` / `BATCH_STATE_CANCELLED`
+(adapters.mjs:422) are known outcomes: intent `failed_known`,
+occurrence reported `provider_error` with the batch state (legacy
+pollBatch, executor.mjs:144-152). Retry, if any, is again
+chain-level only: a repair job may make a *fresh* batch submission
+for the occurrence (new fence, new counted dispatch, new
+attempt-budget unit) — the dead provider job is never polled again
+and never "resumed". CANCELLED is treated identically: no cancel
+method exists in the adapter (nothing in this system cancels a
+provider batch), so a cancelled state can only arrive from outside
+this system; it is known-terminal for the submission and
+chain-retryable like FAILED. EXPIRED likewise — expiry is the
+provider's own latency bound doing its work, and the stall design
+(§5) deliberately never pre-empts it with a local guess.
+
+### 4.2 Partial results
+
+Under the settled cardinality (§1.0), a provider batch holds
+exactly one segment, so whole-batch and per-item outcomes coincide;
+there is no partial batch to design for in this program. The
+general rule is stated so a future grouped adapter inherits it:
+per-item successes commit independently through the shared
+machinery; per-item errors classify per item (§4.3); a batch-level
+failure with no per-item records classifies every uncommitted item
+as `provider_error` (known) — never as ambiguous, because the
+submission's outcome is not in doubt, only its products are.
+
+### 4.3 POLICY_BLOCK and the repair chain (PROPOSAL — decision D-3)
+
+A 

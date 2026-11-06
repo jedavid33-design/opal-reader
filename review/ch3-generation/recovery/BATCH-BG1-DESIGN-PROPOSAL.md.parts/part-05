@@ -1,0 +1,158 @@
+ers.mjs key-namespace
+  note): it is abandoned in place, never migrated, never read by
+  production. Provider jobs submitted from staging run to
+  completion or expiry provider-side; their audio is simply never
+  retrieved. Their cost lands wherever §7.3 attests the staging
+  credential points, bounded by the B-G3 test budget — the rollback
+  record states the count and upper-bound exposure of any
+  outstanding staging submissions.
+- **B-G4, before the flip** (Batch-capable build live, allowlist
+  still `["standard"]`) — ordinary build rollback under the
+  standing law (pre-holds — halt + queue pause — before any
+  rollback; the `6a73d962…` floor; separate Julie authorization).
+  The batch code paths never ran; the gate's own inertness proof is
+  the evidence. Nothing batch-shaped exists in the store.
+- **B-G4, after the flip** (Batch admitted; batch work may be in
+  flight) — rollback has two independent halves, and they must not
+  be conflated:
+  1. **Admission rollback** — the allowlist returns to
+     `["standard"]`, by redeploy of the prior build or a flip-only
+     build, with a capabilities read-back proving `batch_not_armed`
+     again. From that moment: new batch intents refuse at admission
+     (service.mjs:857); any batch dispatch that somehow arrives
+     meets the Standard-only build's three refusal layers
+     (d6-executor.mjs:677-689, :841-842) and is refused without
+     provider contact; in-flight batch plans stop advancing — they
+     park by refusal, they do not corrupt, because every state they
+     hold is a durable row the current build simply declines to
+     act on.
+  2. **In-flight provider jobs** — the standing disposition,
+     proposed here for the arming gate to adopt *in advance*
+     (decision D-5): **INVENTORY-AND-HOLD**. At admission rollback,
+     every non-terminal `batch_maps` row is inventoried into the
+     rollback record (job, occurrence, provider name, state,
+     counted dispatch, upper-bound exposure). The rows are
+     **retained, never deleted** — the audit discipline of the
+     whole program. Nothing polls them under the rolled-back build
+     (§1.1 S10's halt logic has its build-level analog: an absent
+     batch branch makes no provider calls). Their spend exposure is
+     already fully counted and bounded — one dispatch each, at the
+     §3.2 upper bound — and is reported in the rollback record in
+     the three-line form. If a Batch-capable build is later
+     restored, polling resumes from the durable maps and the work
+     completes or expires on its own evidence; **no map is ever
+     re-submitted** (§4.1(a) survives rollback). Retrieval under
+     the rolled-back build does not happen, by any route.
+     The alternative — an explicit terminal `abandoned` transition
+     for maps — does not exist in the current state machine
+     (`closed` is reserved to the never-accepted resolution,
+     coordinator.mjs:552-556), and B-G1 does not invent it:
+     whether B-G2 should add one is **decision D-5's second half**
+     for Rowan. Absent that ruling, INVENTORY-AND-HOLD is complete
+     without it: an unpolled `submitted` row is inert, counted, and
+     resumable, which is everything a disposition needs to be.
+
+### 6.2 The standing rule
+
+**A Batch failure never rolls back Standard.** Admission rollback
+touches only the batch lane: Standard plans, jobs, bindings, and
+accounting are lane-independent rows, and the Standard lane's
+admission, executor path, and history are exactly as they were
+before the flip. The arming gate's rollback plan may not include
+any act on Standard state, and a Batch incident is never, by
+itself, grounds to re-hold Standard (Julie's general re-hold
+authority and the WS1 emergency re-hold triggers are separate
+instruments, governed by the WS1 design, not by this proposal).
+
+---
+
+## 7. B-2 parity and B-3 prepay
+
+### 7.1 Why parity gates interpretation (B-2)
+
+The staging worker's wiring materially differs from production's in
+the source tree: the tree's `worker-entry.js` imports and wires the
+**legacy** executor (`createExecutor`, worker-entry.js:55, :258),
+while production's `worker-entry-prod-d6.js` imports only the D6
+executor (worker-entry-prod-d6.js:271, :1824). A staging Batch pass
+on the legacy entry would prove the adapter and the coordinator
+contract — which are not in doubt — and nothing about the D6
+integration, which is the entire build. The scoping package carries
+this as OPEN ITEM B-2; the ruling requires parity be established
+*before* staging proof is interpreted. B-G1 designs the check; the
+check itself runs at B-G3, on B-G3's evidence.
+
+### 7.2 The parity checklist (PROPOSAL — produces evidence, fails closed)
+
+- **P-1 Entry identity.** For both scripts, record the deployed
+  entry module (from the script's module set) and the `/health`
+  build marker. Parity requires staging's entry to be the *same
+  entry file* as production's (`worker-entry-prod-d6.js`) in the
+  candidate build, or every difference enumerated and ruled on
+  before any staging result is interpreted. **Fail-closed:** if
+  staging's entry is `worker-entry.js` (the legacy wiring), the
+  checklist FAILS and no D6 claim may be drawn from staging —
+  component claims only, labeled as such.
+- **P-2 Import-graph comparison.** From the candidate tree, produce
+  the entry's transitive import list with per-file SHA-256 — the
+  established manifest method (the Grant 1 build's 31-part
+  manifest) — for the staging-deployed build and the production
+  build. The code sets must be identical except an enumerated
+  allowlist. Environment bindings are not code: scope, halt,
+  key-prefix, and token bindings differ by design and are listed
+  as binding differences, never counted as code drift.
+- **P-3 Consumer wiring.** Staging's queue consumer must resolve to
+  the D6 executor constructed by the same entry (P-1's substance,
+  verified at the wiring seam, not just the import list).
+- **P-4 Build-marker discipline.** Each deployed build's `/health`
+  build must equal the pinned review commit for the exact tree
+  deployed (the standing build-marker rule), for both scripts,
+  recorded in the B-G3 evidence package.
+- **P-5 Behavioral spot-parity (no spend).** Against staging:
+  capabilities shape matches the production build's shape; a batch
+  intent is admitted or refused exactly as the candidate build's
+  allowlist dictates; a Standard intent behaves identically to
+  production's. No provider call is made by any parity step.
+- **Output.** A parity evidence record (entry identities, markers,
+  manifest hashes, the difference list) filed with the B-G3
+  package. Every staging result in B-G3's evidence must cite it;
+  an uncited result is uninterpretable by design.
+
+### 7.3 B-3 — the prepay question, answered as far as the record allows
+
+**Established locally, verified by Wren's read-only reads
+2026-11-06:** the staging script `opalreader-api-v2` (build
+`2fe71b5f…`, scope `staging-smoke`, generation halted) carries
+**no `GEMINI_API_KEY` binding at all**. Its binding set (names and
+types only — secret values are never exposed by the API and none
+was read) is: `ALLOWED_ORIGIN`, `COORDINATOR` (DO namespace),
+`GENERATION_HALT "1"`, `OPALREADER_ACCESS_TOKEN` (secret),
+`OPALREADER_GENERATION` (queue), `OPALREADER_STORAGE` (R2),
+`OPALREADER_V2_SCOPE`, `R2_KEY_PREFIX "smoke-p8/"`. Production
+`opalreader-api-v2-prod` carries `GEMINI_API_KEY` as a `secret_text`
+binding alongside its own token secrets.
+
+Consequences, stated at their exact strength:
+
+1. **As deployed today, staging cannot make a provider call.** Any
+   Gemini path would throw `ProviderNotConfiguredError` before any
+   network contact. The question "do staging and production share
+   the prepay" is therefore, for the current deployment, answered
+   structurally: there is no staging credential to share anything.
+2. **The sharing question becomes real at exactly one moment:**
+   when a `GEMINI_API_KEY` secret is provisioned onto the staging
+   script for B-G3. Secret values are write-only through the API,
+   so *which* key was set can never be verified after the fact from
+   any read surface. The verification step that settles B-3 without
+   spending is therefore procedural and must happen at provisioning
+   time, inside the B-G3 gate: (a) the binding read-back (names
+   only) proving the secret exists; (b) a provisioning attestation
+   recorded in the B-G3 evidence naming the key's source in
+   non-secret terms — "the same AI Studio project as production"
+   or "a distinct project/key" — made by whoever performs the
+   provisioning, at the moment of provisioning; (c) absent or
+   ambiguous attestation, the **fail-safe default applies: staging
+   spend is treated as drawing on Julie's production prepay**, and
+   the bounded test budget (below) is charged against it.
+3. **The bounded test-budget shape B-G3 will request** (PARAMETERs
+   for the B-G3 GO to fix): a segment-count ceiling **P-TEST-SEGS**
