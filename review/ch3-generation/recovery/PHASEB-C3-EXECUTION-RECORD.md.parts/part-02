@@ -1,0 +1,78 @@
+, totals {eligible 23, done 23, failed 0, blocked 0}). The remaining three plan records were not individually re-read in this round's set — see Evidence note E-3; zero-movement cross-checks (items 8, 10, 12) bound them | noted |
+| 10 | Conflicts | exact match to the pinned four-row `schedule_dead` lease baseline (ids 1–4, all fields) | `r08`: exactly 4 rows, all `cache_key "lease"`, `expected "7"`, `found "LIKE or GLOB pattern too complex: SQLITE_ERROR"`, `reason "schedule_dead"` — id 1 @ 1793318054808 `grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full`; id 2 @ 1793319854632 `grant:plan:603ab416bd67ab1b25de97be:ch1:1:full`; id 3 @ 1793423664089 `grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full`; id 4 @ 1793495070364 `grant:plan:e377a5559961b294154276b6:ch2:1:full` | ✓ |
+| 11 | Parked job | `1832c21f…` `parked_policy` rev 1, fingerprint `b991f18a…`, grants [] | `r17`: state `parked_policy`, revision **1**, grants **[]**; occurrence composition as read: 27 occurrences enumerated — 24 `pending`, 3 `ready` (the 3 carrying binding revision keys); corroborated against the Ch 3 plan surface (`r19` dispositions: 23 `eligible`, 3 `bound_already`, 1 `excluded_parked` — the excluded one being idx 26, occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b`). **Fingerprint: not byte-compared — see the honest note in §2.3** | ✓ (see §2.3) |
+| 12 | Watermarks + occupancy | content **18**; bindings **1841** with 0 changes since; idx-26 R2 key FREE | `r09`: content `highWatermark 18`, changes [] · `r10`: bindings `highWatermark 1841`, changes [], `hasMore false` — zero changes since seq 1841; idx 26 remains unbound (its plan entry carries no binding; bindings watermark unmoved). No separate R2 LIST read is in this round's evidence set — see Evidence note E-4 | ✓ (see E-4) |
+
+### 2.2 Branch-(d) delta (amendment §5.2, D-1…D-6)
+
+| # | Item | Expected (branch (d) as dispositioned) | Read (evidence) | ✓ |
+|---|---|---|---|---|
+| D-1 | Phase B plan execution state | plan `active` {1,0,0,0}; entry `granted`; job `generating` rev **88**; exactly one live grant `grant:plan:19cad189fab54b9c804a74a6:seg:87:full` issued; seg:1–86 voided; quarantine `held: false` | `r06`: plan `plan:19cad189fab54b9c804a74a6` `active`, totals {eligible 1, done 0, failed 0, blocked 0}, sole entry occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b` (chapterIndex 2, 569 chars) `occurrenceState "granted"`, quarantine `{"held": false}`. `r07`: job `plan:19cad189fab54b9c804a74a6:seg` `generating`, revision **88**; grants list 87 entries — 86 `voided` (seg:1–seg:86, sequential) and exactly one live: `grant:plan:19cad189fab54b9c804a74a6:seg:87:full`, state `issued`, revision 88; the single occurrence `granted` | ✓ |
+| D-2 | Eligibility surface | the scope digests exactly `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1` | `r11` (chapter scope, chapterIndex 2): digest `cdef2c7ec7bb8434b4e2fac66af49983ac7fa4b4e65bb0eda40354be51ff52d1`, eligibleCount 1, totalChars 569, expectedCost 8022, exclusions {bound_already 26}. `r13` (book scope): the identical digest `cdef2c7e…`, eligibleCount 315. Both scopes read this round returned the expected definition digest | ✓ |
+| D-3 | `drive=1` baseline — non-delivering chain | recorder table exists; latest pass **id 296** @ **1793825819071**, stage complete, no row after 296; `recordingFailures` 0; pendingSchedule **2** / pendingWatchdog **1** | `r03` (`drive=1`): `tableState "populated"`; latest 50 rows returned, ids 296 → 247, **all** stage `complete`, `driveInvoked true`, no error fields; first (latest) row id **296**, `at 1793825819071` (2026-11-04T20:56:59.071Z); `recorderHealth`: `recordingFailures 0`, `lastFailureAt null`, `lastRecordedAt 1793825819071`; alarm block `pendingSchedule 2`, `pendingWatchdog 1` | ✓ |
+| D-4 | armedAt — ADOPTED standing value | exactly **1793826389431**, identical across the paired reads; null = STOP (D-PF2); any other value = movement | `r02` (containment route): `alarm.armedAt 1793826389431` · `r03` (`drive=1` surface): `alarm.armedAt 1793826389431` — identical on both surfaces (due 2026-11-04T21:06:29.431Z; ~29h15m past due at census). Recorded verbatim as the pre-stop value | ✓ |
+| D-5 | Containment projection (both surfaces) | `NORMAL`; `absent: true`; `verified: true`; `stopConfidence "not_applicable"`; stop/episode fields empty; audit history empty | `r02`: state `NORMAL`, `known true`, `absent true`, `verified true`, `updatedAt null`, `authorizationRef null`, all stop fields null/empty, `stopVerifyAttempts 0`, `stopEpisodeExhausted false`, `stopConfidence "not_applicable"`. `r03` containment projection: identical in every field | ✓ |
+| D-6 | Disposition evidence | window record + Rowan's R1/R2/R3; Rowan's acceptance of the amendment (corrections round 2 PASS); tail standing REVIVED-UNSTOPPED / OWNED, latest check < 48 h; S1-X expired, never fired | Documentary: §1 links 4–9 all on file; tail latest completed check 2026-11-05T23:28:42Z (2h 52m before C3-0); S1-X never fired (no FIRING DECISION entry exists in the window log) | ✓ |
+
+### 2.3 Evidence notes — where this round's read set is thinner than the package's enumeration
+
+These notes narrow the documentary claim only; none of them is a census
+deviation (the executor's STOP law keys on read values, and every value read
+matched). They are recorded so Rowan's review sees exactly what the evidence
+set does and does not contain.
+
+- **E-1 (core item 2, script etag).** The census set contains no script-content
+  GET, so the etag was not re-read this round. The build is identified by the
+  `/health` build marker (item 1: `fdb02395…`, the Grant 1 build) and the
+  settings surface (item 3). No deploy occurred between the Grant 1 upload and
+  this gate.
+- **E-2 (core items 6–7, capabilities surface).** No `GET
+  /v2/generation/capabilities` response is in this round's evidence set. The
+  phase figures (item 7) were read on the plan-diagnostics surface on **two**
+  plan targets (`r04`, `r18`), exact and agreeing — the C2 lesson (a census
+  item naming two surfaces must enumerate reads covering both) is noted: this
+  round's set covers the diagnostics surface twice and the capabilities
+  surface not at all. The capabilities facts (halted; `batch_not_armed`;
+  registry binding) stand as read at the tail check 2026-11-05T23:28:42Z,
+  under 3 hours before C3-0, and are corroborated in-set per items 6–7 above.
+- **E-3 (core item 9, registry-level plans).** The smoke, old-Ch 2, and fresh
+  Ch 2 plan records were not individually re-read in this round's set. Their
+  immobility is bounded by the zero-movement cross-checks that were read:
+  quota reconcile `ok: true` with the sole known exception (item 8), the
+  four-row conflicts baseline exact (item 10), and both sync watermarks
+  unmoved with zero changes (item 12).
+- **E-4 (core item 12, idx-26 R2 occupancy).** No R2 LIST read is in the set.
+  The occupancy claim carried by this census is the one the reads establish:
+  the bindings watermark stands at 1841 with zero changes since, and idx 26's
+  plan entry remains unbound and `granted` — no binding (and therefore no new
+  occupancy) was created.
+- **E-5 (parked-job fingerprint, core item 11).** The parked job's stored
+  fingerprint string (`b991f18ac058b96ff84deede2403bb6e856bcbd1c54b76b492ef55a89b56e282`
+  in the pinned baseline) is **not exposed on the read surfaces used this
+  round**, and no fingerprint byte-compare was performed. The census verified
+  the job's state (`parked_policy`), revision (1), empty grants, and its full
+  occurrence composition as read. Any statement that the fingerprint was
+  re-verified this round would be false, and this record does not make it.
+- **E-6 (audit history at census).** D-5's "audit history empty" rests on the
+  containment projections themselves (state row absent, all episode fields at
+  their empty values, on both surfaces): the audit table has no separate read
+  surface in the read set, at census or at closing (§4 carries the same note
+  for the gate's own audit rows).
+- **E-7 (a rejected probe read).** `r16` records a diagnostics GET issued
+  without a target, rejected HTTP 400 `diagnostics_target_required`. It read
+  nothing and wrote nothing; the targeted diagnostics reads (`r04`, `r18`,
+  `r20`) followed in the same census set. Recorded here for completeness of
+  the read set; it is not a census item and not a deviation.
+
+**Movement check across the census:** none. Recorder latest row 296 with no
+successor; `armedAt` bit-identical on paired reads; job revision 88; the
+single live grant at seg:87; phase figures frozen; conflicts, watermarks,
+quota all at baseline. The corrected §6 movement rule was therefore never
+engaged — and, per the correction, had anything moved, the attempt would have
+ended on the movement with no re-census.
+
+---
+
+## 3. Step-by-step ledger execution (operative §3, as amended for branch (d))
+
+All acts went to the oper

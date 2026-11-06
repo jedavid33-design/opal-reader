@@ -1,0 +1,154 @@
+ator containment route on the live composed build.
+Every transition carried `authorizationRef` `"Gate C3 branch (d) — Julie GO,
+board comment 6675116603"` once the C3-1 correction (§3.1) established the
+required form. No command, report, SubmitJob, wake provocation, or stimulus of
+any kind was sent at any point in the gate.
+
+### 3.1 C3-1 — `contain_drive` (mechanics leg, sent form)
+
+The census read containment NORMAL (D-5), so C3-1 ran in its **sent form** (the
+RB-6 pre-satisfied form did not arise).
+
+- **First send — 2026-11-06T02:23:12Z** (`c3-1-sent.txt`; response `s1`):
+  HTTP 200, `{"outcome":"rejected","reason":"authorization_ref_required"}`.
+  **The send wrote nothing.** Classification, stated exactly: this was a
+  **pre-act envelope validation rejection**. The deployed route's closed
+  allowlist requires a nonblank `authorizationRef` on every containment
+  transition (deployed source: the worker-entry containment POST handler;
+  the design v3 §5 discipline the build implements). The operative ledger's
+  abbreviated body notation for C3-1 (`{action:"contain_drive"}`) omitted the
+  field. The executor verified the requirement against the deployed source
+  **before** re-sending, supplied the `authorizationRef` naming Julie's GO
+  (above), and re-sent. The rejection is **not** a ledger mutation (zero
+  writes occurred), **not** a §6 movement (the system did not change), and did
+  not touch the census (which remained the accepted census). It is recorded
+  here, in the C3-1 row, at full transparency — neither hidden nor inflated:
+  a request-form defect in the paperwork's abbreviation, caught by the
+  route's own validation before any act.
+- **Re-send — 2026-11-06T02:23:44Z** (`c3-1-resent.txt`; response `s1b`):
+  HTTP 200, `{"outcome":"applied","action":"contain_drive","state":"DRIVE_CONTAINED","idempotent":false}`.
+  The response's state read: state `DRIVE_CONTAINED`, `absent: false` (the
+  state row now exists — created by this transition, as designed), `verified:
+  true`, `updatedAt 1793931825315`, the `authorizationRef` recorded verbatim,
+  stop/episode fields still empty. **State writes 1; audit rows 1**
+  (`contain_drive:applied`).
+
+### 3.2 C3-2 — read back both surfaces
+
+`r`-series-equivalent reads after C3-1 (`s2` containment route; `s2` `drive=1`
+surface):
+
+- Both surfaces: `DRIVE_CONTAINED`, `absent: false`, `verified: true`,
+  `updatedAt 1793931825315`, identical `authorizationRef`, stop fields empty,
+  `stopConfidence "not_applicable"` — **agreeing in every field**.
+- Alarm block unchanged: `armedAt 1793826389431`, pendingSchedule 2,
+  pendingWatchdog 1 (the transition touches no alarm API — operative §5.1).
+- Recorder: latest row still **296** @ 1793825819071; `recordingFailures 0`.
+  No pass in the interval; no §6 movement.
+
+### 3.3 C3-3 — reasoned `clear` (mechanics leg reversal)
+
+- **Send — 2026-11-06T02:23:53Z** (`c3-3-sent.txt`; response `s3`):
+  `POST {action:"clear", reason:"Gate C3 mechanics leg: restore opening state"}`
+  — the ledger's exact reason string. HTTP 200,
+  `{"outcome":"applied","action":"clear","state":"NORMAL","idempotent":false}`;
+  state read: `NORMAL`, `absent: false` (the row persists, as designed — the
+  clear restores the opening *state*, it does not un-create the row),
+  `verified: true`, `updatedAt 1793931834501`, stop/episode fields empty.
+  **State writes 1; audit rows 1** (`clear:applied`, reason recorded). No
+  episode event: no stop episode was open (operative §3, C3-3 row). This
+  clear is the only clear inside C3 and is **not** a restoration.
+
+### 3.4 C3-4 — read back both surfaces
+
+Reads after C3-3 (`s4` containment route; `s4` `drive=1` surface):
+
+- Both surfaces: `NORMAL`, `verified: true`, `updatedAt 1793931834501`,
+  agreeing in every field — the gate's opening state restored.
+- Alarm block unchanged (`armedAt 1793826389431`); recorder still 296 rows;
+  no movement. The gate proceeded to the stop act on the accepted census,
+  which remained bit-identical outside the ledger's own writes.
+
+### 3.5 C3-5 — `stop_chain` (the physical stop act)
+
+- **Send — 2026-11-06T02:24:06Z** (`c3-5-sent.txt`; response `s5`):
+  HTTP 200, `{"outcome":"applied","action":"stop_chain","state":"CHAIN_STOPPED","idempotent":false,"stopVerified":true}`.
+  The act ran in the ledger's order — state commit (enum + episode minted),
+  physical act (observe → `deleteAlarm()` → read-back), stop-record write —
+  and **verified at attempt 1**. The stop record, exactly as read back in the
+  response's state read and confirmed at C3-7:
+
+  | Field | Value |
+  |---|---|
+  | `state` | `CHAIN_STOPPED` |
+  | `stopStatus` | `"verified"` |
+  | `stopVerified` | `true` |
+  | `stopVerifiedAt` | 1793931847431 |
+  | `stopVerifyAction` | `"stop_chain"` |
+  | `stopArmedBefore` | **1793826389431** — the adopted standing value (D-4), exactly |
+  | `stopArmedAfter` | **null** — the act's `getAlarm()` read-back returned null: the registration is deleted |
+  | `stopVerifyAttempts` | 1 |
+  | `stopEpisodeId` | 3 |
+  | `stopEpisodeExhausted` | `false` |
+  | `updatedAt` | 1793931847431 |
+  | `prevEpisode*` fields | all null (no prior episode exists) |
+
+  **State writes 2** (commit + stop record); **audit rows 2**
+  (`stop_chain:applied` — the row whose id mints the episode, id **3** — and
+  `stop_chain_verify:verified`); **`deleteAlarm` 1**; `setAlarm` 0.
+
+### 3.6 C3-6 — `verify_chain_stop` retries
+
+**NOT RUN.** C3-5 ended verified at attempt 1, so the C3-6 condition (only if
+C3-5 ends unverified) never arose. The episode's verification budget stands
+unspent: attempts used 1 of the bound of 3; `stopEpisodeExhausted: false`.
+
+### 3.7 C3-7 — closing census
+
+Closing census opened 2026-11-06T02:24:16Z (`c3-7-started.txt`), ten seconds
+after the stop act. Reads `t02`–`t10`:
+
+- **Containment, both surfaces:** `CHAIN_STOPPED`, `verified: true`,
+  `stopStatus "verified"`, and every stop-record field from §3.5 agreeing
+  between the containment route (`t02`) and the `drive=1` projection (`t03`),
+  including `stopConfidence "verified_current"` on both surfaces — the
+  recorded verified outcome corroborated by the closing reads' own alarm
+  observation: **`armedAt: null`** on the closing surfaces, pendingSchedule 2
+  / pendingWatchdog 1 preserved (the stop preserved the schedule rows).
+- **Recorder:** still **296 rows**; latest row 296 @ 1793825819071; health
+  clean (`recordingFailures 0`). **No row is timestamped after the stop's
+  verification** — no movement at or after the stop.
+- **Everything else bit-identical to the opening census:** the closing files
+  `t04` (plan diagnostics), `t05` (quota), `t06` (Phase B plan), `t07` (job),
+  `t08` (conflicts), and `t10` (bindings watermark) are **byte-identical** to
+  their opening counterparts `r04`, `r05`, `r06`, `r07`, `r08`, `r10`
+  respectively (verified by direct file comparison). Plan still `active`
+  {1,0,0,0} with the entry `granted`; job still `generating` rev 88 with the
+  single live grant `seg:87:full` issued; phase figures frozen at
+  1029420 / 19018 / 5648 / 0; conflicts exactly the four baseline rows;
+  watermarks 18 / 1841, zero changes.
+- **Delta check:** the only deltas in the entire gate are the ledger's own
+  writes (§4) and the deleted registration. No delta beyond the ledger's own
+  — no STOP-and-classify arose at closing.
+
+---
+
+## 4. Totals reconciliation (operative §3.1, expected no-failure path)
+
+| Measure | §3.1 expected (no-failure, sent form) | This execution | ✓ |
+|---|---|---|---|
+| State writes | **4** (C3-1 ×1, C3-3 ×1, C3-5 ×2) | **4** — contain_drive commit, clear, stop commit, stop record | ✓ |
+| Audit rows | **4** (C3-1 ×1, C3-3 ×1, C3-5 ×2) | **4** — `contain_drive:applied`, `clear:applied`, `stop_chain:applied`, `stop_chain_verify:verified` (the design's names for the rows these transitions write) | ✓ |
+| `deleteAlarm` | **1** (C3-5) | **1** | ✓ |
+| `setAlarm` | **0** | **0** — nothing in this gate arms; no registration appeared that the gate did not delete | ✓ |
+| `verify_chain_stop` calls | 0 on the no-failure path (budget ≤2 held in reserve) | **0** — budget unspent | ✓ |
+| Commands / reports / SubmitJob | **0** | **0** | ✓ |
+| Uploads / PATCHes / hold flips / queue changes | **0** | **0** — GENERATION_HALT stood `"1"` and the queue stood paused throughout, read at census and closing | ✓ |
+| Recorder rows created by the gate | 0 (branch (d) expects no accrual; accrual would be §6 movement) | **0** — 296 rows at opening, step read-backs, and closing | ✓ |
+| Spend | $0 | **$0** | ✓ |
+
+**Counting basis, stated honestly.** The state-write count is established by
+the four applied transitions' responses and the `updatedAt` sequence they left
+(1793931825315 → 1793931834501 → 1793931847431, the last carrying both C3-5
+writes). The audit-row count and names follow the operative ledger's
+accounting for the transitions performed (§3.1: each transitio

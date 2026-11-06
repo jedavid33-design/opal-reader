@@ -1,0 +1,84 @@
+# PHASE B — GATE C3, BRANCH (d) REVIVED-UNSTOPPED (POST-WINDOW): EXECUTION RECORD
+
+**Gate:** C3 (operational verification of the containment stop), executed in branch (d)
+REVIVED-UNSTOPPED (POST-WINDOW).
+**Execution window:** 2026-11-06 — census opened 02:21:13Z; closing census opened
+02:24:16Z (all times UTC; 2026-11-05 evening, America/New_York).
+**Verdict:** **C3 branch (d) EXECUTED — PASS AT PARTIAL STRENGTH.** PARTIAL is this
+gate's verdict cap in every branch (operative package §8); nothing in this record
+claims more. The chain is stopped: containment state `CHAIN_STOPPED`, stop verified
+at attempt 1, the standing alarm registration deleted, both holds standing.
+**Spend:** $0.
+**Raw evidence:** `~/workspace/ch2-program/ch3-recovery/c3-execution/` — census
+reads `r01`–`r20`, step responses and read-backs `s1`/`s1b`/`s2`/`s3`/`s4`/`s5`,
+closing-census reads `t02`–`t10`, and the step timestamp files
+(`census-started.txt`, `c3-1-sent.txt`, `c3-1-resent.txt`, `c3-3-sent.txt`,
+`c3-5-sent.txt`, `c3-7-started.txt`). Every value in this record is taken from
+those files. This record's own pin is carried in the companion CP's
+`<EXEC-PIN>` slot (a record cannot name its own commit).
+
+---
+
+## 1. Authority chain
+
+The gate executed under the following chain, in order. No link was skipped, and
+Julie's GO was recorded on the board **before** the execution census opened —
+the ordering the corrected GO wording itself requires.
+
+| # | Link | Reference |
+|---|---|---|
+| 1 | Operative C3 readiness package (rebased to the composed production build) | `PHASEB-C3-READINESS-PACKAGE-REBASED.md`, pin `46112a03…` (repo `jedavid33-design/opal-reader`, branch `ui1-review`) |
+| 2 | C3-R1 correction (branch (c) strictly read-only; premise-failure classes) | `PHASEB-C3-R1-CORRECTION.md`, pin `aba681a0…` |
+| 3 | C3 readiness — Rowan FINAL RULING: PASS (2026-11-02) | Board, opal-roundtable issue #15 |
+| 4 | S1 window record (W-2 EXPECTED S1 EVENT; W-4 close, UNRESOLVED) | Pin `f75130c6…`; window log + tail log |
+| 5 | Rowan ruling on the window record: R1 event ACCEPTED; R2 W-4 accepted as observation, NOT resolution; R3 C3 conditional branch (d) | `ROWAN-S1-WINDOW-RECORD-RULING.md` |
+| 6 | Branch-(d) reconciliation/amendment (branch (d) delta D-1…D-6; movement rule §6; assumptions register) | `PHASEB-C3-BRANCH-D-RECONCILIATION.md`, pin `60da50c3…` |
+| 7 | Rowan ruling on the reconciliation + OQ-1 analysis: REVISE — C3 conditionally accepted; C3-5 strikes re-census-and-continue | `ROWAN-C3D-OQ1-RULING.md` |
+| 8 | Branch-(d) correction (movement rule struck to its strict form; GO wording corrected; C3-1…C3-5 dispositions) | `PHASEB-C3-BRANCH-D-CORRECTION.md`, pin `8ca683bd…` |
+| 9 | Rowan ruling, corrections round 2: **PASS — C3 correction ACCEPTED; C3 DOCUMENTARY READINESS: PASS**; Wren may present the corrected GO wording to Julie | `ROWAN-CORRECTIONS2-RULING.md` |
+| 10 | **Julie's GO**, in the corrected branch-(d) wording exactly as presented, given by button tap in the Coding Projects chat 2026-11-05 ~9:20 p.m. ET and **recorded on the board before the census** | Board comment **6675116603**, opal-roundtable issue #15 |
+| 11 | Execution census C3-0 opened | 2026-11-06T02:21:13Z (`census-started.txt`) — after link 10 |
+
+The GO's scope, as given: exactly ONE C3 attempt in branch (d); the contain_drive
++ reasoned clear mechanics pair; exactly one `stop_chain` act against the
+then-current registration (verify retries only within the design bound of 3 if
+the stop is unverified); any disqualifying movement between the accepted census
+and the stop attempt **ends** the attempt (no re-census, no continuation, no
+adaptation of the GO to a changed baseline); passive read-backs only — no
+command, no wake provocation, no stimulus of any kind; ending HELD in
+CHAIN_STOPPED. The GO expressly records Julie's understanding that the verdict
+cannot exceed PARTIAL, that the W-4 stands accepted as an observation and NOT
+resolved, that C3 does not restore NORMAL, and that a deleted registration
+cannot be restored by this gate.
+
+Production state entering the gate: build `fdb02395…` live; GENERATION_HALT
+`"1"`; queue `opalreader-generation-v2` delivery paused; production
+INVESTIGATION HELD; the Phase B plan `plan:19cad189fab54b9c804a74a6` and the
+idx-26 chapter exemption preserved, untouched by this gate.
+
+---
+
+## 2. C3-0 — execution census
+
+Census opened 2026-11-06T02:21:13Z. Baseline source for the branch-(d) delta:
+the tail log's latest completed check, **2026-11-05T23:28:42Z**
+(TAIL-W4-CONTINUING) — **2h 52m 31s old at C3-0**, inside the 48-hour freshness
+rule (amendment §5.1); no re-baseline was required. The census is fresh reads at
+gate time; tail-adopted values were expectations to match, not inherited facts.
+
+**Result: every core item and every branch-(d) delta item matched. No movement
+anywhere. The gate proceeded to C3-1 on this census.**
+
+### 2.1 Branch-invariant core (operative package §4.0)
+
+| # | Item | Expected | Read (evidence) | ✓ |
+|---|---|---|---|---|
+| 1 | Health | build `fdb02395b3775dc945baa395591a73060ab146c4`; generation `halted`; coordinator `armed` | `r01`: build `fdb02395b3775dc945baa395591a73060ab146c4`, `"generation":"halted"`, `"coordinator":"armed"`, scope `production` | ✓ |
+| 2 | Script identity | etag `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e` | Not separately read in this round's evidence set — see Evidence note E-1. Identity for this gate rests on item 1's build marker and item 3's settings surface | noted |
+| 3 | Bindings / holds / observability | exactly 10 bindings; GENERATION_HALT `"1"`; `OPALREADER_PHASE_POLICY` `"enforce"`; observability enabled + `logs.persist: true` | `r15` (script settings): 10 bindings — `ALLOWED_ORIGIN`, `COORDINATOR`, `GEMINI_API_KEY`, `GENERATION_HALT` (plain_text `"1"`), `OPALREADER_ACCESS_TOKEN`, `OPALREADER_GENERATION_V2`, `OPALREADER_MIGRATION_OPERATOR_TOKEN`, `OPALREADER_PHASE_POLICY` (plain_text `"enforce"`), `OPALREADER_STORAGE`, `OPALREADER_V2_SCOPE`; observability `enabled: true`, `logs.enabled: true`, `logs.persist: true`; `compatibility_date` `2026-08-29` + `nodejs_compat` | ✓ |
+| 4 | Settings | revision **1** (lane standard, cap $50) | `r05`: `"settingsRevision": 1` | ✓ |
+| 5 | Queue | `delivery_paused: true`; exactly 1 consumer `f260f2188d80426bb0588685e9d084eb` | `r14`: queue `93b6a35fb8cf4788a91a2c90b748ae66` (`opalreader-generation-v2`), `delivery_paused: true`, `consumers_total_count: 1`, consumer `f260f2188d80426bb0588685e9d084eb` (script `opalreader-api-v2-prod`); retention 86,400 s | ✓ |
+| 6 | Capabilities | standard admitted; Batch `batch_not_armed`; registry `forever-pucked` ↔ `5c589095-f812-48a2-8ab2-03ba2791f2b2` | Not re-read as a capabilities GET in this round's evidence set — see Evidence note E-2. The registry binding is corroborated in-set by `r11`/`r13` (eligibility for bookId `5c589095-f812-48a2-8ab2-03ba2791f2b2` returning the phase definition digest) and by `r04`/`r18` (`"phase":"forever-pucked"` on that book's plans) | noted |
+| 7 | Phase accounting — BOTH surfaces | settled **1,029,420**; estimatedUnverified **19,018**; reservedUnverified **5,648**; inFlightUpper **0**; unknownOpen **0**; remaining **12,464,932** of 13,500,000 | Surface (b) plan-diagnostics body, read on **two** plan targets, exact and agreeing: `r04` (Phase B plan) and `r18` (Ch 3 plan) both carry `phaseAccounting`: `settledMicroCents 1029420`, `estimatedUnverifiedMicroCents 19018`, `reservedUnverifiedMicroCents 5648`, `inFlightUpperMicroCents 0`, `unknownOpen 0`, `remainingMicroCents 12464932`, `budgetMicroCents 13500000`, `unverifiedStatus "provider_unverified"`. The capabilities phase block (surface (a)) was not separately captured this round — see Evidence note E-2 | ✓ (see E-2) |
+| 8 | Quota | reconcile `ok: true`, drift empty, sole exception the adjudicated straddler `att-37d63768-db4b-447d-8150-580b7c6ee257`; PT dispatched 57 / 79 / 44 / 76 (10-29…11-01) and 0 thereafter; derived reserved exactly **12** in branch (d) (amendment §5.2) | `r12`: `"ok": true`, `"armed": true`, `drift: []`, `driftCount: 0`, `censusComplete: true`, `exceptionCount: 1` — the sole exception `att-37d63768-db4b-447d-8150-580b7c6ee257` (`estimated_unverified`, the known straddler); dayTotals dispatched 2026-10-29 = 57, 10-30 = 79, 10-31 = 44, 11-01 = 76, 11-03 = 0, 11-04 = 0; current day (2026-11-05) dispatched 0 / reserved 0 / consumed 0; **2026-11-04 reserved 12 / consumed 12** — the standing grant's derived reservation on the rolled PT day, exactly the branch-(d) expectation. `r05`: `attemptsToday 0`, `providerDispatchesToday 0`, dayKey `2026-11-05`, `spentMicroCents 302292`, `ledgerSeq 329` | ✓ |
+| 9 | Plans (registry level) | 5 plans: smoke `complete`; old Ch 2 `retired`; fresh Ch 2 `complete`; Ch 3 `complete`; Phase B `active` | Read directly in-set: Phase B plan (`r06`: `active`, §2.2/D-1) and Ch 3 plan (`r19`: `complete`

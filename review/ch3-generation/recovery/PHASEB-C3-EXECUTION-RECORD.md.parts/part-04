@@ -1,0 +1,145 @@
+n writes its
+named row), corroborated by the episode accounting: the stop commit minted
+**episode id 3** — the id of its own `stop_chain:applied` audit row — which is
+consistent with exactly two prior audit rows in the table (this gate's
+`contain_drive:applied` and `clear:applied`), in a table D-5 established as
+empty at census. **The audit table itself has no separate read surface in the
+read set** (E-6): the four-row count is established by the transition
+responses plus the `updatedAt`/episode accounting, not by a direct audit-table
+read, and this record claims it on exactly that basis.
+
+**The C3-1 first send is not in these totals.** It wrote nothing (rejected
+pre-act, §3.1) and is not a ledger mutation; it is accounted in §3.1's row,
+not in the mutation ledger.
+
+---
+
+## 5. Verdict — and what was NOT demonstrated
+
+**C3 branch (d): EXECUTED — PASS AT PARTIAL STRENGTH.**
+
+What the execution establishes:
+
+- The containment machinery works end-to-end on the production composed
+  build: `contain_drive` applies and persists; the reasoned `clear` restores
+  NORMAL; `stop_chain` commits, deletes, and verifies; both read surfaces
+  project every state identically at every step.
+- **The stop is operationally verified for THIS registration at THIS
+  moment.** The standing registration `armedAt 1793826389431` — the W-4
+  registration, past due ~29h18m by the stop act — was observed by the act,
+  deleted by it (`stopArmedBefore 1793826389431`, `stopArmedAfter null`), and
+  the closing census's own fresh alarm observation on both surfaces reads
+  `armedAt: null` against the recorded verified stop record
+  (`stopConfidence "verified_current"` on both surfaces). The stop procedure
+  required no alarm delivery at any step: it acted on the registration as it
+  stood, which is the independence Rowan's R3 required demonstrated.
+- The stop's blast radius was exactly the ledger's: four state writes, four
+  audit rows, one `deleteAlarm`, nothing else — plan, job, grant, phase,
+  conflicts, watermarks, quota, holds, and queue all bit-identical across the
+  gate.
+
+What remains unproven, carried at full strength (this is why the verdict is
+PARTIAL, and why PARTIAL is not a shortfall of this execution but the gate's
+designed cap):
+
+- **Live drive suppression of a running chain was NOT demonstrated.** The
+  chain was not delivering at gate time — that is the W-4. C3 stopped a
+  standing, undelivered registration; it did not suppress a chain in motion,
+  and no branch of this gate, on this evidence, could have shown that.
+- **The racing-wake recheck stays PLATFORM-UNVERIFIED.** The v3+ gate
+  re-check is harness-proven; no live race occurred or was provoked, and none
+  of this gate's evidence bears on the platform behavior.
+- **Post-retry-exhaustion `getAlarm()` semantics stay UNSPECIFIED**
+  (reconciliation A-2). The null read-back is evidence about **this**
+  registration at **that** moment — which is all the gate claims — and
+  documents nothing about the platform's general behavior in this region. A
+  null readback establishes the observed registration state, not a guarantee
+  about future platform behavior (correction, C3-3 condition).
+- **The W-4 remains UNRESOLVED.** Its root cause is unconfirmed; this gate
+  neither attributes it to the 1101 fault nor presumes anything about
+  delivery behavior generally. The registration the W-4 concerned **no longer
+  exists** — deleted by this gate's stop act under Julie's GO. The W-4
+  blocker stands discharged at disposition strength for C3 eligibility
+  (Rowan R1/C3-1, corrections round 2); the underlying alarm-delivery failure
+  remains an open fact of the platform record, preserved for whatever gate
+  next needs it — in particular the generation-resume gate's wake question,
+  whose design already assumes delivery cannot be presumed.
+
+---
+
+## 6. End state
+
+The system ends **HELD in CHAIN_STOPPED**, exactly as the GO prescribed:
+
+- **Containment:** `CHAIN_STOPPED` on both surfaces, `verified: true`,
+  `stopConfidence "verified_current"`; stop record as §3.5 (episode id **3**,
+  verified at attempt 1, budget unspent, `stopEpisodeExhausted: false`); the
+  containment state row and audit table now exist, created by this gate's
+  transitions — the first containment transitions ever run in production.
+  The audit history contains exactly this gate's episode (four rows, §4) —
+  the history the standalone restoration's mandatory historical audit review
+  must cover.
+- **Alarm:** no registration stands (`armedAt: null` on both closing
+  surfaces). Schedule rows preserved (pendingSchedule 2 / pendingWatchdog 1).
+  Nothing will wake the coordinator until a future authorized act re-arms
+  through the ordinary wake paths under NORMAL — which requires restoration
+  first.
+- **Holds:** GENERATION_HALT still `"1"` (generation `halted`); queue
+  `opalreader-generation-v2` still `delivery_paused: true`, one consumer.
+  **C3 restored nothing** — no hold was lifted at any point.
+- **Preserved work, untouched:** Phase B plan `plan:19cad189fab54b9c804a74a6`
+  `active` {1,0,0,0}, entry `granted`; job `generating` rev 88; the single
+  live grant `grant:plan:19cad189fab54b9c804a74a6:seg:87:full` stands
+  `issued` — frozen mid-churn by the stop, exactly as censused; the idx-26
+  chapter exemption stands as it stood (this gate neither consulted nor
+  touched it). Phase accounting frozen; conflicts at the four-row baseline;
+  watermarks 18 / 1841.
+- **Recorder:** 296 rows, latest 2026-11-04T20:56:59.071Z, health clean — the
+  frozen tail of the revived chain's activity, now a closed record.
+- **Tail watch:** the post-window regime **REVIVED-UNSTOPPED / OWNED is
+  closed by this execution** — C3 execution was the tail watch's exit
+  condition, and Wren disabled `phaseb-s1-tail-watch` in session after the
+  closing census (job history preserved). The tail log stands as the
+  regime's record. Ownership of the stopped chain passes to the standing
+  gates: restoration next, separately authorized (§7).
+- **Spend:** $0 across the gate. No deployment, no code change, no settings
+  change was made at any point.
+
+---
+
+## 7. What this record does not authorize
+
+This record is evidence, not authority. It authorizes nothing, and nothing in
+it advances any other gate:
+
+- **Standalone restoration** (CHAIN_STOPPED → NORMAL) remains a separate
+  gate requiring its own Rowan ruling, Julie's separate GO, a fresh census, a
+  recorded reason, and the mandatory **historical audit review** — which must
+  cover the episode this gate created (episode id 3; the four audit rows of
+  §4). Restoration is never bundled with anything else, and `clear` inside
+  this gate (§3.3) was a mechanics-leg reversal, not a restoration.
+- **The generation-resume gate** remains behind restoration: the corrected
+  resume package (pins `0946f9f2…` + `60da50c3…`, as corrected at `8ca683bd…`)
+  with OQ-1 accepted as a readiness design only; the OQ-3…OQ-6 consolidated
+  disposition is still in preparation; GR-B remains blocked on OQ-2. No wake
+  command, hold lift, or generation dispatch is authorized.
+- **No further containment transition** of any kind (no `verify_chain_stop`
+  against episode 3 outside its own gate, no second `stop_chain`, no
+  `contain_drive`, no `clear`) is authorized by this record or by the
+  consumed GO.
+- **The GO is consumed.** Julie's branch-(d) GO (board comment 6675116603)
+  authorized exactly one attempt; it executed and is spent. Any further C3
+  attempt, on any baseline, requires a new Rowan ruling and a new Julie GO.
+- No plan action, no exemption action, no queue or halt change, no
+  deployment, no Batch work — none was performed and none is authorized.
+
+---
+
+## 8. Turn
+
+**Turn: Rowan's** — documentary execution review of this record (via Julie's
+poke; the companion CP rides with the record). Julie retains every execution
+authorization that remains: restoration and the generation-resume gate are
+hers to open, separately, after Rowan's reviews. Wren's next work on this
+chain is the OQ-3…OQ-6 readiness disposition already in preparation; no
+production act of any kind is pending or implied.
