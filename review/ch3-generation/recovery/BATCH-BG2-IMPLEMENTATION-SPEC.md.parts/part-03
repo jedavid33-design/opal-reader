@@ -1,0 +1,168 @@
+rs the synchronous path at adapters.mjs:233-335):
+
+1. Tokens are extracted only from structured fields: a batch-level
+   `error` object's `code` / `status`; the single item's `error`
+   object's `code` / `status`; the item candidate's `finishReason`;
+   `promptFeedback.blockReason`. Each token is normalized
+   (uppercase; non-`[A-Z0-9_]` runs collapsed to `_`; max 64 chars).
+   **Raw provider message text will never be persisted, returned,
+   or copied into any record** — free text is not evidence and may
+   carry content this system does not store.
+2. `kind:"policy_block"`, `outcome:"policy_block"` **only** on
+   clear structured policy evidence: a normalized token equal to
+   `PROHIBITED_CONTENT` or `POLICY_BLOCK`, or a block-reason token
+   containing `PROHIBITED_CONTENT`. Missing audio alone, a generic
+   failure state alone, and refusal-sounding free text are **not**
+   policy evidence on this surface.
+3. Batch-level or item-level error with an HTTP-like code/status:
+   `kind:"provider_error"`, `outcome:"failed_known"`;
+   `retryable:true` only for the transient class (5xx / `INTERNAL`
+   / `UNAVAILABLE`); a 429-class code is `provider_error` with
+   `retryable:false` (it is a terminal poll result, not a dispatch
+   response; the day-cap consequence was already settled at the
+   fence).
+4. Metadata terminal states `FAILED` / `CANCELLED` / `EXPIRED`
+   with no error object: `kind:"batch_terminal"`,
+   `outcome:"failed_known"`, `retryable:true` (chain-level fresh
+   submission eligibility per B-G1 §4.1(c); the dead provider job
+   itself is never re-polled once its terminal bundle lands, §3.6).
+5. Done-response shape failures: zero or >1 inlined records
+   (`source:"record_count"`); exactly one record with no error and
+   no audio and no policy signal (`source:"missing_audio"`);
+   undecodable audio payload (`source:"audio_decode"`) —
+   `kind:"response_shape"`, `outcome:"failed_known"`. Per B-G1
+   §4.2, a named, terminal provider job whose product is unusable
+   is a **known** failure of that submission, never an ambiguity:
+   the submission's outcome is not in doubt. (This deliberately
+   differs from the synchronous no-audio rule, where no durable
+   provider job exists.)
+6. Any other terminal error shape: `kind:
+   "provider_error_unclassified"`, `outcome:"failed_known"`,
+   `retryable:false`. Unclassified never means policy, and never
+   means ambiguous.
+
+**Landing in the attempt record.** The executor will copy only the
+classification's bounded scalar fields into (a) the genstore
+terminal bundle (§3.6.4) — attempt outcome `policy_block` iff
+`classification.outcome === "policy_block"`, else `failed_known`;
+(b) the execution detail receipt, using the diagnostics-whitelisted
+keys (`code`, `reason`, `detail`, `blockReason`, `finishReason` —
+service.mjs:1544-1547) so the existing operator diagnostics surface
+can show them with no new read path; and (c) the report detail
+(`{batchState, classificationKind, providerCode, blockReason,
+finishReason, retryable}` — scalars only).
+
+**Acceptance evidence.** Family BG2-E (§6): every rule above has a
+synthetic-fixture test, including the negative pins — no-audio
+without policy signal is never `policy_block`; an error object
+with an unrecognized shape is never `policy_block`; success and
+not-done returns are byte-identical in shape to today's.
+
+### 3.3 The D6 Batch execution path (queue dispatch)
+
+**Entry shape.** `createD6Executor` will gain a Batch branch inside
+`handleMessage`. Refusal layer 2 (job lane not in
+`D6_LANE_ALLOWLIST`, d6-executor.mjs:688-689) **will remain
+verbatim** — it is the lane law. Layers 1 and 3 will change from
+unconditional refusal to a lane check: a batch payload on a job
+whose lane is **not** admitted still returns
+`{refused:"lane_not_allowed"}` before any claim or provider
+contact; a batch payload on an admitted batch job enters the
+branch. (On the B-G2 candidate as shipped — allowlist
+`["standard"]` — every batch dispatch still refuses; §3.13.)
+
+**Shared scaffolding (unchanged, lane-blind).** Claim first
+(`claimGrant`); completed / closed / unknown grants drop the
+message; another consumer's claim stands down. The Workstream A
+pre-claim fences (strict plan resolution, quarantine hold,
+plan-state fence) run exactly as for Standard, before the branch
+diverges. Per occurrence, state is re-read fresh.
+
+**Per-occurrence state dispatch.** For each granted occurrence of
+a batch job, the branch will act on durable state, in this order:
+
+1. **Existing non-terminal execution** in `synthesized` /
+   `flushed` / `verified` → the existing recovery tail
+   (`verifyAndCommit` / `reenterFlush`), shared with Standard.
+   Never a poll, never a submission.
+2. **Live (non-superseded) batch map** for (job, occurrence):
+   - `submitted` → the shared poll step (§3.6.4), at most once in
+     this message.
+   - `ambiguous` → no action; the occurrence is blocked (§3.10.1).
+   - `rejected` / `closed` → skip; terminal for this job and
+     generation.
+   - `fenced` → convert with `noteBatchAmbiguous(detail:
+     "fence_without_outcome")`; **never post on a fence alone**.
+3. **No live map** → the ambiguity gate, then the fence bundle:
+   - If **any** latest-generation map of this job is `ambiguous`
+     (including one with an open multiple-match adjudication,
+     §3.10), the branch will make **no new submission** for this
+     job in this message: outcome
+     `{skipped:true, reason:"batch_ambiguity_open"}`. Already-
+     `submitted` siblings were handled at step 2 and are
+     unaffected.
+   - Otherwise, the fence + accounting bundle (§3.4) runs; on
+     success the POST follows (§3.5).
+
+**Preflight (before any fence write).** The branch will refuse,
+with no execution, intent, map, attempt, or dispatch row written:
+payload provider not `gemini` → outcome
+`{skipped:true, reason:"batch_provider_unsupported"}`; model not
+matching the adapter's gate regex → `{skipped:true,
+reason:"batch_model_unsupported"}`. (The adapter is Gemini-only for
+Batch; a non-Gemini voice on a batch job is a configuration fact,
+not a provider rejection, and must never be fenced or counted.)
+
+**Cohort report rule (SPECIFICATION CHOICE, Batch only).** The
+Standard message-end rule — report whenever results or commits
+exist — will **not** apply to a Batch grant while any occurrence
+of that grant's cohort (the durable outbox payload's occurrence
+list) still holds a live `fenced` / `submitted` / `ambiguous`
+map. Terminal outcomes are staged durably (§3.6.4) and reported
+only when the cohort completes (§3.6.5). Reason: `handleReport`
+returns unreported `granted` occurrences to `pending` at grant
+closure; a deferred `submitted` occurrence would lose the granted
+state `commitVerified` requires, orphaning a live provider job.
+Standard messages are untouched by this rule.
+
+**Acceptance evidence.** Families BG2-X and BG2-S: state-dispatch
+coverage for every row above; the preflight refusals write zero
+rows; the cohort rule is proven by a two-occurrence grant in which
+one occurrence terminals while the other's map is `submitted`
+(no report, no deferral, sibling still pollable).
+
+### 3.4 The fence + accounting bundle (D-1 / B1)
+
+The full protocol is §4. In brief: the bundle is **one synchronous
+`coord._tx` callback** (SPECIFICATION CHOICE — the coordinator's
+re-entrant transaction, coordinator.mjs:717-721, is the grouping
+the source already provides) containing, in order: execution
+create/reuse and `attempted` transition; spend-intent acquisition;
+attempt reservation (upper bound `upperBoundAttemptMicro(chars)`);
+`fenceBatchSubmit`; and `markDispatching` — whose existing
+transaction body runs `applyDispatchQuota` (dispatch-ledger row,
+reservation slot increment, possible day-rollover re-reservation)
+and stamps the attempt `dispatching` with its Pacific-Time day
+key. No `await` and no provider call may occur inside the
+callback. Any refusal returned by a step (intent not acquired,
+fence refused) will be converted by the bundle into a thrown
+refusal so the whole bundle rolls back; quota refusals propagate
+as thrown `QuotaBudgetRefusal`s, as today. The bundle will
+additionally require `quotaArmed(coord)` to be true before the
+first write: on an unarmed store it will refuse
+`batch_quota_unarmed` and write nothing — a Batch submission may
+never exist without its dispatch ledger (D-1). The POST may be
+attempted only after the bundle's transaction returns committed.
+
+**Acceptance evidence.** Families BG2-F and BG2-C: statement-level
+fault injection at every write inside the bundle proves all-or-
+nothing; the ledger assertion (exactly one dispatch row, one
+consumed slot, one `dispatching` attempt, one `fenced` map, one
+open intent, all sharing one fence timestamp's day key) is read
+back from the tables, never from logs.
+
+### 3.5 Submit-outcome handling
+
+After the bundle commits, the branch will call
+`providers.submitBatch(occ, displayName)` exactly once for that
+fence gener

@@ -1,0 +1,184 @@
+§8 O-3).** The cited seam creates
+follow-ons from repair parents. If Rowan intends B-G2 to also
+originate the *first* repair job for an original batch job's
+blocked occurrence, that origination point is not :2536 and is
+not specified here; the classification surface (§3.2) and the
+`policy_block` report it feeds are specified either way.
+
+**Acceptance evidence.** Family BG2-R: a batch repair parent
+reporting one `policy_block` and one `provider_error` follow-on
+produces exactly two follow-on jobs with the lanes and data
+above; a standard parent produces exactly today's shape; the
+Standard follow-on's split leaves commit through the shared
+machinery with exactly one binding for the occurrence; the
+combined attempt count across lanes never exceeds 12.
+
+### 3.10 Ambiguity, multiple matches, and adjudication (D-2 / D-6 / B2)
+
+#### 3.10.1 The block
+
+While any latest-generation map of a job is `ambiguous`, that
+job makes no further Batch submissions (§3.3 step 3). Already-
+`submitted` maps of the job continue to poll and commit. The
+block is per-job; Standard and other jobs are unaffected. The
+spend intent of an ambiguous map stays open with no outcome
+noted; its attempt stays `dispatching`, so phase accounting
+carries it at upper bound as in-flight exposure from the moment
+it fenced; its dispatch stays counted exactly once.
+
+#### 3.10.2 Adjudication records
+
+The build will add two lazily ensured tables beside their writer
+in coordinator.mjs, presence-checked on every read with the
+house discipline (both absent → no adjudications; exactly one
+present → throw `batch_adjudication_schema_inconsistent`; reads
+never create them):
+
+- `d6_batch_adjudication_runs` — one row per enumeration run:
+  run id, job, occurrence, generation, at, `authorization_ref`,
+  outcome (`no_match` / `adopted` / `multiple_match_block` /
+  `single_match_name_invalid`), match count, **every returned
+  provider identifier** (JSON array, verbatim), an
+  `enumeration_may_be_incomplete` flag (set when the adapter's
+  100-row page is full), and the duplicate-exposure report
+  (§3.10.3) for multi-match runs.
+- `d6_batch_adjudications` — at most one **open** record per
+  (job, occurrence, generation): adjudication id, status
+  (`open` / `adopted`), latest run id, the preserved identifier
+  set, the exposure report, and on resolution the selected
+  provider name, resolution `authorization_ref`, evidence
+  reference, and timestamp. Unselected identifiers are retained
+  permanently; no code path deletes either table's rows.
+
+#### 3.10.3 Duplicate-exposure report (shape)
+
+For a run returning `n ≥ 2` matches against one fence:
+
+```
+{
+  providerJobsObserved: n,
+  countedDispatches: 1,
+  ledgeredUpperMicroCents: <the fence attempt's upper bound>,
+  maximumProviderJobsUpperMicroCents: n × <upper bound>,
+  unledgeredDuplicateUpperMicroCents: (n − 1) × <upper bound>,
+  basis: "upper_bound_scenario_not_a_charge_claim"
+}
+```
+
+The report is an upper-bound **scenario**, recorded verbatim on
+the run and the open adjudication. It writes no dispatch row,
+moves no counter, and settles nothing. If the fence attempt or
+its upper bound cannot be read, the run is recorded with the
+exposure fields null and reason
+`batch_exposure_unavailable` — never zero-filled.
+
+#### 3.10.4 The adjudication procedure (the only exits)
+
+Exits from `ambiguous` are exactly: **adoption** (below) — and
+nothing else. Never-accepted resolution is not wired:
+`verifyNeverAcceptedEvidence` continues to throw, no route
+exposes `resolveBatchNeverAccepted`, and no flow in the build
+may depend on a never-accepted assertion.
+
+The shared adjudicator (coordinator-side, called only by the
+operator route of §3.11) will:
+
+1. Load the map; if it is not `ambiguous`, return its current
+   disposition (`already_submitted` with the provider name,
+   `not_ambiguous` otherwise) — no enumeration, no run record.
+   Repeated calls are therefore idempotent in effect.
+2. Enumerate once via `listBatchesByDisplayName(map.display_name)`.
+   The adapter's match shape will be hardened: every returned
+   match carries its name **verbatim** plus a `nameValid` flag
+   (the existing `^batches/[A-Za-z0-9_-]+$` test); an invalid
+   name is preserved, counted, and never adoptable.
+3. Process the result in **one** `coord._tx` (run record +
+   any adoption + any adjudication update commit or roll back
+   together):
+   - **0 matches** → run recorded `no_match`; nothing else
+     changes. Return `{resolved:false,
+     reason:"batch_no_match_not_terminal"}` (the legacy reason,
+     retained). A no-match never establishes non-acceptance.
+   - **1 match, valid name, no open adjudication** →
+     `adoptBatchByLookup` with evidence
+     `display_name:<displayName>`; run recorded `adopted`.
+     Polling resumes on the next pass; the attempt remains the
+     same `dispatching` attempt; no new dispatch is counted.
+   - **1 match, invalid name** → run recorded
+     `single_match_name_invalid`; map stays `ambiguous`; an
+     open adjudication is created carrying the preserved
+     (invalid) identifier; only §3.10.5's route can move it,
+     and it cannot select an invalid name — the record stands
+     as the visible terminal-for-now state.
+   - **≥2 matches** → run recorded `multiple_match_block`; the
+     open adjudication is created or updated with **all**
+     identifiers and the exposure report; the map stays
+     `ambiguous`; **nothing is adopted**. Creation-time ordering
+     is not consulted (the adapter returns no creation time,
+     and ordering would not be proof in any case — D-6).
+   - **An open adjudication already exists** → no automatic
+     adoption on any later enumeration, even a single-match
+     one; the run updates the record's latest evidence and the
+     case proceeds only through §3.10.5.
+
+#### 3.10.5 The adjudication decision route's store act
+
+A separate operator act (§5) resolves an open adjudication:
+in one `coord._tx`, it will validate that the record is open,
+the map is still `ambiguous` at the same generation, and the
+selected provider name is a member of the preserved identifier
+set and `nameValid`; then `adoptBatchByLookup` with evidence
+`batch_adjudication:<adjudicationId>`, and the record is marked
+`adopted` with the selection, the call's `authorizationRef`,
+and the caller's evidence reference. Repeating the act with the
+same selection after success returns `already_applied`;
+attempting a different selection returns
+`batch_adjudication_already_resolved`. The act records an
+operator decision and its stated basis; it does not assert
+that the selected job is provably the original submission —
+that distinction stays visible on the record.
+
+**Acceptance evidence (§3.10 overall).** Family BG2-M: no-match
+byte-identical state; single-match adoption and poll resumption;
+multiple-match block with every identifier preserved and the
+exposure report exact; no code path — including a direct call
+of the legacy export — adopts on multiple matches; the block
+lifts only through the decision route; a caller-supplied name
+outside the preserved set is refused with zero writes.
+
+### 3.11 Operator reconciliation wiring
+
+The legacy `reconcileBatch` procedure gains its operator entry
+as specified in §5: `POST /v2/d6-batch-reconcile` invoking the
+shared adjudicator of §3.10.4 for exactly one (jobId,
+occurrenceId), and `POST /v2/d6-batch-adjudicate` invoking
+§3.10.5. Both follow the house operator pattern (§2): migration-
+operator credential at the public gate, operator-admitted stamp
+re-checked at the class gate, closed-allowlist bodies with a
+required nonblank `authorizationRef`, the recorded source
+stamped server-side (`"operator-route"`), and an audit row (the
+run record) written in the act's own transaction. Both are
+idempotent (§3.10.4 step 1; §3.10.5). Neither route performs a
+halt check of its own — the adapter's `assertGenerationEnabled`
+is the halt law for the enumeration read, exactly as S10 of
+B-G1 designs; while halted, enumeration throws before provider
+contact and the route surfaces `generation_halted`. Exercising
+either route against production remains a separate authorization
+per act, as with every operator route in this system.
+
+### 3.12 Inventory and rollback support (D-5)
+
+**Read surface.** `GET /v2/d6-batch-inventory` (operator-only,
+§5) will be SELECT-only: it performs no provider call, writes
+nothing, and creates no table (adjudication presence is checked,
+never ensured, on this path). It returns, keyset-paginated by
+(job_id, occurrence_id, generation) with exact totals and an
+explicit truncation/next-cursor discipline mirroring the quota-
+reconcile route:
+
+- Per map row (all generations): job, occurrence, grant,
+  generation, display name, provider name, state, detail,
+  `updated_at`, `superseded_at`; the linked intent outcome; the
+  linked execution state; the linked attempt (id, phase,
+  outcome, upper bound, settled cost, dispatch day key); the
+  dispatch row's identity; th

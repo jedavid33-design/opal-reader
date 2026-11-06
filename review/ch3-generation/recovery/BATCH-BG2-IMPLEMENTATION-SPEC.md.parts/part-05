@@ -1,0 +1,172 @@
+; the genstore terminal-receipt write (execution detail:
+provider name, batch state, classification scalars, duration,
+cache key — idempotent on an identical receipt, refusing
+`batch_terminal_receipt_conflict` on a differing one); and, for
+failures, `failExecution` at stage `batch_policy_block` or
+`batch_provider_error`. The map state does not change — terminal
+consumption is derived (§3.6.2). If the bundle finds the attempt
+already confirmed with the **same** outcome, it returns
+`already_applied` and the caller proceeds from the receipt; a
+different confirmed outcome is `batch_accounting_conflict` and
+fails closed.
+
+#### 3.6.5 Cohort completion and reporting
+
+After processing its maps, the driver (and the queue branch, at
+message end) will, for each touched grant, test cohort
+completion: every occurrence in the grant's durable outbox
+payload is in a durable terminal state (occurrence `ready` with
+execution `committed`; or occurrence still `granted` with a
+terminal bundle landed — attempt confirmed and execution
+`failed`). If the cohort is incomplete, nothing is reported
+(§3.3's cohort rule). If complete, the driver will call
+`handleReport` **once** for that grant with the reconstructed
+non-success results in cohort order (successes are never
+re-reported, per the standing D6 rule); `handleReport` then
+closes the grant, completes the claim, settles reservations,
+derives job completion, and runs the repair follow-on seam
+(§3.9) exactly as for Standard. A crash between a terminal
+bundle and this report is recovered at the next pass: the driver
+re-derives the same results from attempt + execution rows
+(`terminal_unreported` recovery) and reports without polling.
+
+#### 3.6.6 Submission continuation
+
+Adoption (§3.10) can unblock a job mid-flight. On each pass,
+after submitted-map polls and ambiguity classification, the
+driver will, for each job whose original grant claim still
+stands with this consumer, which has **no** `ambiguous` map, and
+which has `granted` occurrences with no live map, run those
+occurrences through the same queue-branch path (preflight →
+fence bundle → POST → immediate poll), staging outcomes under
+the cohort rule. This is a continuation of the existing claimed
+grant, not a new grant: no `requestGrant`, no new reservation
+cohort (the fence bundle's `applyDispatchQuota` consumes the
+grant's existing reservations, re-reserving only on day
+rollover, exactly as a first dispatch would).
+
+**Acceptance evidence (§3.6 overall).** Families BG2-X, BG2-P,
+BG2-C: poll cadence (≤1 per map per pass, proven from the stub's
+call log across simulated passes); classification boundaries at
+exactly the D-4 values on a fake clock; the terminal-bundle
+atomicity cases; cohort completion and `terminal_unreported`
+recovery; continuation after adoption with zero duplicate
+submissions.
+
+### 3.7 Lease custody (source-derived prerequisite)
+
+**The problem, from source.** A grant leases for 15 minutes
+(coordinator.mjs:463). Batch's normal latency exceeds that: the
+extended-latency parameter alone is 1 hour. Under the current
+lease handler, a still-`granted` occurrence of an expired,
+delivered grant transitions to `outcome_unknown` — which would
+destroy every long-running Batch submission's custody before its
+second poll, and `commitVerified` cannot commit an
+`outcome_unknown` occurrence. B-G1's drive-pass polling design
+is unbuildable without answering this; the answer is specified
+here and flagged for Rowan's review as a source-derived addition
+to the B-G1 flow (open item O-2).
+
+**The specified change (coordinator lease handler only).** Before
+applying `lease_expired` to an occurrence, the handler will test
+a **Batch-custody predicate**: the occurrence's latest map is
+non-superseded in state `fenced` / `submitted` / `ambiguous`,
+its generation's attempt is in phase `dispatching`, its
+execution is non-terminal, and the map's grant is this grant.
+A custody occurrence is **excluded** from the newly-unknown set.
+If a grant has at least one custody occurrence and no
+non-custody occurrence became unknown, the handler will
+reschedule the lease at `now + LEASE_MS` (exactly one pending
+lease row — the processed row is consumed, never duplicated)
+and leave the grant and occurrences untouched. Mixed grants keep
+today's behavior for their non-custody occurrences exactly.
+No Standard occurrence can satisfy the predicate (it requires a
+batch map), so Standard lease behavior is unchanged by
+construction. Custody tolling performs no provider call and is
+therefore safe in every halt and containment state; it preserves
+custody through a silent chain (W-4) exactly as it does through
+a live one.
+
+**Acceptance evidence.** Family BG2-P: lease expiry with a
+`submitted` map leaves occurrence, job, grant, attempt, and
+reservation byte-identical except the rescheduled lease row;
+a Standard grant in the same store expires exactly as today;
+a map whose attempt is confirmed (terminally consumed) does
+**not** toll.
+
+### 3.8 The shared commit tail
+
+A terminal-success poll's audio will enter the executor's
+existing post-synthesis tail — the same code path Standard uses
+after `runFresh` obtains audio: transition `synthesized` →
+flush via `flushStore.flushAndVerify` → transition `flushed` →
+transition `verified` → `store.commitVerified` → binding-
+projection note. The build will factor that tail so the Batch
+path calls it with `{audio, format, durationSec, payload}` rather
+than duplicating binding logic. Discipline:
+
+- The payload is re-read through the work source at commit time;
+  its fingerprint is the cache key, exactly as Standard. If the
+  work source cannot produce the payload, the receipt stands,
+  the outcome is classified `batch_terminal_payload_unavailable`,
+  and no report is staged — the next pass retries from the
+  receipt (re-polling the same provider job to re-obtain the
+  audio is retrieval, not resubmission; the terminal bundle is
+  already landed and returns `already_applied`).
+- A crash before the flush: execution still `attempted` with a
+  landed receipt → re-poll and proceed (above). A crash after
+  the object is durable: the execution's recorded state
+  (`synthesized` / `flushed` / `verified`) drives the existing
+  recovery tails; the provider job is **not** re-polled into a
+  second commit, and `commitVerified`'s idempotence is the
+  second layer.
+- A `FlushError` fails the execution at its stage and stages a
+  `provider_error` report with `{stage, code}` — a local stage
+  failure, exactly as Standard stages it; the attempt's known
+  success cost stands (the provider did synthesize).
+
+**Acceptance evidence.** Family BG2-X: success commit produces
+exactly one binding, one projection, one settled cost from the
+actual duration; crash points CW-18…CW-22 (§4.3) each recover
+with no second binding and no second submission.
+
+### 3.9 Standard-lane repair for Batch POLICY_BLOCK (D-3)
+
+**The change (coordinator.mjs:2536, narrow).** When
+`handleReport` creates follow-on repair jobs for a parent job
+whose lane is `batch`, the follow-on occurrences will be
+**partitioned by this report's results**: occurrences whose
+result outcome is `policy_block` go to a follow-on job created
+with `lane: "standard"` and data carrying `chainParent`,
+`parentLane: "batch"`, `laneDeviation:
+"batch_policy_block_standard"`, `followOnClass: "policy_block"`;
+all other follow-on occurrences keep the inherited parent lane
+exactly as today (`followOnClass: "other"`). Follow-on ids are
+allocated deterministically in that order (policy subset first)
+from the existing `${jobId}:follow:` sequence; each applied
+follow-on is granted in the same transaction, and a grant
+refusal leaves that follow-on queued without affecting the
+other — precisely today's per-follow-on behavior. For a
+non-batch parent, the code path is byte-equivalent to today's:
+one follow-on, inherited lane, no new data keys asserted by
+tests beyond the absence of the deviation marker.
+
+**Boundaries.** This seam governs follow-on creation from an
+existing `kind:"repair"` parent — the only place :2536 acts. It
+does not change `RequestRepair` admission, does not create the
+first repair job for an original job, and does not alter the
+shared budget accounting: batch submission and Standard repair
+attempts count in one `segmentAttemptsUsed` derivation over the
+same plan linkage the existing chain uses, bounded by
+`SEGMENT_ATTEMPT_BUDGET = 12` and `REPAIR_MAX_RETRIES = 3`
+(gen-constants.mjs:16-20). The deviation introduces no new
+budget check and bypasses none. Only a `policy_block` report
+result can route an occurrence to the Standard subset — a
+`provider_error` result from a batch parent can never take the
+deviation. F3 entry itself happens on the Standard lane: the
+follow-on job's dispatch runs the existing inline
+`synthesizeSegment` / `synthesizeLongSegment` split machinery
+(generation/policy-split.mjs; depth ≤4, floor 50 chars) in the
+Standard executor path.
+
+**Scope note (flagged, 

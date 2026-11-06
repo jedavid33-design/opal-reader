@@ -1,0 +1,157 @@
+
+decision route adopts only a preserved, valid selection
+(wrong selection, invalid selection, different selection after
+resolution, and non-operator callers all refuse with zero
+writes); no wired flow can invoke never-accepted resolution
+with satisfiable evidence (the adapter throw stands; no route
+exposes it). *Proves:* D-6/B2 in full against the stub.
+*Cannot prove:* real enumeration completeness — the 100-row
+page cap is a provider fact the suite can only flag, which is
+why the run record carries `enumeration_may_be_incomplete`.
+
+**BG2-R — Repair (B3, Standard-repair half).** Intents: a batch
+repair parent reporting mixed follow-ons partitions exactly as
+§3.9 (policy subset → Standard lane with the deviation data;
+other subset → inherited lane); a Standard parent's follow-on
+shape is byte-equivalent to today's; the Standard follow-on's
+F3 split chain commits exactly one binding for the occurrence;
+the shared budget across the lane crossing never exceeds
+`SEGMENT_ATTEMPT_BUDGET` (12) and `REPAIR_MAX_RETRIES` (3) —
+a chain that exhausts leaves the occurrence blocked and visible,
+never silently dropped; a `provider_error` batch result never
+takes the Standard deviation. *Proves:* D-3's conditions
+(shared budget, repair ceiling, accounting chain, exactly-once
+binding). *Cannot prove:* policy behavior of the real provider
+on split parts — that is B-G3 observation.
+
+**BG2-B — Rollback and restoration (B3).** Intents: inventory
+captured over a populated Batch store; the candidate build is
+"rolled back" (Standard-only code path / prior build fixture)
+and restored; inventory before/after matches on identity and
+accounting fields; restoration polls `submitted`, blocks on
+`ambiguous`, converts `fenced`, and submits **zero** times
+(stub log); no row of any §3.12 table is deleted or settled by
+any act in the suite; source-level pins for the NOT-do
+invariants (no forbidden call or delete shape on the named
+paths; no `abandoned` state string anywhere in the tree delta).
+*Proves:* D-5's inventory-and-hold obligations as far as offline
+evidence can. *Cannot prove:* a real rollback's operational
+safety — that remains a B-G4 gate act with its own predicates.
+
+**BG2-S — Standard regression and inertness.** Intents: the
+four standing batteries re-run on the candidate tree (exit rule,
+§6.0); Standard end-to-end (submit → dispatch → commit → report
+→ follow-on) is behaviorally identical to the pre-build tree on
+a shared scenario suite; with the shipped allowlist
+`["standard"]`, §3.13's inertness properties (a)–(d) hold,
+including zero provider calls on every Batch refusal layer.
+*Proves:* the build changes nothing for Standard and nothing at
+all while unarmed. *Cannot prove:* device-side client behavior
+(the client is unchanged; its Batch readiness is a B-G4 device
+verification).
+
+**BG2-O — Operator surfaces.** Intents: both POSTs and the GET
+refuse without the operator credential and without the admitted
+stamp (the two-layer fence), refuse a client credential, refuse
+extra keys / caller-supplied identities / caller-supplied
+figures by their §5 names with zero writes, require nonblank
+`authorizationRef` (and `evidenceRef` on adjudicate), and are
+idempotent under repetition; the inventory performs no writes
+and no cache flush (read purity asserted from a write counter).
+*Proves:* the new surface is operator-only, audited, and
+minimal. *Cannot prove:* anything about production credential
+handling — no production act is in scope.
+
+---
+
+## 7. Sequencing inside B-G2
+
+| Phase | Work | Checkpoint |
+|---|---|---|
+| 0 | Harness extensions (§6.0): provider stub, R2 stub, write-fault injector; cure the P2/R5A identity-fixture staleness in the scaffolding. No production code. | CP-0: extension manifest + standing batteries green on the *unmodified* composed tree in one run |
+| 1 | §3.2 classification surface (adapter-only) + BG2-E | **CP-1 (D-3 prerequisite):** BG2-E green; no other Batch code exists yet |
+| 2 | §3.4/§4 fence bundle + accounting helpers + BG2-F, BG2-A | CP-2: fence families green; submit still unwired (no call site can POST) |
+| 3 | §3.3 Batch branch, §3.5 submit outcomes, §3.6.4 terminal bundles, §3.8 commit tail, §3.7 lease custody, §3.6.5 cohort reporting + BG2-X, BG2-C (main-flow windows) | CP-3: execution + crash families green |
+| 4 | §3.6 poll driver + observation tables + BG2-P | CP-4: poll family green |
+| 5 | §3.10 adjudication tables + adjudicator, §3.10.5 store act, legacy multiple-match hardening — **then** §5 routes + BG2-M, BG2-O | CP-5: no enumeration caller exists before this phase; ambiguity families green |
+| 6 | §3.9 repair partition + BG2-R | CP-6: repair family green |
+| 7 | §3.12 inventory + rollback invariants + BG2-B | CP-7: rollback family green |
+| 8 | §3.13 inertness + BG2-S + BG2-H completion; **the single complete exit run** (§6.0) on the final tree | **Exit:** full logs + exit code 0 + tree manifest hash, presented for the B-G3 readiness package |
+
+Each checkpoint's evidence is a source-diff manifest plus that
+phase's family logs; no checkpoint involves a deployment, a
+staging act, or a provider call. A phase that cannot reach green
+stops the sequence — later phases are not started on a red
+earlier phase, and a checkpoint failure is reported at its true
+strength (the standing rule: counts and claims verified against
+the run's own log, never from memory).
+
+**Exit criteria for presenting B-G2's result toward B-G3:**
+(1) the §6.0 exit run is green in one invocation on the final
+tree; (2) the crash-window suite covers all 29 §4.3 windows;
+(3) the candidate tree still carries `D6_LANE_ALLOWLIST =
+["standard"]` (verified from the tree, not asserted); (4) the
+diff manifest shows changes only in §3's file map; (5) open
+items §8 are carried into the B-G3 package unchanged. Meeting
+these criteria authorizes nothing by itself — B-G3 remains a
+separately reviewed, separately authorized gate.
+
+---
+
+## 8. Boundaries and open items
+
+**What this specification is not.** Not code. Not a build
+authorization (the build itself is "subject to the next
+reviewed build scope", per the ruling). Not a deployment
+authorization for staging or production. Not a provider call,
+a Batch submission, or an allowlist change. Nothing in it
+amends the production hold: generation halted, queue paused,
+containment NORMAL.
+
+**Open items carried (not resolved by this specification):**
+
+- **B-1 (pricing) — OPEN.** The lane-blind cost model stands;
+  no Batch price differential is assumed, designed around, or
+  claimed anywhere in §3–§6.
+- **B-2 (staging parity) — B-G3 predicate.** The B-G1 §7
+  checklist (P-1…P-5) must produce its evidence before any
+  staging result is interpreted; this specification's offline
+  suite is not a substitute for it.
+- **B-3 (prepay provenance) — B-G3 predicate.** Staging carries
+  no `GEMINI_API_KEY` binding as deployed (verified November 6,
+  2026); provisioning it is a B-G3 act requiring its own
+  authorization, a bounded test budget, and the fail-safe
+  default (staging spend treated as production prepay).
+- **O-1 — D-4 parameters are observation parameters.** They
+  classify and escalate; they authorize no automatic halt,
+  failure, abandonment, or termination anywhere in §3.
+- **O-2 — Lease custody (§3.7) is a source-derived addition**
+  beyond B-G1's named flow, required by the 15-minute lease in
+  the deployed source. It is specified at full strength and
+  flagged for Rowan's explicit review.
+- **O-3 — The §3.9 seam's scope.** :2536 governs follow-ons
+  from `kind:"repair"` parents only (verified in source). If
+  initial repair-job origination for an original batch job is
+  expected in B-G2, it needs its own specification point;
+  nothing here silently extends the seam.
+- **O-4 — The halted-fence corner (§3.5, last row).** A fence
+  whose POST is refused by the adapter's halt assert converts
+  to `ambiguous` on a later pass under the existing
+  `fence_without_outcome` rule — conservative and bounded to
+  one counted dispatch, but it spends operator attention on a
+  fence that provably never POSTed (the halt assert fires
+  before any fetch). A narrower rule (a durable "halt-refused"
+  fence marker permitting a clean re-post after the halt lifts)
+  is possible but adds a state to the map law; this
+  specification does **not** adopt it and flags the trade-off
+  for Rowan.
+- **O-5 — Provider error shapes are unverified.** §3.2's
+  taxonomy is built from the synchronous path's evidence
+  standard and the adapter's current collapse; real Batch error
+  payloads are first observable at B-G3. Any token learned
+  there that should classify as policy requires a new reviewed
+  change — the classifier must not be "tuned" informally.
+- **O-6 — Platform-unverified behaviors stand:** alarm delivery
+  and cadence, Durable Object runtime adoption of a deployed
+  build, post-retry-exhaustion alarm semantics, and the
+  racing-wake recheck. 

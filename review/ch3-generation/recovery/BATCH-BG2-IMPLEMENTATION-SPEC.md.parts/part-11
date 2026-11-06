@@ -1,0 +1,52 @@
+No part of §3 or §6 claims them.
+
+---
+
+## 9. B-G3 predicates this build must hand forward
+
+For the record (predicates, not authorizations): the §6.0 exit
+run's logs and tree manifest; the B-2 staging parity evidence
+(P-1…P-5) produced against the candidate build; the B-3
+provisioning decision (credential provenance, bounded test
+budget parameters — B-G1 proposed `P-TEST-SEGS` 12 at the
+lane-blind upper bound — and the shared-prepay fail-safe); the
+first real provider error shapes observed under the bounded
+test budget, reviewed against §3.2 before any production
+interpretation; and Julie's separate authorization for the
+staging deploy and provider testing itself.
+
+---
+
+## Appendix A — Refusal and outcome index (delta only)
+
+New: `batch_accepted_unnamed`, `batch_accounting_conflict`,
+`batch_adjudication_already_resolved`,
+`batch_adjudication_not_found`,
+`batch_adjudication_request_key_not_allowed`,
+`batch_adjudication_schema_inconsistent`,
+`batch_adjudication_selection_not_enumerated`,
+`batch_ambiguity_open`, `batch_duplicate_match_block`,
+`batch_exposure_unavailable`, `batch_figure_caller_supplied`,
+`batch_model_unsupported`, `batch_no_match_not_terminal`
+(retained), `batch_poll_linkage_missing`,
+`batch_provider_identity_caller_supplied`,
+`batch_provider_unsupported`, `batch_quota_unarmed`,
+`batch_reconcile_request_key_not_allowed`,
+`batch_terminal_payload_unavailable`,
+`batch_terminal_receipt_conflict`. Reused unchanged:
+`lane_not_allowed`, `generation_halted`,
+`migration_operator_required`, the `QUOTA_REFUSALS` set, the
+map-transition refusals (`no_map`, `superseded`,
+`state_<current>`), `already_noted`, `no_spend_intent`,
+`claimed_by_other`, `adjudication_schema_inconsistent` (the
+Standard estimated-cost pair — distinct from the Batch pair
+above), and `handleReport`'s existing outcome vocabulary.
+
+## Appendix B — Parameter index
+
+Existing: `LEASE_MS` 15 min; `SEGMENT_ATTEMPT_BUDGET` 12;
+`REPAIR_MAX_RETRIES` 3; `PROVIDER_ATTEMPT_DAILY_LIMIT` 100
+(app-selected policy cap). New (D-4, fixed by the ruling):
+`BATCH_EXTENDED_LATENCY_MS` 3,600,000 (1 h);
+`BATCH_STALL_PASSES` 12; `BATCH_STALL_AGE_MS` 21,600,000 (6 h);
+`BATCH_AMBIGUITY_ESCALATION_MS` 86,400,000 (24 h).

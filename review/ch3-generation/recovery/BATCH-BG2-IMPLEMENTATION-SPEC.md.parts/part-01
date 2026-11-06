@@ -1,0 +1,102 @@
+# B-G2 — BATCH IMPLEMENTATION SPECIFICATION AND OFFLINE TEST PLAN
+
+_Workstream 2, design gate 2. Specification only. Drafted by Wren
+2026-11-06 under Rowan's combined design ruling (local record
+`ROWAN-COMBINED-DESIGN-RULING.md`, Part 2; B-G1 proposal pin
+`9ef371debcc06e2d7db72e8bc84d735c102f943e`)._
+
+**Status of this document.** This specification defines the B-G2
+build at contract level: what a future, separately reviewed build
+must do, file by file and state by state, and the offline tests that
+must prove it. It is **not code**, not a build authorization by
+itself, not a staging or production deployment authorization, not a
+provider-call authorization, and not a Batch allowlist change. The
+candidate build specified here **will ship with
+`D6_LANE_ALLOWLIST` still `["standard"]`** (generation/gen-constants
+.mjs:9). Arming remains B-G4, separately gated.
+
+**Tense discipline.** Statements about the deployed tree are present
+tense and cited to `containment-v4/composed-tree/v2/` (the live
+build source, build `fdb02395b3775dc945baa395591a73060ab146c4`).
+Everything the B-G2 build must do is future tense ("the build
+will…") and is a **specification**, not a claim about current code.
+Where an ordering or mechanism is this specification's own choice
+rather than a fact of the current source, the text says
+**SPECIFICATION CHOICE** explicitly.
+
+**Decision trace.** This specification implements Rowan's rulings
+D-1 (conditional pass — fence-time counting, crash-safe consistency
+to be proven), D-2 (pass — per-job ambiguity block), D-3 (pass with
+conditions — Standard-lane repair for Batch `POLICY_BLOCK`; the
+provider-error classification surface is a **mandatory
+prerequisite**), D-4 (pass — parameters fixed: extended latency
+1 hour; stalled = ≥12 consecutive observed passes without progress
+AND age ≥6 hours; ambiguity escalation 24 hours; no observed pass =
+chain non-observation, never provider stall), D-5 (conditional pass
+— INVENTORY-AND-HOLD; no `abandoned` map state), and D-6 as amended
+(automatic adopt-first on multiple matches is **rejected**), plus
+prerequisites B1 (atomic or recoverably consistent fence +
+accounting protocol, partial-write crash windows enumerated), B2
+(multiple-match handling and duplicate-exposure accounting without
+automatic adoption), and B3 (rollback/restoration and Standard-
+repair tests). B-1 pricing remains **OPEN**; the cost model stays
+lane-blind. B-2 staging parity and B-3 credential provenance are
+carried as B-G3 predicates (§8).
+
+---
+
+## 1. Build outcome and non-goals
+
+When built to this specification, the candidate tree **will**:
+
+1. Execute one Batch submission per occurrence through the D6
+   executor — dispatch → atomic fence + accounting bundle → provider
+   POST → durable map lifecycle → drive-pass polling → classified
+   terminal handling → the shared flush/verify/commit machinery —
+   with exactly the accounting D-1 settled: one counted dispatch per
+   submission, recorded durably **before** the POST; polls,
+   retrievals, and enumerations counted zero.
+2. Classify terminal Batch errors through a new classification
+   surface so a provider policy block is distinguishable from a
+   provider fault **before** any Batch failure can enter the repair
+   machinery (D-3's prerequisite).
+3. Hold ambiguity fail-closed per job, with operator adjudication —
+   including the D-6 multiple-match block with full identifier
+   preservation and duplicate-exposure reporting — as the only
+   designed exits.
+4. Poll submitted maps on drive passes under the fixed D-4
+   parameters, with chain non-observation classified separately
+   from provider stall.
+5. Preserve INVENTORY-AND-HOLD rollback: no map deletion, no
+   `abandoned` state, no silent settlement, no resubmission on
+   restoration.
+6. Remain **inert in production terms**: with the allowlist still
+   `["standard"]`, no Batch intent is admitted, no Batch dispatch
+   executes, and Standard behavior is regression-proven unchanged.
+
+The build **will not**: change the allowlist; group multiple
+segments into one provider batch (the adapter's cardinality is one
+occurrence per provider job — B-G1 §1.0, host/adapters.mjs:364-407);
+add a client surface of any kind (§5.4); cancel or recall a provider
+batch (no cancel method exists in the adapter); depend on
+never-accepted resolution (`resolveBatchNeverAccepted` remains
+unreachable by any wired flow — §3.10.4); or assume any Batch price
+differential (B-1 open).
+
+---
+
+## 2. Current source baseline (present tense, cited)
+
+The components the build touches, as they stand in the deployed
+tree:
+
+| Component | Current fact |
+|---|---|
+| Lane law | `D6_LANE_ALLOWLIST = Object.freeze(["standard"])` (generation/gen-constants.mjs:9); consulted at intent admission (generation/service.mjs:857, refusal `lane_not_allowed`), capabilities (service.mjs:1317-1322, Batch reason `batch_not_armed`), the executor's job-lane check, and the coordinator grant patch. Settings is not a lane control. |
+| D6 executor refusals | `generation/d6-executor.mjs` refuses Batch at three layers: layer 1, a batch dispatch payload before any claim (:677-684); layer 2, the job's own lane not in the allowlist (:688-689); layer 3, a batch work payload inside the occurrence loop (:841-842) — all `{refused: "lane_not_allowed"}`. The file header states: "This executor has no submitBatch call anywhere." |
+| Work source | `generation/d6-work-source.mjs:114` stamps payload `mode: view.lane === "batch" ? "batch" : "standard"`. |
+| Coordinator transactions | `GenerationCoordinator._tx(fn)` (coordinator.mjs:717-721) is re-entrant: a nested `_tx` joins the outer transaction; the outer call runs `state.storage.transactionSync(fn)`. Synchronous SQL helpers called inside an outer `_tx` callback therefore commit or roll back as one unit. |
+| Spend intent | `spend_intents` (coordinator.mjs:533-545): acquired atomically exactly once; the only permit for a provider call; an intent with no recorded outcome is spent-or-unknown and never re-acquirable. `noteSpendOutcome` records known outcomes only; an ambiguous outcome is recorded by **not** calling it. |
+| Batch maps | `batch_maps` DDL (coordinator.mjs:546-556), primary key (job_id, occurrence_id, generation). State law: `fenced` → `submitted \| ambiguous \| rejected`; `ambiguous` → `submitted` (lookup adoption) \| `closed` (evidenced never-accepted resolution only). Methods at coordinator.mjs:3740-3855: `fenceBatchSubmit` (refuses an existing non-superseded map; requires a live, consumer-matched intent), `_batchTransition` (refuses `no_map` / `superseded` / `state_<current>`), `noteBatchSubmitted`, `noteBatchAmbiguous` ("this mapping may NEVER be resubmitted"), `noteBatchRejected`, `adoptBatchByLookup` (evidence string ≤240 chars), `resolveBatchNeverAccepted` (closes + supersedes map and intent atomically; voids a still-open fencing dispatch; re-advances the job). `workView(jobId)` returns latest-generation intents and maps. |
+| Genstore | `generation/genstore.mjs`: execution states `granted → attempted → synthesized → flushed → verified → committed`, with `failed` / `unknown_billing` exits; `createExecution` never creates a second live execution for (job, occurrence); attempt phases `reserved → dispatching → confirmed \| released`; **`markDispatching` is the only path that may precede a provider call** and runs inside `coord._tx`; `confirmAttempt` outcomes are `success \| failed_known \| policy_block \| unknown` (known outcomes must carry a numeric cost; `unknown` must carry cost NULL); `segmentAttemptsUsed` counts `dispatching + confirmed` phases (the shared 12-attempt budget, `SEGMENT_ATTEMPT_BUDGET = 12`, gen-constants.mjs:16); `commitVerified` runs inside `coord._tx` (validateAndBind → occurrence update + `report_success` → `committed`) and is idempotent on (occurrenceId, executionId); `recoveryScan()` classifies non-terminal executions — an `attempted` execution with a `dispatching` attempt is `reconcile_hold`. Phase accounting counts `reserved + dispatching` attempts at their upper bound as in-flight exposure. |
+| Quota | `generation/quota-budget.mjs`: two ledgers — `d6_provider_dispatches` (one row per dispatch, attempt_id primary key) and `d6_grant_reservations` (reservation_id `qres:<grantId>:<occurrenceId>:<dayKey>`). `applyDispatchQuota` is called from `markDispatching` inside the transaction: it proves an open current-day reservation for the exact grant+occurrence (atomically re-reserving on Pacific-Time day rollover), enforces slots and the day cap (`PROVIDER_ATTEMPT_DAILY_LIMIT = 100`, gen-constants.mjs:36 — an app-selected policy cap, not a verified provider limit), writes exactly one dispatch row, and increments `slots_consumed`. Any `QuotaBudgetRefusal` (reasons in `QUOTA_REFUSALS`: `provider_attempt_budget`, `…_day_rollover`, `…_bootstrap_incomplete`, `…_unreserved`, `…_counter_drift`, `…_schema_inconsistent`, `…_day_over_lim

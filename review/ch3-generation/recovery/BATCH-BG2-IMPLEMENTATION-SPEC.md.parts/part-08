@@ -1,0 +1,120 @@
+nown-outcome bundle not yet written | Map `fenced`, attempt `dispatching`, no outcome in memory survives | The known result died with the process. Recovery treats the fence as CW-10/CW-12 (ambiguous path) — fail-closed: a rejection the system can no longer prove is never claimed as known |
+| CW-14 | Map `submitted`; no poll yet in this pass | Poll-state row absent/stale | Next pass polls (≤1 per pass). No accounting state can move |
+| CW-15 | Poll GET in flight | Observation `started` row without completion | Pass counts as attempted; no-progress counter does not advance; no business state changed |
+| CW-16 | Terminal response received; terminal bundle not yet written | Map `submitted`, attempt still `dispatching` | Next pass re-polls the same provider job (retrieval, not resubmission) and lands the bundle then |
+| CW-17 | Inside the terminal bundle | — (one transaction) | All-or-nothing: map/intent/attempt/receipt/execution move together or not at all |
+| CW-18 | Terminal success landed; flush not started | Receipt present; execution `attempted` | Re-poll to re-obtain the audio (bundle returns `already_applied`), then the commit tail |
+| CW-19 | Flush object durable; execution transitions incomplete | Execution `synthesized` (or object present, state behind) | Existing recovery tails (`reenterFlush` / `verifyAndCommit`); never re-synthesize, never re-poll into a second commit |
+| CW-20 | Execution `verified`; commit not yet run | Execution `verified` | `commitVerified` runs from recorded state; idempotent |
+| CW-21 | Inside `commitVerified` | — (existing transaction) | All-or-nothing, as today |
+| CW-22 | Commit landed; binding-projection note not yet written | Binding row present; projection pending | The existing projection sweep publishes it (idempotent, self-healing); no Batch action |
+| CW-23 | Cohort terminal; `handleReport` not yet sent | Attempts confirmed + executions terminal; grant unreported | Next pass's `terminal_unreported` recovery reconstructs the report from durable rows and sends it once — no re-poll, no re-bind |
+| AW-01 | Enumeration response received; run-record transaction not yet written | No run row | Nothing durable moved; the operator re-runs the act (idempotent) |
+| AW-02 | Inside the single-match run + adoption transaction | — | Atomic: adoption and its evidence record land together or not at all |
+| AW-03 | Inside the multiple-match run + adjudication transaction | — | Atomic: the block, all identifiers, and the exposure report land together or not at all |
+| AW-04 | Inside the adjudicate transaction | — | Atomic: selection record and adoption land together or not at all |
+| AW-05 | Adoption committed; next poll not yet run | Map `submitted` with the adopted name | Next pass polls normally; the attempt was never re-counted |
+| FW-01 | Inside `handleReport`'s follow-on creation (existing single transaction) | — | The whole report rolls back; the message is redelivered and re-reported from durable state; no partial follow-on set can exist |
+
+### 4.4 The invariant set (what the tests must prove)
+
+- **I-1 — No executed submission is ever uncounted.** Every POST
+  is preceded by a committed bundle containing exactly one
+  dispatch row. (Proven structurally: the POST call site is
+  reachable only after the bundle returns; and behaviorally:
+  the stub's POST count never exceeds the dispatch-row count.)
+- **I-2 — One fence, one count.** Per (job, occurrence,
+  generation): at most one dispatch row, one consumed slot, one
+  `dispatching` attempt. Polls, retrievals, and enumerations
+  write zero dispatch rows.
+- **I-3 — Over-count ≤1 per crash, and self-identifying.** The
+  only over-count shapes are CW-10/CW-13 (counted, provably
+  unsubmitted — indistinguishable from CW-12, hence the set is
+  *suspects*, bounded by the number of crashed fences). A
+  suspect is identifiable on sight: a non-superseded `fenced` or
+  `ambiguous` map whose attempt is `dispatching` and which has
+  no provider name. The inventory lists exactly these.
+- **I-4 — Known-rejected stays counted.** A `rejected` map's
+  dispatch row and slot are never released by any Batch act;
+  the reservation closes only through the existing close
+  vocabulary at grant settlement.
+- **I-5 — Ambiguity never settles silently.** An `ambiguous`
+  map's attempt remains `dispatching` and its exposure remains
+  at upper bound in phase accounting until adoption + terminal
+  bundle, or an operator accounting act outside this build.
+  No Batch code path writes a cost, an outcome, or a settlement
+  for an ambiguous map.
+- **I-6 — Reconcile derives Batch identically to Standard.**
+  `reconcileQuota` runs unchanged over Batch rows (there is no
+  Batch-specific counter to drift): a clean Batch day reconciles
+  `ok:true` exactly as a Standard day does, and each injected
+  drift class is detected with the same names.
+- **I-7 — Exactly-once commit.** Per occurrence, at most one
+  binding row and one settled cost, across any interleaving of
+  queue messages, drive passes, re-polls, and recoveries.
+- **I-8 — The block is total per job.** While any map of a job
+  is `ambiguous`, the count of new fence bundles for that job is
+  zero; submitted siblings' polls and commits continue.
+- **I-9 — Custody is preserved or loudly lost, never silently
+  settled.** Under the candidate build, a custody occurrence
+  never transitions to `outcome_unknown` while its map is live;
+  under any build, no transition writes a cost or outcome for a
+  provider job that may still be running beyond what the
+  existing lease law already does (and that law's effect is
+  visible in job state).
+
+---
+
+## 5. Interfaces and refusals
+
+### 5.1 New operator routes (the only new surface)
+
+Both POSTs and the GET follow the §2 house pattern exactly:
+public predicates beside the existing operator routes in
+`worker-entry-prod-d6.js`; admission on the migration-operator
+credential alone; internal handlers under `/internal/d6/…`
+re-checking the operator-admitted stamp; closed-allowlist JSON
+bodies; `authorizationRef` required nonblank (≤2000 chars);
+`note` optional (≤2000 chars); refusals returned as structured
+`{ok:false, reason}` bodies with HTTP 200 unless noted, matching
+the house style; the recorded source stamped server-side.
+
+| Route | Body (closed allowlist) | Returns | Notes |
+|---|---|---|---|
+| `POST /v2/d6-batch-reconcile` | `{jobId, occurrenceId, authorizationRef, note?}` | `{ok:true, resolved, mapState, providerName?, runId, matches, exposure?}` or refusal | Invokes §3.10.4 for one occurrence. Idempotent (§3.10.4 step 1). While halted, the enumeration's halt assert surfaces `generation_halted` (403-class, house style) before any provider contact |
+| `POST /v2/d6-batch-adjudicate` | `{adjudicationId, jobId, occurrenceId, selectedProviderName, authorizationRef, evidenceRef, note?}` | `{ok:true, adopted:true, providerName}` / `already_applied` / refusal | `evidenceRef` required nonblank (the operator's stated basis pointer). Invokes §3.10.5 |
+| `GET /v2/d6-batch-inventory` | Query: `limit?` (default 50, max 100), `cursor?` | `{ok:true, rows:[…], summary:{…}, nextCursor, truncated}` | SELECT-only (§3.12). Refuses like the quota-reconcile route on a schema-inconsistent adjudication pair (`batch_adjudication_schema_inconsistent`, HTTP 500, house style) |
+
+Key discipline, mirroring the adjudicate-estimated route:
+caller-supplied keys outside the allowlist refuse
+(`batch_reconcile_request_key_not_allowed` /
+`batch_adjudication_request_key_not_allowed`); a caller-supplied
+**provider identity** on the reconcile route refuses
+`batch_provider_identity_caller_supplied` (identities come from
+enumeration only); figure-shaped keys on either POST refuse in
+the house style (`batch_figure_caller_supplied`). There is no
+route — and no parameter on any route — that closes a map,
+marks a map never-accepted, clears an exposure, or deletes a
+record.
+
+### 5.2 New and changed refusal / outcome names
+
+New names introduced by this build (all others are existing
+vocabulary, §2): `batch_quota_unarmed` (fence-bundle refusal,
+§3.4); `batch_accounting_conflict` (linkage/outcome conflicts
+at the terminal bundle and inventory, §3.5/§3.6.4);
+`batch_terminal_receipt_conflict` (§3.6.4);
+`batch_terminal_payload_unavailable` (commit-tail retry class,
+§3.8); `batch_poll_linkage_missing` (inventory classification,
+§3.6.2); `batch_provider_unsupported` /
+`batch_model_unsupported` (preflight outcomes, §3.3);
+`batch_ambiguity_open` (per-job submission block outcome,
+§3.3); `batch_accepted_unnamed` (adapter error marker, §3.5);
+`batch_no_match_not_terminal` (retained from the legacy
+procedure, §3.10.4); `batch_duplicate_match_block` (route-level
+outcome for a multiple-match run, §3.10.4);
+`batch_adjudication_not_found` /
+`batch_adjudication_already_resolved` /
+`batch_adjudication_selection_not_enumerated` /
+`batch_adjudication_schema_inconsistent` (§3.10);
+`batch_reconcile_

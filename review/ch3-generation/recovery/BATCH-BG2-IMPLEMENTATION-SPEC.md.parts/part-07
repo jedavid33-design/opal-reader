@@ -1,0 +1,148 @@
+e reservation (id, state,
+  slots total/consumed); any open adjudication id; and the
+  derived `custody` class: `provider_custody` (non-superseded
+  `fenced` / `submitted` / `ambiguous` with a `dispatching`
+  attempt), `terminal_consumed`, or `closed_history`.
+- Summary over **all** rows, not the page: counts by state;
+  `countedDispatches` (distinct dispatch rows joined to map
+  generations); `outstandingUpperMicroCents` (upper bounds of
+  `provider_custody` rows); `duplicateUnledgeredUpperMicroCents`
+  (summed from open adjudications); `knownSettledMicroCents`
+  (confirmed costs of terminally consumed maps);
+  `lastDrivePassAt` and the outstanding-map count (§3.6.3's
+  chain-non-observation facts).
+
+**Rollback invariants (what the code must NOT do).** The build
+will contain: no deletion of `batch_maps`, `spend_intents`,
+attempt, dispatch, reservation, execution, transition, poll, or
+adjudication rows; no `abandoned` map state and no transition
+that manufactures one; no rollback, restore, or inventory code
+path that calls `submitBatch`, `getBatch`,
+`listBatchesByDisplayName`, or `resolveBatchNeverAccepted`; no
+settlement of a map's exposure by any act except the terminal
+bundle (§3.6.4) and the existing operator accounting machinery.
+A rolled-back (Standard-only) build leaves maps untouched
+because it has no batch branch; a restored Batch-capable build
+resumes from the durable rows — `submitted` → poll, `ambiguous`
+→ block, `fenced` → `fence_without_outcome` conversion, never a
+resubmission (§3.3). One boundary is stated plainly: after any
+Batch map exists, a rollback target **without** the §3.7 custody
+predicate and this inventory surface (e.g. the permanent floor
+build `6a73d962…`) does not preserve Batch custody semantics —
+its lease handler can move a custody occurrence to
+`outcome_unknown` (visible, never silent, and the map and
+exposure rows survive), so B-G4's rollback plan must name a
+custody-aware target or rule on that consequence explicitly.
+This specification does not claim the floor build is a safe
+Batch rollback target.
+
+**Acceptance evidence.** Family BG2-B: inventory before and
+after a simulated rollback + restoration is identity- and
+accounting-equivalent (observation timestamps excepted);
+restoration submits nothing; every NOT-do invariant is pinned
+by a source-level test (the candidate tree is searched for the
+forbidden call/delete shapes on the named paths) plus the
+behavioral tests.
+
+### 3.13 The allowlist flip is NOT in this build (inertness)
+
+`D6_LANE_ALLOWLIST` will remain `Object.freeze(["standard"])`.
+The build's inertness property, which §6 family BG2-S must
+prove on the candidate tree as shipped: with the candidate code
+in place, (a) a Batch intent is refused `lane_not_allowed` at
+admission and capabilities report `batch_not_armed`; (b) a
+Batch dispatch message, a Batch-lane job, and a Batch work
+payload are each refused `lane_not_allowed` with zero provider
+calls, zero map rows, zero attempt rows, and zero dispatch rows;
+(c) the new operator routes exist but, against a store with no
+Batch maps, every act is a no-op refusal (`not_ambiguous` /
+`batch_adjudication_not_found`) and the inventory reads empty;
+(d) the poll driver, invoked on a store with no Batch maps,
+polls nothing and writes nothing. Batch behavior is exercised
+in tests only by seeding Batch-lane jobs directly in the store
+(bypassing admission), never by editing the constant in the
+candidate tree.
+
+---
+
+## 4. The fence + accounting protocol (B1)
+
+### 4.1 The ordered writes and their grouping
+
+At the fence, "accounting" is four durable objects that must
+agree: the **fence row** (`batch_maps`, state `fenced`), the
+**dispatch ledger row** (`d6_provider_dispatches`), the
+**attempt record** (`segment_attempts`, phase `dispatching`), and
+the **quota reservation** (`d6_grant_reservations`,
+`slots_consumed` incremented) — with the **spend intent** as
+their common permit and the **execution record** as the commit
+carrier. The grouping available today is the coordinator's
+re-entrant `_tx` (nested calls join the outer transaction) over
+`state.storage.transactionSync`; the protocol below is
+**SPECIFICATION CHOICE**: the fence will be executed as one
+outer transaction, using the existing synchronous helpers, in
+this order:
+
+| # | Write (existing helper) | Table / effect |
+|---|---|---|
+| W1 | `createExecution` (or reuse the live execution) | execution `granted`, attempt budget stamped |
+| W2 | execution transition | execution → `attempted` |
+| W3 | `acquireSpendIntent` | intent row, exactly-once permit |
+| W4 | `reserveAttempt` | attempt `reserved`, upper bound recorded |
+| W5 | `fenceBatchSubmit` | map `fenced`, `display_name`, grant provenance |
+| W6 | `markDispatching` → `applyDispatchQuota` (may create the day-rollover reservation first) | dispatch row; reservation `slots_consumed` +1; attempt → `dispatching` with day key |
+
+Rules of the bundle: no `await` inside; a refusal returned by
+W1–W5 is converted to a throw so the bundle cannot half-apply;
+quota refusals (including the segment-budget refusal surfaced
+through the reservation check) propagate as thrown
+`QuotaBudgetRefusal`s; the bundle requires `quotaArmed(coord)`
+before W1 and refuses `batch_quota_unarmed` otherwise; the POST
+is attempted only if the bundle's callback returns normally.
+
+**Day-boundary rule.** The dispatch row, the slot, and the
+attempt's day stamp all take the Pacific-Time day key computed
+inside `applyDispatchQuota` at fence time. A submission POSTed
+seconds after midnight PT still belongs to its fence day. That
+is the B-G1 §2 decision made mechanical, and it matches how
+Standard attributes a dispatch (the stamp is written at
+`markDispatching` there too).
+
+### 4.2 Why this order
+
+W3 before W5 is forced by the source: `fenceBatchSubmit`
+requires the latest spend intent to exist, be un-superseded, and
+be consumer-matched. W5 before W6 is the D-1 rule: the durable
+submission record precedes the act it counts. W6 last means the
+only write that can refuse on budget grounds (the quota step)
+is also the one whose refusal most cleanly aborts the whole
+fence — a quota-refused fence leaves **no** map, intent,
+attempt, or dispatch row, which is exactly the Standard
+property the ruling's B1 asks B-G2 to match ("reconciles
+identically", §4.4 I-6).
+
+### 4.3 Crash-window enumeration
+
+A **window** is a point where a process death (or an injected
+fault with the same durable effect) can leave the system between
+two specified steps. Recovery is always by a named actor on
+durable state: the next drive pass, the next queue message, the
+lease handler, the operator routes, or the inventory surface.
+Twenty-nine windows are specified: CW-01…CW-23 (main flow),
+AW-01…AW-05 (adjudication), FW-01 (repair follow-on).
+
+| Window | Durable state at the window | Detection | Recovery rule |
+|---|---|---|---|
+| CW-01 | Claim committed; no fence bundle yet | Next message / pass sees the granted occurrence with no execution, intent, or map | Run the bundle from the top (nothing to reconcile) |
+| CW-02 | Inside bundle, after W1 | — (uncommitted) | Transaction rolls back: no execution row survives. Next pass = CW-01 |
+| CW-03 | Inside bundle, after W2 | — | Rolls back to the pre-bundle execution state (or absence) |
+| CW-04 | Inside bundle, after W3 | — | Rolls back: no intent survives; the permit was never spent |
+| CW-05 | Inside bundle, after W4 | — | Rolls back: no attempt survives |
+| CW-06 | Inside bundle, after W5 | — | Rolls back: no map survives; nothing was counted |
+| CW-07 | Inside bundle, at the rollover-reservation creation inside W6 | — | Rolls back with the bundle; the new-day reservation is recreated atomically on retry |
+| CW-08 | Inside bundle, after the dispatch-row insert, before the slot increment | — | Rolls back both; `reconcileQuota` sees no drift because neither half survives |
+| CW-09 | Inside bundle, after the slot increment, before the attempt's day stamp | — | Rolls back all three W6 effects together |
+| CW-10 | Bundle committed; POST not started | Next pass/message: map `fenced`, attempt `dispatching`, no outcome | **Convert, never post**: `noteBatchAmbiguous("fence_without_outcome")`; adjudication is the only exit. The dispatch stays counted (D-1's ≤1 over-count, self-identifying: §4.4 I-3) |
+| CW-11 | POST in flight; provider outcome unknown | Same durable shape as CW-12 | Indistinguishable from CW-10/CW-12 by construction → the ambiguous path (CW-12 rule) |
+| CW-12 | Provider accepted; `noteBatchSubmitted` not yet written | Map still `fenced` with a counted dispatch and no provider name | Never resubmit. Convert to `ambiguous` (as CW-10); adoption by enumeration is the exit. The counted dispatch is *not* an over-count here — the provider job exists — but the system cannot tell CW-10 from CW-12, so both take the conservative path and the inventory exposes the ambiguity, not a guess |
+| CW-13 | HTTP rejection received; k

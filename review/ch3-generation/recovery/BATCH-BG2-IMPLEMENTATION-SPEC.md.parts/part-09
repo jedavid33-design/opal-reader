@@ -1,0 +1,174 @@
+request_key_not_allowed` /
+`batch_adjudication_request_key_not_allowed` /
+`batch_provider_identity_caller_supplied` /
+`batch_figure_caller_supplied` (§5.1). Changed behavior, same
+name: `lane_not_allowed` (§3.3 — still the refusal whenever the
+lane is not admitted, including every Batch case on the shipped
+candidate).
+
+### 5.3 Read-surface additions
+
+Exactly one: `GET /v2/d6-batch-inventory` (§3.12). The existing
+diagnostics surface gains the classification scalars through the
+already-whitelisted detail keys (§3.2) — no new diagnostics
+shape. Capabilities, health, quota, and sync surfaces do not
+change.
+
+### 5.4 Client impact
+
+**None.** The client is capability-driven (§2): the Generate
+button already renders from server admission, the click handler
+already selects Batch when admitted, and the submission already
+carries `lane`. No client file changes in this build, and no
+client-visible contract changes: capabilities still report
+`batch_not_armed` on the shipped candidate. Device verification
+of the Batch-ready client belongs to B-G4's admission gate, not
+to B-G2.
+
+---
+
+## 6. Offline test plan
+
+### 6.0 Harness law (applies to every family)
+
+- **Home:** a new suite `containment-v4/tests/batch-bg2-battery
+  .test.mjs`, run with `node --test` from `containment-v4/tests/`
+  against the candidate tree, built on
+  `containment-v4/tests/harness.mjs` — the real-SQLite harness
+  whose `SqlCursor.one()` **throws** on zero or multiple rows
+  (production Durable Object semantics). The null-returning
+  `.one()` fake of the older do-harness lineage is **forbidden**:
+  no test in this suite may introduce, wrap, or tolerate a
+  null-returning `one()`. Every new read path in §3 is exercised
+  against empty result sets under throwing semantics (the P8
+  lesson: harness-green over a null fake is no evidence for
+  empty-result paths).
+- **Extensions (test-only, enumerated):** a scripted provider
+  stub implementing `submitBatch` / `getBatch` /
+  `listBatchesByDisplayName` / `synthesize` with a durable call
+  log and per-call scripted outcomes (accept+name, HTTP error
+  by status, transport throw, accepted-unnamed, terminal shapes
+  for §3.2's matrix) — it never touches the network; an R2 stub
+  with object durability across `crash()`; the harness's fake
+  clock and pass-token source; a counting write-fault injector
+  layered on the harness's statement matcher, able to fail the
+  *n*-th matching statement inside a named bundle.
+- **Crash** means the harness's `crash()`: a fresh instance over
+  the same storage. Assertions are made from table rows and the
+  stub's call log, never from console output.
+- **Fixtures are synthetic.** No book text, no production ids,
+  no production payloads anywhere in the suite.
+- **Exit rule (standing battery rule):** B-G2's evidence is one
+  complete runner invocation on the final candidate tree
+  executing every family below plus the four standing batteries
+  (containment, P2, R5A, V-3), exit code 0, full logs captured,
+  tree manifest hashed. The known P2/R5A identity-fixture
+  staleness on composed trees must be cured in the scaffolding
+  as part of this build's test work — a B-G2 exit may not rest
+  on "behavioral-only" partial passes.
+
+### 6.1 Families
+
+**BG2-H — Throw-safe and harness semantics.** Intents: every new
+§3 read on empty tables returns its specified empty/refusal
+shape under throwing `.one()`; every `note*` / transition refusal
+(`no_map`, `superseded`, `state_<current>`, intent refusals)
+writes zero rows; the adjudication presence discipline (both
+absent → empty; one present → `batch_adjudication_
+schema_inconsistent`) under all four combinations; adapter-level
+throws (halt, not-configured, unsupported) at every stage leave
+exactly the §3.5-prescribed durable state. *Proves:* the new
+code is safe on the empty and refusal paths that production
+hits first. *Cannot prove:* real DO storage error behavior
+beyond the harness's SQLite fidelity.
+
+**BG2-F — Fence atomicity (B1).** Intents: fault injected at
+each of W1…W6 (including the rollover-reservation sub-step)
+leaves the store snapshot-equal to the pre-bundle baseline
+(a pre-existing execution keeps its prior state); a quota
+refusal (segment budget, day budget, counter drift seeded) rolls
+back the whole bundle with no partial rows; `batch_quota_unarmed`
+on an unarmed store writes nothing; a successful bundle yields
+exactly the §4.1 ledger set, all sharing one day key. *Proves:*
+the bundle is atomic or recoverably consistent at every
+internal boundary the source supports. *Cannot prove:* platform
+transaction behavior under a real DO eviction mid-callback —
+the harness models rollback, not the platform.
+
+**BG2-C — Crash windows.** Intents: one test per window in
+§4.3 (CW-01…CW-23, AW-01…AW-05, FW-01 — 29 windows), each:
+drive to the window, `crash()`, run the named recovery actor,
+assert the specified end state from rows (including "no second
+POST" from the stub log and "no second binding" from the
+binding table). *Proves:* every torn state the protocol can
+produce has the specified detection and recovery. *Cannot
+prove:* that a real platform crash leaves storage in exactly
+the modeled states (in-flight provider calls in particular are
+modeled, not observed).
+
+**BG2-A — Accounting.** Intents: fence-time counting (the
+dispatch row exists before the stub records the POST — asserted
+by interleaving the stub log with a ledger read); known-rejected
+counted forever (I-4); polls and enumerations move no counter
+(I-2); the ≤1 over-count bound with its self-identifying shape
+(I-3); a fence straddling the PT day boundary attributes to the
+fence day; a mixed Standard + Batch day reconciles `ok:true`
+and each injected drift class is caught with the Standard names
+(I-6); phase accounting carries an ambiguous map at upper bound
+from its fence moment (I-5). *Proves:* D-1's counting law
+mechanically. *Cannot prove:* the provider's own billing — the
+ledger is estimates, as everywhere in this system.
+
+**BG2-E — Error classification.** Intents: the §3.2 matrix over
+synthetic provider shapes — structured policy evidence →
+`policy_block`; item error 5xx → provider_error retryable;
+batch error 429-class → provider_error non-retryable; metadata
+FAILED/CANCELLED/EXPIRED without error → batch_terminal;
+record-count and missing-audio and bad-audio shapes →
+response_shape `failed_known`; unrecognized error shape →
+`provider_error_unclassified` `failed_known`; negatives: no
+shape without structured policy evidence ever yields
+`policy_block`; success and not-done returns are shape-identical
+to today's adapter. *Proves:* F3's entry condition (D-3) — a
+Batch failure reaches repair only with a proven class.
+*Cannot prove:* the real provider's error payload shapes; the
+classifier is conservative precisely because B-G3 is where real
+shapes are first observed.
+
+**BG2-X — Execution, poll, and commit.** Intents: the §3.3
+state-dispatch table end-to-end (each map state, each execution
+state); §3.5's five submit outcomes; immediate poll after
+acceptance; terminal-bundle atomicity and receipt idempotence
+(same receipt → `already_applied`; differing receipt →
+`batch_terminal_receipt_conflict`, zero extra writes); shared
+commit tail produces exactly one binding/projection/settled
+cost (I-7); cohort rule (no early report; `terminal_unreported`
+recovery reports once). *Proves:* the execution path's contract
+against the stub. *Cannot prove:* real provider latency,
+real R2 behavior, or DO alarm delivery.
+
+**BG2-P — Poll driver, D-4 parameters, lease custody.** Intents:
+≤1 poll per map per pass across many simulated passes; duplicate
+pass token is a no-op; classification boundaries at exactly
+1 h / 12 passes / 6 h on the fake clock (11 passes ≠ stalled;
+12 passes at 5 h 59 m ≠ stalled; both conditions → stalled;
+progress resets the counter); poll-error passes count as
+observed without progress; a `started`-only observation does not
+advance the counter; ambiguity classification at 24 h with zero
+provider calls; halt and containment suppression invoke nothing;
+lease tolling (§3.7) across repeated expiries and across a
+simulated silent chain; a terminally consumed map does not toll.
+*Proves:* D-4's observation parameters and the custody rule
+mechanically. *Cannot prove:* alarm delivery, alarm cadence,
+or any platform timing — NO-PASS-OBSERVED remains an
+observation-layer derivation, as designed.
+
+**BG2-M — Ambiguity and multiple matches (B2).** Intents: the
+per-job block (I-8) with submitted siblings unaffected; no-match
+leaves byte-identical state and returns
+`batch_no_match_not_terminal`; single-match adoption resumes
+polling on the same attempt with no new dispatch; multiple
+matches adopt **nothing** — including via a direct call of the
+hardened legacy export — preserve every identifier verbatim,
+and produce the exact §3.10.3 exposure report; an open
+adjudication blocks later single-match auto-adoption; the

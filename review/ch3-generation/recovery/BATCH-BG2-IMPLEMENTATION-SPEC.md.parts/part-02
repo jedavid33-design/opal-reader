@@ -1,0 +1,75 @@
+it`) rolls the whole transaction back. `reconcileQuota` derives drift from rows (`slots_consumed_mismatch`, `slots_over_consumed`, `dispatch_row_unmatched`, `stamped_attempt_without_dispatch_row`, `day_over_limit`, bootstrap exceptions); `ok` requires empty drift and no current-day block. Enforcement is armed exactly when the durable bootstrap record exists. |
+| Adapter | `host/adapters.mjs`: every method begins `assertGenerationEnabled(env)` — under `GENERATION_HALT = "1"` submissions, polls, and enumerations all throw before provider contact. `submitBatch` (:364-407) is Gemini-only, model-gated to `gemini-3.8-flash-tts` / `flash-lite` (regex at :372), POSTs one request keyed `seg-<occurrenceId>`, and on an accepted response with a missing/invalid `batches/…` name throws a 502 marked `noRetry` ("Manual reconciliation required"). `getBatch` (:409-439) returns `{done, state}` shapes; at :422-423 a batch-level error collapses to the metadata state or `BATCH_STATE_FAILED`, and at :430 a done response whose single record carries an error, or carries no audio, collapses to `BATCH_STATE_FAILED` — **a policy block and a provider fault are indistinguishable today**. `listBatchesByDisplayName` (:441-469) returns only `{name, displayName}` per match, page size 100. `verifyNeverAcceptedEvidence()` throws unconditionally. The synchronous Gemini path's policy evidence standard lives at :233-335: `contentBlocked` is set only on clear structured policy signals (finish/block/status fields, prompt feedback), never on missing audio alone. |
+| Legacy executor | `executor.mjs` (tree root): `runBatch` (:158-209) is the behavioral reference — existing map dispatch (`submitted` → poll; `ambiguous` → block; `rejected`/`closed` → skip; `fenced` → `noteBatchAmbiguous(fence_without_outcome)`, never post on a fence alone); `pollBatch` (:141-156; a poll throw is pending with no state changes). `reconcileBatch` (:224-240) requires an `ambiguous` map, returns `{resolved:false, reason:"no_match_not_terminal"}` on no match, and **adopts `matches[0]`** on any match. Grep-verified: `reconcileBatch` has **no caller** in any entry of the tree. Its adopt-first behavior is what D-6 rejects. |
+| Repair inheritance | `coordinator.mjs:2536`: when a `kind:"repair"` job's report completes with `detail.followOn.occurrences`, the follow-on job is created with `lane: jobRow.lane` and granted in the same transaction. |
+| Grants and leases | Grants lease for `LEASE_MS = 15 * 60 * 1000` (coordinator.mjs:463). The lease handler (:3319-3405) transitions still-`granted` occurrences of an expired, delivered grant to `outcome_unknown` and the job to `unknown`. `handleReport` closes its grant: occurrences the report does not mention return to `pending` at grant closure, and `settleReservationsForGrant` runs there. §3.7 specifies the Batch-custody consequence. |
+| Production entry | `worker-entry-prod-d6.js` imports `createD6Executor` (:271) and constructs it only inside `_execute` (:1824). `alarm()` (:1939+) runs the base coordinator alarm, then the containment gate, then `service.recover()` + `service.driveOnce()`; drive-pass outcomes are recorded in `d6_drive_passes` through a scalar allowlist projection (:464-476). Operator routes follow one house pattern: public gate skips the client token only for the migration-operator credential; the class gate re-checks the `x-opalreader-operator-admitted: "1"` stamp (missing stamp ⇒ HTTP 403 `migration_operator_required`); bodies are closed allowlists with a required nonblank `authorizationRef` where the act is auditable (e.g. `/v2/d6-reconcile-unknown`, `/v2/d6-adjudicate-estimated`, `/v2/d6-quota-reconcile` at entry :2065-2102 and their internal handlers). |
+| Drive selection | `service.driveOnce` (:1008) selects plans whose state is NOT IN (`complete`, `partial`, `retired`, `halted_unknown`); its grant step refuses to grant a job while any pending occurrence has a non-terminal execution (`execution_in_flight`). |
+| Cost model | Lane-blind: 225 units per audio second (gen-constants.mjs:64-65 region; `MICRO_CENTS_PER_AUDIO_SECOND = 225`); expected cost `round(chars / 15.96 × 225)`; per-attempt upper bound `upperBoundAttemptMicro(chars) = round(chars/10 × 225)` (:78-84). Ledger units behave as micro-dollars despite the `MicroCents` naming (standing correction). |
+| Test harnesses | `containment-v4/tests/harness.mjs`: real SQLite via `node:sqlite`; its `SqlCursor.one()` **throws** on 0 or >1 rows ("Expected exactly one result, got N") — production Durable Object semantics, deliberately not the null-returning fake of the older do-harness lineage; `transactionSync` is BEGIN/COMMIT/ROLLBACK; a statement-matching fault injector and `crash()` (new instance over the same storage) are built in. Standing batteries: containment `containment-v4/tests/containment-battery.test.mjs` (42 tests), P2 `instrumentation-spec/tests/battery.test.mjs` (32), R5A `r5a-revision/tests/r5a-battery.test.mjs` (23), V-3 `v3-harness/v3-cold-restart.test.mjs` (5). |
+
+---
+
+## 3. Build scope, component by component
+
+File map (the complete set of production files the build may
+touch; anything else changing is a scope finding at review):
+
+| File | Change |
+|---|---|
+| `host/adapters.mjs` | §3.2 classification surface inside `getBatch`; §3.5 accepted-unnamed marker; §3.10 enumeration match hardening. `submitBatch`'s request shape and success shape do not change. |
+| `generation/d6-executor.mjs` | §3.3 Batch branch replacing refusal layers 1 and 3 for admitted lanes (layer 2 unchanged); §3.4 fence bundle invocation; §3.5 submit-outcome handling; §3.6 shared poll/terminal handling and the drive-pass poll method; §3.8 shared commit tail. |
+| `generation/genstore.mjs` | §3.6 terminal-receipt writer; §3.6 poll-observation storage (lazily ensured beside its writer, never added to the pinned bootstrap schema set). |
+| `generation/quota-budget.mjs` | No conceptual change. The fence bundle will reuse `applyDispatchQuota` through `markDispatching`, and `reconcileQuota` unchanged. (A Batch-specific counter is forbidden — §4.4, invariant I-6.) |
+| `coordinator.mjs` | §3.7 lease-custody predicate; §3.9 repair follow-on lane partition at :2536; §3.10 adjudication tables and transitions (lazily ensured beside their writer, presence-checked on reads). Map state law itself does not change. |
+| `generation/service.mjs` | §3.10/§3.11 operator service methods (reconcile, adjudicate, inventory); capabilities and admission logic do not change. |
+| `generation/gen-constants.mjs` | The four fixed D-4 parameters as pinned constants (§3.6.3). The allowlist line does not change. |
+| `worker-entry-prod-d6.js` | §3.6 drive-pass poll invocation in `alarm()`; §5 operator routes (public classification + internal handlers). `_execute` wiring otherwise unchanged. |
+| `executor.mjs` (legacy) | §3.10.5 multiple-match hardening of `reconcileBatch` only. It gains no caller and no D6 role. |
+| Client (any file) | **No change.** §5.4. |
+
+### 3.1 Sequencing constraint that governs all of §3
+
+The error-classification surface (§3.2) **will be built and tested
+first**. Until it exists and its family (§6, BG2-E) is green, no
+Batch terminal failure may be wired to any report, repair, or
+settlement path. The fence + accounting protocol (§3.4/§4) **will
+be built before** the execution path's submit wiring (§3.5). The
+multiple-match adjudicator (§3.10) **will be built before** any
+enumeration caller is wired (§3.11's route is that caller).
+
+### 3.2 The error-classification surface (D-3 prerequisite)
+
+**Where it lands.** A pure classifier inside `host/adapters.mjs`,
+used only by `getBatch`, exported for offline tests. It takes the
+decoded provider batch object and returns a classification object;
+it performs no I/O, reads no coordinator state, and never throws
+for a terminal shape. `getBatch`'s success return
+(`{done:true, state:"BATCH_STATE_SUCCEEDED", audio, format:"wav",
+durationSec}`) **will not change**. The not-done return
+(`{done:false, state}`) **will not change**.
+
+**What it will produce.** For every terminal (done) non-success
+response, `getBatch` will return
+`{done:true, state, classification}` where `state` keeps today's
+vocabulary (`BATCH_STATE_FAILED` / `BATCH_STATE_CANCELLED` /
+`BATCH_STATE_EXPIRED`, or the metadata state) and `classification`
+is exactly:
+
+```
+{
+  kind:        "policy_block" | "provider_error" | "batch_terminal"
+             | "response_shape" | "provider_error_unclassified",
+  outcome:     "policy_block" | "failed_known",
+  blockReason: <bounded token or null>,
+  finishReason:<bounded token or null>,
+  providerCode:<bounded token or null>,
+  retryable:   <boolean>,        // chain-level eligibility only
+  source:      "batch_error" | "item_error" | "item_finish"
+             | "metadata_state" | "missing_audio" | "record_count"
+             | "audio_decode"
+}
+```
+
+**Extraction rules** (conservative by construction; the evidence
+standard mirro

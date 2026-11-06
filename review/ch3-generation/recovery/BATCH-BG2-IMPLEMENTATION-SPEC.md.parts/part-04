@@ -1,0 +1,161 @@
+ation, and handle the outcome as follows:
+
+| Outcome | Durable response | Report |
+|---|---|---|
+| Accepted, valid `batches/…` name returned | `noteBatchSubmitted` (persists the provider name at once), then one immediate shared poll (§3.6.4) in the same message | Per poll result |
+| HTTP error (a response was received) | Known-outcome bundle (§3.6.4's transaction shape): `noteBatchRejected` + `noteSpendOutcome(failed_known)` + attempt confirmed `failed_known` cost 0 + execution failed at stage `submit` | `provider_error` with `{httpStatus, batch:true}`; if the error carries the adapter's quota marker (Gemini 429), `daily_limit` with `{quotaExceeded:true, httpStatus}` and the message stops, mirroring Standard; `retryable` marker for HTTP 500/502/503 |
+| Accepted but no valid name (adapter's 502 `noRetry` throw) | The adapter will mark this error distinctly (`batchAcceptedUnnamed: true`, code `batch_accepted_unnamed`) and the branch will check that marker **before** the HTTP branch: `noteBatchAmbiguous(detail:"accepted_unnamed")`; attempt stays `dispatching`; intent stays open | None |
+| Transport-unknown throw (no HTTP status, no marker) | `noteBatchAmbiguous(detail:"submit_transport_unknown")`; attempt stays `dispatching`; intent stays open | None |
+| `GenerationHaltedError` from the adapter's halt assert | No map transition, no outcome note; the message stops. (The fence stands; a later pass treats a still-`fenced` map under the `fence_without_outcome` rule — conservative, bounded to one counted dispatch, and visible. See §8, open item O-4.) | None |
+
+A known-outcome bundle that fails validation (e.g. the map is no
+longer `fenced`) will roll back whole; the occurrence then takes
+the ambiguity path on its durable state rather than claiming
+knowledge from memory.
+
+**Acceptance evidence.** Family BG2-X: one test per table row,
+asserting map state, intent outcome, attempt phase/outcome/cost,
+execution state, and provider-call count from the stub's record.
+
+### 3.6 The poll driver
+
+#### 3.6.1 Placement and authority
+
+The build will add a `pollBatchPass({passToken})` method to the
+D6 executor. The production entry's `alarm()` will construct the
+executor with the same dependencies `_execute` uses
+(providers, flush store, cache, work source, consumer id) and
+invoke `pollBatchPass` **once**, after the containment gate and
+`service.recover()`, before `service.driveOnce()`. The entry will
+generate one pass token per alarm invocation and merge the poll
+outcomes into the recorded pass outcomes as plan-shaped entries
+using only the recorder's existing allowlisted scalar keys
+(`planId`, `state`, `stopReason`, `grantId`) — per-map evidence
+lives in the poll-observation records (§3.6.3) and the inventory
+surface (§3.12), not in the recorder.
+
+Authority: the poll step is a **continuation of an already-fenced
+submission**, not a new dispatch. It will act only on a map whose
+original grant is not `reported` / `voided` / `superseded` and
+whose claim row stands `claimed` by this executor's consumer id.
+It never acquires an intent, never fences, and never submits —
+except the bounded submission continuation of §3.6.6. While
+`GENERATION_HALT` is not `"0"`, or while containment suppresses
+the drive, `pollBatchPass` will not be invoked at all (the entry's
+existing gates stand in front of it), and the adapter's own halt
+assert remains as the second layer.
+
+#### 3.6.2 Selection
+
+Per pass, in deterministic order (map `updated_at`, job id,
+occurrence id), the driver will consider every latest-generation,
+non-superseded map where:
+
+- the job's lane is `batch` and the job is not in a terminal,
+  cancelled, superseded, or `parked_policy` state;
+- a linked plan, if any, is not `complete` / `partial` /
+  `retired` / `halted_unknown` and is not quarantine-held (a read
+  fault on the hold check excludes the map for this pass, D8-1
+  discipline);
+- the linked execution is non-terminal and the linked attempt is
+  in phase `dispatching` (a map without this linkage is not
+  polled; it is classified `batch_poll_linkage_missing` on the
+  inventory surface — a corruption signal, never silently
+  adopted into the driver);
+- the occurrence state is `granted` (custody, §3.7).
+
+Each selected `submitted` map is polled **at most once per pass**.
+A map whose attempt is already confirmed, or whose execution is
+`committed` / `failed`, is terminally consumed (§3.6.4) and is
+never polled again, whatever the map state says — the map state
+machine gains no terminal-success state, so terminal consumption
+is **derived** from attempt + execution + occurrence state.
+
+#### 3.6.3 Observation records and the D-4 parameters
+
+Poll history must be durable: pass-recorder rows are bounded and
+pruned (retention 288), so they cannot carry a 12-pass stall
+count. The build will therefore keep, in the genstore, two lazily
+ensured tables beside their only writer (the house pattern of the
+reconcile-audit and adjudication schemas — never part of the
+pinned bootstrap set):
+
+- `d6_batch_poll_state` — one row per (job, occurrence,
+  generation): `provider_name`, `submitted_observed_at` (first
+  observation of the `submitted` state), `last_pass_token`,
+  `last_observed_at`, `last_provider_state`,
+  `consecutive_no_progress_passes`, `classification`,
+  `classification_since`, `ambiguity_since`.
+- `d6_batch_poll_observations` — one row per (pass token, job,
+  occurrence, generation): `phase` (`started` / `completed`),
+  provider state, outcome class, progress flag, classification,
+  poll-error name. A `started` row is written in its own
+  transaction **before** the provider GET; the completion update
+  and the poll-state counter advance in one transaction after
+  it. A crash during the GET leaves a `started` row: the pass
+  counts as attempted, the no-progress counter does **not**
+  advance, and no accounting state has moved.
+
+The pinned parameters (gen-constants.mjs, new constants):
+`BATCH_EXTENDED_LATENCY_MS = 3_600_000` (1 hour),
+`BATCH_STALL_PASSES = 12`, `BATCH_STALL_AGE_MS = 21_600_000`
+(6 hours), `BATCH_AMBIGUITY_ESCALATION_MS = 86_400_000`
+(24 hours) — exactly D-4's fixed values.
+
+Classifications, computed per map per completed pass:
+
+- **BATCH-IN-FLIGHT** — `submitted`, non-terminal, age below the
+  extended-latency bound. No outcome beyond the poll record.
+- **BATCH-LATENCY-EXTENDED** — age ≥1 hour without a terminal
+  state. Informational; named on the pass outcome.
+- **BATCH-STALLED** — ≥12 consecutive observed passes without
+  progress **and** age ≥6 hours. Progress means: a provider-state
+  change, a map transition, or a terminal outcome, recorded on an
+  observed pass. Effect: escalation visibility only (pass outcome
+  + inventory). The plan is not auto-halted, the job is not
+  failed, the provider job is not abandoned. Any later progress
+  clears the classification.
+- **BATCH-AMBIGUITY-OPEN** — an `ambiguous` map aged ≥24 hours.
+  The driver records the classification (no provider call — an
+  ambiguous map has no name to poll); adjudication (§3.10) is the
+  only action it calls for.
+- **NO-PASS-OBSERVED** — never emitted by the driver itself (a
+  driver cannot observe its own absence). The inventory surface
+  (§3.12) will report `lastDrivePassAt` (from `d6_drive_passes`)
+  alongside outstanding maps so the observation layer can name
+  chain non-observation; no D-4 threshold attaches to it, and it
+  is never classified as a provider stall. While no pass is
+  observed, no poll occurs, no spend occurs, and no stall clock
+  advances — Batch correctness rests on durable rows, not alarm
+  punctuality.
+
+Duplicate invocation with the same pass token will not double-
+count: the observation primary key makes the second invocation a
+no-op for that map.
+
+#### 3.6.4 Poll result handling and terminal bundles
+
+The shared poll step (used by the queue branch's immediate poll,
+by continuation polls, and by the drive-pass driver — one
+implementation, three callers):
+
+1. `providers.getBatch(providerName)` throws → pending,
+   `pollError` recorded on the observation; **no** map, intent,
+   attempt, or execution state changes.
+2. Not done → pending; the provider state string is recorded
+   (the stall test's progress signal).
+3. Done + success → the terminal-success bundle, then the shared
+   commit tail (§3.8).
+4. Done + terminal failure → classification first (§3.2), then
+   the terminal-failure bundle.
+
+A **terminal bundle** is one synchronous `coord._tx` containing:
+validation that the map is still `submitted` with the same
+provider name and generation, the attempt still `dispatching`,
+the execution still `attempted`; `confirmAttempt` (success →
+outcome `success`, cost `knownCostMicro(durationSec)`,
+providerRequestId = provider name; policy → outcome
+`policy_block`, cost 0; other failure → outcome `failed_known`,
+cost 0); `noteSpendOutcome` (success → `success`; failure →
+`failed_known` with the batch state + classification kind as
+detail)
