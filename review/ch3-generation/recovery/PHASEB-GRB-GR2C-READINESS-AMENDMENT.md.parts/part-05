@@ -1,0 +1,100 @@
+ census state stops the attempt
+> and returns for ruling; branch GR-A is foreclosed and must not
+> be manufactured; a fresh read-only voice checkpoint (Alex →
+> Gemini Charon, quote digest `cdef2c7e…`); exactly one wake — a
+> single fresh `RequestPause` probe against
+> `alarm-wake-probe:nonexistent`, counted as one production
+> command, verified only by an observed recorder-row effect
+> within the ruled 15-minute bound — never a second wake, never a
+> deploy-as-stimulus; then **checkpoint GR-2C, with both holds
+> still standing**: the first cold pass's recorder row and the
+> settled successor grant evidenced **separately**, intermediate
+> polls preserved, the void of `seg:87:full` and the sequential
+> issuance of `seg:88:full` each identified, derived reserved
+> exactly 12 (a transient 0 only in polls between those two
+> identified transitions), dispatched and provider attempts 0
+> throughout, and **two consecutive complete polls** confirming
+> the settled state — the full checkpoint inside the same
+> 15-minute bound, with **no extension**; on GR-2C's success
+> OQ-2 stands discharged **for this attempt only**; on any
+> checkpoint failure the attempt ends there, both holds standing,
+> and returns for review; then one halt lift and one queue
+> unpause, **in that order**; the post-unpause protocol with its
+> sliding 35-minute stall window, the adopted three-hour review
+> checkpoint from dispatch, and abort condition A-7 (a post-lift
+> recorder discrepancy re-holds and returns for review; a
+> completed segment stands as completed-with-discrepancy);
+> **NO SubmitJob of any scope — ever — NO exemption call, NO
+> containment transition, NO Batch, NO rest-of-book, NO other
+> generation**; counted production commands ≤ 5 on every path;
+> the segment's expected cost ≈ $0.008, the 12,808-unit forecast
+> line and the 25,000-unit detection threshold standing as
+> deviation signals, never caps, the 12-slot reservation bounding
+> attempts and the Gemini prepay balance as the physical
+> backstop; on success, abort, checkpoint, GR-2C failure, or wake
+> failure alike, the attempt ends **HELD** — re-pause and re-halt
+> wherever the holds were lifted, each verified by read-back —
+> with exposure reported in the three-line form, and the named
+> post-gate observation duty (`phaseb-resume-postgate-watch`)
+> opened at close on every path. I understand that success ends
+> with exactly one new binding and the bindings watermark at
+> 1842; that my playback check — the chapter header reading
+> 'Complete 27/27' — is the acceptance, outside the executor's
+> verdict; that one GO covers one attempt, and a stall, an abort,
+> a checkpoint, or a checkpoint failure consumes it; and that
+> restoration was authorized, executed, and closed separately,
+> before this GO."
+
+The end-state alternative in the package §6 form (holds left
+lifted on success) is **not** carried into this wording: silence
+means HELD, and any lifted end state would need Julie's express
+words in place of the ends-HELD clause.
+
+---
+
+## 7. The remaining chain, updated
+
+1. **This amendment, with the §4 V-3 annex completed from
+   `v3-harness/RESULTS.md`, is filed for Rowan's final review**
+   (Q-7). If the annex cannot complete at PASS, the filing does
+   not advance (§4.3) and the block returns for separate review
+   (Q-6).
+2. **Rowan's final review and acceptance** of this amendment —
+   GR-2C as incorporated, the annex at its stated strength, the
+   §5 feasibility answer, and the §6 GO proposal. Her acceptance
+   is the last documentary act before Julie's turn; it is not a
+   GO and authorizes no execution.
+3. **Presentation to Julie** of the accepted §6 wording — only
+   then, and only in the accepted form.
+4. **Julie's separate GO**, recorded on the board before the
+   execution census (the established ordering).
+5. **Execution** under the confirmation as amended — one attempt,
+   consumed by its outcome on every path; GR-2C inside it as
+   §2 specifies; OQ-2 discharging for the attempt on GR-2C's
+   success and on nothing else.
+6. **The execution record**, filed for Rowan's documentary
+   review; the §8-of-the-confirmation observation duty runs from
+   close until her acceptance or 14 days, whichever first.
+7. **Julie's playback acceptance** — the chapter end, expected
+   header "Complete 27/27" — outside every executor verdict.
+
+---
+
+## 8. What this amendment does not do
+
+It does not authorize any wake, probe, hold lift, dispatch, or
+generation; it does not execute, present, or request the GO; it
+does not discharge OQ-2 (the question stands OPEN PENDING
+OBSERVATION, and discharges, if at all, inside the gate on
+GR-2C's observations); it does not resolve the W-4 (an unresolved
+observation; the 296 warm passes do not resolve its root cause,
+and no claim of general cold-restart reliability is made — the
+ruling's own closing caution, carried); it does not select V-2
+(Q-5 stands NOT APPLICABLE — no standing-registration disposition
+or separate re-stop is authorized or proposed); and it does not
+touch the preserved plan, the idx-26 exemption, the parked
+Chapter 3 job, or any production state. Production remains HELD
+at NORMAL.
+
+**Turn: Rowan's** — final review of this amendment and its V-3
+annex.

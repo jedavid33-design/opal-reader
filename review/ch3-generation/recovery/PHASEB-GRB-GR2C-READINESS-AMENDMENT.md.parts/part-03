@@ -1,0 +1,175 @@
+uestion with the live W-4 counterexample — is exactly
+  the part it cannot touch. **OQ-2 does not discharge on harness
+  results** (Q-2: no success presumed from harness results); the
+  discharge vehicle is GR-2C's observation, §2.
+- The standing harness limitation carries: harness-green is no
+  evidence for platform behavior on empty-result paths (the DO
+  `.one()` divergence — the harness fake returns null where real
+  DO SQLite throws — is the program's standing example). The
+  annex's assertions are transition-mechanics evidence at harness
+  strength, and are reported as such.
+- **A failed or ambiguous assertion blocks the gate until
+  separately reviewed** (Q-6). The block is not curable by the
+  executor's own tracing, by re-running until green, or by
+  narrowing an assertion after the fact; any assertion change
+  after a run is itself filed and ruled on.
+
+### 4.3 Required contents — and the completion slot
+
+Per Q-6, the annex must file: the battery's **assertions** (each
+named, with its expected transition), its **results**, its
+**exit codes**, its **source/build identity** (the composed tree
+under test — the Grant 1 build tree at
+`containment-v4/composed-tree/`, build
+`fdb02395b3775dc945baa395591a73060ab146c4` — and the harness
+identity), and **any limitations** beyond §4.2 that the run itself
+surfaces. The assertions the battery must report on include, at
+minimum, the assessment §5.3 set: `seg:87` voided with a
+`lease_expired_undelivered` transition record; `seg:88:full`
+issued as the sole live grant; the occurrence standing `granted`
+through the void→pending→granted path; derived reserved exactly
+12 after the transition (released exactly once, re-derived to the
+successor, no double-count, no leak); job revision advanced
+monotonically from 88; dispatched 0 under the seeded holds.
+
+### 4.4 V-3 results — as run
+
+_Inserted at filing from `v3-harness/RESULTS.md`, verbatim in
+substance: assertions, per-test results, exit codes,
+source/build identity, and the limitations the run itself
+surfaces._
+
+**Battery verdict: V-3 PASS — 5/5 tests, exit code 0**, on one
+complete run of the final test file, `v3-cold-restart.test.mjs`
+(SHA-256
+`51283341a757ed0bc63a79deae0c3352c774d594f8772aa4d17ba88a57245291`;
+full log `v3-final-run.log`). That was **run 2 (final)**.
+**Run 1** (initial test file; log `v3-run-1.log`) returned
+**2/5, exit 1** — T2 and T3 passed; T1/T4/T5 failed on
+**test-side assertion plumbing**, disclosed here rather than
+discarded: (i) occurrence transitions are keyed by aggregate
+id `<jobId>/<occurrenceId>`, not the bare occurrence id —
+T1's event filter matched nothing; (ii) the issuance job
+transition is identified by its detail's grant id (its logged
+cause is `requestGrant`), not by cause `grant`; (iii)
+`requestGrant` lives on the coordinator (the service's own
+path), not on the entry class instance. The fixes changed
+only the test file's observation code; no assertion was
+loosened, and **no source file was touched at any point**.
+The complete final run — fresh process, full churn from
+seg:1 — is run 2, whose log is the battery's evidence. Per
+Q-6, this PASS proves transition mechanics in the harness
+only; it does not prove platform alarm delivery, and it does
+not discharge OQ-2 (§4.2).
+
+**T1 — the cold transition (the ruling's observations
+(a)–(e) and the §4.3 assertion set).** The fixture stood at
+the adopted GR-B predicates — job revision 88, `seg:87:full`
+`issued`, occurrence `granted`, reservation 12 open against
+seg:87, dispatched 0 — reached by 87 cycles of warm churn on
+the tree's own machinery; the alarm registration was then
+deleted (mirroring C3's verified `deleteAlarm`) and the clock
+advanced 26 hours with no pass running, seg:87's lease going
+stale unobserved. The single cold pass then showed:
+
+- **(a) Recorder:** exactly one new `d6_drive_passes` row
+  (row id **88** in the run), `stage = "complete"`,
+  `drive_invoked = 1` — evidenced separately from the grant
+  state, per the ruling's protocol correction (the recorder
+  row and the successor-grant observations are separately
+  evidenced; a completed drive pass is not equated with proof
+  that the successor has issued).
+- **(b) Safe void:** `seg:87` transitioned to `voided` via
+  exactly one `dispatch_voided` grant transition whose detail
+  names `voidReason = "lease_expired_undelivered"` (the M-4
+  never-invoked branch — its outbox row had `sent_at` and
+  `send_attempted_at` null). `seg:87` exists exactly once in
+  the grants table and is never reissued (also T4).
+- **(c) Successor identity:** exactly one live grant after
+  settling, id **`seg:88:full`**, state `issued`, first
+  observed at **cold pass 1** — the same pass's drive sweep
+  re-granted after the base alarm's void (the M-6/M-8
+  same-pass shape; the retry-pass shape was not needed, and
+  T1's transient-state branch was therefore not taken — no
+  pass-boundary snapshot in this run shows the void→reissue
+  intermediate).
+- **(d) No coexistence:** across all 94 snapshots in the
+  series, live-grant count never exceeds 1.
+- **(e) Reservation continuity:** seg:87's reservation (12
+  slots, `qres:` row) is `closed` with `close_reason =
+  "grant_voided"`; a second `closeReservationsForVoidedGrant`
+  sweep closes nothing (exactly-once, asserted directly);
+  exactly one `rel:op:<seg:87>:<occ>` attempt-ledger release
+  row exists; seg:88's fresh reservation stands `open` at 12;
+  derived open reserved = **12** at settle; never 24 anywhere
+  in the series; two consecutive accounting polls (reads
+  only) agree field-for-field on the settled state (Q-3's
+  two-complete-poll rule, in harness form).
+- **(f) Occurrence path:** transitions in the cold window
+  show `granted` —(cause `dispatch_voided`)→ `pending`
+  —(cause `grant`)→ `granted`, in that order; the occurrence
+  ends `granted`. (`outcome_unknown` never appears.)
+- **(g) Zero dispatch/spend:** `d6_provider_dispatches` is
+  empty; the queue binding received nothing; seg:87's outbox
+  row was deleted by the void; seg:88's outbox row stands
+  with `sent_at = null` and `send_attempted_at = null` —
+  born never-invoked, because under HALT `"1"` the entry
+  wires no `sendGrant` (M-9, structural).
+- **(h) Revision — 89, explained:** job revision moved
+  **88 → 89**, and the delta equals exactly **one** job
+  transition in the cold window carrying the successor's
+  grant id (the issuance event; logged cause `requestGrant`).
+  Not 90: in this build's event sequence the void applies
+  **no** job event (its re-advance is a schedule row, not a
+  job transition) and the drive sweep's issuance applies
+  exactly one — so 89 is the explained value, inside Rowan's
+  permitted 89-or-90 band, with the explaining sequence
+  recorded in the run log's transition-level assertions.
+
+**T2 — idle second pass.** A pass one minute later (inside
+seg:88's lease): grant set and states byte-identical, seg:88
+still the live grant, reservation 12, occurrence `granted`,
+job revision unchanged, dispatched 0, seg:88's outbox still
+unattempted. The chain idles rather than churning early.
+
+**T3 — stale successor.** Past seg:88's lease: seg:88
+safe-voids (`grant_voided` closure), **`seg:89:full`** issues
+as the sole live grant with a fresh open 12, occurrence
+`granted`, dispatched 0, seg:87 still `voided`. The warm
+pattern reproduces from the cold start — the cold restart is
+not a one-off recovery shape.
+
+**T4 — revision-derived identity.** The grants table holds
+suffixes **1..89, each exactly once**. A fresh
+`requestGrant` against the fully-granted job is refused
+(`ok: false` — nothing pending) and creates no row; `seg:87`
+still exists exactly once, `voided`; the job revision (90
+after T3) has moved permanently past 87, so the
+revision-derived id `seg:87` is unreachable — reissuance is
+structurally impossible, not merely unobserved (M-1).
+
+**T5 — the observable series.** 94 snapshots spanning churn,
+cold fixture, cold pass, polls, T2 and T3: **live grants
+≤ 1 at every snapshot; open reserved ∈ {12} at every settled
+snapshot (the value 24 never occurs; the permissible
+transient 0 was not observed at any pass boundary in this
+run, because void and reissue completed inside single
+passes); dispatched = 0 at every snapshot.**
+Machine-readable evidence printed by the run: `V3-EVIDENCE
+{"recorderRowId":88,"successorFirstSeenPass":1,"revBefore":88,"revAfter":89,"jobGrantEvents":1}`
+plus the full `V3-SERIES` snapshot array — both in
+`v3-final-run.log`.
+
+**Baseline suites on the same composed tree** (run first,
+against the identical composed tree, to establish that the
+tree under test is the known-good baseline):
+
+| Suite | Result | Exit |
+|---|---|---|
+| Containment V4 (42 tests) | **42/42 PASS** | 0 |
+| P2 (32 tests) | 31/32 | 1 |
+| R5A (23 tests) | 21/23 | 1 |
+
+**Finding (identity fixtures, reported — not repaired):**
+every P2/R5A failure is a **T0 identity assertion on one
+file**: `v2/coordinator.mjs`. 

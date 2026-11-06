@@ -1,0 +1,94 @@
+▶ T0 — assembly & identity (fixture-parameterized)
+  ✖ candidate tree: 31 parts; fixture changed parts differ from deployed and match fixture identities; every other part byte-identical (22.539289ms)
+  ✔ patch round-trip: each fixture diff applied to pristine parts reproduces the candidate parts byte-for-byte (38.290997ms)
+  ✔ node --check passes on every fixture changed part (candidate tree) (257.726513ms)
+  ✔ baseline tree is the pristine deployed tree (31/31 byte-identical) (98.005799ms)
+✖ T0 — assembly & identity (fixture-parameterized) (418.905685ms)
+▶ T1 — harness bring-up
+  ✔ T1(a) empty store: class construction + first alarm resolve; no .one() bootstrap deadlock (48.999774ms)
+  ✔ T1(b) seeded attempt-3 shape: plan/job/parked/conflicts/phase figures exact (9.875507ms)
+✔ T1 — harness bring-up (59.24061ms)
+▶ T2 — normal recording (twin equivalence)
+  ✔ six alarm passes: candidate records each; all non-recorder state identical to the unmodified build (145.466944ms)
+✔ T2 — normal recording (twin equivalence) (145.86371ms)
+▶ T2b — clock seam fallback (R-4)
+  ✔ without env.now, recorded times track wall Date.now() (5.60885ms)
+✔ T2b — clock seam fallback (R-4) (5.877935ms)
+▶ T3 — stage capture & record-then-rethrow
+  ✔ T3(i) throw in the base alarm's schedule processing -> stage base_alarm, identical object rethrown (24.959262ms)
+  ✔ T3(ii) throw at cache construction -> stage construct (6.365587ms)
+  ✔ T3(iib) a cache-namespace fault present from the start is recorded at base_alarm (the base alarm constructs the cache first) (11.317091ms)
+  ✔ T3(iii) throw in recover() -> stage recover, identical object rethrown (15.801633ms)
+  ✔ T3(iv) throw in driveOnce -> stage drive, identical object rethrown (15.082674ms)
+✔ T3 — stage capture & record-then-rethrow (74.008531ms)
+▶ T4 — recorder-fault injection (the recorder may never break the alarm)
+  ✔ T4 DDL fault: alarm resolves, drive effects happen, health notes step 'ddl', no row (8.594103ms)
+  ✔ T4 INSERT fault: alarm resolves, health notes step 'insert', zero rows (8.286871ms)
+  ✔ T4 PRUNE fault: count exceeds the cap for exactly one pass, then recovers to <= cap (39.174233ms)
+  ✔ T4 getAlarm fault: row written with armed_after NULL and NO health increment (the shipped coordinator itself reads getAlarm, so the base chain — not the recorder — is what fails) (7.372378ms)
+  ✔ T4 KV get fault (health read): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (9.89138ms)
+  ✔ T4 KV put fault (health write): alarm resolves, row written, drive effects normal; the channel self-heals on the next pass (14.071446ms)
+  ✔ T4 serialize-step fault (wrapper level): the catch discipline names the step 'serialize' (5.457854ms)
+✔ T4 — recorder-fault injection (the recorder may never break the alarm) (93.522708ms)
+▶ T5 — sanitization (write-time discipline + hostile storage on read)
+  ✔ T5 write: hostile outcome values are grammar-checked or scrubbed; nothing raw is stored (3.90298ms)
+  ✔ T5 write: error name/message scrubbed (URL, token run, control chars, caps) (3.331672ms)
+  ✔ T5 write: an oversized grammatical identifier is sliced, and the slice is disclosed (13.77388ms)
+  ✔ T5 read: hostile stored rows and a hostile health object never escape raw (8.869386ms)
+✔ T5 — sanitization (write-time discipline + hostile storage on read) (30.288213ms)
+▶ T5b — identifier fidelity (real id shapes survive sanitization exactly)
+  ✔ plan/grant ids and code tokens are stored byte-exact, with no marker (3.386344ms)
+✔ T5b — identifier fidelity (real id shapes survive sanitization exactly) (3.520636ms)
+▶ T6 — truncation at the 8,000-char cap
+  ✔ T6 over-cap: whole entries only, terminal marker, kept+dropped = submitted (3.811653ms)
+  ✔ T6 under-cap: no marker, no flag, entries unaltered (2.989007ms)
+✔ T6 — truncation at the 8,000-char cap (7.0068ms)
+▶ T7 — mode rejection (the read that can never blend modes)
+  ✔ T7 ambiguous drive modes -> 400 diagnostics_mode_ambiguous; attempt mode unchanged; 403 without the operator stamp (38.574082ms)
+✔ T7 — mode rejection (the read that can never blend modes) (38.793792ms)
+▶ T8 — retention & bursts
+  ✔ T8 300 records prune to exactly the newest 288 (29.643785ms)
+  ✔ T8 burst of seven throwing passes: every pass recorded, cap holds throughout (47.602427ms)
+✔ T8 — retention & bursts (77.505501ms)
+▶ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding)
+  ✔ T9 route read returns exactly the recorded rows; health key contract holds; crash-instance records (17.227284ms)
+✔ T9 — round-trip & cross-part contract (end-to-end diagnostics forwarding) (17.426573ms)
+▶ T10 — shipped-surface equivalence smoke
+  ✔ twin stores: every shipped read surface answers field-for-field identically (42.022159ms)
+✔ T10 — shipped-surface equivalence smoke (42.179004ms)
+ℹ tests 32
+ℹ suites 13
+ℹ pass 31
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1214.781057
+
+✖ failing tests:
+
+test at p2-battery.test.mjs:116:3
+✖ candidate tree: 31 parts; fixture changed parts differ from deployed and match fixture identities; every other part byte-identical (22.539289ms)
+  AssertionError [ERR_ASSERTION]: coordinator.mjs must equal the fixture identity for this tree
+  + actual - expected
+  
+  + '5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed'
+  - 'c097061a3712b3a21058b5d7b790b9cf5314463a664d4fbc3d01bf27f33542ae'
+  
+      at TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/ch3-recovery/suites/p2-battery.test.mjs:127:16)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at node:internal/test_runner/test:1903:71
+      at node:internal/per_context/primordials:504:82
+      at new Promise (<anonymous>)
+      at new SafePromise (node:internal/per_context/primordials:478:3)
+      at node:internal/per_context/primordials:504:9
+      at Array.map (<anonymous>) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed',
+    expected: 'c097061a3712b3a21058b5d7b790b9cf5314463a664d4fbc3d01bf27f33542ae',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

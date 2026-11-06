@@ -1,0 +1,104 @@
+▶ R5A-T0 — assembly & identity (fixture-parameterized)
+  ✖ changed parts vs the baseline tree are exactly the fixture set, each matching its fixture identity (75.384387ms)
+  ✖ candidate coordinator identity + design markers (1.128765ms)
+  ✔ patch round-trip: each fixture diff applied to the pristine baseline part reproduces the candidate byte-for-byte (10.998292ms)
+  ✔ node --check passes on the candidate coordinator (100.020784ms)
+✖ R5A-T0 — assembly & identity (fixture-parameterized) (189.436497ms)
+▶ R5A-T1 — normal future alarms (legacy behavior preserved)
+  ✔ armed == due (future): wake registers nothing; earlier due advances once; then quiet (58.14178ms)
+  ✔ armed null: wake registers at due exactly as shipped (4.921639ms)
+✔ R5A-T1 — normal future alarms (legacy behavior preserved) (63.480345ms)
+▶ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command
+  ✔ exactly one setAlarm for the whole command wake; exactly one commands row; no other movement (5.842812ms)
+✔ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command (6.126868ms)
+▶ R5A-T3 — retry-gap safeguard (stale-age threshold)
+  ✔ armed 5 minutes past due (inside a plausible retry gap): NO re-registration (5.256953ms)
+  ✔ armed 59 minutes past due: still NO re-registration (4.763101ms)
+  ✔ armed exactly at the threshold boundary (60 min): re-registers (boundary is inclusive) (4.696721ms)
+  ✔ armed 61 minutes past due: re-registers at D (4.463891ms)
+  ✔ baseline twin at 61 minutes: shipped condition does NOT re-register (the delta is exactly the new disjunct) (42.558695ms)
+✔ R5A-T3 — retry-gap safeguard (stale-age threshold) (62.308015ms)
+▶ R5A-T4 — dedupe within a single wake operation
+  ✔ wake + post-apply evaluation with unchanged schedule: 1 registration total (4.565474ms)
+  ✔ corrective second registration ONLY when the operation schedules strictly earlier work (5.021399ms)
+  ✔ handleReport path also dedupes (replayed report on a reported grant) (5.261299ms)
+✔ R5A-T4 — dedupe within a single wake operation (15.175834ms)
+▶ R5A-T5 — B3 schedule ordering
+  ✔ B3-future beyond threshold: stale A is moved to the actual earliest future D (board ruling decision 2) (4.510682ms)
+  ✔ B3-future inside the retry-gap threshold: shipped behavior — no registration, future D stands untouched (4.054297ms)
+  ✔ D computation uses ALL pending kinds: an earlier retry_grant row, not the watchdog, sets the registration (4.245234ms)
+✔ R5A-T5 — B3 schedule ordering (13.089612ms)
+▶ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape)
+  ✔ stimulus registers once; the delivered pass issues exactly the pre-classified grant set; the chain then self-terminates the 5a branch (35.30866ms)
+✔ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape) (35.471615ms)
+▶ R5A-T7 — repeated wakes, delivery never happens (churn bound)
+  ✔ 10 wakes -> exactly 10 registrations, all at D, zero schedule growth, zero watchdog duplication (5.142911ms)
+✔ R5A-T7 — repeated wakes, delivery never happens (churn bound) (5.298685ms)
+▶ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery)
+  ✔ after the R2-form stimulus and no alarm firing: only the commands row changed; plan, job, occurrence, figures byte-identical (7.429404ms)
+✔ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery) (7.578909ms)
+▶ R5A-T9 — shipped-surface equivalence spot checks
+  ✔ drive=1 diagnostics read performs no wake and no registration (candidate) (16.287604ms)
+  ✔ future-alarm behavior identical on baseline and candidate (call sequences match) (9.63098ms)
+✔ R5A-T9 — shipped-surface equivalence spot checks (26.183941ms)
+ℹ tests 23
+ℹ suites 10
+ℹ pass 21
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 572.262194
+
+✖ failing tests:
+
+test at r5a-battery.test.mjs:84:3
+✖ changed parts vs the baseline tree are exactly the fixture set, each matching its fixture identity (75.384387ms)
+  AssertionError [ERR_ASSERTION]: v2/coordinator.mjs identity
+  + actual - expected
+  
+  + '5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed'
+  - 'c097061a3712b3a21058b5d7b790b9cf5314463a664d4fbc3d01bf27f33542ae'
+  
+      at TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/ch3-recovery/suites/r5a-battery.test.mjs:91:14)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at node:internal/test_runner/test:1903:71
+      at node:internal/per_context/primordials:504:82
+      at new Promise (<anonymous>)
+      at new SafePromise (node:internal/per_context/primordials:478:3)
+      at node:internal/per_context/primordials:504:9
+      at Array.map (<anonymous>) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed',
+    expected: 'c097061a3712b3a21058b5d7b790b9cf5314463a664d4fbc3d01bf27f33542ae',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at r5a-battery.test.mjs:93:3
+✖ candidate coordinator identity + design markers (1.128765ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed'
+  - 'c097061a3712b3a21058b5d7b790b9cf5314463a664d4fbc3d01bf27f33542ae'
+  
+      at TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/ch3-recovery/suites/r5a-battery.test.mjs:94:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed',
+    expected: 'c097061a3712b3a21058b5d7b790b9cf5314463a664d4fbc3d01bf27f33542ae',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

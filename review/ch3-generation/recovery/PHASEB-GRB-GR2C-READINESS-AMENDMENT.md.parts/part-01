@@ -1,0 +1,162 @@
+# Phase B — GENERATION-RESUME gate: GR-B / GR-2C READINESS AMENDMENT and REVISED GO PROPOSAL
+
+**What this document is.** The consolidated amendment commissioned by
+Rowan's OQ-2 cold-restart assessment ruling (`ROWAN-OQ2-RULING.md`;
+verdict **PASS WITH CONDITIONS ON DESIGN — OQ-2 REMAINS OPEN PENDING
+OBSERVATION**). It does four things: **(1)** incorporates the
+gate-internal cold-restart checkpoint **GR-2C** into the operative
+resume protocol, at an exact slot in the execution sequence, enacting
+the ruling's required protocol correction and failure law, with
+Q-3's conditions carried as operative predicates; **(2)** carries the
+V-3 harness annex the ruling makes mandatory (Q-1, Q-6) — a
+completion slot at §4, because the battery had not run when this
+amendment was drafted; its results are inserted verbatim at filing
+from `v3-harness/RESULTS.md`, and no number in §4 is asserted here;
+**(3)** answers the OQ-5 feasibility condition from Rowan's final
+readiness ruling (its item 4) at §5; and **(4)** returns the
+**revised, adopted-GR-B GO proposal** at §6 for Rowan's final review
+under Q-7 — **for Rowan only; it is expressly NOT presented to Julie
+by this filing**, and may be presented only after Rowan accepts it
+(and only with the V-3 annex standing completed at PASS — §4.3).
+
+**Documents amended.** The final consolidated readiness confirmation
+(pin `ad42c9e9b961944df25ad29c0e487ceb0ad0f939`, repo
+`jedavid33-design/opal-reader`, branch `ui1-review`) — its §6
+sequence, its §4.3 branch consequence, and its §9 GO wording — as
+that confirmation itself consolidated the generation-resume package
+(pin `0946f9f2fb978a46b562c738d8ac6d9d4ee977a6`), correction 1 (pin
+`8ca683bdfe2967b1e23a99b9eded99b065478a00`), and correction 2 (pin
+`91bb9c44b8b6a1a80310b14c2668e85cf110ad98`). The GR-2C design
+incorporated here is §5.1 of the OQ-2 cold-restart assessment (pin
+`91c0731e9044db701a4dd2ced792dd3badc1347b`), with its §6 stop rules,
+§7 recorder evidence specification, and §8 conditional-discharge
+construction as ruled on. **Branch GR-B stands determined** under
+reading (i) of the final readiness ruling (its item 1): the adopted
+predicates are the confirmation §3.2 baseline values — plan
+`active`, totals {eligible 1, done 0, failed 0, blocked 0, prompts
+0}, sole entry and occurrence `granted`; job `generating` revision
+**88**; 87 grants, `seg:1`–`seg:86` voided,
+`grant:plan:19cad189fab54b9c804a74a6:seg:87:full` **issued** and
+live; derived reserved
+**12**; dispatched 0, provider attempts 0, settled delta 0; phase
+figures at the §4.0 item 5 frozen values; containment NORMAL;
+`armedAt` null. GR-A is foreclosed (final readiness ruling item 1)
+and must not be manufactured by resetting or replacing the job.
+
+**Pin:** `<AMEND-PIN>` (this amendment and its companion CP ride in
+one pin commit; Rowan reads the Dropbox copy, whose CP carries the
+pin filled).
+
+**Non-authorizations.** This amendment authorizes nothing: no probe,
+wake, hold lift, SubmitJob, grant mutation, generation, deployment,
+or Batch activation (the OQ-2 ruling's own bar, carried verbatim in
+substance). OQ-2 remains **OPEN PENDING OBSERVATION**; nothing in
+this filing discharges it, presumes a GR-2C outcome, or requests a
+GO from Julie.
+
+---
+
+## 1. Status — what changes, and what does not
+
+**Changes, exhaustively:**
+
+1. **A new named checkpoint step, GR-2C,** is inserted into the
+   confirmation §6 execution sequence — exact slot at §2.1 below.
+   GR-3 (halt lift) may not be entered until GR-2C is declared met.
+2. **The ruling's protocol correction is enacted** (§2.3): the first
+   successful recorder row and the settled successor-grant
+   observations are **separately evidenced**; a completed drive pass
+   is never equated with proof that the successor has issued;
+   intermediate polls are preserved; the void and reissue
+   transitions are identified; the two-complete-poll rule applies
+   to the final accounting state.
+3. **Q-3's conditions are operative predicates** of GR-2C (§2.2):
+   the five observations as checkpoint exit criteria; the
+   two-consecutive-complete-polls rule; the transient-reserved-0
+   rule; the revision 89/90 rule; the hard 15-minute bound with no
+   discretionary extension.
+4. **The §4.3 branch consequence is superseded as ruled.** The
+   confirmation's §4.3 rule (proceed only on an exact GR-A census;
+   a churn-state census stops and returns) is overtaken by the
+   final readiness ruling's branch determination: the execution
+   census now verifies the **adopted GR-B predicates** (§0 above),
+   and on an exact match the sequence proceeds GR-1 → GR-2 →
+   **GR-2C** → lifts. Any other census state — GR-A's form
+   included, should it impossibly appear — is a deviation: STOP
+   before any mutation and return for ruling. (Rowan's final
+   readiness ruling item 5 already held the GR-A-only GO wording
+   NOT APPROVED as inconsistent with the known GR-B baseline; this
+   amendment's §6 replaces it.)
+5. **The confirmation §9 GO wording is superseded** by the revised
+   proposal at §6 of this amendment, in full. No other wording may
+   be presented to Julie for this gate.
+6. **The V-3 annex (§4) is a mandatory component** of this gate's
+   readiness evidence. The confirmation's readiness position is
+   incomplete until the annex stands completed; a failed or
+   ambiguous V-3 assertion blocks the gate until separately
+   reviewed (Q-6).
+
+**Unchanged, and not re-opened by this amendment:** the execution
+census specification (confirmation §3.3, including the R4 captured
+etag artifact `g06-etag.json`, saved before the wake decision); the
+GR-3 provenance record (§2 of the confirmation) and its application
+(a non-null `armedAt` at census is an unexplained deviation and a
+STOP — final readiness ruling item 3); the wake mechanism and its
+verification discipline (§5 of the confirmation, GR-1…GR-7 as
+corrected); the two timing controls (§6.1 — the sliding ≥35-minute
+stall test and the adopted three-hour checkpoint from T0); abort
+conditions A-1…A-7 (§6.2, including A-7 and its
+completed-with-discrepancy carve-out); the completion set and
+closure evidence (§6.3); the counted-command ledger (≤ 5 production
+commands on every path, the probe counted as one — §7.1), the money
+figures at their true scope (§7.2 — the 12,808-unit forecast line
+and the 25,000-unit detection threshold are deviation signals,
+never caps; the 12-slot cohort reservation bounds attempts), quota
+(§7.3), and scope (§7.4 — one segment, the preserved plan only, no
+Batch, no rest-of-book, **no second SubmitJob ever**); and the OQ-5
+observation duty as specified (confirmation §8), whose feasibility
+condition §5 of this amendment answers.
+
+---
+
+## 2. GR-2C — the cold-restart checkpoint, incorporated
+
+### 2.1 The exact slot
+
+In the confirmation §6 sequence (GR-0 fresh execution census →
+GR-1 voice checkpoint → GR-2 the wake → GR-3 halt lift → GR-4 queue
+unpause → GR-5 monitored generation → GR-6a success close → GR-7
+closing census), **GR-2C is inserted immediately after GR-2 and
+immediately before GR-3**. No existing step is renumbered, renamed,
+or re-ordered; the steps after the insertion point keep their
+names, and every cross-reference to GR-3 in the operative documents
+now reads subject to this insertion. The lift decision is GR-3:
+**neither hold may lift until GR-2C is declared met**, and GR-2C
+itself sits entirely inside the holds-on phase — at its every
+moment GENERATION_HALT stands `"1"` and the queue stands paused,
+so the cold transition it observes is exposure-free by construction
+(assessment §2, M-9: under the holds a drive pass can churn; it
+cannot dispatch — `sendGrant` is wired only when GENERATION_HALT
+is `"0"`).
+
+### 2.2 Exit criteria — observations GR-2C(a)…(e) (Q-3, ACCEPT WITH CONDITIONS)
+
+GR-2C is declared met only when **all five** observations below are
+in hand, from the gate's existing read set, each with its evidence
+preserved raw. The observations discharge the cold-restart
+sub-questions as mapped (assessment §3).
+
+- **GR-2C(a) — Valid new recorder row** *(CR-1, delivery).* A
+  recorder row with id ≥ **297**, `stage complete`, `drive_invoked`
+  1, error fields null, whose `at` falls within the 15-minute
+  bound of the GR-2 probe's dispatch (assessment §7's row-quality
+  set). **This observation is evidenced separately** (§2.3): the
+  row's own poll capture stands as the delivery evidence, on its
+  own, before any successor-grant observation is taken.
+- **GR-2C(b) — Confirmed registration** *(CR-1, creation re-verified
+  post-pass).* The row's `armed_after` is non-null and in the
+  future relative to the row's `at`, corroborated at the same poll
+  by the diagnostics alarm block (`armedAt`, `pendingSchedule`,
+  `pendingWatchdog`) — the chain stands armed after the pass. (A
+  registration value alone never proves delivery — item 3 of the
+  final readiness ruling; (b) is read only 

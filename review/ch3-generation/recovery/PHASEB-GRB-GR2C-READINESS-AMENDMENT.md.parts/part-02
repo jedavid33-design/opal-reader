@@ -1,0 +1,170 @@
+alongside (a).)
+- **GR-2C(c) — Safe void and sequential reissue** *(CR-2; CR-4
+  ordering).* At the settling polls: `seg:87:full` reads
+  **voided**; exactly **one** live grant stands —
+  `grant:plan:19cad189fab54b9c804a74a6:seg:88:full`, `issued`, for
+  occurrence `2a85f74f-353d-4c25-a86a-4a4db392868b`; the occurrence
+  reads `granted`; and **no second live grant appears at any
+  poll** of the checkpoint. `seg:87` must not be reissued (Q-4:
+  the successor's identity is accepted at source-derived strength
+  — the grant id is the job revision at issuance, so the next
+  issuable grant on this job is `seg:88:full`; any production
+  discrepancy returns for review). The void and the reissue are
+  **separately identified transitions** (§2.3), not inferred from
+  the settled state alone.
+- **GR-2C(d) — Reservation continuity** *(CR-3).* Derived reserved
+  reads exactly **12** at the settling polls. A transient value of
+  **0** is permissible **only** as an observed, explainable
+  intermediate in polls strictly between the identified void
+  transition and the identified reissue transition of (c). A value
+  of **24 at any poll**, any other reservation value, or any
+  unexplained reservation movement is a **STOP**.
+- **GR-2C(e) — Zero dispatch / spend** *(CR-4; E-4 re-verified
+  cold).* Dispatched **0** and provider attempts **0** on every
+  surface, at every checkpoint poll; phase figures frozen at the
+  §4.0 item 5 values (settled 1,029,420; estimatedUnverified
+  19,018; reservedUnverified 5,648; remaining 12,464,932 of
+  13,500,000); `recorderHealth.recordingFailures` still **0**.
+
+**Poll discipline (Q-3; the protocol correction).** Polls run at
+the GR-2 paired cadence — complete polls at most 5 minutes apart —
+with executor-recorded timestamps, and **every intermediate poll is
+preserved raw**. GR-2C may be declared met only on **two
+consecutive complete accounting polls** — full checkpoint read set
+(job read, quota and phase surfaces, diagnostics) — both showing
+the settled state (a)–(e) above, **before either hold lifts**.
+
+**Job-revision rule (Q-3).** The job revision at the settling
+polls may read **89 or 90**, and is accepted **only** when the
+recorded event sequence (the recorder rows and the identified
+void/reissue transitions) explains the count **and** the exact
+grant, occurrence, and reservation predicates of (c)–(d) match.
+Revision alone is not evidence of success; an unexplained 89 or
+90, or any other revision value, is a STOP.
+
+**The bound (Q-3).** The 15-minute recorder verification remains
+the **hard failure-decision bound**: the full checkpoint — the row
+of (a) and both settling polls — must be verified **within the
+authorized observation window** (15 minutes from the probe's
+dispatch). If it cannot, **STOP with both holds standing. No
+discretionary extension**, under any wording.
+
+**Discharge semantics (Q-2).** On GR-2C declared met, **OQ-2 is
+discharged for this specific GR-B attempt only** — the conditional
+discharge construction the ruling accepts. No success is presumed
+from source analysis, harness results, registration creation, or
+command receipt alone (Q-2, verbatim in substance); the discharge
+rests on the observations and on nothing else. Any GR-2C failure
+voids the discharge for the attempt: the gate ends HELD and the
+question returns (assessment §8's drafted language, as ruled on).
+
+### 2.3 The protocol correction, enacted (ruling, required)
+
+> The first successful recorder row and the settled successor-grant
+> observations must be separately evidenced. Do not equate a
+> completed drive pass with proof that the successor has issued.
+> Preserve intermediate polls, identify the void and reissue
+> transitions, and apply the two-complete-poll rule to the final
+> accounting state.
+
+Operatively: the execution record must present, as distinct
+evidence items, **(i)** the poll capture carrying the first new
+recorder row (GR-2C(a)/(b)); **(ii)** the first poll at which
+`seg:87:full` reads voided (the void transition); **(iii)** the
+first poll at which `seg:88:full` reads issued (the reissue
+transition); and **(iv)** the two consecutive complete settling
+polls of §2.2. A record that shows only a completed pass and a
+settled state, without (ii) and (iii) identified, has **not**
+discharged GR-2C, however clean the settled state reads.
+
+### 2.4 Failure law at the checkpoint (ruling, failure law)
+
+> Any unexpected probe receipt, recorder discrepancy, grant state,
+> reservation value, dispatch, phase movement, or hold deviation
+> stops progression. If the checkpoint fails before the lifts, both
+> holds remain standing. If a later step fails after lifting,
+> execute the already-ruled re-pause/re-halt sequence and verify
+> it. Every close retains the post-gate observation duty.
+
+Operatively at GR-2C, each of the following is a STOP (the
+assessment §6 stop rules S-1…S-8 stand incorporated by reference
+and are applied under these heads): a probe receipt other than
+the expected `{"outcome":"rejected","reason":"job_not_found"}`
+(S-8); no new recorder row within the bound (S-1); `seg:87` still
+`issued` after a recorded pass, or the occurrence in
+`outcome_unknown` (S-2); a second live grant, or any grant other
+than the standing member and its single sequential successor
+(S-3); reserved 24, settled at other than exactly 12, or any phase
+movement (S-4); dispatched > 0, provider attempts > 0, or any
+settled movement (S-5 — under the holds, a structural impossibility
+made real); a recorder row of non-`complete` stage or with non-null
+error fields, or `recordingFailures` > 0 (S-6). On any GR-2C STOP:
+the raw polls are preserved exactly as taken; no corrective or
+further act is taken under the gate's authorization; **both holds
+remain standing** (they never lifted — there is nothing to
+re-hold); the attempt is consumed; and the gate returns to Rowan
+and Julie for review, with the §8 post-gate observation duty
+attaching to the close (§3).
+
+---
+
+## 3. GR-2C in the gate's failure law as a whole
+
+GR-2C governs only the holds-on phase. The rest of the failure law
+stands exactly as ruled, and this amendment states the joins
+expressly so no reading can blur them:
+
+- **Pre-lift failures (GR-0, GR-1, GR-2, GR-2C)** end the attempt
+  with **both holds standing**; there is nothing to re-hold, and
+  no re-hold act may be improvised. The closing capture is taken,
+  the raw evidence preserved, and the gate returns for review.
+- **Post-lift failures (GR-5 onward)** run the **already-ruled
+  re-pause / re-halt sequence** (package §2.3.3, in its exact
+  order: re-pause and read back; re-halt and read back; closing
+  capture; ends HELD; three-line exposure report), and the
+  sequence is **verified** by its read-backs — an unverified
+  re-hold escalates at once, it is never retried silently
+  (correction 2's checkpoint discipline, applied by analogy).
+  Abort conditions **A-1…A-7** (confirmation §6.2) are unchanged;
+  A-7's post-lift R-06 rule and its completed-with-discrepancy
+  carve-out apply from the lifts onward exactly as corrected.
+  GR-2C neither extends nor dilutes A-7: the checkpoint's
+  two-complete-poll discipline is a **pre-lift** gate on the lift
+  decision, and A-7's two-poll observation definition remains the
+  **post-lift** discrepancy rule.
+- **The timing controls** (confirmation §6.1) are unchanged: the
+  sliding ≥35-minute stall test and the adopted three-hour
+  checkpoint from T0 govern GR-5; the 15-minute bound governs
+  GR-2/GR-2C. No control substitutes for another.
+- **Every close retains the post-gate observation duty** (the
+  ruling's failure law, final clause): success, abort,
+  checkpoint-escalation, wake failure, and GR-2C failure closes
+  alike open the §8-of-the-confirmation duty at close (§5 below
+  answers its feasibility condition).
+
+---
+
+## 4. Annex V-3 — the offline harness battery (mandatory; Q-1, Q-4, Q-6)
+
+### 4.1 Role
+
+V-3 is the offline Durable Object harness complement the ruling
+selects alongside V-1 (Q-1): it tests the **transition
+mechanics** of the cold restart — the source-behavior halves of
+CR-2, CR-3, and CR-4 (assessment §5.3) — against the deployed
+composed source, seeded to the adopted GR-B state: grants
+`seg:1`–`seg:86` voided plus `seg:87` issued with a past
+`lease_expires_at` and an unsent outbox row; occurrence `granted`;
+job `generating` rev 88; the pending `lease` and `watchdog`
+schedule rows, both past due; the containment row NORMAL in its
+post-restoration form; `seg:87`'s 12 quota reservations open;
+GENERATION_HALT `"1"` in env. Per Q-4, the battery must test
+**this exact transition** — `seg:87` voided, `seg:88:full`
+sequentially issued, with its reservation effects — and
+`seg:87` must not be reissued in any assertion.
+
+### 4.2 Limits (stated at the ruling's strength; not to be smoothed)
+
+- **Harness PASS does not prove platform alarm delivery** (Q-6).
+  The harness invokes `alarm()` directly; CR-1's delivery half —
+  the sub-q

@@ -1,0 +1,168 @@
+Both suites' "composed"
+identity fixtures pin the coordinator at SHA-256
+`c097061a…`, an **earlier composition**
+(pre-containment-V4-corrections). The current composed
+coordinator is `5303cb63…`, which is exactly what
+containment-v4's own identity fixture pins (and the
+containment battery's identity tests pass against it).
+**All behavioral tests pass**: P2 31/31 behavioral, R5A
+21/21 behavioral. The mismatch is fixture staleness in the
+two older suites, not a behavioral or identity defect in the
+tree under test — but it is recorded here at full strength
+because Q-6 makes failed or ambiguous assertions
+gate-blocking until separately reviewed: the P2/R5A T0
+identity assertions, as fixtured, cannot pass against the
+current composed tree, while every behavioral assertion in
+all three suites passes and the containment suite's identity
+assertions pass exactly. **Per Q-6, this failed/ambiguous
+assertion finding is presented for Rowan's separate review
+as part of this filing; this amendment does not characterize
+it as discharged.**
+
+**Source/build identity.** Tree under test:
+`containment-v4/composed-tree/` — the deployed composed
+tree, build `fdb02395b3775dc945baa395591a73060ab146c4` (the
+Grant 1 build: R5a + containment v4 composition), 31 files;
+full per-file SHA-256 manifest: `tree-manifest.sha256` (31
+entries, captured at run time from the tree as tested).
+Modules exercised, SHA-256: `v2/coordinator.mjs` —
+`5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed`;
+`v2/worker-entry-prod-d6.js` —
+`2bb0608b589a084ca275428c3236c24680f4a4692afe2245dfcb2880257983c1`;
+`v2/generation/service.mjs` —
+`5c5183e664218b9746c497e9456af45c7467a8ace66fd1b9ef0928eccb3c7c14`;
+`v2/generation/genstore.mjs` —
+`811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a`;
+`v2/generation/quota-budget.mjs` —
+`2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820`;
+`v2/generation/gen-constants.mjs` —
+`9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d`.
+The composed coordinator's hash matches containment-v4's own
+`fixtures/identity-composed.json` exactly. **No source file
+was edited**; the only code written is the test file in the
+`v3-harness/` directory.
+
+**Harness identity and limitations (from RESULTS.md).**
+Harness: `containment-v4/tests/harness.mjs`, SHA-256
+`8eb4c0d6393602440cdb3e466fa4f832bbfa11734d99052573688cd0209f71b4`
+— the program's existing DO harness (the P2/containment/R5a
+batteries' harness): real SQLite via `node:sqlite`, a fake
+clock, `crash()` = new instance over the same storage.
+**`.one()` semantics:** THIS harness's `SqlCursor.one()`
+**THROWS** on 0 or >1 rows — production DO semantics,
+deliberately mirrored; the standing caution about a
+null-returning fake applies to the older `do-harness.mjs`
+lineage, **not** to this harness. In addition, no V-3
+assertion depends on an empty-result `.one()` path at all:
+the `.one()` calls on the exercised paths are aggregate
+`COUNT(*)`/`COALESCE(SUM(...))` queries, which return
+exactly one row by construction. Limitations: **alarm
+delivery is not tested — at all.** The harness invokes
+`alarm()` directly; nothing here bears on whether the
+platform delivers a fresh registration on the production DO
+after the verified stop and restoration (CR-1's delivery
+half; the W-4, whose root cause remains UNCONFIRMED). Only
+the GR-2C in-gate production observation can discharge that.
+Concurrency is asserted at harness-observable snapshots
+only: snapshots are taken at pass boundaries, and a pass's
+internal steps run inside transactions in a single-threaded
+harness invocation, so "never two live grants" and "never
+24" are verified at every observable state, while their
+within-pass atomicity rests on the transaction structure,
+not on a directly observed interleaving; the racing-wake
+recheck remains platform-unverified. **One cold shape is
+exercised:** registration deleted + 26 h dormancy +
+never-invoked standing grant — the actual adopted GR-B
+posture. Attempted-but-unacknowledged (`handoff_uncertain`)
+and delivered-lease shapes are different branches that
+production's state excludes and this battery does not claim
+to cover.
+
+---
+
+## 5. OQ-5 — the observation duty's feasibility (final readiness ruling, item 4)
+
+Rowan's condition: the duty's setup "must be operationally
+feasible, documented and verified without exceeding the gate's
+counted-production-mutation ceiling or silently creating another
+production action. If it cannot be established as specified,
+return for review rather than claiming the condition discharged."
+The duty itself stands as specified at confirmation §8 (name
+`phaseb-resume-postgate-watch`; owner Wren; start at gate close on
+every path; daily at approximately 18:28 ET; the closing-census
+subset read set; POST-GATE-QUIET / POST-GATE-MOVEMENT; immediate
+escalation on MOVEMENT, never an act; termination at the earlier
+of Rowan's acceptance of the execution record or 14 days after
+close, the job disabled with history preserved and the
+termination reported). Feasibility, point by point:
+
+- **The job is Wren-side, not production.** `phaseb-resume-postgate-watch`
+  is a scheduled job in Wren's own scheduler (the same mechanism
+  that ran the retired `phaseb-s1-tail-watch` on this exact
+  pattern — daily, read-only, classified, disabled at termination
+  with its history preserved). Creating it writes only to Wren's
+  scheduler state and its local log (`phaseb-resume-postgate-log`
+  under the goal's hidden files, on the tail-watch precedent). It
+  sends **no** production command, performs **no** containment,
+  queue, settings, or plan act, and touches no production surface
+  except by reading.
+- **It consumes none of the counted ceiling.** The gate's counted
+  ledger (confirmation §7.1) counts production **commands** —
+  the probe, the lifts, the re-holds — ≤ 5 on every path. The
+  watch's creation is not a production command, and its checks
+  are GET reads: the same read-only substrate as every census in
+  this program, which has never been a counted act. The duty
+  therefore neither exceeds the ceiling nor creates a production
+  action, silently or otherwise.
+- **Setup, at gate close** (the duty is created as part of the
+  gate's closing acts, per confirmation §8 — it does not exist
+  before the gate closes and is not created by this filing): the
+  executor creates the job with its read set, cadence,
+  classifications, escalation route, and termination rule as its
+  standing instructions, and records the creation in the
+  execution record.
+- **Verification of the setup, threefold:** (i) the job's saved
+  definition is read back from the scheduler and quoted in the
+  execution record (name, cadence, read-only instruction set);
+  (ii) at creation the executor runs the check's read set once by
+  hand — a dry read, logged as the duty's check #0 with its
+  classification against the closing values; (iii) the first
+  **scheduled** run's log entry is confirmed at the next daily
+  check-in and its presence (or absence) reported — an absent
+  first run is a setup failure, not a quiet day.
+- **If it cannot be established as specified** — the scheduler
+  refuses the job, the read-back differs from the specified
+  definition, or the dry read cannot complete — the execution
+  record states the failure plainly, the condition is **not**
+  claimed discharged, and the gate returns for review on that
+  point. No substitute mechanism (ad-hoc manual checks, a
+  differently-scoped job) may be stood up under the duty's name
+  without a ruling.
+
+---
+
+## 6. The revised adopted-GR-B GO proposal — for Rowan's final review (Q-7)
+
+This wording **supersedes the confirmation §9 wording in full**
+(that wording stood NOT APPROVED — final readiness ruling item 5 —
+as GR-A-only against a known GR-B baseline). It is returned here
+for **Rowan's final review only**. Under Q-7 it may be presented
+to Julie **only after Rowan accepts this revised proposal**, and
+— Q-6's block — only with the §4 annex standing completed at
+PASS. On acceptance and presentation, the GO is recorded on the
+board before the execution census (the established ordering).
+
+> "GO — execute exactly one generation-resume attempt under
+> branch GR-B as pinned at `<AMEND-PIN>`: fresh execution census
+> on both phase surfaces, with the script etag captured and saved
+> as an evidence artifact before any wake decision, verifying the
+> adopted GR-B predicates exactly — the preserved plan active,
+> totals {eligible 1, done 0, failed 0, blocked 0}, its sole entry
+> granted; the Phase B job generating at revision 88 with 87
+> grants, `seg:1`–`seg:86` voided and
+> `grant:plan:19cad189fab54b9c804a74a6:seg:87:full` issued and
+> live; the occurrence granted;
+> derived reserved 12; dispatched 0; the phase figures at their
+> frozen values; containment NORMAL; the alarm registration
+> absent (`armedAt` null — any non-null value stops the attempt
+> before any act) — and any other
