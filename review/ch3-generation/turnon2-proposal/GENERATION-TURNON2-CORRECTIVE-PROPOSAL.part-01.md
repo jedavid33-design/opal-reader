@@ -1,0 +1,44 @@
+# WS1 — STANDARD TURN-ON, SECOND ATTEMPT: CORRECTIVE PROPOSAL
+
+**Handoff:** `RT-H-20261107-1e33ea`
+**Filed at pin:** `<TURNON2-PIN>` (repo `jedavid33-design/opal-reader`, branch `ui1-review`; the pin slot is filled in the Dropbox copy and named in the filing board summary, per the standing pin-slot convention — a commit cannot name itself)
+**Status: OFFLINE PROPOSAL ONLY.** Prepared under Rowan's ruling of Nov 7, 2026 (below). This document performs no production read, mutation, deploy, queue act, or Batch act; it authorizes nothing. It exists so Rowan can rule on the corrections and Julie can later give — or withhold — a fresh GO for a re-attempt through a new gate.
+
+## §0. Authority and basis
+
+- **Rowan's ruling on the executed gate** (relayed by Julie, Nov 7, 2026; handoff `RT-H-20261106-e81241`; evidence pin `f1d78ae01694a99ebef36dc729148fe76a80f81c`): **DOCUMENTARY EXECUTION PASS WITH QUALIFICATIONS. TERMINAL SUSPENSION ACCEPTED. SMOKE INCOMPLETE. PRODUCTION HELD.** The two-layer classification is accepted: terminal procedural disposition **SUSPENDED-BY-FAULT**; substantive smoke disposition **FAILED-by-incompleteness** as an independently established quota-bound trajectory; **COMPLETE excluded**.
+- **The ruling's next-authorized-work clause is this proposal's charter**: "Prepare a separately pinned corrective proposal for Rowan review. Preserve the execution record unchanged. Do not perform production reads requiring new authority, mutations, deploys, queue lifts, recovery actions or Batch operations under this ruling." And: "NO PRODUCTION GO. JULIE'S FRESH GO REQUIRED FOR ANY RE-ATTEMPT." Every word of this document is written inside that boundary — it is built exclusively from documents already on disk.
+- **Sources**: the execution record (`GENERATION-TURNON-EXECUTION-RECORD.md`, pin `f1d78ae0…` — preserved byte-unchanged; this proposal cites it, never amends it); the corrected final execution package that ran (`GENERATION-TURNON-FINAL-EXECUTION-PACKAGE-CORRECTED.md`, pin `2ee79872…`), cited below as "the gate-1 package" by section; the quota-guard facts as the record establishes them. No production surface was read for this proposal.
+- **WS2 B-G3 is untouched** — separate, separately gated, not part of this package.
+
+## §1. The problem set, exactly as Rowan framed it
+
+**Q-1 — the quota/headroom/window mismatch (qualification 3, first half).** The executed design's 4-hour smoke decision bound could not contain a quota park: the plan parked at 02:13:48Z on the designed attempt guard, the PT-day reset that would release it fell at 07:00Z — 1h24m **after** the 05:35:32Z bound — and at the observed dispatch rate a 20-segment chapter does not reliably fit one PT day alongside the guard's 12-slot fresh-occurrence cohort headroom. Rowan: *"A future execution proposal must explicitly resolve the observed quota/headroom/window mismatch."* Resolved at §3–§5.
+
+**Q-2 — fault clearance never verified (qualifications 1 and 3, second half).** The gate executed with no fault-clearance prerequisite: nothing in the gate-1 package required the platform to be demonstrably healthy before the census, and a 1101-class fault in fact arrived mid-gate (sustained onset bracket 04:00:59Z → 04:08Z) and was still live at the record's post-close read (04:54:34Z). Rowan: *"Fault clearance remains unverified"* and the future proposal must *"establish fault-clearance prerequisites."* Resolved at §6. A direct consequence for the record, stated here so it is not lost: **as of the last logged evidence available to this proposal (the scheduled monitor's runs on the morning of Nov 7, 2026, still returning the 1101 signature), fault clearance is NOT established.** The prerequisites at §6 therefore cannot currently be satisfied; they define when a new gate may be scheduled, not a claim about today.
+
+**Q-3 — the parked plan's post-close state (qualification 2).** *"The parked plan's post-close state is not freshly readable; preserve the last verified evidence without claiming additional movement."* This proposal claims none. The plan's last verified state is the execution record's poll 22 (2026-11-07T04:00:59Z): `plan:8f14c8885548b9c5ddd6b8df`, `parked_quota` / `provider_attempt_budget`, totals {eligible 20, done 19, failed 0, blocked 0, prompts 0}, position 107 `pending`, never attempted, no binding; bindings watermark 1861; phase settled 1,406,466. Everything §4 designs is sequenced to be *verified fresh at the new gate's census* before it is relied on — the census baseline itself changes to expect exactly this one non-terminal plan (§7).
+
+## §2. The observed arithmetic (the factual basis for §3)
+
+All figures from the execution record (§§6–7), PT day 2026-11-06:
+
+- **Consumption**: 19 completed segments consumed **89 provider dispatches = 63 success + 26 `policy_block` + 0 failures**; settled exactly **368,586 units**. Mean **≈4.7 dispatches per completed segment**.
+- **Distribution (a consistent reconstruction, labeled as such — the record does not expose a per-segment dispatch table)**: the record states split-affected segments "typically consumed ~6 provider requests (2 policy_blocks followed by 4 successful sub-attempts)." Solving 6x + 1·(19−x) = 89 gives x = 14: roughly **14 of 19 segments were split-affected at ~6 dispatches each and ~5 were clean at 1 each**. The one cleanly attributable single-segment increment (poll 8 → poll 9) is **6 dispatches**. Observed per-segment range: **1 to ~6**; observed maximum: **6**.
+- **The guard's rule**: the daily provider-attempt cap is **100 dispatches per PT day** (reset **07:00Z**); a fresh occurrence may start only while current dispatches + **12** (the cohort worst-case headroom held for that occurrence) ≤ 100 — i.e., only while dispatches ≤ **88**. The 20th segment was refused at 89 + 12 = 101 > 100, **before any attempt existed for it**. The irony the design must absorb: had it run, the chapter's total (~90–95 dispatches) would likely have stayed under the cap itself — it was the *headroom reservation for starting*, not the day's total, that stopped it. The guard behaved exactly as designed; the mismatch is in the gate's window and scheduling, not in the guard.
+- **The executed timeline**: submission T0 **01:35:32Z** → park **02:13:48Z** (38 minutes in) → decision bound **05:35:32Z** → PT reset **07:00Z**. The reset fell **after** the bound by 1h24m, so under gate-1 law the park was unresolvable inside the gate no matter when in the evening Julie submitted: any evening submission's bound lands before the next 07:00Z reset, and the day's dispatches were already the constraint, not the clock.
+- **Planning figures used below**: observed mean 4.7; observed maximum 6; a *planning worst case* **w = 8** dispatches/segment (observed max + 2, ≈ +33% margin) is proposed for the sizing tests — its adoption is OQ-8 (§8).
+
+## §3. Q-1 — options analysis
+
+The mismatch has three independent variables: **when in the PT day the smoke runs** (scheduling), **how much the smoke asks of one day** (scope), and **what the gate's clock does with a park** (window law). A fourth variable — the guard's own parameters — is a code change and is treated separately. Each option is analyzed on the §2 arithmetic; §5 recommends the combination.
+
+### Option A — start-time alignment (schedule the gate against the PT reset)
+
+**A-pure**: lifts and Julie's submission land just after the 07:00Z reset (07:00Z = **2:00 a.m. ET**), so the smoke starts a completely fresh PT day (0 dispatches used) with the whole cap ahead of it.
+
+- *What it buys*: the maximum same-day probability of completion. On a fresh day, Chapter 4's observed traffic would have needed its first 19 segments to total ≤ 88 dispatches to let the 20th start; they totaled **89**. Even perfectly aligned, this chapter on its observed distribution is a **coin flip that lands one dispatch short**. Alignment improves the odds; it does not change the structure.
+- *What it does not fix*: the window mismatch persists in form. If the plan parks anyway, the releasing reset is the *next* 07:00Z — still after any 4-hour bound. A-pure alone leaves Q-1's second half (the bound cannot contain a park) untouched.
+- *Human cost, stated honestly*: 2:00 a.m. ET is the middle of Julie's night. She is prone to insomnia and takes bedtime medication; a gate whose success depends on her tapping Generate at 2 a.m. is a bad design and an unreliable one — a missed tap leaves generation enabled inside a gate window with no submission (the no-indefinite-enabled predicate, gate-1 §2.8.4, would force a re-hold stand-down). **A-pure is rejected on both counts.**
+
+**A-variant — morning submission on a young PT day (the usable form of A)**: the executor-side work (census, clearance confirmation, lifts) runs in the early morning ET; the lifts land at roughly **12:30–13:00Z (7:30–8:00 a.m. ET)**; Julie submits when she wakes,
