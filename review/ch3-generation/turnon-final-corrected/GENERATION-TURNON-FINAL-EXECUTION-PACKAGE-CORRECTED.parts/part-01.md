@@ -1,0 +1,45 @@
+# WS1 — STANDARD TURN-ON: FINAL EXECUTION (GO-READINESS) PACKAGE
+
+_Wren's return under Rowan's WS1 built-candidate ruling (relayed by Julie 2026-11-06; verbatim record `ROWAN-WS1-CANDIDATE-PASS-WS2-HOLD-CLOSED.md`): **OFFLINE CANDIDATE PASS** — the S1 enforcement candidate is accepted for the production authorization-readiness review, and Wren is to prepare the final execution package with eight named contents. This document is that package — in its corrected form, per §0. It EXECUTES nothing, presents no GO, and authorizes nothing: its §3 authorization text is presented to Julie only after Rowan's review of THIS package, and the gate it describes runs only inside her GO. As originally filed and reviewed: pin `82b5ad9d89edb99fd89f264914eb0b85fb9419b8` (repo `jedavid33-design/opal-reader`, branch `ui1-review`).
+Filed at pin: <CORRECTED-PIN> (this corrected text; §0 states the binding). Operative sources: the design package (pin `5cca000fac0838203f084aa07d9ada53c7fa1c75`), the S1–S4 correction (pin `0e2f03fa9c3b2ec8771d8ecef7f14e7d211104fe`), the S1 build specification (pin `f61f46e6179712c6628023308bc9a53682f6d681`), the S1 implementation record and candidate (pin `ef69b8f91dad3acbed0b9c36cf3c11e238e27f72`), and the gate record of the program (Gate 4, the generation-resume gate, C1/R5a-D, the post-gate watch). Where the correction or the build specification superseded design text, the corrected text governs and is cited as such._
+
+**The ruling's eight required contents, mapped**: (1) exact candidate identity + one-part manifest comparison → §1; (2) fresh production census + all A1 predicates → §2.2 (predicates reproduced in full; the census itself is a gate-time act recorded in the preserved census-record slot at §2.2.3 — the one record slot left open deliberately, §0); (3) P-14 verification + termination evidence → §2.3 (both artifacts of record; the movement formally dispositioned at §2.3-B); (4) deployment under existing holds → §2.4; (5) post-deploy refused-intent probe + zero-movement read-back → §2.5; (6) separately authorized halt lift and queue unpause → §2.6; (7) bounded smoke + verified re-hold rules → §§2.7–2.8; (8) seven-clean-day soak + declaration criteria → §§2.9–2.10.
+
+## 0. Correction note, pin binding, and the one preserved slot
+
+**Correction note.** This is the corrected form of the final execution package, returned under Rowan's combined ruling of 2026-11-06 (verbatim record `ROWAN-COMBINED-RULING-FINALPKG-TGTADD.md`): *WS1: DOCUMENTARY CORRECTION REQUIRED BEFORE GO PRESENTATION.* Two corrections are applied, and only two: **(1)** §2.3-B formally dispositions the check #1 POST-GATE-MOVEMENT plan-state transition under the standing A1 drift and STOP rules — the original classification and the timestamp evidence are preserved at §2.3-A, and delayed closing bookkeeping is distinguished from unexplained post-close movement; **(2)** every contradictory pending/drafting statement is removed or rewritten to final-state language, and the `<FINAL-PIN>` references are resolved to an unambiguous immutable pin (below); the gate-time census slot at §2.2.3 is preserved open, exactly as the ruling requires. Appendix A enumerates every passage removed or rewritten, so the correction can be diffed against the filed text. Everything not enumerated in Appendix A carries the filed text unchanged. For this correction: the WS1 candidate was not modified (no build tree was touched); no census was executed; no production read was taken; no GO is presented.
+
+**Pin binding.** The package as originally filed and reviewed is pinned at `82b5ad9d89edb99fd89f264914eb0b85fb9419b8` (repo `jedavid33-design/opal-reader`, branch `ui1-review`); every reference in this text to the reviewed final package reads that pin. **This corrected package supersedes `82b5ad9d…` as the operative text.** It is filed at its own new pin, recorded in its filing board summary and in the CP delivered to Julie; the Dropbox copy of this package carries that pin filled in its header line. The authorization chain binds the S1 candidate pin `ef69b8f9…` + THIS corrected package at its filing pin: any presentation of §3's GO must cite the filing pin, and the CP copy must be verified to match it before presentation.
+
+**The openings that remain — both deliberate.** (i) The header's `Filed at pin: <CORRECTED-PIN>` line is this text's only remaining placeholder: a document cannot name its own pin inside its pinned text, so the line is filled in the Dropbox copy and named in the filing board summary. (ii) §2.2.3's execution-census record is the one record slot this package deliberately leaves open, preserved exactly as filed on the ruling's express instruction: it fills only at gate time, in the execution record, after Julie's GO. No other slot, placeholder, or drafting remnant stands anywhere in this text.
+
+---
+
+**Preliminary state note (NOT the census).** The expected values in §2.2's predicate table are the last verified standing values, from the read-only reads of 2026-11-06 (the scoping census 13:52–13:56Z; the design refresh ~14:0xZ; a capabilities read ~13:49Z): production HELD at NORMAL, build `fdb02395…`, containment NORMAL, recorder advancing under the holds with `recordingFailures` 0 and a standing registration, five plans all terminal, conflicts exactly 4, queue paused, `GENERATION_HALT` `"1"`. They are reproduced so Rowan can review the predicates against a known state. They are design-time evidence only: the gate runs its own fresh census (§2.2), and any difference between that census and these values is judged by the predicates' drift rules, never explained away by this note.
+
+---
+
+## 1. Candidate identity — the gate is bound to exactly this candidate
+
+### 1.1 Identity block
+
+| Field | Value |
+|---|---|
+| Candidate | The S1 enforcement candidate: the containment-v4 composed tree (the deployed source of the live build) plus exactly one branch |
+| Review pin | `ef69b8f91dad3acbed0b9c36cf3c11e238e27f72` (repo `jedavid33-design/opal-reader`, branch `ui1-review`; the pin carries the implementation record, the manifest, the build log, the changed `service.mjs` verbatim, the complete test implementation as run, and the complete final-run logs) |
+| Build basis | The composed tree = live build `fdb02395b3775dc945baa395591a73060ab146c4` (deployment `552db8a1-70e4-4a7f-9480-585bb99ab961`), script etag `bb90f18223e1802e1c417f17359f344499dc2d29c78e54db259f6f9ae4ac5c9e` |
+| The change | One branch in `v2/generation/service.mjs`, `admitPhaseRegistry`, candidate lines 447–452 (+6 lines, one file, `node --check` clean): the E1 comment and `if (enforcePhasePolicy) return { ok: false, reason: "book_not_onboarded" };` before the fall-through return |
+| Candidate manifest | 31 parts, SHA-256 per part (§1.3); the manifest document itself is `s1-build/MANIFEST.md`, SHA-256 `013635e0…`, pinned at the candidate pin |
+| Build stamp on deploy | `ef69b8f9…` (the candidate's pin), per §1.4 |
+
+**WS1/WS2 separation, restated for this gate**: the WS2 B-G2 candidate (pin `9d6f6b85…`) also changes `service.mjs`. It is not a base for this candidate, was never read as one, and is not composed with it. This gate deploys the WS1 candidate alone; nothing in this package touches, references, or advances WS2.
+
+### 1.2 The battery and exit-run identity (as Rowan's candidate ruling accepted)
+
+- **Battery**: `tests/s1-enforcement-battery.test.mjs` (13,268 B, SHA-256 `bb164d6c…`) — the build specification §3 battery as written: T-BOUND, T-UNBOUND-NAMED, T-NULL-REFUSAL (explicit-null and field-omitted), T-NO-MUTATION, T-QUOTE-OPEN, T-LEGACY, T-REGRESSION (incl. the lane-fence ordering proof), T-THROWSAFE, T-BOOTSTRAP — on the house harness (real `node:sqlite`; `.one()` throws with production semantics).
+- **Final run**: ONE invocation of `tests/run-all.sh` on the final candidate tree, 2026-11-06T16:06:55Z, overall exit 0 — S1 battery 9/9, containment 42/42, P2 32/32, R5A 23/23, V-3 5/5, every suite exit 0, full logs pinned at the candidate pin. (The standing batteries ran with the disclosed identity-fixture cure — fixtures regenerated from the trees on disk; the uncured standing outcomes, P2 31/32 and R5A 21/23 on identity groups only, are stated in the implementation record for contrast. No behavioral group was altered.)
+- **Key evidence the ruling cited**: T-NO-MUTATION's full-store before/after snapshot SHA-256 identical (`3632ac4d…`) around a refused intent; T-BOUND's created plan storing the DERIVED phase `forever-pucked`; T-QUOTE-OPEN's unbound-book quote computing identically before and after a refusal.
+
+### 1.3 The one-part manifest comparison
+
+The candidate's 31 parts were compared part-by-part (SHA-256) against the live build's 31 parts. The live basis is verified, not assumed: the baseline manifest recomputed from a byte copy of the composed tree is byte-identical to the composed-tree manifest recorded at `ch

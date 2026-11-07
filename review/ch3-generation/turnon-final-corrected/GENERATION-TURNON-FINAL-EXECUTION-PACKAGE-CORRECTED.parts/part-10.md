@@ -1,0 +1,25 @@
+e list (correction 2)
+
+Every passage removed or rewritten in this corrected package, against the package as originally filed (pin `82b5ad9d89edb99fd89f264914eb0b85fb9419b8`). Correction 1's substantive addition (§2.3-B) is item 15. Everything not listed here carries the filed text unchanged; §2.2.3's census slot, §2.3-A's verbatim log entry, and §3's verbatim GO passage are byte-identical to the filed text.
+
+1. **Header** — old: "Review pin: `<FINAL-PIN>` (repo `jedavid33-design/opal-reader`, branch `ui1-review`)." → resolved to the immutable pin `82b5ad9d89edb99fd89f264914eb0b85fb9419b8`, and the `Filed at pin: <CORRECTED-PIN>` header line added.
+2. **Header** — old: "This document is that package." → "This document is that package — in its corrected form, per §0."
+3. **§0** — NEW: correction note, pin binding clause, and the statement of the two deliberate openings (the header pin line; §2.2.3's preserved census slot).
+4. **Intro, contents mapping** — old: "the census itself is a gate-time act recorded in the slot at §2.2.3" → "recorded in the preserved census-record slot at §2.2.3 — the one record slot left open deliberately, §0".
+5. **Intro, contents mapping** — old: "P-14 verification + termination evidence → §2.3 (slot, filled at filing)" → "both artifacts of record; the movement formally dispositioned at §2.3-B".
+6. **§2.1** — old: "naming this package's pin (`<FINAL-PIN>`)" → resolved to the operative package's filing pin, per §0's pin binding.
+7. **§2.2.1, P-14 row (surface cell)** — old: "The watch log + the scheduler record (§2.3 slot)" → "(§2.3)".
+8. **§2.2.1, P-14 row (drift cell)** — old: "Exact precondition. Open at this package's drafting; by gate time it must read verified-and-terminated, else STOP until it does" → as-filed verified-and-terminated text, with the census re-read rule.
+9. **§2.2.4 heading** — old: "SLOT — pre-filing predicate verification (filled by Wren at filing, 2026-11-06 evening)" → "Pre-filing predicate verification (filed 2026-11-06)".
+10. **§2.2.4 lead** — old: "**FILLED 2026-11-06 (Wren, at filing).**" → "**Filed 2026-11-06 (Wren).**"
+11. **§2.2.4 body** — old: "the plan-state settling dispositioned at §2.3-A" → "formally dispositioned at §2.3-B".
+12. **§2.2.4 body** — old: "the alarm `pendingSchedule` 2 → 1 (mechanism not established by the check; the standing registration itself is healthy — `armedAt` advancing through 119 complete passes)" → "mechanism not established by the check; dispositioned at §2.3-B at the strength stated there".
+13. **§2.3 intro** — old: "both recorded here at filing:" → "both of record in this section:".
+14. **§2.3, artifact 1** — subheading "#### 2.3-A Artifact 1 — the first scheduled run: check #1 and its log entry" added; lead old: "**FILLED 2026-11-06 (Wren, at filing).** … and the movement is dispositioned in the paragraph after the entry." → "**Of record (filed 2026-11-06).** … preserved here unaltered, and formally dispositioned at §2.3-B under the A1 drift and STOP rules."
+15. **§2.3, disposition** — the informal paragraph (old, in full: "**Disposition of the MOVEMENT classification (Wren).** The transition that triggered the classification is timestamped **2026-11-06T03:58:37.070Z — inside the resume gate's own closing sequence** … On this evidence Wren states P-14's substance met — the arrangement ran as specified, observed honestly, and terminates below — and leaves the weighing to Rowan's review of this package.") REPLACED AND EXPANDED by §2.3-B, the formal disposition under the A1 drift and STOP rules (correction 1).
+16. **§2.3, artifact 2** — subheading "#### 2.3-C Artifact 2 — the termination act" added; lead old: "**FILLED 2026-11-06 (Wren, at filing).** The termination act of record:" → "**Of record (filed 2026-11-06).** The termination act of record:".
+17. **§2.3, closing paragraph** — REMOVED: "Status at this package's drafting: leg (iii) is due tonight (2026-11-06 18:28 ET) and stands PENDING; this package asserts nothing about it. With both slots filled as specified, the OQ-5 observation duty is discharged and P-14 is evaluable at gate time on this evidence." → replaced by the final-state closing sentence (artifact 1 quoted, movement dispositioned, termination of record; duty discharged).
+18. **§3 wrapper** — old: "naming THIS package's pin (`<FINAL-PIN>`) and adopting this text (P-15, §2.1)" → filing-pin resolution per §0. (The verbatim passage itself is untouched; it contains no `<FINAL-PIN>` reference — its three pin slots are substituted in this wrapper prose, as filed.)
+19. **§3 presentation note** — old: "names this package's pin (`<FINAL-PIN>`) alongside the passage's own three pins (P-15, §2.1)" → filing-pin resolution per §0.
+20. **Sign-off** — old: "**Turn: Rowan's** — production authorization-readiness review of this package." → "final documentary review of the corrections in this package, completing the production authorization-readiness review"; "(corrected return)" added to the signature line.
+21. **Appendix A** — NEW (this list).
