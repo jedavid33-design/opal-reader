@@ -1,0 +1,45 @@
+§4.13 branch (i) — it does not compress the clearance, shorten the confirmation separation, or lift early**):
+
+| Step | Target (Z) | Target (ET) | Rule |
+|---|---|---|---|
+| PT-day reset | 07:00Z | 2:00 a.m. ET | The day the gate runs on is young by construction |
+| FC-1 evidence assembly | ~11:15Z | ~6:15 a.m. ET | Read-only; the lookback excerpt is assembled and hash-preserved **before** the census (§4.2) |
+| Census set (incl. FC-2 clearance set) | ~11:30–12:00Z | ~6:30–7:00 a.m. ET | Every P-item and FC-item read fresh (§4.3) |
+| Confirmation set (FC-3) | ≥ 30 min after the census set completes; target ~12:05–12:30Z | ~7:05–7:30 a.m. ET | **Same morning** (OQ-3); must complete **before the first lift** (A3) |
+| The two lifts | ~12:30–13:00Z | ~7:30–8:00 a.m. ET | Only on a fully passed census (§4.6) |
+| P-1 observation window | [L2, L2 + 60 min]; target ~13:00–14:00Z | ~8:00–9:00 a.m. ET | L2 = the second lift's verification timestamp (§4.8) |
+| A6 snapshot + report to Julie | at the P-1 clean terminal read | — | Julie submits nothing before this report (§4.8) |
+| Julie's submission window | opens at the clean-terminal report; **closes 15:00Z** (10:00 a.m. ET) — extended to *report + 60 min* if the clean report lands after 14:00Z | — | Deterministic close; expiry = §4.13 branch (ii) |
+| T0 | Julie's submission (the plan's `createdAt`) | — | Every §4.10 deadline is a formula over T0 |
+| Inner bound | T0 + 4h (target ~18:00–19:00Z) | ~1:00–2:00 p.m. ET | §4.10 |
+| Outer bound | (first PT reset strictly after T0) + 4h (target next-day 11:00Z) | next-day 6:00 a.m. ET | §4.10 |
+| Extension deadline (if earned) | outer bound + 4h (target next-day 15:00Z) | next-day 10:00 a.m. ET | §4.10 |
+| Absolute cap | T0 + 52h | — | §4.10; the classification lands regardless |
+
+A schedule property worth stating, because the deadline law relies on it: under this schedule the first PT reset strictly after T0 is always the **next** morning's 07:00Z (the gate morning's own reset precedes T0), and a quota park taken on gate day therefore **necessarily persists past the inner bound** — which is exactly the configuration WAIT exists for.
+
+## §4 The gate
+
+### §4.1 Act 0 — the authorization of record
+
+The GO of record is Julie's adoption of §5 at this package's filing pin, recorded on the board (issue #15) **before** the census runs. It names: this package's pin; the chapter she selects for the smoke; and her **adopt/strike decision on the OQ-6 reuse clause** (§5 renders it as a clause she accepts or strikes; the board record preserves which). A GO recorded without the adoption decision is incomplete and the census does not run. Wren's chat report that the GO was given is not the record; the board comment is.
+
+### §4.2 Pre-census clearance-evidence assembly (A5) — read-only, not counted
+
+Before the census set is read, the executor assembles the FC-1 evidence artifact:
+
+1. **The monitor-log excerpt.** From `~/workspace/goals/opal-roundtable/hidden_files/fp-ch2-monitor-log.md` (the `fp-ch2-generation-monitor`'s run log; 20-minute cadence), the contiguous run entries covering the 12 elapsed hours immediately preceding the census start, copied verbatim into the gate's evidence set and preserved with its SHA-256. If the monitor job has been retired or its log cannot cover the full window, the fallback is a **Wren-run clearance cadence log** on the same 20-minute cadence over the same elapsed window, preserved the same way. **There is no third source and no waiver**: if neither artifact evidences the full 12 hours, FC-1 fails and the run stands down (§4.13 (i)) — the lookback is accumulated first, on a later morning if necessary.
+2. **The disqualifying-gap rule (A5).** Inside the lookback window, any of the following is a **disqualifying observation**, and the 12-hour clock restarts at that observation: (a) any logged run whose `/v2` reads returned the 1101 signature (HTTP 500, body `error code: 1101`) — or any non-200 on the monitor's plan/job/quota/snapshot reads; (b) an **evidence gap**: an interval between consecutive logged runs **longer than 40 minutes** (one missed run at the 20-minute cadence is the largest tolerable slippage); (c) the window's tail: the most recent logged run must sit **≤ 40 minutes before** the census start. Qualification is **elapsed wall-clock time**: the interval from the first evidencing clean run to the census start must be **≥ 12 hours** with every run inside it clean and every consecutive interval ≤ 40 minutes. (The ruling's precision, OQ-7: 36 clean readings at perfect cadence span only 11h40m — a reading count is not the measure; elapsed time is.)
+3. The excerpt artifact, the computed window (first/last run timestamps, the elapsed span, the gap check), and the clock-restart history are filed in the evidence set **before** the census verdict is pronounced, so the clearance claim is auditable from artifacts, not from the executor's summary.
+
+### §4.3 The predicate census — P-1…P-15 and the clearance group FC-1…FC-5
+
+The census runs **once**, on the gate morning, in full. **Every** predicate below must PASS — the P-items and the FC-items alike — before the first lift. Expected values are the last verified standing values (first-attempt record and its suspension close); they are design-time evidence only, and the census re-reads every surface fresh. **Drift rule key:** *exact* = any difference is a STOP; *shape-judged* = the executor judges the value against the stated rule and records the judgment and the values in the census record — a shape-judged item that cannot be judged clean is a STOP, not a pass. After the census set, the **confirmation set (FC-3)** repeats the clearance group ≥ 30 minutes later, same morning; the lifts wait for it (A3).
+
+| # | Predicate — expected value | Surface(s) | Drift |
+|---|---|---|---|
+| P-1 | **Live-build identity (R4).** `/health` reports build `ef69b8f91dad3acbed0b9c36cf3c11e238e27f72`; the script ETag read via in-process GET equals `d0eb6ea9b378eaed9a42a4a481d3b5738dc733c13d690463b85a1b918b4674a3` and is **captured and saved** to the gate evidence set before any act; the deployments list's most recent entry is the suspension close's flip deployment `f4c14000…` (2026-11-07T04:50:45Z) — **no intervening deploy**; `/settings` shows the same 10 bindings; observability enabled + persisted | cf-api script GET (in-process, headers), deployments list, `/settings` GET, `/health` | exact |
+| P-2 | **Both holds standing.** `GENERATION_HALT` = `"1"` in `/settings`; `/health` generation `halted`; queue `opalreader-generation-v2` `delivery_paused` = true, sole consumer `f260f2188d80426bb0588685e9d084eb`, producer `opalreader-api-v2-prod` | `/settings` GET, `/health`, cf-api queue GET | exact |
+| P-3 | **Containment NORMAL on both surfaces**, state NORMAL, known true, absent: false, verified: true; `updatedAt` `1793933356719`; closed-episode summary prevEpisodeId 3, prevEpisodeAttempts 1, prevEpisodeExhausted false, prevEpisodeClosedAt `1793933356719`; `stopConfidence` `not_applicable` | operator `GET /v2/d6-containment`; operator `GET /v2/d6-diagnostics?drive=1` | exact |
+| P-4 | **Conflicts = exactly the four preserved `schedule_dead` lease rows, exact-matched:** id 1 @ 2026-10-29T23:54:14.808Z, occurrence `grant:plan:3183ecbf2ac4bf50bbc6166e:seg:1:full`; id 2 @ 2026-10-30T00:24:14.632Z, `grant:plan:603ab416bd67ab1b25de97be:ch1:1:full`; id 3 @ 2026-10-31T05:14:24.089Z, `grant:plan:b2dc2a3d1cd367a0245b9102:ch1:1:full`; id 4 @ 2026-11-01T01:04:30.364Z, `grant:plan:e377a5559961b294154276b6:ch2:1:full` — all cache_key `lease`, expected `7`, found `LIKE or GLOB pattern too complex: SQLITE_ERROR`, reason `schedule_dead` | client `GET /v2/conflicts` | exact |
+| P-5 | **Plans inventory = exactly SIX.** Five terminal baseline plans unchanged: `plan:3183ecbf2ac4bf50bbc6166e` complete {1,1,0,0,0}; `plan:603ab416bd67ab1b25de97be` retired / `retired_unknown_billing` (38 entries preserved); `plan:b2dc2a3d1cd367a0245b9102` complete 18/18; `plan:e377a5559961b294154276b6` complete {23,23,0,0,0}; `plan:19cad189fab54b9c804a74a6` complete {1,1,0,0,0}, job complete rev 90. Plus **the one named non-terminal plan**: `plan:8f14c8885548b9c5ddd6b8df` — state parked (park reason `provider_attempt_budget`), totals {eligible 20, done 19, failed 0, blocked 0, prompts 0}; job `plan:8f14c8885548b9c5ddd6b8df:ch3` state `generating` rev 6; grants `…:ch3:1…5:full` all `reported`; position 92 `bound_already` (occurrence `bc3c9357…`, 1,259 chars); positions 93–106, 108–112 eligible ready/committed (19); **position 107 pending, executionState null** (occurrence `f4b451a5-b496-4392-90f8-079c3b142e5c`, 1,461 chars — never attempted, no execution record, no binding). Quarantine `held: false` on all six (five plan reads + the inherited plan's diagnostics read). **Any other non-terminal plan, any change to the named plan's values, or any q
