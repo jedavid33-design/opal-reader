@@ -1,0 +1,268 @@
+{
+ "bindings": {
+  "totalChanges": 1861,
+  "ops": [
+   "upsert"
+  ],
+  "seqMin": 1,
+  "seqMax": 1861,
+  "fpBoundBefore": 93,
+  "fpBoundAfter": 112,
+  "deltaCount": 19,
+  "deltaSeqRange": [
+   1843,
+   1861
+  ],
+  "deltaMatchesSeqWindow": true
+ },
+ "content": {
+  "chapters": 21,
+  "chapterArrayOrderIsIndexOrder": true,
+  "totalSegments": 407,
+  "distinctPovs": [
+   "Violet",
+   "Alex"
+  ],
+  "povProviders": [
+   "gemini",
+   "gemini"
+  ],
+  "allPovsResolve": true
+ },
+ "parked": {
+  "bookIdMatches": true,
+  "chapterIndex": 2,
+  "entries": 27,
+  "entriesEqualChapter2Segments": true,
+  "allEntriesBoundBefore": true,
+  "allEntriesBoundAfter": true
+ },
+ "digests": {
+  "beforeModule": "7d76a0538d8156a050eab0c34ecdb584d92da0c39f6d97a2589fc16ad5e5247f",
+  "beforeOwnSha": "7d76a0538d8156a050eab0c34ecdb584d92da0c39f6d97a2589fc16ad5e5247f",
+  "beforeMatchesRecord": true,
+  "afterModule": "831e456db0d82373d2f408fd9e37d6d9a3dd46e9f2419153be7d2d9755b60f94",
+  "afterOwnSha": "831e456db0d82373d2f408fd9e37d6d9a3dd46e9f2419153be7d2d9755b60f94",
+  "afterMatchesObserved": true
+ },
+ "tallies": {
+  "before": {
+   "eligible": 314,
+   "voice_prompt": 0,
+   "excluded_ch3": 0,
+   "excluded_parked": 0,
+   "bound_already": 93
+  },
+  "after": {
+   "eligible": 295,
+   "voice_prompt": 0,
+   "excluded_ch3": 0,
+   "excluded_parked": 0,
+   "bound_already": 112
+  }
+ },
+ "perChapter": {
+  "before_ch3": {
+   "bound_already": 1,
+   "eligible": 20
+  },
+  "after_ch3": {
+   "bound_already": 20,
+   "eligible": 1
+  },
+  "before_ch4": {
+   "eligible": 21
+  },
+  "after_ch4": {
+   "eligible": 21
+  },
+  "before_ch2": {
+   "bound_already": 27
+  },
+  "after_ch2": {
+   "bound_already": 27
+  }
+ },
+ "sameUniverseSameOrder": true,
+ "diff": {
+  "count": 19,
+  "allEligibleToBound": true,
+  "allInChapterIndex3": true,
+  "positions": [
+   93,
+   94,
+   95,
+   96,
+   97,
+   98,
+   99,
+   100,
+   101,
+   102,
+   103,
+   104,
+   105,
+   106,
+   108,
+   109,
+   110,
+   111,
+   112
+  ],
+  "idsEqualBindingsDelta": true,
+  "entries": [
+   {
+    "position": 93,
+    "chapterIndex": 3,
+    "occurrenceId": "9bd5ac7e-b8fe-442c-834a-a175456d1f81",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 94,
+    "chapterIndex": 3,
+    "occurrenceId": "e791bdd8-c065-47b9-8fa0-b7b97172eb8c",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 95,
+    "chapterIndex": 3,
+    "occurrenceId": "bb5f757d-ac16-4e46-999d-93734d027a97",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 96,
+    "chapterIndex": 3,
+    "occurrenceId": "60ae2ba8-e1aa-4774-9191-945fc3d280e6",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 97,
+    "chapterIndex": 3,
+    "occurrenceId": "e8b56db4-3ad8-473f-8cc7-041043757558",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 98,
+    "chapterIndex": 3,
+    "occurrenceId": "56450d42-8eec-4613-8f07-2994686dc782",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 99,
+    "chapterIndex": 3,
+    "occurrenceId": "92d589dc-8973-42e2-8374-f202f1563c56",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 100,
+    "chapterIndex": 3,
+    "occurrenceId": "369e5cda-4e12-4e4d-b444-39cecbb83f63",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 101,
+    "chapterIndex": 3,
+    "occurrenceId": "9b5886f1-abc5-476c-9b81-f6c776822234",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 102,
+    "chapterIndex": 3,
+    "occurrenceId": "6a3dffa3-22c9-4127-bd45-34e8c5c3cd92",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 103,
+    "chapterIndex": 3,
+    "occurrenceId": "06a2e8fd-fec7-4e8a-9f98-829c4c22d389",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 104,
+    "chapterIndex": 3,
+    "occurrenceId": "8a62c4e4-9103-40cf-ba4a-5495c38f1dfa",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 105,
+    "chapterIndex": 3,
+    "occurrenceId": "b7495a60-1c4c-4533-abed-022c4a2204a0",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 106,
+    "chapterIndex": 3,
+    "occurrenceId": "5a609acd-5a42-4011-9943-9de63c50183f",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 108,
+    "chapterIndex": 3,
+    "occurrenceId": "0b6c8913-3511-46fa-93f9-a506a2f9775d",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 109,
+    "chapterIndex": 3,
+    "occurrenceId": "4bee9d78-640f-4073-a53f-39813614fe32",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 110,
+    "chapterIndex": 3,
+    "occurrenceId": "d6977097-7f03-4d9c-9d7b-302f4c75d88e",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 111,
+    "chapterIndex": 3,
+    "occurrenceId": "5630be88-87c8-4b4c-91e4-f1fb8b3c1494",
+    "from": "eligible",
+    "to": "bound_already"
+   },
+   {
+    "position": 112,
+    "chapterIndex": 3,
+    "occurrenceId": "9e04c4b5-f318-4e23-9c39-b28371d786e6",
+    "from": "eligible",
+    "to": "bound_already"
+   }
+  ]
+ },
+ "planCrossCheck": {
+  "planEntriesSeen": 21,
+  "committedCount": 19,
+  "committedEqualDiff": true
+ },
+ "variants": {
+  "withReleasedAndExempt": {
+   "before": true,
+   "after": true
+  },
+  "parkedJobNull": {
+   "before": true,
+   "after": true
+  },
+  "povsEmpty": {
+   "before": true,
+   "after": true
+  }
+ }
+}
