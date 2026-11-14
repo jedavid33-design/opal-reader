@@ -1,0 +1,149 @@
+{
+  "baseline": "baseline-tree (composed build fdb02395b3775dc945baa395591a73060ab146c4, pre-S1)",
+  "tree": "candidate-tree",
+  "changedParts": [
+    {
+      "rel": "v2/coordinator.mjs",
+      "sha256": "a3dce2976582aed353f1367f908a2bb2c759eb177eb5360ea97a7721669d611d"
+    },
+    {
+      "rel": "v2/generation/service.mjs",
+      "sha256": "a77765910cdbcf283d2b475b47d97067587d4b4b799eb15dd40d58efcdf10d64"
+    },
+    {
+      "rel": "v2/worker-entry-prod-d6.js",
+      "sha256": "4e2bed3c7e976db7f514e7d43a92af7d1c6a2a8afcd6d98c62c980aa2d54858b"
+    }
+  ],
+  "nodeCheckParts": [
+    "v2/coordinator.mjs",
+    "v2/generation/service.mjs",
+    "v2/worker-entry-prod-d6.js"
+  ],
+  "baselineParts": [
+    {
+      "rel": "v2/api.mjs",
+      "sha256": "9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d"
+    },
+    {
+      "rel": "v2/audio-route.mjs",
+      "sha256": "b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616"
+    },
+    {
+      "rel": "v2/coordinator.mjs",
+      "sha256": "5303cb6323da01c21a5ebe9a7983f87abe08e14945660daaebce99734849e1ed"
+    },
+    {
+      "rel": "v2/executor.mjs",
+      "sha256": "5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9"
+    },
+    {
+      "rel": "v2/generation/binding-projection.mjs",
+      "sha256": "d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654"
+    },
+    {
+      "rel": "v2/generation/content-plane-adapter.mjs",
+      "sha256": "d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7"
+    },
+    {
+      "rel": "v2/generation/d6-executor.mjs",
+      "sha256": "c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c"
+    },
+    {
+      "rel": "v2/generation/d6-work-source.mjs",
+      "sha256": "8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006"
+    },
+    {
+      "rel": "v2/generation/eligible-set.mjs",
+      "sha256": "a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7"
+    },
+    {
+      "rel": "v2/generation/flush-store.mjs",
+      "sha256": "e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325"
+    },
+    {
+      "rel": "v2/generation/gen-constants.mjs",
+      "sha256": "9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d"
+    },
+    {
+      "rel": "v2/generation/gen-schema.mjs",
+      "sha256": "d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5"
+    },
+    {
+      "rel": "v2/generation/genstore.mjs",
+      "sha256": "811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a"
+    },
+    {
+      "rel": "v2/generation/grant-finalizer.mjs",
+      "sha256": "0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076"
+    },
+    {
+      "rel": "v2/generation/grant-guards.mjs",
+      "sha256": "9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629"
+    },
+    {
+      "rel": "v2/generation/park-release.mjs",
+      "sha256": "ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd"
+    },
+    {
+      "rel": "v2/generation/phase-policy.mjs",
+      "sha256": "09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f"
+    },
+    {
+      "rel": "v2/generation/policy-split.mjs",
+      "sha256": "61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876"
+    },
+    {
+      "rel": "v2/generation/prefix-range.mjs",
+      "sha256": "a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514"
+    },
+    {
+      "rel": "v2/generation/quarantine.mjs",
+      "sha256": "64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62"
+    },
+    {
+      "rel": "v2/generation/quota-budget.mjs",
+      "sha256": "2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820"
+    },
+    {
+      "rel": "v2/generation/service.mjs",
+      "sha256": "5c5183e664218b9746c497e9456af45c7467a8ace66fd1b9ef0928eccb3c7c14"
+    },
+    {
+      "rel": "v2/host/adapters.mjs",
+      "sha256": "f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368"
+    },
+    {
+      "rel": "v2/host/build-identity.mjs",
+      "sha256": "5d80fe5a6604b1e5ba5649b3853e293e1827b4de2048e5d093980218d52a227c"
+    },
+    {
+      "rel": "v2/p8/approved-freeze-carry.mjs",
+      "sha256": "24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46"
+    },
+    {
+      "rel": "v2/p8/approved-freeze-chunks.mjs",
+      "sha256": "b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a"
+    },
+    {
+      "rel": "v2/p8/approved-freeze-manifest.mjs",
+      "sha256": "e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd"
+    },
+    {
+      "rel": "v2/p8/migration-chunk-limits.mjs",
+      "sha256": "886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41"
+    },
+    {
+      "rel": "v2/worker-entry-prod-d6.js",
+      "sha256": "2bb0608b589a084ca275428c3236c24680f4a4692afe2245dfcb2880257983c1"
+    },
+    {
+      "rel": "v2/worker-entry-prod.js",
+      "sha256": "1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5"
+    },
+    {
+      "rel": "v2/worker-entry.js",
+      "sha256": "91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5"
+    }
+  ]
+}

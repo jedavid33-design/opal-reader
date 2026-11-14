@@ -1,0 +1,26 @@
+file:///tmp/bg2-vs-a1/tests/batch-bg2-battery.test.mjs:45
+    throw new Error("allowlist line not found in the fixture copy");
+          ^
+
+Error: allowlist line not found in the fixture copy
+    at file:///tmp/bg2-vs-a1/tests/batch-bg2-battery.test.mjs:45:11
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.1
+✖ tests/batch-bg2-battery.test.mjs (119.229127ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 131.61793
+
+✖ failing tests:
+
+test at tests/batch-bg2-battery.test.mjs:1:1
+✖ tests/batch-bg2-battery.test.mjs (119.229127ms)
+  'test failed'
