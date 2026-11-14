@@ -1,0 +1,58 @@
+# STANDARD TURN-ON — PREPARATION PACKAGE AND EXECUTION PROPOSAL
+
+**Case:** Opal Roundtable, issue #15 · **Handoff:** `RT-H-20261114-db14e0`
+**Prepared under:** Julie's Standard turn-on preparation GO, 2026-11-14 (board 6882034835), per Rowan's L-1 execution ruling §6 and §8 (verbatim board 6882016926).
+**Review pin (repo `jedavid33-design/opal-reader`, branch `ui1-review`):** `<PIN>`
+
+**Status sought:** documentary review of (A) the §6 grant/lifecycle accounting and (B) the proposed first Standard generation gate. **This preparation made NO production reads and NO production contact of any kind.** Every production fact below is from the pinned L-1 gate evidence or earlier pinned records, each cited; every mechanism claim is from the deployed A-1 candidate source (pin `8a16def4…`), cited by part and line. Production remains HELD. WS2/Batch untouched. W-4 remains an open historical deviation; the formal L-1 outcome remains INCONCLUSIVE, with Rowan's separately accepted bounded-autonomous-liveness finding as the evidentiary basis for proceeding.
+
+## 1. Why this proposal can be made now
+
+L-1 established, and Rowan accepted: A-1's first production exercise passed; the recorder chain is verifiably self-running (15 successive deliveries each within 0–96 ms of the preceding reported due time, ruling §4); the strike is discharged by derivation (effective 0, no durable event, projection untouched as directed); dispatch and expenditure containment passed throughout. A second L-1 stimulus is not a prerequisite and none is proposed. A-3 does not exist and is **not** represented as a safeguard anywhere in this proposal; if the chain dies again, recovery is the already-proven manual path (an authorized A-1 evaluation at a future gate), not an automation.
+
+## 2. The §6 accounting — the revived chain and the smoke plan
+
+### 2.1 What the chain did (evidence)
+
+At the L-1 gate-entry census the smoke plan (`plan:8f14c8885548b9c5ddd6b8df`) stood `parked_quota` (stopReason `provider_attempt_budget`), totals {eligible 20, done 19, failed 0, blocked 0, prompts 0}, its job's five grants (`:ch3:1:full` … `:ch3:5:full`) all `reported`, bindingsPublished 19. The revival (pass 452, 2026-11-14T16:50:54.894Z) resumed drive processing; because the PT quota day had rolled since the November park, the park condition no longer held and the plan transitioned `parked_quota` → **active**. Pass outcomes in the gate's observation log name the grants the chain then produced — `:ch3:6:full` (pass 452), `:ch3:7:full` (pass 454), `:ch3:8:full` (pass 457) — and Rowan's review of the full captures extends the observed sequence through `:ch3:10:full`. The terminal smoke-plan capture (L-1 evidence) shows totals **unchanged**, stopReason cleared, and **position 107** (occurrence `f4b451a5-b496-4392-90f8-079c3b142e5c`, 1,461 chars) at `occurrenceState: granted`, `executionState: null` — granted and not committed. Quota bookkeeping at the terminal census: ledgerSeq 350 → 359; `providerReservedToday` 12; `attemptsToday` 1 (server attempt ledger); **`providerDispatchesToday` 0**; phase accounting bit-identical; $0 spent.
+
+### 2.2 The lifecycle mechanism (source: A-1 candidate, `v2/coordinator.mjs`)
+
+Grant issuance is one atomic stretch (comment at :2234): ledger reservations → grant row (`issued`, lease = now + `LEASE_MS` 15 min, :2344) → outbox `dispatch` row (:2355) → lease schedule row (:2358). Delivery happens only in drive processing **and only when a delivery handler is wired**: `if (typeof this.env.sendGrant === "function") await this.drainOutbox(this.env.sendGrant)` (:4036–4037); the entry wires `sendGrant` **only when `GENERATION_HALT !== "1"`**. While halted, no drain occurs; outbox rows wait untouched. When a grant's lease expires undelivered, the expiry processing (:4090–4105) finds its outbox row still present and never invoked and applies the round-4 safe void — `_voidDispatch(..., "lease_expired_undelivered")` — then re-advances the job, which issues the successor grant for the same head occurrence. A grant with no outbox row is retired `voided` outright. **Voided grants are terminal: their payloads can never be delivered afterward.** This is the cycle the passes were executing: issue → 15-minute lease → safe-void → reissue, all internal, nothing dispatched.
+
+### 2.3 Answers to ruling §6, items 1–7
+
+1. **Grant identities/status since revival:** `:ch3:6:full` through `:ch3:10:full` observed (gate evidence + ruling review); each prior grant in the sequence is necessarily safe-voided (`lease_expired_undelivered`) or retired, because the successor's issuance happens only via the expiry path that voids it (§2.2); exactly one grant — the then-latest — is live at any instant. The gate-entry census (§4) re-establishes the live grant's identity at gate time; no November 14 identity is frozen as an expectation (per the ruling).
+2. **Reservations/claims/leases/outbox:** each issuance makes the standard cohort reservation (12 slots — the quota guard's fixed cohort bound), one claim/lease schedule row, and one outbox row; each expiry releases the reservation via the void path and deletes/voids the outbox row (`DELETE FROM outbox` at void, :2620 region). The terminal figures (reserved 12 = exactly one cohort; ledger +9 across five cycles = issue/void bookkeeping pairs, not accumulation) match this exactly.
+3. **Deliverability at lift:** every expired grant is terminal (§2.2). The **only** payload eligible for delivery when the halt lifts is the then-live grant's — which is, by construction, a grant for the plan's head occurrence, **position 107**. Its delivery at lift is therefore not an anomaly to prevent but the gate's **first counted act, planned as such** (§5): position 107 is the one Chapter 4 segment Julie has been owed since November 7.
+4. **Attempt-budget effects of cycling:** the server attempt ledger advanced **once** (attemptsToday 1) across at least five grant cycles — the reservation/attempt accounting attaches to the occurrence's admission, and reissues of the same occurrence under the void path do not re-count it. Cycling therefore does **not** consume or distort the daily counter beyond the single admission; the gate census nonetheless reads the day counters fresh and treats any value beyond the §4 expectation as a STOP under the standing executor law.
+5. **Reservation boundedness:** the cohort reservation stood at exactly 12 at the terminal census after ≥5 cycles — bounded by construction (one live grant, one cohort) and confirmed in evidence; no accumulation.
+6. **Boundaries intact:** the original parked-policy job (`1832c21f…`, the separate Nov 5 job) stood unchanged at the L-1 census and is untouched by the smoke plan's lifecycle (different job, different plan); the smoke plan's terminal capture shows `quarantine.held: false`; the other five plans stood at their standing states at the L-1 census; the four conflicts rows are preserved. All are re-verified at the gate census (§4) rather than assumed.
+7. **Exact remaining work for the first Standard gate:** §5 of this proposal, and nothing else.
+
+## 3. Standing safeguards incorporated
+
+S1 enforcement is live on the current build (an unonboarded book's submission is refused `book_not_onboarded`; Forever Pucked is bound to its **$13.50 phase budget**, settled 1,406,466 / remaining 12,087,886 units ≈ $12.09). Outer bounds: $50 monthly cap (settings revision 1), 100 provider attempts per PT day with the 12-slot cohort rule, the Gemini prepay balance as a hard physical limit with **no automatic top-up**. Containment stands NORMAL/verified. The executor STOP law, the 1101 WAIT law, and the halt/queue re-hold mechanics (proven repeatedly: settings-envelope halt flip with etag-preserving read-backs; queue pause via cf-api with read-back) all carry into the gate unchanged.
+
+## 4. The execution gate — entry census (fresh, time-bounded; pass = every item)
+
+Executed at the start of Julie's attended gate window; any mismatch STOPs under the executor law and the gate stands down pre-lift.
+
+1. /health: build `8a16def4…`, generation halted. 2. Script settings: halt `"1"`, 10 bindings, observability intact, etag matches the deployment record. 3. Queue: paused, sole consumer `f260f218…`. 4. Containment NORMAL/verified, `updatedAt` unchanged. 5. Capabilities: halted; phase accounting vs the FP baseline (settled 1,406,466 / est 19,018 / reserved 5,648 / remaining 12,087,886) — any movement requires a named explanation before proceeding. 6. Reconcile `ok`, censusComplete, drift [] modulo the gate-day's expected cycling bookkeeping, each drift row individually explained or STOP. 7. Six plans identified; smoke plan `active`, totals {20, 19, 0, 0, 0}; **the live grant identified** (expected `:ch3:N:full` for N ≥ 11, occurrence = position 107, with its lease expiry and outbox presence recorded); parked-policy job unchanged; other four plans at standing states. 8. Conflicts exactly the four preserved rows. 9. Settings revision 1. 10. Repair-status: intent 1 discharged by derivation, no new intents. 11. Recorder: latest pass ≤ 20 minutes old, chain intact, failures 0 (the R-B P-12 conditions, now satisfiable from the live chain). 12. **Quota day state read fresh** (attempts/reserved/dispatches for the gate's PT day; the day's cycling admission of 1 is the expected value; dispatches must be 0). 13. **Gemini prepay balance confirmed by Julie in-window** (AI Studio; historical $17.83 on 2026-10-29 — the gate does not proceed on the historical figure). 14. Julie present; GO fresh in-window.
+
+## 5. The execution gate — sequence and counted acts
+
+1. **Lift** (2 counted acts): queue unpause (cf-api PUT + read-back); halt flip `"1"` → `"0"` (settings envelope, etag-unchanged read-back, observability verified). Order per the proven mechanics.
+2. **Position 107 completes** (the lift's immediate, expected consequence): the live grant drains; watch its job to `reported`/committed and the binding published (watermark 1861 → 1862 expected). Chapter 4 is then **20/20**. Observation bound: 35-minute sliding stall window per standing law; foreign generation = STOP.
+3. **Julie's playback acceptance of the completed Chapter 4** (her act; the gate pauses for it).
+4. **Chapter 5 smoke** (1 counted act: Julie's in-app submission, or a SubmitJob with the proven intent shape — to be fixed in the corrected package after Rowan's review): 21 eligible, 29,145 chars, expected 410,880 units, quote digest `831e456d…` (the P-13-proven expectation; re-quoted at census — a digest mismatch is a STOP, per the P-13 lesson). Daily-cap check first: gate-day attempts + 21 + 12 cohort ≤ 100.
+5. **Completion + Julie's playback acceptance of Chapter 5.**
+6. **End state:** on both acceptances, the gate closes with **generation LIVE** — halt stays `"0"`, queue stays unpaused — and Standard is usable: Julie generates further Forever Pucked chapters at her own pace from the app, inside the phase budget's hard bound. Any failure at steps 2–5 stands down to re-hold (halt flip + queue pause, both read back) and the gate reports; nothing about a stand-down pre-authorizes a retry.
+
+**Explicitly out of scope:** any other book (Finding Home remains unonboarded and refused by S1), any settings change, conflicts disposition, containment transition, repair evaluation/acknowledgment, deploy, rollback, and **all of WS2/Batch**.
+
+## 6. What is asked
+
+Rowan: documentary review of the §2 accounting (items 1–7) and of the §4–§5 gate design; corrections as needed. Julie: after Rowan's review, a separate execution GO in an attended window. Neither is requested by this filing itself.
+
+**Turn: Rowan's** (documentary review). Then Julie's.
