@@ -1,0 +1,166 @@
+--- ../s1-build/candidate-tree/v2/worker-entry-prod-d6.js	2026-11-06 11:04:12.579414162 -0500
++++ candidate-tree/v2/worker-entry-prod-d6.js	2026-11-14 09:53:58.570497315 -0500
+@@ -1779,6 +1779,97 @@
+         await cache.flush();
+         return json(200, result);
+       }
++      if (url.pathname === "/internal/d6/repair-evaluate" && request.method === "POST") {
++        // W-4 TRACK A / A-1: the alarm-repair maintenance route —
++        // the ONLY invocation source for the shared repair
++        // evaluation in this build (no scheduler wiring exists;
++        // A-3 is separately gated). Same operator fence as every
++        // operator surface above (operator-admitted stamp required
++        // at this class gate). The request contract is a CLOSED
++        // ALLOWLIST enforced HERE, before any state is read for
++        // action: evaluate_repair takes exactly { action,
++        // authorizationRef, reason }; acknowledge_repair_counter
++        // takes exactly those plus { boundaryEventId }, which
++        // must be a true integer (a numeric string is refused —
++        // Rowan's final ruling §5). Both text fields are required,
++        // nonblank after trimming, and bounded at 2000 chars; the
++        // recorded source is stamped HERE ("operator-route"),
++        // never taken from the caller's body. Outcomes: a recorded
++        // policy decline returns 200 with the evaluation record;
++        // EVERY execution-error outcome (error:*) returns 500
++        // with the record's audit identity (implementation
++        // review I-C4 — an unreadable prerequisite is not a
++        // successful policy evaluation). An ambiguous response
++        // is NOT authority to retry: the unresolved intent in
++        // the record is the state to be dispositioned.
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const reject = (reason) =>
++          json(400, { error: "repair_body_not_allowed", reason });
++        const body = await request.json().catch(() => null);
++        if (!body || typeof body !== "object" || Array.isArray(body))
++          return reject("repair_body_not_allowed");
++        const isAck = body.action === "acknowledge_repair_counter";
++        if (body.action !== "evaluate_repair" && !isAck)
++          return reject("repair_action_not_allowed");
++        const ALLOWED_KEYS = isAck
++          ? ["action", "authorizationRef", "reason", "boundaryEventId"]
++          : ["action", "authorizationRef", "reason"];
++        for (const key of Object.keys(body)) {
++          if (!ALLOWED_KEYS.includes(key))
++            return reject("repair_body_not_allowed");
++        }
++        if (typeof body.authorizationRef !== "string" ||
++            body.authorizationRef.trim().length === 0 ||
++            body.authorizationRef.length > 2000)
++          return reject("authorization_ref_required");
++        if (typeof body.reason !== "string" ||
++            body.reason.trim().length === 0 ||
++            body.reason.length > 2000)
++          return reject("repair_reason_required");
++        if (isAck && (typeof body.boundaryEventId !== "number" ||
++            !Number.isInteger(body.boundaryEventId) ||
++            body.boundaryEventId <= 0))
++          return reject("acknowledgment_boundary_invalid");
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state, d6HostEnv(this.env, cache));
++        const stamped = { source: "operator-route",
++          authorizationRef: body.authorizationRef.trim(),
++          reason: body.reason.trim() };
++        const result = isAck
++          ? coord.acknowledgeRepairCounter(
++              { ...stamped, boundaryEventId: body.boundaryEventId })
++          : await coord.evaluateAlarmRepair(stamped);
++        await cache.flush();
++        if (typeof result.outcome === "string" &&
++            result.outcome.startsWith("error:"))
++          return json(500,
++            { error: "repair_evaluation_failed", ...result });
++        return json(200, result);
++      }
++      if (url.pathname === "/internal/d6/repair-status" && request.method === "GET") {
++        // W-4 TRACK A / A-1: the read-only repair audit surface.
++        // Same operator fence as every operator surface above.
++        // The handler performs zero writes and no wake: it
++        // reports the authoritative strike derivation (never the
++        // projection alone), the unresolved intents, and a
++        // bounded page of recent repair events. Missing or
++        // unverified repair state is reported, never repaired
++        // here: the coordinator is constructed through the
++        // read-surface pattern (ASSUME_SCHEMA), so this handler
++        // cannot create the repair tables or the singleton
++        // (implementation review I-C4). Object initialization
++        // occurring through other paths remains separately
++        // accounted (addendum §5.5).
++        if (request.headers.get("x-opalreader-operator-admitted") !== "1")
++          return json(403, { error: "migration_operator_required" });
++        const cache = await this._cache();
++        const coord = new GenerationCoordinator(this.state,
++          { ...d6HostEnv(this.env, cache), ASSUME_SCHEMA: true });
++        const result = coord.repairStatus();
++        await cache.flush();
++        return json(200, result);
++      }
+       if (url.pathname === "/internal/d6/seed-storage" && request.method === "POST") {
+         // CORRECTION 2 + G2 HARDENING: the storage seed. Beyond the
+         // class gate above (internal header + production scope),
+@@ -2143,6 +2234,18 @@
+     url.pathname === "/v2/d6-containment";
+   const isContainmentStateRoute = request.method === "GET" &&
+     url.pathname === "/v2/d6-containment";
++  // W-4 TRACK A / A-1 (Rowan's final ruling, 2026-11-14): the
++  // alarm-repair maintenance route (POST /v2/d6-repair-evaluate)
++  // and its read-only audit surface (GET /v2/d6-repair-status)
++  // join the same operator fence class — the production gate
++  // skips the client token for them, the operator admission
++  // block below requires the migration-operator credential in
++  // addition, and the class gate requires the stamped admission
++  // again. The everyday client token alone is refused on both.
++  const isRepairEvaluateRoute = request.method === "POST" &&
++    url.pathname === "/v2/d6-repair-evaluate";
++  const isRepairStatusRoute = request.method === "GET" &&
++    url.pathname === "/v2/d6-repair-status";
+   const denied = productionGate(request, env, cors,
+     { skipClientToken: isOperatorRoute || isDiagnosticsRoute
+         || isPhaseBindingRoute || isRetirePlanRoute
+@@ -2152,7 +2255,8 @@
+         || isParkReleaseRoute || isParkReleaseRevokeRoute
+         || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+         || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
+-        || isContainmentRoute || isContainmentStateRoute });
++        || isContainmentRoute || isContainmentStateRoute
++        || isRepairEvaluateRoute || isRepairStatusRoute });
+   if (denied) return denied;
+   const instance = request.headers.get("x-opalreader-instance");
+   if (instance !== PRODUCTION_INSTANCE)
+@@ -2199,7 +2303,8 @@
+       || isParkReleaseRoute || isParkReleaseRevokeRoute
+       || isChapterExemptionRoute || isChapterExemptionRevokeRoute
+       || isGrantFinalizationPreviewRoute || isGrantFinalizeRoute
+-      || isContainmentRoute || isContainmentStateRoute) {
++      || isContainmentRoute || isContainmentStateRoute
++      || isRepairEvaluateRoute || isRepairStatusRoute) {
+     const operatorToken = env.OPALREADER_MIGRATION_OPERATOR_TOKEN;
+     if (!operatorToken || !env.OPALREADER_ACCESS_TOKEN ||
+         operatorToken === env.OPALREADER_ACCESS_TOKEN)
+@@ -2501,6 +2606,26 @@
+     return forward(new Request("https://do.internal/internal/d6/containment",
+       { method: "GET" }));
+   }
++  // W-4 TRACK A / A-1: the repair surfaces (operator-admitted
++  // above; forward() stamps the admission the class gate
++  // checks). The body passes through minus any pretense of
++  // authority: the class gate enforces the closed allowlist,
++  // stamps the recorded source itself, and the coordinator's
++  // held-state, containment, strike, and fence checks run
++  // inside regardless.
++  if (isRepairEvaluateRoute) {
++    let repairBody = null;
++    try { repairBody = await request.json(); } catch { repairBody = null; }
++    return forward(new Request("https://do.internal/internal/d6/repair-evaluate", {
++      method: "POST",
++      headers: { "content-type": "application/json" },
++      body: JSON.stringify(repairBody ?? {}),
++    }));
++  }
++  if (isRepairStatusRoute) {
++    return forward(new Request("https://do.internal/internal/d6/repair-status",
++      { method: "GET" }));
++  }
+   return forward(new Request(url.toString(), request));
+ }
+ 

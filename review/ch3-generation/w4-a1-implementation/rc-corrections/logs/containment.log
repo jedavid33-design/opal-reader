@@ -1,0 +1,84 @@
+▶ CT0 — assembly & identity (fixture-driven)
+  ✔ changed parts are exactly the fixture set; all others byte-identical to the live tree (65.006456ms)
+  ✔ node --check passes on every changed part (310.878887ms)
+  ✔ design markers present in the candidate parts (3.549327ms)
+✔ CT0 — assembly & identity (fixture-driven) (381.352768ms)
+▶ CT1 — NORMAL: ordinary delivery, containment inert and invisible
+  ✔ seeded pass issues its grant exactly as shipped; reads report NORMAL-absent; no state table is created by passes or reads (119.089308ms)
+✔ CT1 — NORMAL: ordinary delivery, containment inert and invisible (119.455338ms)
+▶ CT2 — Layer 1 (DRIVE_CONTAINED): drive suppressed, chain alive, leases close
+  ✔ contained passes record stage 'contained'; the in-flight grant is voided by the lease path; no new grant; registration continues (16.84536ms)
+✔ CT2 — Layer 1 (DRIVE_CONTAINED): drive suppressed, chain alive, leases close (17.074313ms)
+▶ CT3 — Layer 2 (CHAIN_STOPPED): registration removed and cannot resurrect
+  ✔ verified stop: deleteAlarm read back null; schedule rows untouched; commands and wakes register nothing; a delivered pass is contained and does not re-arm (19.744681ms)
+✔ CT3 — Layer 2 (CHAIN_STOPPED): registration removed and cannot resurrect (20.132002ms)
+▶ CT4 — state READ failures default darker at every consuming path
+  ✔ CT4a DRIVE_CONTAINED + read fault: drive stays suppressed (contained row carries the error); arming also suppresses (10.259707ms)
+  ✔ CT4b CHAIN_STOPPED + read fault: the verified stop is NOT defeated — wakes register nothing (16.218199ms)
+  ✔ CT4c NORMAL (table absent) + non-table read error: fail-closed — the pass is contained, nothing issues (6.868998ms)
+✔ CT4 — state READ failures default darker at every consuming path (33.919553ms)
+▶ CT5 — state WRITE failures during transitions: no silent success
+  ✔ state-row INSERT fault: the route surfaces HTTP 500 and the state is unchanged (still absent/NORMAL) (34.958152ms)
+  ✔ DDL fault at transition time: HTTP 500, nothing recorded (8.503151ms)
+✔ CT5 — state WRITE failures during transitions: no silent success (43.826561ms)
+▶ CT6 — stop whose deleteAlarm FAILS: reported unverified, never silent, gates hold
+  ✔ outcome rejected/containment_stop_unverified; state stands CHAIN_STOPPED; later wakes register nothing despite the surviving registration (17.276046ms)
+✔ CT6 — stop whose deleteAlarm FAILS: reported unverified, never silent, gates hold (17.55856ms)
+▶ CT7 — alarm-handler retries under containment (simulated re-invocation)
+  ✔ a throwing base alarm under DRIVE_CONTAINED rejects identically on re-invocation; containment state and chain survive; the next healthy pass is contained (10.027999ms)
+✔ CT7 — alarm-handler retries under containment (simulated re-invocation) (10.205355ms)
+▶ CT8 — in-flight grant activity at the moment of the stop
+  ✔ the stop does not interrupt anything retroactively; a later delivered pass closes the in-flight grant by lease and issues nothing new (14.967201ms)
+✔ CT8 — in-flight grant activity at the moment of the stop (15.137427ms)
+▶ CT9 — transition discipline, route fences, and the return path
+  ✔ transition table enforced; idempotent re-apply audited; downgrade refused with no writes; clear restores ordinary arming (6.698422ms)
+  ✔ route fences: closed allowlist, operator-only admission, client token alone refused (13.836124ms)
+✔ CT9 — transition discipline, route fences, and the return path (20.833505ms)
+▶ CT10 — preserved-plan integrity across the full containment sweep
+  ✔ contain -> passes -> stop -> command -> clear leaves plan, job, occurrence, figures, parked job, and conflicts byte-identical (18.059793ms)
+✔ CT10 — preserved-plan integrity across the full containment sweep (18.235176ms)
+▶ CT11 — verify_chain_stop: the auditable re-verification / retry mechanism (ruling item B)
+  ✔ CT11a delete failed at the stop: verify retries the delete, lands it, and marks the record re_verified (11.486618ms)
+  ✔ CT11b the delete landed but the read-back failed: verify confirms from the null read-back WITHOUT re-deleting (8.727457ms)
+  ✔ CT11c verify is refused unless the state is CHAIN_STOPPED (4.701485ms)
+  ✔ CT11d the attempts bound is enforced; a fresh stop episode (after a reasoned clear) resets it (10.445005ms)
+  ✔ CT11e a failed verify never downgrades: state, suppression, and the unverified record all stand (9.71549ms)
+  ✔ CT11f verify on an already-verified stop is an idempotent confirmation (status stays 'verified', no delete) (4.928286ms)
+✔ CT11 — verify_chain_stop: the auditable re-verification / retry mechanism (ruling item B) (50.581408ms)
+▶ CT12 — restoration discipline (ruling item D)
+  ✔ CT12a clear without a recorded reason is refused at the method AND the route; with a reason it applies and the reason is audited (7.455558ms)
+  ✔ CT12b clearing CHAIN_STOPPED never re-arms: the registration stays absent until an ordinary wake under NORMAL (8.869991ms)
+  ✔ CT12c NO automatic clear anywhere: an unverified stop persists across time, passes, wakes, commands, and reads (69.40058ms)
+✔ CT12 — restoration discipline (ruling item D) (86.109836ms)
+▶ CT13 — async races at the await boundaries (ruling item C)
+  ✔ CT13a a wake parked at getAlarm() cannot resurrect the chain after a stop lands mid-wake (stale-value branch) (85.511648ms)
+  ✔ CT13b the same race, null branch: the parked read resolves after the delete and STILL cannot re-arm (25.283033ms)
+  ✔ CT13c a verify_chain_stop landing while a wake is parked: the last physical act wins and the record stays truthful (12.98754ms)
+  ✔ CT13d contain_drive lands mid-pass: the running pass completes under its gate-time state; the NEXT pass is contained (32.785962ms)
+  ✔ CT13e stop_chain lands mid-pass: the pass completes, its post-grant arm is suppressed, and the stop record survives (9.998936ms)
+  ✔ CT13f state-read failure at the parked wake's re-check: unverified means suppressed (darker branch at the new boundary too) (5.971752ms)
+✔ CT13 — async races at the await boundaries (ruling item C) (173.667493ms)
+▶ CT14 — R1: stop-record truth — derived CURRENT PHYSICAL CONFIDENCE (design v4 §2)
+  ✔ CT14a the exported derivation: the full truth table, cell by cell (0.948604ms)
+  ✔ CT14b surfaces: verified stop shows verified_current; enum and last-verified fact are immutable under degradation (12.815362ms)
+  ✔ CT14c surfaces: a failed registration read degrades confidence to unknown; an unverified stop never displays verified (12.554852ms)
+  ✔ CT14d truth-table row 1's READABLE-RECORD precondition (Rowan V4 ruling, V4-3): an unreadable record never yields row 1's not_applicable, whatever the enum (0.687963ms)
+✔ CT14 — R1: stop-record truth — derived CURRENT PHYSICAL CONFIDENCE (design v4 §2) (27.313339ms)
+▶ CT15 — R3: retry-exhaustion law — episodes persist across clear (design v4 §4)
+  ✔ CT15a exhaustion is recorded in the audit + state at the moment the bound is reached; refusal writes nothing further (8.808298ms)
+  ✔ CT15b clear CLOSES the episode (summary persists); a new stop mints a NEW episode; the exhausted history stays disclosed (10.486788ms)
+  ✔ CT15c verify on the SAME episode still refuses after exhaustion even when the physical fault clears (code-enforced half of the law) (36.697352ms)
+✔ CT15 — R3: retry-exhaustion law — episodes persist across clear (design v4 §4) (56.275904ms)
+▶ CT16 — R4: the C3 ledger, dry-run in the harness (gates v4, C3)
+  ✔ CT16a the C3 sequence end-to-end: contain (read-only gate) → stop against the stale registration → verified; ledger writes match the audit (6.218092ms)
+  ✔ CT16b partial failure at the delete step + ambiguous re-entry: resume uses verify_chain_stop, never a second stop_chain; deletes never duplicate (5.380725ms)
+  ✔ CT16c ambiguous delete (landed, response lost): the read-back resolves it; resume confirms without re-deleting (5.793234ms)
+✔ CT16 — R4: the C3 ledger, dry-run in the harness (gates v4, C3) (17.662506ms)
+ℹ tests 42
+ℹ suites 17
+ℹ pass 42
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1285.877733

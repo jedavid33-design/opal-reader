@@ -1,0 +1,779 @@
+--- ../s1-build/candidate-tree/v2/coordinator.mjs	2026-11-06 11:04:12.578869314 -0500
++++ candidate-tree/v2/coordinator.mjs	2026-11-14 10:07:41.156529240 -0500
+@@ -460,6 +460,275 @@
+   return "unknown";
+ }
+ 
++// ============================================================
++// W-4 TRACK A — A-1 ALARM REPAIR (operative specification: the
++// A-1 implementation proposal, pin 4bc8b81b…; its focused
++// addendum, pin 3759a69e…; and Rowan's final documentary ruling
++// of 2026-11-14, board 6878847251, which controls on conflict).
++// One shared repair evaluation with exactly ONE authorized
++// invocation source in this build — the operator maintenance
++// route. No scheduler entrypoint, activation flag, service
++// binding, or automatic caller exists in this build (A-3 is
++// separately gated). The evaluation's ONLY repairable predicate
++// is P-STALE; P-ABSENT / P-FUTURE / P-SILENT are diagnostic
++// observations and never register. The evaluation acts only in
++// the HELD operating state (GENERATION_HALT === "1" inside the
++// coordinator; the queue-pause, fault-clearance, authorization,
++// and exclusive-control conditions are externally enforced
++// execution prerequisites of any gate that invokes it — the
++// code does not claim to observe them).
++//
++// CONCURRENCY (ruling §2): the registration-revision fence.
++// ALARM_REVISIONS maps a Durable Object state object to a
++// monotonic counter bumped in the same synchronous stretch as
++// EVERY registration or deletion initiation in this part —
++// _armAlarm, both _armAlarmIfEarlier initiation sites, the
++// containment stop's deleteAlarm, the verify path's re-issued
++// deleteAlarm, and the repair evaluation's own act. An
++// evaluation captures the revision before its asynchronous
++// registration observation and rechecks it at the act boundary
++// (and again after the commitment boundary); a changed revision
++// suppresses the repair as observation_superseded. Lifetime:
++// the counter lives exactly as long as the state object, i.e.
++// as long as the Durable Object instance; an in-flight
++// observation cannot survive its instance (the event dies with
++// it), so a reset on instance replacement invalidates nothing
++// that still exists. No persistent write is added to ordinary
++// passes. This fence is defense in depth ON TOP of the
++// platform's documented input gate for storage operations
++// (addendum §1); neither replaces the other, and the v3
++// containment rechecks above are preserved untouched.
++//
++// STRIKE LAW (ruling §3): at most REPAIR_STRIKE_BOUND
++// outstanding ineffective registering attempts. The derivation
++// over the append-only d6_repair_events table is the ONLY
++// authority; the d6_repair_state row is a projection, updated
++// in the same transaction as its triggering event and never
++// read for eligibility. An intent counts once; its completion
++// never counts again; an unresolved intent counts. Discharge
++// requires two consecutive complete recorder rows after the
++// intent (a single row can be a pass already in flight when the
++// intent was written); once an evaluation establishes discharge
++// it persists a durable discharge event carrying the qualifying
++// pass identities, so later recorder pruning cannot resurrect
++// the strike, and a missing row never manufactures discharge.
++// There is NO post-bound evaluation exception: at the bound,
++// every source declines until discharge or an explicitly
++// authorized acknowledgment.
++//
++// COMMITMENT (ruling §6, as corrected by implementation
++// review I-C1): the registering intent is the evaluation's
++// FIRST persistent action. Before any watchdog ensure or
++// registration, the evaluation crosses an explicit commitment
++// boundary — an awaited storage.sync(), the documented
++// operation that synchronizes pending writes and resolves
++// when they complete — and then RE-VERIFIES state, derivation,
++// and its own reservation, re-establishes P-STALE from a fresh
++// registration observation, and REPEATS the final revision,
++// eligibility, halt, containment, and due checks (review
++// I-C2: Phase B2 fails closed). If the intent cannot be
++// established, nothing follows it. A demonstrably uninitiated
++// act is recorded as such; an uncertain act remains
++// conservatively counted.
++// ============================================================
++export const REPAIR_STRIKE_BOUND = 3;
++// The recorder's future-dated tolerance for P-FUTURE
++// (addendum §2.3 step 6).
++export const REPAIR_FUTURE_TOLERANCE_MS = 60 * 1000;
++const REPAIR_SCHEMA = `
++CREATE TABLE IF NOT EXISTS d6_repair_state (
++  id INTEGER PRIMARY KEY CHECK (id = 1),
++  projection_strikes INTEGER NOT NULL DEFAULT 0,
++  updated_at INTEGER NOT NULL DEFAULT 0,
++  last_evaluation_id INTEGER,
++  last_ack_boundary INTEGER NOT NULL DEFAULT 0
++);
++CREATE TABLE IF NOT EXISTS d6_repair_events (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  at INTEGER NOT NULL,
++  kind TEXT NOT NULL,
++  action TEXT NOT NULL,
++  intent_id INTEGER,
++  source TEXT NOT NULL,
++  authorization_ref TEXT,
++  reason TEXT,
++  outcome TEXT NOT NULL,
++  detail_json TEXT
++);
++INSERT OR IGNORE INTO d6_repair_state
++  (id, projection_strikes, updated_at, last_evaluation_id,
++   last_ack_boundary)
++  VALUES (1, 0, 0, NULL, 0);
++`;
++
++const ALARM_REVISIONS = new WeakMap();
++
++// Read the repair state row. Never throws, never writes.
++// Unlike containment, ABSENCE IS NOT A VERIFIED STATE: a
++// missing table or row is unverified, and every consumer fails
++// closed (addendum §5.2).
++export function readRepairState(sql) {
++  let rows;
++  try {
++    rows = sql.exec(
++      `SELECT projection_strikes, updated_at, last_evaluation_id,
++              last_ack_boundary
++         FROM d6_repair_state WHERE id = 1`).toArray();
++  } catch (e) {
++    const msg = String((e && e.message) || e);
++    if (/no such table/i.test(msg))
++      return { known: false, absent: true, verified: false,
++        projectionStrikes: null, updatedAt: null,
++        lastEvaluationId: null, lastAckBoundary: null,
++        errorName: null };
++    return { known: false, absent: false, verified: false,
++      projectionStrikes: null, updatedAt: null,
++      lastEvaluationId: null, lastAckBoundary: null,
++      errorName: e && e.name ? String(e.name) : "Error" };
++  }
++  if (!rows || rows.length === 0)
++    return { known: false, absent: true, verified: false,
++      projectionStrikes: null, updatedAt: null,
++      lastEvaluationId: null, lastAckBoundary: null,
++      errorName: null };
++  const r = rows[0];
++  const num = (v) => typeof v === "number" ? v : null;
++  return { known: true, absent: false, verified: true,
++    projectionStrikes: num(r.projection_strikes),
++    updatedAt: num(r.updated_at),
++    lastEvaluationId: num(r.last_evaluation_id),
++    lastAckBoundary: num(r.last_ack_boundary),
++    errorName: null };
++}
++
++function _repairDetail(text) {
++  try {
++    const v = JSON.parse(text || "{}");
++    return v && typeof v === "object" ? v : {};
++  } catch { return {}; }
++}
++
++// THE authoritative strike derivation (ruling §3). Pure read:
++// it never writes, so the audit surface can use it directly;
++// an evaluation that establishes a NEW recorder-based discharge
++// persists the corresponding discharge event itself, inside
++// its own transaction, and the projection is then recomputed
++// from the events — the events are always the authority.
++//   passes: [{ id, at, stage }] in id order, or null when the
++//     recorder read failed / the table is absent — in which
++//     case NOTHING is recorder-discharged (fail closed).
++// Discharge by recorder rows requires TWO consecutive complete
++// rows (adjacent in id order among the rows present) with
++// id > intent.latestPassIdBefore and at > intent.at — AND a
++// completion record for the intent (implementation review
++// I-C3): a still-active reservation, whose evaluation can
++// still act, is never AUTOMATICALLY discharged by recorder
++// evidence. An operator acknowledgment may cover such an
++// intent; the in-flight evaluation's Phase B2 reservation
++// re-verification then invalidates its permission to proceed.
++// The derivation also distinguishes, for the audit surface:
++// outstanding strikes (unresolvedIntentIds), intents lacking
++// a completion record (incompleteIntentIds — an acknowledged
++// or discharged intent with no completion remains visible
++// here, historically unresolved), completed-but-ineffective
++// attempts (completedIneffectiveIntentIds), and acknowledged
++// historical attempts (acknowledgedIntentIds).
++export function deriveRepairStrikes(sql, passes) {
++  let events;
++  try {
++    events = sql.exec(
++      `SELECT id, at, kind, detail_json FROM d6_repair_events
++        ORDER BY id`).toArray();
++  } catch (e) {
++    return { verified: false, effectiveStrikes: null,
++      totalIntents: 0, dischargedIntentIds: [],
++      recorderDischargedIntentIds: [], unresolvedIntentIds: [],
++      incompleteIntentIds: [], acknowledgedIntentIds: [],
++      completedIneffectiveIntentIds: [],
++      acknowledgedBoundary: 0, recorderVerified: passes !== null,
++      errorName: e && e.name ? String(e.name) : "Error" };
++  }
++  const dischargedByEvent = new Map();
++  const completions = new Map(); // intentId -> completion `at`
++  let ackBoundary = 0;
++  const intents = [];
++  for (const row of events) {
++    const d = _repairDetail(row.detail_json);
++    if (row.kind === "intent")
++      intents.push({ id: row.id, at: row.at, detail: d });
++    else if (row.kind === "completion" &&
++             typeof d.intentId === "number" &&
++             !completions.has(d.intentId))
++      completions.set(d.intentId, row.at);
++    else if (row.kind === "discharge" &&
++             typeof d.intentId === "number")
++      dischargedByEvent.set(d.intentId,
++        Array.isArray(d.passIds) ? d.passIds : []);
++    else if (row.kind === "acknowledgment" &&
++             typeof d.boundaryEventId === "number" &&
++             d.boundaryEventId > ackBoundary)
++      ackBoundary = d.boundaryEventId;
++  }
++  const discharged = [];
++  const recorderDischarged = [];
++  const unresolved = [];
++  const incomplete = [];
++  const acknowledged = [];
++  const completedIneffective = [];
++  let effective = 0;
++  for (const intent of intents) {
++    const hasCompletion = completions.has(intent.id);
++    if (!hasCompletion) incomplete.push(intent.id);
++    if (dischargedByEvent.has(intent.id)) {
++      discharged.push(intent.id);
++      continue;
++    }
++    if (intent.id <= ackBoundary) {
++      acknowledged.push(intent.id);
++      continue;
++    }
++    let byRecorder = null;
++    if (hasCompletion && passes) {
++      const before = typeof intent.detail.latestPassIdBefore ===
++        "number" ? intent.detail.latestPassIdBefore : 0;
++      // Evidence ordering (review RC-2): BOTH qualifying
++      // passes must have handler-entry timestamps strictly
++      // later than the intent's COMPLETION timestamp — the
++      // conservative lower boundary. Passes that precede the
++      // act cannot establish delivery after it.
++      const completionAt = completions.get(intent.id);
++      for (let i = 0; i + 1 < passes.length; i++) {
++        const r1 = passes[i], r2 = passes[i + 1];
++        if (r1.id > before && r1.at > intent.at &&
++            r1.at > completionAt && r2.at > completionAt &&
++            r1.stage === "complete" && r2.stage === "complete" &&
++            r2.id > r1.id && r2.at > intent.at) {
++          byRecorder = [r1.id, r2.id];
++          break;
++        }
++      }
++    }
++    if (byRecorder) {
++      discharged.push(intent.id);
++      recorderDischarged.push(
++        { intentId: intent.id, passIds: byRecorder });
++    } else {
++      unresolved.push(intent.id);
++      if (hasCompletion) completedIneffective.push(intent.id);
++      effective++;
++    }
++  }
++  return { verified: true, effectiveStrikes: effective,
++    totalIntents: intents.length, dischargedIntentIds: discharged,
++    recorderDischargedIntentIds: recorderDischarged,
++    incompleteIntentIds: incomplete,
++    acknowledgedIntentIds: acknowledged,
++    completedIneffectiveIntentIds: completedIneffective,
++    unresolvedIntentIds: unresolved,
++    acknowledgedBoundary: ackBoundary,
++    recorderVerified: passes !== null, errorName: null };
++}
++
+ const LEASE_MS = 15 * 60 * 1000;
+ // Option D two-phase constants (design §3.3.7, §3.10): a pending
+ // migration command awaits operator approval for at most 24
+@@ -691,6 +960,7 @@
+     // every writable wake creates them first.
+     if (!env.ASSUME_SCHEMA) {
+       this.sql.exec(SCHEMA);
++      this.sql.exec(REPAIR_SCHEMA);
+       // Part 1 integration fix: seed every sync family's state row at
+       // schema time (history-aware, insert-or-ignore). _familyState's
+       // lazy INSERT is a WRITE, and the GET API's read-only facade
+@@ -2813,6 +3083,7 @@
+       this._noteContainmentArmSuppressed("_armAlarm");
+       return;
+     }
++    this._bumpAlarmRevision();
+     await this.state.storage.setAlarm(due);
+   }
+ 
+@@ -2827,6 +3098,452 @@
+     return deriveStopConfidence(readContainmentState(this.sql), fresh);
+   }
+ 
++  // ---- W-4 TRACK A / A-1 ALARM REPAIR (see the design block
++  // at readRepairState). ----
++
++  _alarmRevision() {
++    const entry = ALARM_REVISIONS.get(this.state);
++    return entry ? entry.revision : 0;
++  }
++
++  _bumpAlarmRevision() {
++    const entry = ALARM_REVISIONS.get(this.state) || { revision: 0 };
++    entry.revision += 1;
++    ALARM_REVISIONS.set(this.state, entry);
++  }
++
++  // The repair state read used by the operator surface (never
++  // throws, never writes; absence is UNVERIFIED, fail closed).
++  repairState() { return readRepairState(this.sql); }
++
++  _repairRecorderPasses() {
++    try {
++      return this.sql.exec(
++        `SELECT id, at, stage FROM d6_drive_passes ORDER BY id`
++      ).toArray();
++    } catch { return null; }
++  }
++
++  _repairDerive(passes) {
++    return deriveRepairStrikes(this.sql,
++      passes === undefined ? this._repairRecorderPasses() : passes);
++  }
++
++  _repairInsertEvent({ kind, action, intentId, source,
++      authorizationRef, reason, outcome, detail }) {
++    this.sql.exec(
++      `INSERT INTO d6_repair_events
++         (at, kind, action, intent_id, source, authorization_ref,
++          reason, outcome, detail_json)
++       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
++      this._now(), kind, action,
++      typeof intentId === "number" ? intentId : null,
++      source, authorizationRef ?? null, reason ?? null, outcome,
++      JSON.stringify(detail ?? {}));
++    const row = this._one(`SELECT last_insert_rowid() AS id`);
++    return row ? row.id : null;
++  }
++
++  _repairProject(strikes, extras = {}) {
++    this.sql.exec(
++      `UPDATE d6_repair_state SET projection_strikes = ?,
++              updated_at = ? WHERE id = 1`,
++      typeof strikes === "number" ? strikes : 0, this._now());
++    if (typeof extras.lastEvaluationId === "number")
++      this.sql.exec(
++        `UPDATE d6_repair_state SET last_evaluation_id = ?
++          WHERE id = 1`, extras.lastEvaluationId);
++    if (typeof extras.lastAckBoundary === "number")
++      this.sql.exec(
++        `UPDATE d6_repair_state SET last_ack_boundary = ?
++          WHERE id = 1`, extras.lastAckBoundary);
++  }
++
++  // Persist any recorder-established discharges from a
++  // derivation, inside the caller's transaction. Returns
++  // nothing; the events are the durable discharge record
++  // (ruling §3), so recorder pruning can never resurrect them.
++  _repairPersistDischarges(derive, { source, authorizationRef,
++      reason, action }) {
++    for (const d of derive.recorderDischargedIntentIds)
++      this._repairInsertEvent({ kind: "discharge", action,
++        intentId: d.intentId, source, authorizationRef, reason,
++        outcome: "discharged",
++        detail: { intentId: d.intentId, passIds: d.passIds } });
++  }
++
++  // THE shared repair evaluation. Async only at storage
++  // operations (getAlarm, the commitment sync(), setAlarm,
++  // the read-back) — the construction rule of addendum §1.2.
++  // `source` is stamped by the calling handler, never taken
++  // from a request body.
++  async evaluateAlarmRepair({ source, authorizationRef,
++      reason } = {}) {
++    const state0 = readRepairState(this.sql);
++    if (!state0.verified)
++      return { evaluationId: null, action: "evaluate_repair",
++        outcome: "error:repair_state_unverified", source,
++        registered: false, actInitiated: false };
++    // ---- Phase O: observation (no writes) ----
++    const revisionAtCapture = this._alarmRevision();
++    const now0 = this._now();
++    let armed = null, armedReadFailed = false;
++    try {
++      const a = await this.state.storage.getAlarm();
++      armed = typeof a === "number" ? a : null;
++    } catch { armedReadFailed = true; }
++    const passes = this._repairRecorderPasses();
++    const latestPass = passes && passes.length
++      ? passes[passes.length - 1] : null;
++    const base = { action: "evaluate_repair", source,
++      authorizationRef, reason, armedObserved: armed,
++      latestPassIdBefore: latestPass ? latestPass.id : 0,
++      latestPassAt: latestPass ? latestPass.at : null };
++    let predicate = "not_stale";
++    if (armedReadFailed) predicate = "unreadable";
++    else if (armed === null) predicate = "absent";
++    else if (armed <= now0 - ALARM_STALE_THRESHOLD_MS)
++      predicate = "stale";
++    else if (armed > now0 + WATCHDOG_PERIOD_MS +
++             REPAIR_FUTURE_TOLERANCE_MS)
++      predicate = "future_dated";
++    else if (!latestPass || latestPass.at <
++             now0 - (2 * WATCHDOG_PERIOD_MS + 300000))
++      predicate = "silent";
++    base.predicate = predicate === "stale" ? "P-STALE"
++      : predicate === "absent" ? "P-ABSENT"
++      : predicate === "future_dated" ? "P-FUTURE"
++      : predicate === "silent" ? "P-SILENT" : "NONE";
++    const finishDecline = (outcome, extra = {}) => {
++      let evaluationId = null;
++      this._tx(() => {
++        this._repairPersistDischarges(this._repairDerive(passes),
++          { source, authorizationRef, reason,
++            action: "evaluate_repair" });
++        evaluationId = this._repairInsertEvent({
++          kind: "evaluation", action: "evaluate_repair",
++          intentId: null, source, authorizationRef, reason,
++          outcome,
++          detail: { predicate: base.predicate,
++            armedObserved: armed,
++            latestPassIdBefore: base.latestPassIdBefore,
++            ...extra } });
++        this._repairProject(
++          this._repairDerive(passes).effectiveStrikes,
++          { lastEvaluationId: evaluationId });
++      });
++      return { evaluationId, ...base, outcome,
++        registered: false, actInitiated: false,
++        effectiveStrikes:
++          this._repairDerive(passes).effectiveStrikes };
++    };
++    // ---- Phase B1: boundary stretch (synchronous) ----
++    if (this._alarmRevision() !== revisionAtCapture)
++      return finishDecline("observation_superseded");
++    const cont = readContainmentState(this.sql);
++    if (!cont.verified)
++      return finishDecline("error:containment_unverified");
++    if (cont.state === "CHAIN_STOPPED")
++      return finishDecline("contained_stop");
++    const pending0 = this._one(
++      `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
++    if (cont.state === "DRIVE_CONTAINED" && pending0 &&
++        pending0.n > 0)
++      return finishDecline("contained_drive_pending");
++    if (this.env.GENERATION_HALT !== "1")
++      return finishDecline("held_state_required");
++    if (armedReadFailed)
++      return finishDecline("error:registration_unreadable");
++    const derive0 = this._repairDerive(passes);
++    if (!derive0.verified)
++      return { evaluationId: null, ...base,
++        outcome: "error:repair_state_unverified",
++        registered: false, actInitiated: false };
++    if (derive0.effectiveStrikes >= REPAIR_STRIKE_BOUND)
++      return finishDecline("repair_ineffective");
++    if (predicate !== "stale")
++      return finishDecline(
++        predicate === "absent" ? "absent_diagnostic"
++          : predicate === "future_dated" ? "future_dated"
++          : predicate === "silent" ? "silent_diagnostic"
++          : "not_stale");
++    // ---- The reservation: the intent is the evaluation's
++    // first persistent action, written with any discharges the
++    // derivation established, in one transaction. ----
++    let intentId = null;
++    this._tx(() => {
++      this._repairPersistDischarges(this._repairDerive(passes),
++        { source, authorizationRef, reason,
++          action: "evaluate_repair" });
++      intentId = this._repairInsertEvent({
++        kind: "intent", action: "evaluate_repair", intentId: null,
++        source, authorizationRef, reason, outcome: "intent",
++        detail: { predicate: "P-STALE", armedObserved: armed,
++          latestPassIdBefore: base.latestPassIdBefore } });
++      this._repairProject(
++        this._repairDerive(passes).effectiveStrikes,
++        { lastEvaluationId: intentId });
++    });
++    // ---- Commitment boundary (final ruling §6, as corrected
++    // by implementation review I-C1): the awaited
++    // storage.sync() — the documented operation that
++    // synchronizes pending writes and resolves when they
++    // complete — establishes that the intent independently
++    // reached durable storage before any watchdog ensure or
++    // registration follows. If it cannot be established,
++    // nothing follows; the intent stands, counted. ----
++    try {
++      await this.state.storage.sync();
++    } catch (e) {
++      try {
++        this._tx(() => {
++          this._repairInsertEvent({ kind: "completion",
++            action: "evaluate_repair", intentId, source,
++            authorizationRef, reason, outcome: "error:commitment",
++            detail: { intentId, actInitiated: false,
++              errorName: e && e.name ? String(e.name) : "Error" } });
++          this._repairProject(
++            this._repairDerive(passes).effectiveStrikes, {});
++        });
++      } catch { /* the intent itself remains the audit record */ }
++      return { evaluationId: intentId, ...base,
++        outcome: "error:commitment", registered: false,
++        actInitiated: false };
++    }
++    // ---- Phase B2 re-verification (implementation review
++    // I-C2, placement corrected per review RC-1): FAIL CLOSED.
++    // A fresh registration observation is taken first (the
++    // method's final storage call before the act); the complete
++    // re-verification then runs inside the final synchronous
++    // stretch — repair state and the authoritative derivation
++    // re-verified (a failed derivation is never read as zero
++    // competing reservations); the evaluation's own reservation
++    // must still exist and remain outstanding (not discharged,
++    // acknowledged away, or otherwise invalid); P-STALE
++    // re-established from the fresh observation — a
++    // platform-side registration change need not move the
++    // application revision counter. Any failure produces zero
++    // watchdog-ensure and registration acts. ----
++    const finishSuppressed = (outcome, extra = {}) => {
++      this._tx(() => {
++        this._repairPersistDischarges(this._repairDerive(passes),
++          { source, authorizationRef, reason,
++            action: "evaluate_repair" });
++        this._repairInsertEvent({ kind: "completion",
++          action: "evaluate_repair", intentId, source,
++          authorizationRef, reason, outcome,
++          detail: { intentId, actInitiated: false, ...extra } });
++        this._repairProject(
++          this._repairDerive(passes).effectiveStrikes, {});
++      });
++      return { evaluationId: intentId, ...base, outcome,
++        registered: false, actInitiated: false };
++    };
++    let armedFresh = null, freshFailed = false;
++    try { armedFresh = await this.state.storage.getAlarm(); }
++    catch { freshFailed = true; }
++    if (freshFailed)
++      return finishSuppressed("error:registration_unreadable");
++    // ---- Final synchronous stretch (corrected per review
++    // RC-1): no asynchronous step separates the completed
++    // boundary validation from registration initiation. The
++    // FULL re-verification — repair state, authoritative
++    // derivation, this evaluation's own outstanding
++    // reservation, strike eligibility — is repeated HERE,
++    // after the last getAlarm() call, alongside the fence,
++    // containment, halt, P-STALE (on the fresh observation),
++    // and drive-pending checks; only then the watchdog
++    // ensure, the due, and the act. ----
++    const rs2 = readRepairState(this.sql);
++    if (!rs2.verified)
++      return finishSuppressed("error:repair_state_unverified");
++    const derive2 = this._repairDerive(passes);
++    if (!derive2.verified)
++      return finishSuppressed("error:derivation_unverified");
++    if (!derive2.unresolvedIntentIds.includes(intentId))
++      return finishSuppressed("reservation_invalidated");
++    const othersOutstanding = derive2.unresolvedIntentIds
++      .filter((id) => id !== intentId).length;
++    if (othersOutstanding >= REPAIR_STRIKE_BOUND)
++      return finishSuppressed("repair_ineffective");
++    if (this._alarmRevision() !== revisionAtCapture)
++      return finishSuppressed("observation_superseded");
++    const cont2 = readContainmentState(this.sql);
++    if (!cont2.verified || cont2.state === "CHAIN_STOPPED")
++      return finishSuppressed("contained_stop");
++    if (this.env.GENERATION_HALT !== "1")
++      return finishSuppressed("held_state_required");
++    const nowF = this._now();
++    if (typeof armedFresh !== "number" ||
++        armedFresh > nowF - ALARM_STALE_THRESHOLD_MS)
++      return finishSuppressed("observation_superseded",
++        { freshObservation: armedFresh });
++    const pending2 = this._one(
++      `SELECT COUNT(*) AS n FROM schedule WHERE state = 'pending'`);
++    if (cont2.state === "DRIVE_CONTAINED" && pending2 &&
++        pending2.n > 0)
++      return finishSuppressed("contained_drive_pending");
++    const now2 = this._now();
++    const wd = this._one(
++      `SELECT COUNT(*) AS n FROM schedule
++        WHERE state = 'pending' AND kind = 'watchdog'`);
++    if (!wd || wd.n === 0)
++      this._schedule(now2 + WATCHDOG_PERIOD_MS, "watchdog",
++        null, {});
++    const next = this._one(
++      `SELECT MIN(due_at) AS due FROM schedule
++        WHERE state = 'pending'`);
++    const due = next && next.due !== null
++      ? next.due : now2 + WATCHDOG_PERIOD_MS;
++    this._bumpAlarmRevision();
++    let actError = null;
++    try { await this.state.storage.setAlarm(due); }
++    catch (e) { actError = e && e.name ? String(e.name) : "Error"; }
++    // ---- Phase C: completion ----
++    let readback = null, readbackState = "not_read";
++    if (!actError) {
++      try {
++        const rb = await this.state.storage.getAlarm();
++        readback = typeof rb === "number" ? rb : null;
++        readbackState = readback === null
++          ? "readback_null" : "value";
++      } catch { readbackState = "read_failed"; }
++    }
++    const outcome = actError ? "error:registration" : "registered";
++    this._tx(() => {
++      this._repairPersistDischarges(derive2,
++        { source, authorizationRef, reason,
++          action: "evaluate_repair" });
++      this._repairInsertEvent({ kind: "completion",
++        action: "evaluate_repair", intentId, source,
++        authorizationRef, reason, outcome,
++        detail: { intentId,
++          actInitiated: actError ? "uncertain" : true,
++          due, readback, readbackState,
++          ...(actError ? { errorName: actError } : {}) } });
++      this._repairProject(
++        this._repairDerive(passes).effectiveStrikes, {});
++    });
++    return { evaluationId: intentId, ...base, outcome,
++      registered: !actError,
++      actInitiated: actError ? "uncertain" : true,
++      due, readback, readbackState,
++      commitmentSyncEstablished: true };
++  }
++
++  // The acknowledgment verb (ruling §3): separately authorized,
++  // never implied by an evaluation authorization. The boundary
++  // must identify an actual existing intent; the event and the
++  // projection update commit in one transaction; historical
++  // intents remain fully visible.
++  acknowledgeRepairCounter({ source, authorizationRef, reason,
++      boundaryEventId } = {}) {
++    const state0 = readRepairState(this.sql);
++    if (!state0.verified)
++      return { outcome: "error:repair_state_unverified",
++        action: "acknowledge_repair_counter" };
++    let target = null;
++    try {
++      target = this._one(
++        `SELECT id FROM d6_repair_events
++          WHERE id = ? AND kind = 'intent'`, boundaryEventId);
++    } catch { target = null; }
++    if (!target)
++      return { outcome: "rejected",
++        reason: "acknowledgment_boundary_invalid",
++        action: "acknowledge_repair_counter", boundaryEventId };
++    const passes = this._repairRecorderPasses();
++    const dischargedIntentIds = [];
++    let ackId = null;
++    this._tx(() => {
++      const rows = this.sql.exec(
++        `SELECT id FROM d6_repair_events
++          WHERE kind = 'intent' AND id <= ? ORDER BY id`,
++        boundaryEventId).toArray();
++      for (const r of rows) dischargedIntentIds.push(r.id);
++      ackId = this._repairInsertEvent({
++        kind: "acknowledgment",
++        action: "acknowledge_repair_counter", intentId: null,
++        source, authorizationRef, reason, outcome: "applied",
++        detail: { boundaryEventId, dischargedIntentIds } });
++      this._repairProject(
++        this._repairDerive(passes).effectiveStrikes,
++        { lastEvaluationId: ackId,
++          lastAckBoundary: boundaryEventId });
++    });
++    return { outcome: "applied",
++      action: "acknowledge_repair_counter",
++      acknowledgmentId: ackId, boundaryEventId,
++      dischargedIntentIds,
++      effectiveStrikes:
++        this._repairDerive(passes).effectiveStrikes };
++  }
++
++  // The read-only audit surface (ruling §6): reports the
++  // authoritative derivation, never the projection alone;
++  // performs zero writes and no wake; missing or unverified
++  // state is reported, never repaired here.
++  repairStatus() {
++    const state = readRepairState(this.sql);
++    const passes = this._repairRecorderPasses();
++    const derive = deriveRepairStrikes(this.sql, passes);
++    let recent = [];
++    try {
++      // The detail payload is part of the inspectable audit
++      // evidence (implementation review I-C4): registration
++      // due and read-back, act-initiation status, discharge
++      // pass identities, acknowledgment boundaries, and
++      // intent/completion linkage must be dispositionable
++      // from this surface alone, alongside the recorded
++      // authorization references and reasons.
++      recent = this.sql.exec(
++        `SELECT id, at, kind, action, intent_id, source,
++                authorization_ref, reason, outcome, detail_json
++           FROM d6_repair_events ORDER BY id DESC LIMIT 50`
++      ).toArray().map((r) => ({ id: r.id, at: r.at,
++        kind: r.kind, action: r.action, intentId: r.intent_id,
++        source: r.source,
++        authorizationRef: r.authorization_ref, reason: r.reason,
++        outcome: r.outcome, detail: _repairDetail(r.detail_json) }));
++    } catch { recent = []; }
++    const unresolved = [];
++    if (derive.verified) {
++      let byId = new Map();
++      try {
++        for (const r of this.sql.exec(
++          `SELECT id, at, source FROM d6_repair_events
++            WHERE kind = 'intent' ORDER BY id`).toArray())
++          byId.set(r.id, r);
++      } catch { byId = new Map(); }
++      for (const id of derive.unresolvedIntentIds) {
++        const r = byId.get(id);
++        unresolved.push({ intentId: id,
++          at: r ? r.at : null, source: r ? r.source : null });
++      }
++    }
++    return { initialized: state.verified, absent: state.absent,
++      projection: state.verified
++        ? { strikes: state.projectionStrikes,
++            updatedAt: state.updatedAt,
++            lastEvaluationId: state.lastEvaluationId,
++            lastAckBoundary: state.lastAckBoundary }
++        : null,
++      derivation: derive.verified
++        ? { effectiveStrikes: derive.effectiveStrikes,
++            totalIntents: derive.totalIntents,
++            dischargedIntentIds: derive.dischargedIntentIds,
++            unresolvedIntentIds: derive.unresolvedIntentIds,
++            incompleteIntentIds: derive.incompleteIntentIds,
++            acknowledgedIntentIds: derive.acknowledgedIntentIds,
++            completedIneffectiveIntentIds:
++              derive.completedIneffectiveIntentIds,
++            acknowledgedBoundary: derive.acknowledgedBoundary,
++            recorderVerified: derive.recorderVerified }
++        : null,
++      unresolvedIntents: unresolved,
++      recentEvents: recent };
++  }
++
+   _noteContainmentArmSuppressed(path) {
+     try {
+       this._logTransition("containment", "alarm_chain",
+@@ -3000,6 +3717,7 @@
+     let verifyError = null;
+     let armedAfter = armedBefore;
+     try {
++      this._bumpAlarmRevision();
+       await this.state.storage.deleteAlarm();
+       const armed = await this.state.storage.getAlarm();
+       armedAfter = typeof armed === "number" ? armed : null;
+@@ -3129,6 +3847,7 @@
+       armedAfter = armedBefore;
+       if (armedBefore !== null) {
+         deleteAttempted = true;
++        this._bumpAlarmRevision();
+         await this.state.storage.deleteAlarm();
+         const b = await this.state.storage.getAlarm();
+         armedAfter = typeof b === "number" ? b : null;
+@@ -3238,6 +3957,7 @@
+       // earlier work scheduled by this operation justifies a second
+       // registration, at the strictly earlier due.
+       if (due < armMemo.armedAfter) {
++        this._bumpAlarmRevision();
+         await this.state.storage.setAlarm(due);
+         armMemo.armedAfter = due;
+       }
+@@ -3264,6 +3984,7 @@
+     if (armed === null || armed === undefined
+         || armed <= now - ALARM_STALE_THRESHOLD_MS
+         || due < armed) {
++      this._bumpAlarmRevision();
+       await this.state.storage.setAlarm(due);
+       if (armMemo) { armMemo.registered = true; armMemo.armedAfter = due; }
+     }
