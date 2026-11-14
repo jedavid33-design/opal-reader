@@ -1,0 +1,22 @@
+ROWAN COPY-PASTE — STANDARD TURN-ON: CORRECTED EXECUTION PACKAGE (for documentary execution-gate review)
+
+Case: Opal Roundtable, issue #15. Handoff: RT-H-20261114-cc407c.
+Incorporates your ruling ST-G1–ST-G8 (verbatim board 6882886761) in full, under Julie's preparation GO (board 6882034835). Production remains HELD; preparation made no production contact. After your review, Julie's execution GO is sought — not before.
+
+READ ORDER (Dropbox folder "Opal Roundtable - For Rowan"):
+1. STANDARD-TURNON-EXECUTION-PACKAGE-CORRECTED.md — the complete corrected gate.
+
+WHAT CHANGED, BY YOUR NUMBER
+- ST-G1: the census now ESTABLISHES the deliverable-work inventory: a job read enumerating every grant since revival with its state; the live grant identified exactly (occurrence f4b451a5…, position 107, issued, lease valid, cohort ownership, no handoff_uncertain anywhere); the queue's backlog/in-flight fields recorded verbatim, never inferred from the pause; all six plans, the parked-policy job, quarantine, and the four conflicts re-read; a release-boundary repeat of the marked items; permitted successor movement defined (next sequential grant, same occurrence, void path, evidenced) with anything else a STOP. One surface limit is returned in advance, per your blocker rule: no read surface exposes an outbox row, so delivery-attempt status is established by the chain — grant state "issued" + halt continuously "1" since before issuance + the handler wired only when it is not (coordinator :4036–4037) + the affirmative absence of handoff_uncertain. If direct outbox evidence is required beyond that chain, it is the named blocker; no mutation will be added to obtain it.
+- ST-G2: your four categories kept distinct throughout; the simplified arithmetic replaced by the source rule (consumed = dispatched + reserved ≤ 100; fresh cohort admission requires consumed + 12 ≤ 100 — quota-budget.mjs); the envelope stated (Stage 1 ≈ 20,600 units; Stage 2 expected 410,880 units, expressly an estimate; binding ceilings = phase budget, $50 month cap, the attempt limit); park behavior specified (park ends the stage; a Stage 1 park ends the gate; closing acts follow; never a retry trigger); unexplained reconcile drift is a STOP that explanation cannot convert; the November figures treated as historical observations, not invariants; Gemini balance = Julie's in-window census confirmation; no top-up inside the gate.
+- ST-G3: readiness restated on your due-aligned standard (two most recent complete passes each ≤ 5 min after their preceding due; latest registration not > 20 min overdue; failures 0) — no ten-minute spacing, no hash-chain claim, no renaming of the finding; silence/1101 → STOP/WAIT, never an automatic A-1 invocation.
+- ST-G4: two stages exactly; Stage 2 only after Stage 1 is complete, accounted, and accepted; the chapter correspondence written out (displayed Chapter 4 = chapterIndex 3; displayed Chapter 5 = chapterIndex 4) and verified at census; the live grant's delivery classed as an authorized internal consequence of the lift, not a mutation attempt.
+- ST-G5: operator SubmitJob, exactly once, with the body written in full in the package — command_id fixed in advance (10889ce0-fc8f-4843-bd0c-2bf3eb2a5304) for read-only reconciliation; ambiguous response → 15 minutes of read-only reconciliation, never a resubmission; a not-landed submission stands the gate down to closing acts.
+- ST-G6: ACCEPTED AND REVERSED FROM MY PROPOSAL — the gate concludes HELD including on success; operational release is a later, narrower proposal on this smoke evidence.
+- ST-G7: exactly five mutation attempts, ordered (queue unpause → halt lift → SubmitJob → halt restoration → queue pause restoration), the last two mandatory closing acts; partial-lift handling; ambiguous flips resolved by reads, never re-sent; an absolute deadline (lift + 4 hours) bounding the 35-minute sliding stall windows; WAIT preserved at closing — last-verified states reported, unknowns named unknown, no manufactured HELD.
+- ST-G8: per-chapter acceptance criteria as you specified; any blocker prevents proceeding; terminal census establishes accounting, remaining work, recorder state, and restored holds; the four conflicts untouched.
+
+QUESTION
+(i) Does the ST-G1 indirect outbox chain satisfy the deliverable-work census, or do you disposition the named surface limit as a blocker (and if so, in what form)?
+
+Reply route: via Julie, as always. End by naming whose turn it is.
