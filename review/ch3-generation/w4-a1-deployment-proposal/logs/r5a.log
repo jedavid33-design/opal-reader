@@ -1,0 +1,51 @@
+▶ R5A-T0 — assembly & identity
+  ✔ 31 parts; differ set vs the pre-build tree == the cured fixture's changed parts (11.987189ms)
+  ✔ candidate coordinator identity + design markers (2.720503ms)
+  ✔ patch round-trip: coordinator.diff applied to the pristine part reproduces the candidate byte-for-byte (15.767383ms)
+  ✔ node --check passes on the candidate coordinator (88.23173ms)
+✔ R5A-T0 — assembly & identity (120.847296ms)
+▶ R5A-T1 — normal future alarms (legacy behavior preserved)
+  ✔ armed == due (future): wake registers nothing; earlier due advances once; then quiet (50.703051ms)
+  ✔ armed null: wake registers at due exactly as shipped (5.5044ms)
+✔ R5A-T1 — normal future alarms (legacy behavior preserved) (56.641702ms)
+▶ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command
+  ✔ exactly one setAlarm for the whole command wake; exactly one commands row; no other movement (9.776772ms)
+✔ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command (10.22195ms)
+▶ R5A-T3 — retry-gap safeguard (stale-age threshold)
+  ✔ armed 5 minutes past due (inside a plausible retry gap): NO re-registration (5.282648ms)
+  ✔ armed 59 minutes past due: still NO re-registration (4.980264ms)
+  ✔ armed exactly at the threshold boundary (60 min): re-registers (boundary is inclusive) (5.04428ms)
+  ✔ armed 61 minutes past due: re-registers at D (5.14396ms)
+  ✔ baseline twin at 61 minutes: shipped condition does NOT re-register (the delta is exactly the new disjunct) (119.798252ms)
+✔ R5A-T3 — retry-gap safeguard (stale-age threshold) (140.844846ms)
+▶ R5A-T4 — dedupe within a single wake operation
+  ✔ wake + post-apply evaluation with unchanged schedule: 1 registration total (4.874795ms)
+  ✔ corrective second registration ONLY when the operation schedules strictly earlier work (4.946733ms)
+  ✔ handleReport path also dedupes (replayed report on a reported grant) (5.449959ms)
+✔ R5A-T4 — dedupe within a single wake operation (15.674142ms)
+▶ R5A-T5 — B3 schedule ordering
+  ✔ B3-future beyond threshold: stale A is moved to the actual earliest future D (board ruling decision 2) (4.581225ms)
+  ✔ B3-future inside the retry-gap threshold: shipped behavior — no registration, future D stands untouched (4.143679ms)
+  ✔ D computation uses ALL pending kinds: an earlier retry_grant row, not the watchdog, sets the registration (4.423108ms)
+✔ R5A-T5 — B3 schedule ordering (13.458557ms)
+▶ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape)
+  ✔ stimulus registers once; the delivered pass issues exactly the pre-classified grant set; the chain then self-terminates the 5a branch (34.293474ms)
+✔ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape) (34.47728ms)
+▶ R5A-T7 — repeated wakes, delivery never happens (churn bound)
+  ✔ 10 wakes -> exactly 10 registrations, all at D, zero schedule growth, zero watchdog duplication (5.135357ms)
+✔ R5A-T7 — repeated wakes, delivery never happens (churn bound) (5.286964ms)
+▶ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery)
+  ✔ after the R2-form stimulus and no alarm firing: only the commands row changed; plan, job, occurrence, figures byte-identical (7.343621ms)
+✔ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery) (7.488398ms)
+▶ R5A-T9 — shipped-surface equivalence spot checks
+  ✔ drive=1 diagnostics read performs no wake and no registration (candidate) (15.600112ms)
+  ✔ future-alarm behavior identical on baseline and candidate (call sequences match) (9.546217ms)
+✔ R5A-T9 — shipped-surface equivalence spot checks (25.456293ms)
+ℹ tests 23
+ℹ suites 10
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 587.075738
