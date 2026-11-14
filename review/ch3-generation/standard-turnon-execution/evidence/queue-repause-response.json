@@ -1,0 +1,16 @@
+{
+ "result": {
+  "queue_id": "93b6a35fb8cf4788a91a2c90b748ae66",
+  "queue_name": "opalreader-generation-v2",
+  "settings": {
+   "delivery_delay": 0,
+   "delivery_paused": true,
+   "message_retention_period": 86400
+  },
+  "created_on": "2026-10-29T17:02:56.569174Z",
+  "modified_on": "2026-11-14T20:11:32.083712Z"
+ },
+ "success": true,
+ "errors": [],
+ "messages": []
+}

@@ -1,0 +1,1 @@
+{"command_id": "10889ce0-fc8f-4843-bd0c-2bf3eb2a5304", "type": "SubmitJob", "payload": {"bookId": "5c589095-f812-48a2-8ab2-03ba2791f2b2", "lane": "standard", "data": {"d6Intent": {"scope": "chapter", "chapterIndex": 4, "phase": "forever-pucked", "keepGoing": false}}}}

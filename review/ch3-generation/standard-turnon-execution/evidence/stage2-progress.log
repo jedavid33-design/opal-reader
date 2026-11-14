@@ -1,0 +1,16 @@
+19:45:44Z state active done 0 / 21 failed 0 blocked 0 stop None
+19:47:45Z state active done 0 / 21 failed 0 blocked 0 stop None
+19:49:46Z state active done 0 / 21 failed 0 blocked 0 stop None
+19:51:47Z state active done 1 / 21 failed 0 blocked 0 stop None
+19:53:47Z state active done 6 / 21 failed 0 blocked 0 stop None
+19:55:48Z state active done 8 / 21 failed 0 blocked 0 stop None
+19:57:49Z state active done 11 / 21 failed 0 blocked 0 stop None
+19:59:49Z state active done 14 / 21 failed 0 blocked 0 stop None
+20:01:50Z state active done 15 / 21 failed 0 blocked 0 stop None
+20:03:50Z state active done 19 / 21 failed 0 blocked 0 stop None
+20:05:51Z state active done 19 / 21 failed 0 blocked 0 stop None
+20:07:51Z state active done 21 / 21 failed 0 blocked 0 stop None
+TERMINAL
+quota final: attempts(net) 22 dispatches 43 reserved 0 ledgerSeq 394
+phase final: settled 1848546 est 19018 res 5648 remaining 11645806
+bindings watermark: 1883

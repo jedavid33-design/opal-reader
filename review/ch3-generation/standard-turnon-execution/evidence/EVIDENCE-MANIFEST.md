@@ -1,0 +1,50 @@
+# STANDARD SMOKE GATE — EVIDENCE MANIFEST
+
+SHA-256 + size for every capture in the gate workspace (`~/workspace/ch2-program/std-gate/`),
+pinned alongside at `evidence/`. The balance screenshot is Julie's in-window AI Studio
+confirmation (credit balance $16.41, auto-reload off), archived as received.
+
+546e9f90d844faae64b91b4c3769c65edbfaa04aabc2deec714e164d4d05da12  70123  attemptdiag-census.json
+4052815d16c24ecc60e04177a0f3cf963cb416b854a4cb00a8c8911048960b11  72136  attemptdiag-stage1.json
+67c810041483b6e1ced67f88c528d2e285a58e5aa116d41ef6b3f709c26414d0  44669  attemptdiag-stage2.json
+d955d0b29732252d5353b28723002df3ed6a943b66d24e18d86ad4b94fc34b96  995  capabilities-census.json
+d35fd3c8814ac780a31cb005ba5d073befe90f14872aa9ddb6e453d01e9dbb36  997  capabilities-presubmit.json
+fb1d39003afecdc7b39eeab19d43ffe586bf148bc31dbc68f35b278d237ec702  10583  ch5-job-terminal.json
+fbdf725030995212c71cc6b74324c00159e2d8f45c6def686ab547f21262b7d3  17600  ch5-plan-final.json
+a8d70c916c5495d4d44381d4a42b239bb34bcb38ba6624a3bfab838e2f7e31e5  17346  ch5-plan-initial.json
+fbdf725030995212c71cc6b74324c00159e2d8f45c6def686ab547f21262b7d3  17600  ch5-plan-poll.json
+e5f7d792944518c5e9f566d803d3d9ce6a1ca5f6f2b6a110d02f3c7f0249477a  1280  containment-census.json
+576ccbb8880c64e91e6c39476027880348e25a571aab347e70a924843352dc4b  48459  drive1-census.json
+67cd3d1041e5ac7b7d2ca10612c4e7e4469f8134e901702d601089687c9d3155  826  elig-ch4.json
+2da9a4c0664393b33d45078b34fe507cb78375e5c019764ead73168117e30dde  830  elig-ch5.json
+a66a22b72458795c0a9eb7581bb477d624e5f0632b02c0c2e55100885f572094  4679  flip_lift.py
+df0280cc2d25f0b5fcb47f3c2405830a17f58f297e60ecd49f26f5374e5966b4  4384  flip_rehold.py
+f195341334f43c7e090ad12e01cb7d86f53a33f9abd63cfcf98dd76f05d732c9  294591  gemini-balance-census.jpg
+c06655fb519b89957f70ffb514878a60a467704c57c49579c5e0c59af440f50e  171  health-census.json
+04045c88b76ee8ad74d51f91651eea662e2c2b0a86fb6b9be49b69cfb984564b  1609  lift-ledger.json
+55f95086d33323f083ed5f7cd9c6eac1ace4ea242de53f7354dfd06dc5696069  1438  lift-put-response.json
+31ac7d24b8d11bb45f39576aada7ea0852084f232eca26a7838b18eeade91fa7  6542  plans-census.json
+6781ea0a4d142f431d9a84facae8b9c90545327236575518a26c276030797b75  7595  plans-terminal.json
+cfefb815101d59d205c0c493515473a8dfdb6952fe0b7b88ab65132c8ea61e53  793  queue-after-unpause.json
+9c654d777cab8d7c1c193472f3ff5eae9ee3c29a9a0dbeca8e5ba7e69d2dac1e  792  queue-census.json
+f181fa82e7aebbd164eec7b0ca1599d0b03878924b20d7f2934bc4bd4b3bc021  367  queue-repause-response.json
+fdc2764f653bfe9107dbaa735108f5620ecd326bab9c196d13016da87376f3d4  368  queue-unpause-response.json
+0c8fb1dc9840c720c30a22f7e104cb7f65a0a6bb0fd754369bbd93bad483c911  1039  quota-census.json
+33ba74108fcfc34fabedcabcd5c63965fe9faa1d4278410a9126884267db9ef6  1037  quota-presubmit.json
+d88454b91fffb02d987743c742e56815f9fb8c3a69fe7d477a0a729f183a7036  3228  reconcile-census.json
+8a9d75cbb401187776c7fd5d7918d72296a0ffb6a3f99c2714afe55a15366d1d  3220  reconcile-presubmit.json
+4eb2050d166f5d38b78e9f8edc342721001287dae36daba249d75bcc8e23cf1c  3228  reconcile-stage2.json
+04045c88b76ee8ad74d51f91651eea662e2c2b0a86fb6b9be49b69cfb984564b  1609  rehold-ledger.json
+b57d517061ceadb03dbd4d9a29121a461db3c0b031025f61747db3cc9580d417  1436  rehold-put-response.json
+2566e4907388ee9671275687f3d93f3df6926a0da83defffb52707fc32bd2d01  1692  settings-census.json
+37ea2327c0938fefb569008e1f3b09dd3b024f2024e87b1f261e20214c5428e6  1548  settings-just-before-lift.json
+0e3eaa6719c15f0d49b3feefd977ee0c9440e94d42332a2bb89305d21387fd5a  1548  settings-just-before-rehold.json
+8a25a0f1d5a7dbdac539902829c75ff9eaf9e8e0ff28f9a601d0a47352d01a85  12663  smoke-job-boundary.json
+ecbba9c1c7e3d73bad4ae2f1e84ad118a7f6fafc12496025daa3ab3c70e725e8  12459  smoke-job-census.json
+7c6c5fbf49e98af511f77354e30c817d7ca2f2b56f1f991115a87ed9811ae68f  12785  smoke-job-stage1.json
+45ae5c958f852644060fa4dc4b08a024eb32610078f23ea791a59f954136dc8f  17492  smoke-plan-census.json
+10eabcc1fba813c76d2142269cb8faa6702bb1951737102d8ef21341a4c43e55  17504  smoke-plan-stage1.json
+22fe7e180311fea9d07ba4770886ec7413bfdb431f6ad0284d30236f251bdb1b  1867  stage2-poll.sh
+321ba9c77dcf001c1a0e511bd01f2c1cafdc013bb4702533cccf7d7a6dec77d8  944  stage2-progress.log
+e2e98eaca1edaacb70ba6813e78fffd38b956eef5eca314b0ff9a3501ef676c3  269  submit-body.json
+bafa10ace87f03eb4563c28af58232f3d62b3ec9f1aadb768076c11df874642d  205  submit-response.json
