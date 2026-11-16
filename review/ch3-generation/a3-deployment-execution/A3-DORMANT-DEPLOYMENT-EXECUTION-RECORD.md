@@ -4,7 +4,7 @@ Case #10 / P8 (issue #15). Executed by Wren, 2026-11-16, in one attended
 window under Julie's execution GO (board 6926261875), the dormant
 deployment proposal (pin `76673997dbe0768c8b0cac294e414f72dc4db834`),
 and Rowan's proposal PASS WITH BINDING CONDITIONS E1–E8 (verbatim
-board 6926248489). Handoff: RT-H-20261116-a3deploy
+board 6926248489). Handoff: RT-H-20261116-a8b02a
 Review pin: PIN-SLOT (repo `jedavid33-design/opal-reader`, branch `ui1-review`;
 the Dropbox copy carries the filled pin — the only difference between copies).
 
