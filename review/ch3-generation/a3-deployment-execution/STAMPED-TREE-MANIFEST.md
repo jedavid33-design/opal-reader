@@ -1,0 +1,40 @@
+# A-3 STAMPED TREE MANIFEST (deployment gate, 2026-11-16)
+
+Prepared offline from the accepted candidate (pin `7f8b98d4a82f2fb41a88caf0e7a03be5e9a0148b`).
+The stamped tree differs from the candidate in exactly one file: `v2/host/build-identity.mjs`,
+where BUILD_COMMIT `86ad06aba6083f7ea84d64b08eac1788d5bf570c` is replaced by the accepted pin
+`7f8b98d4a82f2fb41a88caf0e7a03be5e9a0148b` (the standing build-marker substitution). Verified
+mechanically: identical file sets (31 files); exactly one differing file; that file differs
+only in the commit string.
+
+- `v2/api.mjs` sha256 `9b1d0eba128c972b5329020018fefc10b0db9250f3134393de190d54e4e3237d`
+- `v2/audio-route.mjs` sha256 `b6383d21be32f119271e1d39f3894bd7f84b15ac1be4c38655601d1dee20d616`
+- `v2/coordinator.mjs` sha256 `ce90852ac4fbd37e222d4bf442327266de6a0949ac1b37c501febb4b40781b00`
+- `v2/executor.mjs` sha256 `5c6db175e68abdf727bf2e1d1a23626be0651db3c6eb48dd4af9e7f7d4ee14c9`
+- `v2/generation/binding-projection.mjs` sha256 `d100f02ce199bbcd6935569c8daabadbd6783d79b0bf1abd41f811e5763d8654`
+- `v2/generation/content-plane-adapter.mjs` sha256 `d8db2cbab33f16a5909fae0e74af672eed93b77b4f917f63d332cd3a221ba9c7`
+- `v2/generation/d6-executor.mjs` sha256 `c3613a818f598a2fc9f0f975312ad76879edab6bdffcdd06fe3fb2e3b123984c`
+- `v2/generation/d6-work-source.mjs` sha256 `8fa929b2d283084542d9dc76c1e75278d9f5ea4ed7a8d94540e55bef45e05006`
+- `v2/generation/eligible-set.mjs` sha256 `a9932a82ab3a81eeca38a80d3a555b56951a1d4dcef02fcf686bd9a9a264d1f7`
+- `v2/generation/flush-store.mjs` sha256 `e8f622bf4ed8745dd342cdbdd8d66f2a59a586ce034e8e1b1e21d68a2460f325`
+- `v2/generation/gen-constants.mjs` sha256 `9af664fafc61dff1c16de8f94d06c0097271313bae7327d2a9a9d16efe14c77d`
+- `v2/generation/gen-schema.mjs` sha256 `d7ae4936b11fe0d01c9ff8a6e1ccbb7364541ecad7d012b8fc3e712a453aacc5`
+- `v2/generation/genstore.mjs` sha256 `811b6b15b790097ad0010be3c71881c5024331143b4b0e2031392287bb839c2a`
+- `v2/generation/grant-finalizer.mjs` sha256 `0da45d8e6d156d1fc7441ce97e3338aa2a9e143a5560d640ee909c5727f8c076`
+- `v2/generation/grant-guards.mjs` sha256 `9249539fb867fb086338c72840539dcd130062772631a523e2b4373fc5487629`
+- `v2/generation/park-release.mjs` sha256 `ba2952af66ee64f81491b003b7e8f225af7ccbafb15adeedeff34e41ac87f6bd`
+- `v2/generation/phase-policy.mjs` sha256 `09883c40e365815f48cc9cb9d3bfdf1908f994b809c73ba27535638c7607f37f`
+- `v2/generation/policy-split.mjs` sha256 `61dc00148c803cb7f6b2eead2ca12caf707a3653bb3d0f7f5c97c9d8fa997876`
+- `v2/generation/prefix-range.mjs` sha256 `a6546b3e94247adcd4215aa1ed4ab691a2595520a2783dd67849056a498da514`
+- `v2/generation/quarantine.mjs` sha256 `64a491f3b1345219cb8816b80252908df9aaaadbd67e910547658aa9ade0fe62`
+- `v2/generation/quota-budget.mjs` sha256 `2b39924579e5af2d5d20eea01122d2323ccedac9fe9ff9f7026c49af14770820`
+- `v2/generation/service.mjs` sha256 `e9f99bd2d308be2d679fa2dec5205d60caf99847de7d27a01093dc0c342ad92c`
+- `v2/host/adapters.mjs` sha256 `f8ac357e3ca4d23bb9edd46dab1843257d26c6fafe6a52b3fffaff676a749368`
+- `v2/host/build-identity.mjs` sha256 `4838ce0fc1bfc9b41ecc5ad821b2c3eba3538e912ab9c03867f64b1a0b9af105`
+- `v2/p8/approved-freeze-carry.mjs` sha256 `24ddc8ee428e6e161fc2114af9a572f348db5959977402090539163cacb5bb46`
+- `v2/p8/approved-freeze-chunks.mjs` sha256 `b49cfcfcaf656d957f0c828566d390d6b2bc4b25238885fa60c3e3293563f06a`
+- `v2/p8/approved-freeze-manifest.mjs` sha256 `e59ab3d37245cc049d23215e0538933d633621ceb3fd29e48afdcda07e519edd`
+- `v2/p8/migration-chunk-limits.mjs` sha256 `886c8ea6d79dd6d2014976c50e23fe6553fd3d0ff81dd1f5f2337bf109b0fe41`
+- `v2/worker-entry-prod-d6.js` sha256 `c5853a70b683fec10ff635fea27302822e910b08173e3987d14a0e5874cfd601`
+- `v2/worker-entry-prod.js` sha256 `1d2f333a75a3ffff3d4e7c9454f218ba8a8042fab179fcd4f50031c6d80a27c5`
+- `v2/worker-entry.js` sha256 `91daefdd4778599db83024b074a5c4e78ef4d396a5d815712b381d40f72bd6e5`
