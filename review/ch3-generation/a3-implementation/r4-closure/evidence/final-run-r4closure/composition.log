@@ -1,0 +1,32 @@
+== candidate-tree vs pre-a3-tree (live-build baseline)
+   files: baseline 31, tree 31
+   differ set (3): v2/coordinator.mjs, v2/generation/service.mjs, v2/worker-entry-prod-d6.js
+   v2/worker-entry-prod-d6.js
+     baseline sha256 4e2bed3c7e976db7f514e7d43a92af7d1c6a2a8afcd6d98c62c980aa2d54858b
+     tree     sha256 c5853a70b683fec10ff635fea27302822e910b08173e3987d14a0e5874cfd601
+     diff: +1730 / -77 lines
+   v2/coordinator.mjs
+     baseline sha256 39486a7078c6b162520161064613b7488d762067d8e62ba9f9da1b6d933fbf81
+     tree     sha256 ce90852ac4fbd37e222d4bf442327266de6a0949ac1b37c501febb4b40781b00
+     diff: +145 / -10 lines
+   v2/generation/service.mjs
+     baseline sha256 a77765910cdbcf283d2b475b47d97067587d4b4b799eb15dd40d58efcdf10d64
+     tree     sha256 e9f99bd2d308be2d679fa2dec5205d60caf99847de7d27a01093dc0c342ad92c
+     diff: +34 / -0 lines
+== rollback-tree vs pre-a3-tree (live-build baseline)
+   files: baseline 31, tree 31
+   differ set (3): v2/coordinator.mjs, v2/generation/service.mjs, v2/worker-entry-prod-d6.js
+   v2/worker-entry-prod-d6.js
+     baseline sha256 4e2bed3c7e976db7f514e7d43a92af7d1c6a2a8afcd6d98c62c980aa2d54858b
+     tree     sha256 faae80af18c9185f119261e38ed9fcea152c6754f06622b219927221efb3bc48
+     diff: +245 / -22 lines
+   v2/coordinator.mjs
+     baseline sha256 39486a7078c6b162520161064613b7488d762067d8e62ba9f9da1b6d933fbf81
+     tree     sha256 ce90852ac4fbd37e222d4bf442327266de6a0949ac1b37c501febb4b40781b00
+     diff: +145 / -10 lines
+   v2/generation/service.mjs
+     baseline sha256 a77765910cdbcf283d2b475b47d97067587d4b4b799eb15dd40d58efcdf10d64
+     tree     sha256 e9f99bd2d308be2d679fa2dec5205d60caf99847de7d27a01093dc0c342ad92c
+     diff: +34 / -0 lines
+== shared code: candidate and rollback coordinator.mjs byte-identical: true; generation/service.mjs byte-identical: true
+COMPOSITION OK: both trees differ from the live baseline in exactly the three parts; Parts 2 and 3 are shared verbatim.

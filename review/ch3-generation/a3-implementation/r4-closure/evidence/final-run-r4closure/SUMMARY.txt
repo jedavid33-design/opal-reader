@@ -1,0 +1,17 @@
+run-all summary 2026-11-16T18:38:41Z
+a1 exit: 0
+a3 exit: 0
+composition exit: 0
+containment exit: 1
+p2 exit: 1
+r5a exit: 1
+rb-a1 exit: 0
+rb-containment exit: 1
+rb-p2 exit: 1
+rb-r5a exit: 1
+rb-s1 exit: 0
+rb-v3 exit: 0
+rollback-rc2 exit: 0
+s1 exit: 0
+v3 exit: 0
+overall exit: 1

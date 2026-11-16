@@ -1,0 +1,78 @@
+▶ R5A-T0 — assembly & identity
+  ✔ 31 parts; differ set vs the pre-build tree == the cured fixture's changed parts (55.107411ms)
+  ✖ candidate coordinator identity + design markers (2.804767ms)
+  ✔ patch round-trip: coordinator.diff applied to the pristine part reproduces the candidate byte-for-byte (12.974281ms)
+  ✔ node --check passes on the candidate coordinator (94.924806ms)
+✖ R5A-T0 — assembly & identity (167.716273ms)
+▶ R5A-T1 — normal future alarms (legacy behavior preserved)
+  ✔ armed == due (future): wake registers nothing; earlier due advances once; then quiet (59.052007ms)
+  ✔ armed null: wake registers at due exactly as shipped (6.288022ms)
+✔ R5A-T1 — normal future alarms (legacy behavior preserved) (65.771456ms)
+▶ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command
+  ✔ exactly one setAlarm for the whole command wake; exactly one commands row; no other movement (7.462774ms)
+✔ R5A-T2 — stale armed, B1 shape (D = A), via the R2-form command (8.521722ms)
+▶ R5A-T3 — retry-gap safeguard (stale-age threshold)
+  ✔ armed 5 minutes past due (inside a plausible retry gap): NO re-registration (6.275864ms)
+  ✔ armed 59 minutes past due: still NO re-registration (6.04641ms)
+  ✔ armed exactly at the threshold boundary (60 min): re-registers (boundary is inclusive) (6.05996ms)
+  ✔ armed 61 minutes past due: re-registers at D (6.58632ms)
+  ✔ baseline twin at 61 minutes: shipped condition does NOT re-register (the delta is exactly the new disjunct) (112.072848ms)
+✔ R5A-T3 — retry-gap safeguard (stale-age threshold) (137.678116ms)
+▶ R5A-T4 — dedupe within a single wake operation
+  ✔ wake + post-apply evaluation with unchanged schedule: 1 registration total (5.978007ms)
+  ✔ corrective second registration ONLY when the operation schedules strictly earlier work (6.050396ms)
+  ✔ handleReport path also dedupes (replayed report on a reported grant) (6.630946ms)
+✔ R5A-T4 — dedupe within a single wake operation (19.045918ms)
+▶ R5A-T5 — B3 schedule ordering
+  ✔ B3-future beyond threshold: stale A is moved to the actual earliest future D (board ruling decision 2) (5.589183ms)
+  ✔ B3-future inside the retry-gap threshold: shipped behavior — no registration, future D stands untouched (5.341092ms)
+  ✔ D computation uses ALL pending kinds: an earlier retry_grant row, not the watchdog, sets the registration (5.700941ms)
+✔ R5A-T5 — B3 schedule ordering (16.955483ms)
+▶ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape)
+  ✔ stimulus registers once; the delivered pass issues exactly the pre-classified grant set; the chain then self-terminates the 5a branch (36.274872ms)
+✔ R5A-T6 — unexpected revival under the holds (seeded preserved-plan shape) (36.454211ms)
+▶ R5A-T7 — repeated wakes, delivery never happens (churn bound)
+  ✔ 10 wakes -> exactly 10 registrations, all at D, zero schedule growth, zero watchdog duplication (6.317987ms)
+✔ R5A-T7 — repeated wakes, delivery never happens (churn bound) (6.505318ms)
+▶ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery)
+  ✔ after the R2-form stimulus and no alarm firing: only the commands row changed; plan, job, occurrence, figures byte-identical (7.616805ms)
+✔ R5A-T8 — stop behavior + preserved-plan integrity (stimulus with NO delivery) (7.773119ms)
+▶ R5A-T9 — shipped-surface equivalence spot checks
+  ✔ drive=1 diagnostics read performs no wake and no registration (candidate) (16.560981ms)
+  ✔ future-alarm behavior identical on baseline and candidate (call sequences match) (10.7606ms)
+✔ R5A-T9 — shipped-surface equivalence spot checks (27.621082ms)
+ℹ tests 23
+ℹ suites 10
+ℹ pass 22
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 719.533886
+
+✖ failing tests:
+
+test at regressions/r5a/r5a-battery.test.mjs:100:3
+✖ candidate coordinator identity + design markers (2.804767ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'ce90852ac4fbd37e222d4bf442327266de6a0949ac1b37c501febb4b40781b00'
+  - '39486a7078c6b162520161064613b7488d762067d8e62ba9f9da1b6d933fbf81'
+  
+      at TestContext.<anonymous> (file:///home/hatch/workspace/ch2-program/a3-build/regressions/r5a/r5a-battery.test.mjs:101:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'ce90852ac4fbd37e222d4bf442327266de6a0949ac1b37c501febb4b40781b00',
+    expected: '39486a7078c6b162520161064613b7488d762067d8e62ba9f9da1b6d933fbf81',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
